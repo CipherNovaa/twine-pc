@@ -30,9 +30,11 @@ python -m venv .venv && .venv/bin/pip install "splat64[mips]" capstone pycparser
 # tools that are cloned or downloaded into tools/ (all gitignored):
 #   tools/mkpsxiso   github.com/Lameguy64/mkpsxiso (build with cmake)
 #   tools/old-gcc    github.com/decompals/old-gcc releases (2.8.1-psx at least)
-#   tools/maspsx     github.com/mkst/maspsx
+#   tools/maspsx     github.com/mkst/maspsx (then: git -C tools/maspsx apply ../patches/maspsx-mflo-load-nop.patch)
 #   tools/m2c        github.com/matt-kempster/m2c
 ```
+
+The maspsx patch adds a nop real ASPSX inserts when a load sits between `mflo`/`mfhi` and a `mult`/`div` that doesn't read the loaded register (ASPSX always keeps two instructions between them).
 
 Put your disc dump in `workbench/disc/` and extract it with `dumpsxiso` into `workbench/extracted/` (with `-s workbench/extracted/disc.xml`).
 

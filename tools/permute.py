@@ -79,6 +79,8 @@ def run_one(func, code, opt, minutes, threads):
     norm = lambda t: " ".join(t.split())
     changed = [v for k, v in am.top_level_decls(cand).items()
                if k in base_decls and norm(base_decls[k]) != norm(v) and k != func and not v.startswith("typedef")]
+    replaced = {am.decl_name(c) for c in changed}
+    decls = [d for d in decls if am.decl_name(d) not in replaced]
     note = "score 0" + (f" (permuter changed declarations: {changed})" if changed else "")
     return func, "\n".join(decls + changed) + "\n\n" + body + "\n", note
 
@@ -102,7 +104,7 @@ def main():
             continue
         stem = next((k for k, t in src.items() if f"{f});" in t), None)
         if stem and not (WORK / f / "done").exists():
-            jobs.append((int(v["status"].split()[1]), f, v["code"], "-O0" if stem in o0 else "-O2"))
+            jobs.append((int(v["status"].split()[1]), f, v["code"], am.file_opt(stem)))
     jobs = sorted(jobs)[:args.limit]
     print(f"permuting {len(jobs)} functions, {args.parallel} at a time x {args.threads} threads, {args.minutes} min each", flush=True)
     found = 0

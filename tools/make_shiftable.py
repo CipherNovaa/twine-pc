@@ -362,7 +362,10 @@ def fix_raw_hi_lo(path, exe_lo, bss_start, addr_name, all_syms):
 
 
 def place_jump_targets(asm, wanted):
-    """Insert `jlabel jtgt_<addr>` before each wanted instruction in the level's asm files."""
+    """Insert `jlabel jtgt_<addr>` before each wanted instruction in the level's asm files.
+
+    Every file containing the instruction gets the label: nonmatchings/ can hold stale copies of a function
+    (from before a function moved to another C file), and only the copy a C file includes is assembled."""
     placed = {}
     if not wanted:
         return placed
@@ -376,7 +379,7 @@ def place_jump_targets(asm, wanted):
         out = []
         for line in lines:
             m = re.match(r"\s*/\* [0-9A-F]+ ([0-9A-F]{8}) [0-9A-F]{8} \*/", line)
-            if m and int(m.group(1), 16) in wanted and int(m.group(1), 16) not in placed:
+            if m and int(m.group(1), 16) in wanted and f"jlabel jtgt_{m.group(1)}," not in text:
                 a = int(m.group(1), 16)
                 out.append(f"jlabel jtgt_{a:08X}, global")
                 placed[a] = f"jtgt_{a:08X}"

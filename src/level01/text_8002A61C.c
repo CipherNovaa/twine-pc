@@ -1,5 +1,9 @@
 #include "twine.h"
 
+typedef struct { char *name; s32 unk4; s32 unk8; } CdFileEnt;
+extern CdFileEnt D_8009C204[];
+
+
 s16 func_8002AAFC(s16 *, s16 *, u8 *);
 M2C_UNK func_80082E04(M2C_UNK);
 M2C_UNK func_80082B64(s32, s8 *, s32);
@@ -117,7 +121,24 @@ u8 func_8002AAC4(void) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002AAFC);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002AC90);
+s32 func_8002AC90(u8 *a, u8 *b) {
+    a++;
+    for (;;) {
+        if (*a == ';') {
+            return 0;
+        } else if (*a == 0) {
+            return 0;
+        } else if (*a == *b) {
+            a++;
+            b++;
+        } else if (*a == '\\' && *b == '/') {
+            a++;
+            b++;
+        } else {
+            return *a - *b;
+        }
+    }
+}
 
 void func_8002ADF0(void) {
     printf(&D_800A7120);
@@ -144,7 +165,13 @@ s32 func_8002AF08(void) {
     return 0;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002AFF8);
+void func_8002AFF8(s32 idx) {
+    s32 file[6];
+
+    if (CdSearchFile(file, D_8009C204[idx].name) == 0) {
+        return;
+    }
+}
 
 void func_8002B064(s32 arg0) {
     func_8002B29C(arg0, -2);

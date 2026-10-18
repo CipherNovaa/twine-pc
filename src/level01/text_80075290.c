@@ -1,5 +1,28 @@
 #include "twine.h"
 
+typedef struct { s32 m[8]; } GsMat32;
+typedef struct { u8 pad0[0x4C]; void *super; } GsCOORDUNIT;
+typedef struct { GsCOORDUNIT *coord; u32 *primtop; } GsUNIT;
+typedef struct { u32 type; void **ptr; } GsTYPEUNIT;
+typedef struct { u32 *hmd; GsUNIT *units; u8 *flags; u32 nunits; GsCOORDUNIT *coords; u32 flg; GsMat32 coord; u8 pad38[0x28]; s32 sub; u8 pad64[8]; s32 nframes; void *seq; u8 pad74[4]; s32 unk78; s32 unk7C; s32 unk80; s32 unk84; s32 unk88; s32 unk8C; } HmdModel;
+typedef struct { u32 length; u32 *org; u32 offset; u32 point; u32 *tag; } GsOT;
+extern GsMat32 D_800FC6A0;
+extern GsOT D_800B8F88[];
+void *func_80030610(s32);
+void func_80075D48(HmdModel *);
+void GsMapUnit(u32 *);
+s32 GsScanUnit(u32 *, GsTYPEUNIT *, GsOT *, u32 *);
+GsCOORDUNIT *GsMapCoordUnit(u32 *, void **);
+s32 GsLinkAnim(void *, void **);
+s32 GsScanAnim(void **, s32);
+void *func_8008E03C(u32);
+void *func_8008DAAC(u32);
+void *func_8008CCB8(u32);
+void *func_8008DB68(u32);
+void func_8008DBDC(void);
+void func_8008E378(void);
+
+
 void func_80076104(s32 idx);
 void func_800760B4(s32 arg0);
 void func_8002C490(char *, s8 *, void (*)(s32));
@@ -279,7 +302,101 @@ void func_800758CC(void) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_800758F0);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80075920);
+void func_80075920(HmdModel *arg0) {
+    GsTYPEUNIT ut;
+    u32 *p;
+    u32 n;
+    u32 i;
+    s32 j;
+    s32 cnt;
+    s32 len;
+    GsOT *ot;
+
+    ot = D_800B8F88;
+    p = arg0->hmd;
+    if (p == NULL) {
+        return;
+    }
+    arg0->nframes = 0;
+    arg0->coords = NULL;
+    arg0->sub = 0;
+    arg0->coord = D_800FC6A0;
+    arg0->unk84 = 0;
+    arg0->unk78 = -1;
+    arg0->unk7C = 0;
+    arg0->unk80 = 0;
+    arg0->unk88 = -1;
+    arg0->unk8C = -1;
+    n = p[3];
+    arg0->units = func_80030610(n * 8);
+    arg0->seq = func_80030610(n * 0x1C);
+    arg0->flags = func_80030610(n);
+    if (p[1] != 0) {
+        func_80075D48(arg0);
+        return;
+    }
+    GsMapUnit(p);
+    p += 3;
+    arg0->nunits = *p++;
+    for (i = 0; i < arg0->nunits; i++) {
+        arg0->flags[i] = 0;
+        arg0->units[i].primtop = (u32 *)*p;
+        arg0->units[i].coord = NULL;
+        p++;
+        if (arg0->units[i].primtop != NULL) {
+            GsScanUnit(arg0->units[i].primtop, NULL, NULL, NULL);
+            while (GsScanUnit(NULL, &ut, ot, (u32 *)0x1F800000)) {
+                if (((ut.type >> 24) < 2 || (ut.type >> 24) == 6) && (ut.type & 0x800000)) {
+                    arg0->coords = GsMapCoordUnit(arg0->hmd, ut.ptr);
+                    ut.type &= ~0x800000;
+                    cnt = ((s32 *)arg0->coords)[-1];
+                    for (j = 0; j < cnt; j++) {
+                        if (arg0->coords[j].super == NULL) {
+                            arg0->coords[j].super = &arg0->flg;
+                        }
+                    }
+                }
+                *ut.ptr = NULL;
+                switch (ut.type >> 24) {
+                case 0:
+                    *ut.ptr = func_8008E03C(ut.type);
+                    break;
+                case 1:
+                    *ut.ptr = func_8008DAAC(ut.type);
+                    break;
+                case 2:
+                    *ut.ptr = func_8008CCB8(ut.type);
+                    ((void (*)(u32 *))*ut.ptr)((u32 *)0x1F800000);
+                    *ut.ptr = func_8008E378;
+                    break;
+                case 3:
+                    *ut.ptr = func_8008DB68(ut.type);
+                    if (*ut.ptr != NULL && *ut.ptr != func_8008E378) {
+                        len = GsLinkAnim(arg0->seq, ut.ptr);
+                        if (arg0->nframes <= 0) {
+                            arg0->nframes = len;
+                        }
+                        if (len != arg0->nframes && arg0->nframes < len) {
+                            arg0->nframes = len;
+                        }
+                        if (GsScanAnim(ut.ptr, 0)) {
+                            func_8008DBDC();
+                        }
+                    }
+                    break;
+                }
+                if (*ut.ptr == NULL) {
+                    *ut.ptr = func_8008E378;
+                }
+            }
+        }
+    }
+    if (arg0->coords != NULL) {
+        for (i = 1; i < arg0->nunits - 1; i++) {
+            arg0->units[i].coord = &arg0->coords[i - 1];
+        }
+    }
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80075D48);
 

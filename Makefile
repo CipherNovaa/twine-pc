@@ -38,6 +38,8 @@ TARGET  := $(BUILD)/$(LEVEL).exe
 # Regions the original developers built without optimization.
 O0_FILES := text_8002680C text_8002A61C text_8006FA54
 $(foreach f,$(O0_FILES),$(eval $(BUILD)/src/$(LEVEL)/$(f).o: OPTFLAGS := -O0))
+O1_FILES := text_8005EDF8
+$(foreach f,$(O1_FILES),$(eval $(BUILD)/src/$(LEVEL)/$(f).o: OPTFLAGS := -O1))
 
 all: check
 

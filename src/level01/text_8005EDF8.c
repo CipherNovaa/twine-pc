@@ -1,0 +1,1731 @@
+#include "twine.h"
+
+extern u16 D_800DE0E8[64][16];
+extern u16 D_800DE0E4[];
+
+
+extern char D_800A7D74[];
+void func_80052BEC(void);
+void *func_800390F8(s32 arg0);
+void func_80060094(void *arg0);
+void func_80063F34(void *arg0, s32 arg1);
+void func_80058B10(void *);
+void func_800391B0(void *, s32);
+
+
+extern u8 D_800DD7F4[];
+extern s32 D_800AFF88;
+#define gte_stflg(r0) __asm__ volatile("cfc2 $12, $31; nop; sw $12, 0(%0)" : : "r"(r0) : "$12", "memory")
+
+
+void RotMatrixYXZ_gte(void *, void *);
+void func_800634C0(u8 *obj);
+typedef struct { s32 m[8]; } Mat32;
+#define gte_ldv3(r0, r1, r2) __asm__ volatile("lwc2 $0, 0(%0); lwc2 $1, 4(%0); lwc2 $2, 0(%1); lwc2 $3, 4(%1); lwc2 $4, 0(%2); lwc2 $5, 4(%2)" : : "r"(r0), "r"(r1), "r"(r2))
+#define gte_rtpt() __asm__ volatile("nop; nop; .word 0x4A280030")
+#define gte_stsxy3(r0, r1, r2) __asm__ volatile("swc2 $12, 0(%0); swc2 $13, 0(%1); swc2 $14, 0(%2)" : : "r"(r0), "r"(r1), "r"(r2) : "memory")
+#define gte_avsz3() __asm__ volatile("nop; nop; .word 0x4B58002D")
+#define gte_stotz(r0) __asm__ volatile("swc2 $7, 0(%0)" : : "r"(r0) : "memory")
+#define gte_stflg(r0) __asm__ volatile("cfc2 $12, $31; nop; sw $12, 0(%0)" : : "r"(r0) : "$12", "memory")
+
+
+typedef struct { u32 active : 1; u32 life : 5; u32 pad6 : 6; u32 state : 4; u32 pad16 : 16; s32 pad4[4]; u32 start; } Spark;
+void func_80065588(void *arg0);
+s32 func_80066098(s16 *arg0, SVECTOR *arg1);
+
+
+#define gte_stflg(r0) __asm__ volatile("cfc2 $12, $31; nop; sw $12, 0(%0)" : : "r"(r0) : "$12", "memory")
+
+
+typedef struct { s32 active; s32 cursor; s32 count[12]; s32 vals[12]; } DevMenu;
+extern u8 D_8009CD6C;
+
+
+extern s32 D_800B8EFC[][5];
+extern u8 D_8009D00E;
+extern u8 D_8009CFBB;
+
+
+typedef struct { u8 unk0; u8 active; u8 pad2[2]; s32 unk4; u8 pad8[0x10]; s32 time; u8 *sub; s32 unk20; u8 pad24[0x10]; } EffSlot;
+void func_8004C498(s32, u8 *);
+
+
+typedef struct { s32 x, y, z; s32 unkC, unk10, unk14, unk18; u32 flags; s32 unk20, unk24, unk28, unk2C, unk30; } Ent34;
+extern Ent34 D_800DF200[];
+
+
+typedef struct { s32 count; u32 *items[4]; } ScriptStack;
+extern char D_800A8C08[];
+
+
+short func_8008C5D8(s32 *in, s32 *out);
+
+
+extern s32 D_8009D038;
+extern s32 D_8009D084;
+extern s32 D_8009D088;
+typedef struct { u32 addr : 24; u32 len : 8; } PTag;
+
+
+extern u8 D_800D7C24[][0x10];
+
+
+extern u8 D_800D3288[];
+
+
+extern s16 D_800AC4E0;
+extern s16 D_800AC4E4;
+
+
+extern s16 D_800D4480[];
+extern u8 D_800DDC70[];
+extern s32 D_800DDDC0;
+extern s16 D_8009D8F0;
+extern s16 D_800DE0D0;
+void func_80049470(u8 *obj, s16 *out);
+void func_8004973C(VECTOR v, s16 *out);
+
+
+extern s32 D_800B8EFC[][5];
+extern u32 D_800B0EFC[][0x1000];
+extern u32 D_800D28F4[][0x40];
+
+
+typedef struct { u32 count; u32 *table; u32 idx; s32 color; s32 timer; } ColCycle;
+typedef struct { s16 flags; s16 pad2[3]; u16 du; u16 dv; s16 u; s16 v; u16 au; u16 av; } UvScroll;
+typedef struct { s32 nCol; s32 nUv; ColCycle *col; s32 padC; UvScroll *uv; } FxHdr;
+extern s32 D_8009EEDC;
+extern s32 (*D_8009CE48)(s32);
+extern s32 D_8009CAC0;
+
+
+s32 func_800698C4(void);
+void func_8003732C(u8 *, s32);
+s16 func_80037768(u8 *obj, u8 *proj);
+void func_80038C8C(u8 *obj);
+void func_80062F38(u8 *, u8 *);
+void func_800632AC(u8 *, s32);
+
+
+extern s32 D_8009CF50;
+extern s32 D_800D31BC;
+s32 func_80050A10(VECTOR *, VECTOR *, u8 *, void *);
+void func_80049A88(void);
+
+
+typedef struct { u32 flags; s32 w4; u32 w5; } SpawnInfo;
+typedef struct { s32 x; s32 y; s32 z; SpawnInfo info; } SpawnEnt;
+typedef struct { u8 pad0[5]; u8 type5; u8 pad6[2]; u8 unk8; u8 pad9[0x2B]; s32 unk34; u8 pad38[0x10]; s32 flags48; u8 pad4C[0x14]; SpawnInfo *src; u32 path : 7; u32 b64 : 22; u32 idx : 3; u32 f68 : 4; u32 b68 : 12; s16 scale; u8 pad6C[0x24]; u8 *parts; u8 pad94[0x10]; u8 stateA4; u8 padA5[0x27]; u8 unkCC; u8 unkCD; u8 padCE[0x56]; } SmartObj;
+typedef struct { u8 pad0[3]; u8 state; s16 unk4; s16 unk6; s32 x; s32 y; s32 z; s16 unk14; s16 unk16; s16 unk18; s16 pad1A; SpawnInfo *src; } Rec20;
+typedef struct { s16 x; s16 y; s16 z; s16 pad6; s32 *src; s32 unkC; u32 active : 1; u32 f1 : 2; u32 f3 : 3; u32 f6 : 4; u32 f10 : 1; u32 f11 : 3; } SpawnRec;
+extern Rec20 D_800B0CB0[];
+extern char D_800B0BC0[];
+extern char D_800A7F5C[];
+u8 *func_800333D4(void);
+s32 func_8003C6B0(s32 arg0, s32 arg1, s32 arg2);
+void func_8003FCE4(s32, SpawnInfo *, s32, s32, s32, s32);
+void func_80053790(u8 *, s32);
+void func_8002DD6C(u8 *obj);
+
+
+extern u8 D_8009CA5C;
+extern u16 D_8009CA6C;
+extern s16 D_8009CAB0;
+extern void (*D_8009CDD4)(void);
+extern void (*D_8009CDD8)(void);
+extern s16 D_800B0C6C;
+extern s8 D_800B0E48;
+M2C_UNK func_8002847C();
+void func_8002BDE4(void);
+M2C_UNK func_8002E798();
+void func_8002F1BC(void);
+void func_8002F1F4(void);
+void func_8002FE04(void);
+void func_80031F28(void);
+void func_80031F54(s32 arg0);
+void func_80032024(void);
+M2C_UNK func_80032074(s16);
+M2C_UNK func_800332A4();
+void func_8003B4F4(void);
+void func_8003FC60(void);
+void func_800478C8(void);
+void func_8004B324(void);
+M2C_UNK func_8004BDA8();
+M2C_UNK func_8004D048();
+void func_8004F3D8(void);
+void func_800530F4(void);
+M2C_UNK func_80057C40();
+void func_8005ED88(void);
+void func_80075290(void);
+M2C_UNK func_800761DC();
+
+
+s16 func_80044AF4(void);
+s32 func_8004A370(void);
+extern char D_800A7800[];
+
+
+extern s16 D_800D43CC;
+
+
+extern s32 D_8009CF60;
+
+
+extern s16 D_800B0AB8;
+extern s16 D_800B0AC0;
+extern s16 D_8009CD5E;
+extern s16 D_8009CD60;
+extern s32 D_8009CD58;
+s32 func_8004DFF8(s32 *);
+s32 func_80040AA8(s32 *);
+void func_800503D8(s32, s32, s32, s32);
+
+
+extern u8 D_800B0848;
+extern u8 D_800DE004[];
+
+
+void func_8007CE30(s32, u8);
+
+
+typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; s16 w, h; } TILE;
+typedef struct { s32 hdr; TILE t[12][2]; } TileGrid;
+extern TILE D_800DD818[];
+void func_80081B74(void *);
+
+
+typedef struct { u8 pad0[4]; s32 voice : 16; u32 active : 1; u32 timer : 10; u32 rest : 5; } ChrSnd;
+
+
+extern char D_800A8464[];
+extern char D_800A8468[];
+extern char D_800A8478[];
+extern char D_800A8490[];
+extern char D_800A849C[];
+extern char D_800A84A8[];
+extern char D_800A84B4[];
+extern char D_800A84B8[];
+extern s32 D_800D43A8;
+extern s32 D_800D43C0;
+extern s32 D_800D43D0;
+extern s32 D_800D43E4;
+extern s32 D_800D43F8;
+extern s32 D_800D4400;
+extern s32 D_800D4440;
+extern s32 D_800D4450;
+extern s32 D_800D4458;
+extern s32 D_800D445C;
+extern s32 D_800D4464;
+void func_800425E4(void);
+
+
+extern char D_800A8C48[];
+s32 func_80057AB0(s32 arg0);
+void func_80057AD8(void *arg0, s16 arg1, s16 arg2);
+
+
+typedef struct { s16 unk0; s16 unk2; u32 unk4 : 16; u32 unk6 : 8; u32 unk7 : 2; u32 pad7 : 6; s32 unk8; s32 unkC; } SndCh;
+extern SndCh D_800D31C0;
+extern SndCh D_800D31D0;
+
+
+typedef struct { char s[5]; } Str5;
+extern Str5 D_800A770C;
+extern char D_800D2F48[4][16];
+
+
+extern u8 D_800B8FB4[][0x8CA0];
+extern u8 *D_800FC640;
+
+
+void func_8007F25C(s16 *, s32, s32, s32);
+
+
+extern s32 D_800D3FA8;
+extern s32 D_800D3FAC;
+extern s32 D_800D3FB0;
+extern s32 D_800D3FD4;
+extern s32 D_800D3FD8;
+extern s32 D_800D3FE0;
+extern s32 D_800D3FE4;
+extern s32 D_800D3FEC;
+extern s32 D_800D3FF0;
+extern s32 D_800D4068;
+extern s32 D_800D406C;
+extern s32 D_800D4070;
+extern s32 D_800D4074;
+extern s32 D_800D40F8;
+extern s32 D_800D40FC;
+extern s32 D_800D4100;
+extern s32 D_800D4104;
+extern s32 D_800D4108;
+extern s32 D_800D410C;
+extern s32 D_800D4110;
+extern s32 D_800D4114;
+
+
+typedef struct { char text[0x23]; u8 unk23; u16 unk24; u8 flag; u8 pad27; s16 x; s16 y; } Msg;
+void func_80028858(char *text, s16 *x, s16 *w);
+void func_800299CC(s32 arg0, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 arg5, s32 arg6, s32 arg7);
+void func_800477C0(void *arg0, void *arg1);
+extern s32 D_8009EED0;
+extern u16 D_800AEDD4;
+
+
+typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 r1, g1, b1, pad1; s16 x1, y1; u8 r2, g2, b2, pad2; s16 x2, y2; u8 r3, g3, b3, pad3; s16 x3, y3; } POLY_G4;
+typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; s16 x1, y1; s16 x2, y2; s16 x3, y3; } POLY_F4;
+void func_80088C44(void *);
+void func_80044B3C(void *arg0, s16 arg1, s16 arg2, s16 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
+void func_80044BBC(void *arg0, s8 arg1, s8 arg2, s8 arg3);
+extern POLY_G4 D_800D79D4[];
+extern POLY_F4 D_800D7554[];
+
+
+extern s32 D_8009E41C;
+extern s32 D_800E23DC[];
+extern s32 D_800E23EC[];
+
+
+extern s16 D_800B0066;
+
+
+void func_80050180(s32, s32);
+void func_8004FD3C(s32, s32);
+s32 func_8004F348(void);
+
+
+void func_8005C10C(u8 *, u8 *, s16 *, s16 *);
+void RotMatrixY(s32, void *);
+
+
+typedef struct { u8 pad0[0x1CC]; u32 flags; u8 pad1D0[0x78]; } AISlot;
+extern AISlot D_800D9278[];
+
+
+extern u8 *D_800DF1F4[];
+extern u8 D_800DF5B8[];
+
+
+extern s32 D_800DF540[];
+
+
+extern s32 D_800D43F4;
+
+
+extern u16 D_800D43AC;
+extern s32 D_800D43F0;
+void func_8007A040(s32);
+
+
+extern char D_800A77E4[];
+
+
+void func_80039520(u8 *obj);
+void func_800753A4(void *arg0);
+
+
+typedef struct { u32 length; u32 *org; u32 offset; u32 point; u32 *tag; } GsOT;
+extern s32 D_800D2BE8;
+extern s32 D_800B8EFC[][5];
+extern GsOT D_800D2AFC[];
+extern u8 D_800B8FB4[][0x8CA0];
+extern s32 D_800D3234;
+extern s32 D_800D3064;
+extern s8 D_8009C1EE;
+extern s32 D_8009C1F0;
+extern s32 D_8009CDE8;
+extern s32 D_8009CDC0;
+extern u8 D_8009CD6E;
+extern s16 D_800B07B4;
+extern s16 D_800B07A4;
+extern s16 D_800B0DB0;
+extern s16 D_800B07C0;
+void func_80087704(void *);
+void GsClearOt(s32, s32, void *);
+void GsSortOt(void *, void *);
+void GsSortClear(s32, s32, s32, void *);
+void GsSwapDispBuff(void);
+s32 VSync(s32);
+void func_8004B32C(void);
+void func_8006F784(void);
+void func_8006F6AC(void);
+void func_8006CEA4(s32);
+void func_80030354(void);
+void func_8005AEF8(void);
+void func_800781B4(void);
+void func_80060410(void);
+void func_8007545C(s32 first, s32 last);
+void func_80077D50(s32, s32);
+void func_80077FC4(s32, s32);
+void func_800406A0(void);
+void func_8004B58C(s32);
+void func_800463C8(void);
+void func_8004514C(void);
+void func_80028DBC(s32, s32);
+void func_80028C08(s32, s32);
+void DevMenu_Draw(void);
+void DebugScreen_DrawPage(s32);
+void func_80030234(void);
+
+
+extern char D_800A89A4[];
+void func_800705A8(s32, SVECTOR *, s32, u8 *);
+
+
+u32 func_8006D3C0(SVECTOR *a, SVECTOR *b);
+
+
+extern char D_800A74E0[];
+void *malloc3(s32);
+
+
+extern s32 D_800E2E48;
+
+
+extern u8 D_800DD83C[];
+extern s8 D_8009D8D4;
+extern SVECTOR D_800DD808;
+extern SVECTOR D_800DD810;
+extern s32 D_800DD7F8;
+extern s16 D_800DD7FC;
+extern s32 D_800DD800;
+extern s16 D_800DD804;
+
+
+extern s8 D_800A7F1C;
+extern s8 D_800A7F2C;
+extern struct { s16 v[4]; } D_800B077C;
+extern u32 D_800D2BF0[];
+void *func_80030610(s32);
+void func_8004C0C0(s32, void *);
+void GsLinkObject4(s32, void *, s32);
+
+
+typedef struct { u8 pad[4]; u8 flags; u8 pad5[15]; } FxTmpl;
+extern s32 D_800AB540;
+extern u8 D_800DB884[];
+extern u8 D_800DA5C4[];
+extern u8 D_800DA5C0;
+extern char D_800A8CB0[];
+extern char D_800A8CC4[];
+extern char D_800A8CEC[];
+extern char D_800A8CF8[];
+void func_8005885C(u8 *, u8);
+
+
+
+
+extern s32 D_800DDDA8;
+
+
+extern char D_800A88A4[];
+extern char D_800A88D0[];
+extern s16 D_8009D914;
+extern s16 D_8009D444;
+extern s32 D_800E23E8;
+extern s32 D_800E02B4;
+extern s32 D_800E23D4;
+s32 func_80075FA0(void);
+void func_8004E9AC(void);
+void func_8004EC70(void);
+void func_8004A29C(void);
+void func_8004A81C(void);
+void func_8004A85C(s32 arg0);
+
+
+extern s32 D_800DDDDC[];
+
+
+extern List D_800D86E8[][8];
+extern char D_800A880C[];
+extern char D_800A8820[];
+extern char D_800A8858[];
+
+
+extern u8 D_800DE0C8[];
+extern u8 *D_800DDEF0[];
+s32 func_8005B584(s32, u8, s16);
+void func_8007D260(s32);
+
+
+extern u8 D_800DE018[];
+void func_8005BA30(void *obj);
+void func_8005B7BC(void *obj, s32 arg1);
+
+
+extern s32 D_8009D020;
+extern s32 D_8009D024;
+extern s32 D_8009D080;
+
+
+extern char D_800A80A4[];
+extern s32 D_800D40D8[];
+void func_8003EA24(SVECTOR *arg0, s32 *arg1, SVECTOR *arg2);
+
+
+typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; s16 x1, y1; u8 u1, v1; u16 tpage; s16 x2, y2; u8 u2, v2; u16 pad1; s16 x3, y3; u8 u3, v3; u16 pad2; } POLY_FT4;
+extern POLY_FT4 D_800D4984[2][32][2];
+extern u8 D_8009D040[][8];
+s16 GetClut(s32, s32);
+void func_80044B74(void *arg0, s8 arg1, s8 arg2, s8 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
+
+
+
+
+extern s32 D_800E2438;
+extern s32 D_800B0018[];
+extern s32 D_800E2DBC;
+void func_8006E054(void);
+void func_8006E9E0(s32);
+
+
+extern u8 D_1F8003E0[];
+
+
+extern s32 D_800DF10C[];
+void func_80062394(void);
+void func_80062784(void);
+void func_80062B68(void);
+
+
+extern char D_800A7DC0[];
+extern char D_800A7DE8[];
+
+
+extern s16 *D_8009D5AC;
+extern s32 **D_8009D5A8;
+extern s16 D_800D9232;
+s16 func_80053684(s32 x, s32 z, u8 *obj, s32 dist);
+s16 func_80053004(u8 *obj, s32 x, s32 z);
+
+
+typedef struct { s32 unk0; s32 x; s32 y; s32 z; u32 flags; u16 start; u16 end; s16 frames; s16 pad1A; u8 *anim; s32 time; } AnimSlot;
+extern AnimSlot D_800D30D8[];
+extern char D_800A7D64[];
+
+
+typedef struct { s16 x, y, w, h; } RECT16;
+extern char D_800A79F0[];
+void GsGetTimInfo(u32 *, GsIMAGE *);
+void LoadClut(u32 *, s32, s32);
+void LoadClut2(u32 *, s32, s32);
+
+
+extern u8 D_800E2DA8[];
+
+
+extern s32 D_800D86E0;
+typedef struct { u8 pad[6]; s16 x[6]; s16 y[6]; s16 z[6]; u8 pad2[0x54]; } HierRow;
+typedef struct { u8 pad[0x28]; s32 x; s32 y; s32 z; u8 pad2[0x58]; } Part;
+
+
+extern s32 D_800B0C38[];
+extern s16 D_800B0094;
+void func_8007A4E4(void *, void *);
+void func_80050960(void);
+void func_8004E89C(void);
+void func_8004E78C(void);
+
+
+extern s32 D_8009CA78;
+extern s32 D_8009CA7C;
+extern s32 D_8009CA80;
+extern s32 D_8009CA84;
+extern s32 D_8009CAA8;
+extern s32 D_8009CACC;
+extern s32 D_8009CAD0;
+extern u8 D_8009CFEC;
+extern s32 D_800B00A0;
+extern s32 D_800B0AA0;
+extern s32 D_800B0B84;
+extern s32 D_800B0B88;
+extern s32 D_800B0B8C;
+void func_8002D604(void);
+void func_8004900C(void);
+void func_8004D88C(void);
+s32 func_8004B084(void);
+void func_8004B04C(void);
+s32 func_8004B06C(void);
+void SsUtAllKeyOff(s32);
+
+
+extern s32 (*D_8009E480[])(void);
+extern s32 D_8009E490;
+extern char D_800A8A2C[];
+
+
+extern u8 D_8009CDA0;
+extern s16 D_800B0C9C;
+extern s16 D_8009CD5C;
+extern u8 D_8009CD62;
+extern s32 D_800B0B10;
+extern s16 D_800D9200[];
+extern s32 D_800B0C64;
+extern s32 D_800B0C68;
+extern s32 D_800B0C60;
+extern u16 D_800B0AEC;
+extern s16 D_800B0D94;
+extern s16 D_8009CFCC;
+extern s32 D_800B0B14;
+void func_8004E304(void);
+void func_8004E328(void);
+void func_800448F4(void);
+
+
+M2C_UNK func_80065614(void *, volatile int, M2C_UNK);
+M2C_UNK func_80065614(void *, M2C_UNK, M2C_UNK);
+
+
+extern s32 D_800A944C;
+void *func_80058694(u8 type);
+void *func_80063CAC(void *, s16, s16, s16, s32);
+void func_80063ED4(void *arg0);
+
+
+extern s32 D_8009D368;
+extern ListSet D_800D8C7C[];
+extern u8 D_800D8E8C[][12];
+extern u8 D_800D8E74[][12];
+extern s32 D_800D8EA8[][8];
+void func_8004D844(ListSet *set, s32 i, u32 j);
+void func_8004D770(ListSet *set, s32 i, s32 j);
+s32 func_8004D72C(ListSet *set, s32 which);
+void func_8004CE38(s32 arg0, M2C_UNK arg1);
+
+
+void func_800644DC(s16 arg0, s16 arg1, s16 arg2, s32 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
+
+
+extern s32 D_800A9498;
+void func_800658B4(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
+void func_800669A4(SVECTOR *arg0, s32 *arg1, void *arg2);
+void func_8006439C(s16 arg0, s16 arg1, s16 arg2, s32 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
+
+
+void func_80052CA8(s32 *out, u8 *obj);
+void func_80065058(s16, s16, s16, void *, s32);
+
+
+typedef struct { u8 active; u8 type; s16 unk2; s32 unk4; s32 animIdx; s32 unkC; s32 startTime[8]; u8 *obj; u16 flags; u8 duration; u8 pad37[9]; u8 enable[8]; } AnimEnt;
+typedef struct { AnimEnt e[1]; } AnimEntArr;
+extern M2C_UNK D_800A887C;
+
+
+extern s32 D_800A0370[];
+void func_8005ADD4(void *, s32, s32 *);
+
+
+void func_80031B58(u8 *arg0);
+
+
+extern s32 D_8009CAB4;
+extern s32 D_8009CAB8;
+void func_8003801C(void);
+void func_80069AB4(void);
+void func_8006A3E0(void);
+
+
+extern M2C_UNK D_800A87EC;
+void gteMIMefunc(SVECTOR *otp, SVECTOR *dfp, s32 n, s32 p);
+
+
+extern s16 D_8009CF68;
+extern s32 *D_8009CF6C;
+extern s32 **D_8009CF70;
+extern s32 D_800E2DE0;
+u8 *func_8003C1BC(SpawnEnt *p, s32 x, s32 y, s32 z);
+
+
+extern s32 D_800B8EFC[][5];
+extern u8 D_800D2FF4[];
+extern u8 D_800D2FC4[];
+extern s32 g_DevMenu[];
+extern char **D_8009CEB0[];
+extern char *D_8009CEE0[];
+extern char D_800A7A24[];
+extern char D_800A7A30[];
+
+
+typedef u8 Rec48[0x48];
+extern s32 D_800D8BE8[];
+
+
+extern s32 D_800E2F54;
+extern s32 D_800E2E44;
+extern void (*D_8009CE44)(s32);
+typedef struct { s32 x, y, z, w; } Vec4i;
+extern Vec4i D_800D2FB0;
+void func_8004B05C(void);
+void func_80053DAC(void);
+void func_8006F168(s32, s32);
+void func_8006FA54(s32);
+void func_8006F9A4(s32 arg0);
+void func_80030FA8(s16 *);
+void func_8003C6E4();
+void func_8003BFB8(void);
+void func_80058D00(void);
+void func_8005FF60(void);
+
+
+extern u16 D_800AFFAC;
+extern u8 *D_800B0AB4;
+extern s16 D_800B0C84;
+
+
+extern s32 D_800DDDCC[];
+s32 SquareRoot0(s32 a);
+
+
+extern s32 D_800D2D30[];
+void func_8004BC70(s32, s32 *, s32);
+
+
+extern s32 D_800E2F2C;
+s32 func_800746D0(s32, s32 *, s32 *, s16 *, s16 *, s32 *);
+
+
+extern u8 D_800D5ED8[][0xC];
+void func_80081C54(void *);
+void func_8004B028(s8 arg0, s8 arg1, s8 arg2);
+
+
+extern s32 D_1F8003E8[];
+extern s32 D_800A7D44;
+s32 func_80035BBC(u8 *obj);
+
+
+extern s32 D_800A7CB8;
+void func_80076B9C(void *arg0);
+void func_8006417C(s32, s32, s32, s32, s32);
+
+
+extern s32 D_8009CE28;
+extern s32 D_8009E9D8;
+extern char D_800A77B4[];
+extern char D_800A77CC[];
+extern s16 D_800D2F94[];
+void func_800310B4(s32 base);
+
+
+extern s16 D_800B07B8;
+extern s16 D_800B0DA8;
+
+
+extern M2C_UNK D_800D9210;
+extern s16 D_800D9214;
+
+
+extern s32 D_8009CD3C[];
+extern s32 D_800A8FAC;
+void Camera_ResetZoom(void);
+void func_8004F134(s16 arg0, s8 arg1);
+void func_80069318(void);
+void func_8006B1DC(s32 arg0);
+void func_800509E4(void *);
+void func_8005E020();
+
+
+void func_8006ECBC(void);
+
+
+extern char D_800A85D4[];
+int strlen(char *s);
+
+
+extern s32 D_1F8003D4;
+extern s32 D_1F8003D8;
+extern s32 D_1F8003DC;
+extern M2C_UNK D_800D30C0;
+extern s32 D_8009CF30;
+M2C_UNK func_80052B2C(M2C_UNK *, s32);
+s32 func_80037B6C(u8 *obj);
+void func_8004B270(s32 arg0, s32 arg1, s32 arg2);
+void func_8005E228(void *arg0);
+M2C_UNK func_8004009C(s32);
+
+
+extern s32 D_800DDE30;
+extern u8 D_800D7C24[][0x10];
+void func_800498E4(s16 *out);
+
+
+extern s16 D_8009CFB8;
+extern s32 D_800D439C;
+extern s32 D_800D43A0;
+extern s32 D_800D43C4;
+extern s32 D_800D4404;
+extern s32 D_800D440C;
+extern s32 D_800D4414;
+extern s32 D_800D4460;
+extern char D_800A8558[];
+extern char D_800A8564[];
+extern char D_800A8574[];
+extern char D_800A857C[];
+void func_80043610(void);
+
+
+extern s32 D_800A8894;
+extern u8 D_800B0064[];
+extern s32 D_800B0808[];
+extern s32 D_800D3238[];
+extern s32 D_800B0C10[];
+void func_8004DA60();
+void func_8004DBCC();
+void func_8004E07C(void);
+void func_8003BC98(void *arg0, void *arg1, s32 arg2);
+void GsSetRefView2(void *);
+void GsGetLs(void *, void *);
+
+
+extern char D_800A8484[];
+extern char D_800A84D0[];
+extern char D_800A84D8[];
+extern char D_800A84E4[];
+extern char D_800A84F0[];
+extern char D_800A84FC[];
+extern char D_800A850C[];
+extern char D_800A851C[];
+extern char D_800A8528[];
+extern char D_800A8534[];
+extern char D_800A8544[];
+void func_800411BC(s32 *x, s32 *y, s16 step);
+void func_800433A8(void);
+
+
+extern s16 D_8009EEC4;
+
+
+extern int D_800AC54C;
+extern s8 D_800D446C[];
+extern char D_800A84BC[];
+extern char D_800A84C0[];
+extern char D_800A84C4[];
+
+
+extern s32 D_800D2E70;
+extern u8 D_8009CDEC;
+u32 func_80026800(void);
+s32 func_800855BC(u32);
+
+
+extern s16 D_800B0798;
+extern s32 D_800D4474[];
+void func_8006981C(s32 arg0);
+
+
+extern u32 D_800B8F68[];
+extern s32 D_800D2AF8;
+void func_8007F34C(u32 *, s32);
+void func_8007F4C0(u32 *);
+void AddPrim(void *, void *);
+
+
+extern s32 D_800D4410;
+extern char D_800A842C[];
+void func_80041E78(void);
+
+
+void func_800419CC(void *arg0);
+void func_80041CF0(void);
+
+
+extern char *D_800D4444[];
+extern char D_800A8420[];
+void func_80041BA0(void);
+
+
+extern s32 D_800B8EFC[][5];
+extern u8 D_800D308C[];
+
+
+s32 Cheat_CheckCodes(void);
+void func_800414AC(void);
+void RestartPrompt_Open(void);
+void func_80042A94(void);
+void func_80042E34(void);
+void func_800433F4(void);
+
+
+void func_80058DFC(void *arg0);
+
+
+extern struct { char *s[8]; } D_800A8370;
+extern struct { s32 v[8]; } D_800A8390;
+
+
+extern s16 D_8009D108;
+extern s16 D_8009D10A;
+extern s16 D_8009D124;
+extern s32 D_8009D130[];
+extern s16 D_800D86CC[];
+
+
+extern u8 D_800D5EF0[][0x28];
+extern u8 D_800D7980[][0x28];
+void func_80044BAC(void *arg0, s8 arg1, s8 arg2, s8 arg3);
+void func_80081C84(void *);
+void func_80081CE4(void *, s32);
+
+
+extern s32 D_800DE0C4;
+extern s32 D_800DE0D4;
+
+
+void func_80057BFC(void *arg0, s16 arg1);
+
+
+extern s32 D_8009CD30;
+extern s16 D_800AFF5C;
+extern s16 D_800AFF60;
+extern u8 D_800B0ACC;
+extern u8 D_800B0AD0;
+extern u8 D_800B0AD4;
+extern u8 D_800B0ADC;
+extern s16 D_800B0AE8;
+extern s16 D_800B0AFC;
+extern s16 D_800B0B54;
+extern s16 D_800B0C58;
+extern s16 D_800B0C94;
+extern s16 D_800B0C98;
+extern u8 D_800B0CA0;
+extern u8 D_800B0CA4;
+extern u8 D_800B0CA8;
+extern s16 D_800B0CAC;
+extern s16 D_800B0DD8;
+extern s32 D_800B8F28[];
+extern u8 D_800B8FB0[];
+extern u8 D_800D2AF4[];
+
+
+extern s32 D_800A962C;
+s32 func_8004CB2C(void *, Weapon *);
+void func_8004C558(Weapon *, s32);
+void *func_8004C5C8(s32, s32);
+
+
+extern s16 D_8009CF80;
+
+
+M2C_UNK *func_8004C768(void *arg0);
+s32 func_8004C824(void);
+void *func_8004C82C(void *);
+void *func_8004C944(void *);
+void *func_800693DC(void *arg0);
+void func_800395E8(void *arg0);
+
+
+extern s32 D_800D4454;
+extern char D_800A8444[];
+extern char D_800A844C[];
+extern char D_800A8458[];
+extern char D_800A8460[];
+void func_80042020(void);
+void func_800289C0(s32, char *);
+
+
+extern s16 D_800B0794;
+extern u8 D_8009CDD0;
+extern s16 D_800AEDA0;
+extern s16 D_800AEDA4;
+extern s32 D_8009CAC4;
+extern char D_800A83B0[];
+extern char D_800A83BC[];
+extern char D_800A83D4[];
+extern char D_800A83E0[];
+extern char D_800A83E8[];
+extern char D_800A83F0[];
+extern char D_800A8400[];
+void func_800417C4(void);
+void func_80028B58(s32, s32, s32);
+
+
+extern s32 D_8009CFA8;
+extern s16 D_800D91FC;
+
+
+extern M2C_UNK D_800F10A8;
+
+
+M2C_UNK func_8007980C(void *, Weapon *);            /* extern */
+
+
+extern u16 D_8009E4A8;
+
+
+extern u16 D_8009E4A4;
+
+
+extern s32 D_8009CFB0;
+extern u16 D_800B0C5C;
+
+
+extern u8 D_8009CDE4, D_8009CDE5, D_8009CDE6;
+extern s32 D_800B8F24, D_800D2BE8;
+void GsDefDispBuff(u16 x0, u16 y0, u16 x1, u16 y1);
+void GsInit3D(void);
+void InitGeom(void);
+s32 GsGetActiveBuff(void);
+void func_8008A904(s32);
+void func_800876E4(s32);
+void func_8008A404(s32, s32);
+void func_8002F624(void);
+
+
+s32 SquareRoot12(s32);                              /* extern */
+s16 ratan2(s16, s32);                               /* extern */
+
+
+extern u8 D_800D2E84;
+
+
+void GsInitGraph(u16 x, u16 y, u16 intmode, u16 dith, u16 varmmode);
+void func_80032648(u32 *tim);
+void func_80032724(s16 arg0, s16 arg1, s16 arg2, s16 arg3);
+extern u8 D_8009CDE4;
+extern u8 D_8009CDE5;
+extern u8 D_8009CDE6;
+extern s8 D_800A7330;
+extern M2C_UNK D_800D2BC4;
+extern s32 D_800D30D4;
+extern s32 D_800D31B8;
+s32 func_800794D4();                                /* extern */
+void PauseMenu_Open(void);
+extern u8 D_8009CA90;
+extern s32 D_800B0B9C;
+extern M2C_UNK D_800AC284;
+M2C_UNK func_8002B69C();                            /* extern */
+void func_80041A38(void);
+extern s32 D_8009CFB4;
+s32 func_80082F24(M2C_UNK, M2C_UNK);
+M2C_UNK FntLoad(M2C_UNK, M2C_UNK);                  /* extern */
+s32 FntOpen(M2C_UNK, M2C_UNK, M2C_UNK, M2C_UNK, s32, s32); /* extern */
+M2C_UNK SetDumpFnt(s32, Args *);                    /* extern */
+M2C_UNK func_8005099C();                            /* extern */
+extern M2C_UNK D_800D90C0;
+extern Rec48 D_800D8FF8[];
+
+
+s32 func_80054098(s32);
+
+
+extern char D_800A7344[];
+void func_80032880(s32 arg0, GsIMAGE *arg1);
+void func_800324D0(s32, s16, s16);
+
+
+extern char D_800A7778[];
+extern char D_800A7784[];
+void func_80030DA0(u8 *data, s32 len, s32 mode);
+void func_80030B04(u8 *);
+void func_80061700(void);
+void *memchr(void *, int, int);
+
+
+void func_8007D184(s32, s32, s32, s32);
+extern u8 D_8009CABD;
+extern u8 D_8009CABE;
+
+
+extern s16 D_8009CF54;
+s32 func_800349F8(void *);
+
+
+extern char D_800A828C[], D_800A82B4[], D_800A82DC[], D_800A8304[], D_800A8308[], D_800A8310[];
+extern char D_800A8318[], D_800A8320[], D_800A832C[], D_800A8340[];
+
+
+typedef s32 (*CmdHandler)(u8 *, void *, void *);
+extern CmdHandler D_8009D7A8[];
+
+
+void Cheat_DoAction(s32 action);
+
+
+extern s32 D_8009CD4C;
+extern s32 D_800B0C74;
+extern s32 D_8009CD54;
+extern s32 D_8009D3A4;
+extern s32 D_800B0A94;
+extern s16 D_8009CDA2;
+
+
+
+
+extern M2C_UNK D_800D45C4;
+
+
+M2C_UNK func_800636B8();                            /* extern */
+s32 rand();                                         /* extern */
+extern M2C_UNK *D_8009D8B8;
+extern M2C_UNK D_800DA4F8;
+extern M2C_UNK D_800DF12C;
+
+
+extern s8 D_800A7540;
+extern M2C_UNK D_800A7564;
+extern s8 D_800A7570;
+extern s8 D_800A75AC;
+extern M2C_UNK D_800A75C0;
+extern M2C_UNK D_800FDB2C;
+
+
+extern s16 D_800AFF80;
+extern s16 D_800AFFC0;
+extern s16 D_800AFFC4;
+extern s16 D_800B008C;
+extern s16 D_800B0AA4;
+extern s32 D_800B0AA8;
+extern s16 D_800B0C30;
+
+
+extern u16 D_8009E4C0;
+
+
+unsigned long func_80027248(M2C_UNK, s32, M2C_UNK);
+
+
+extern u8 D_8009D5E4;
+
+
+M2C_UNK func_80057E80(s32);                         /* extern */
+void func_80062300(void);
+M2C_UNK func_80063B20();                            /* extern */
+extern s32 D_800B8F24;
+extern GsOT D_800B8F88[];
+
+
+M2C_UNK func_8007F2EC(M2C_UNK *, M2C_UNK *);        /* extern */
+extern M2C_UNK D_800B0C7C;
+extern u16 D_800DE8E8[64][16];
+
+
+M2C_UNK func_80029684();                            /* extern */
+void func_800456D0(void);
+M2C_UNK func_80047A04();                            /* extern */
+M2C_UNK func_80047DBC();                            /* extern */
+void func_800481B0(void);
+M2C_UNK func_80048E60();                            /* extern */
+M2C_UNK func_80049220(u8 *);                        /* extern */
+void func_800493C0(void);
+M2C_UNK func_80049D60();                            /* extern */
+M2C_UNK func_8004A8E4();                            /* extern */
+void func_8004AF0C(void);
+void func_8004B0B0(void);
+extern s8 D_800D74F8;
+extern s16 D_800D7928;
+extern s16 D_800D792C;
+extern s16 D_800D7AB0;
+extern s16 D_800D7AB4;
+extern s16 D_800D7BE8;
+extern s16 D_800D7BEC;
+extern s16 D_800D7BF0;
+extern s8 D_800D91F8;
+extern s8 D_800D9218;
+
+
+extern s32 D_8009D260;
+extern s32 D_8009D27C;
+extern s32 D_8009D280;
+extern s32 D_8009D29C;
+extern s32 D_8009D2A0;
+extern s32 D_8009D2A8;
+extern s32 D_8009D2BC;
+extern s32 D_8009D2CC;
+extern s32 D_8009D2D0;
+extern s32 D_8009D2D4;
+extern s32 D_8009D2F0;
+extern s32 D_8009D2F4;
+extern s32 D_8009D2F8;
+extern s32 D_8009D300;
+extern s32 D_8009D310;
+extern s32 D_8009D314;
+extern s32 D_8009D31C;
+extern s32 D_8009D320;
+extern s32 D_8009D324;
+extern s32 D_8009D328;
+extern s32 D_8009D32C;
+extern s32 D_8009D330;
+extern s32 D_8009D334;
+extern s32 D_8009D338;
+extern s32 D_8009D33C;
+extern s32 D_8009D340;
+extern s32 D_8009D344;
+extern s32 D_8009D34C;
+extern s32 D_8009D350;
+extern s32 D_8009D354;
+extern s32 D_8009D358;
+
+
+M2C_UNK SsEnd();                                    /* extern */
+M2C_UNK SsVabClose(s16);                            /* extern */
+M2C_UNK func_8002B0A0();                            /* extern */
+M2C_UNK func_80082F64(M2C_UNK);                     /* extern */
+M2C_UNK func_80083388(M2C_UNK);                     /* extern */
+M2C_UNK func_800841C4(M2C_UNK);                     /* extern */
+M2C_UNK func_80085B9C();                            /* extern */
+void func_800268CC(void);
+M2C_UNK func_80082E04(M2C_UNK);
+M2C_UNK func_80082F78(M2C_UNK);
+s16 SsVabOpenHead(s32, M2C_UNK);                    /* extern */
+s16 SsVabTransBody(s32);                            /* extern */
+M2C_UNK SsVabTransCompleted(M2C_UNK);               /* extern */
+extern s8 D_800A763C;
+extern s8 D_800A7650;
+extern s8 D_800A7664;
+extern s8 D_800A7678;
+extern M2C_UNK D_800A76A0;
+extern s8 D_800A76AC;
+extern s8 D_800A7948;
+extern s8 D_800A795C;
+extern s8 D_800A796C;
+extern s8 D_800A7980;
+extern s8 D_800A7994;
+extern s8 D_800A79B8;
+extern s32 D_8009CE3C;
+extern s8 D_800A7788;
+extern s32 D_800A77A0;
+extern s16 D_800AFFA4;
+extern s16 D_800B0BA0;
+M2C_UNK func_80081458(s16);
+void func_8002F564(void *arg0, s32 arg1, s32 arg2, s16 arg3, u16 arg4);
+M2C_UNK func_80038984(void *, s32, Weapon *);       /* extern */
+extern u32 D_8009D910;
+extern s32 D_8009DB38;
+M2C_UNK func_80048B4C(M2C_UNK *, M2C_UNK, M2C_UNK); /* extern */
+extern s16 D_8009D104;
+extern s16 D_8009D106;
+extern s16 D_8009D126;
+extern M2C_UNK D_800A87A0;
+extern M2C_UNK D_800A87B0;
+extern M2C_UNK D_800A87C0;
+M2C_UNK func_80030994(u8 *);                        /* extern */
+void func_80030D08(u8 arg0, u8 *buf, u8 *name);
+void func_80030F20(void);
+extern s8 D_800A9604;
+extern s8 D_800A9614;
+
+
+M2C_UNK func_80060798();                            /* extern */
+
+
+void func_8003331C(s32 arg0);
+s32 func_8005D58C(s32 arg0);
+s32 func_8005D5C4(M2C_UNK *, void *);               /* extern */
+extern u8 D_8009E4F0;
+extern u8 D_8009E6FC;
+extern u8 D_800A9644;
+extern M2C_UNK *D_800DDEE0;
+extern u8 **D_800DDEE4;
+
+
+M2C_UNK PadInitDirect(M2C_UNK *, void *);           /* extern */
+M2C_UNK func_8008657C();                            /* extern */
+M2C_UNK func_80086928(M2C_UNK);                     /* extern */
+extern u8 D_800B0DE4;
+extern s32 D_800B0E40;
+extern s32 g_PadHeld;
+extern s32 g_PadPressed;
+extern s32 g_PadPrev;
+extern s8 D_800B0E54;
+extern s32 D_800B0E58;
+extern u8 g_PadAxes;
+extern u8 g_PadAxesPrev;
+void func_8003237C(s32 arg0, s32 arg1);
+extern s32 D_8009CE34;
+extern M2C_UNK (*D_8009CE40)(s16);
+extern s16 D_8009E9C4;
+extern u8 D_8009E9DC;
+void func_8004782C(void *arg0);
+extern u8 D_800D4958;
+extern u8 D_800D5DA4;
+extern u8 D_800D7CB4;
+s32 GetTPage(M2C_UNK, s32, M2C_UNK, M2C_UNK);       /* extern */
+M2C_UNK SetDrawMode(M2C_UNK *, M2C_UNK, M2C_UNK, s32, s32); /* extern */
+extern u8 D_800D8138;
+extern u8 g_CamPosX;
+
+
+extern u32 D_8009CE38;
+s32 func_80045344(POLY_FT4 *p, s32 u, s32 v, s32 x, s32 y, s32 uw, s32 w, s32 h, s32 tpx, s32 tpy, s32 clx, s32 cly);
+extern M2C_UNK D_800D5E80;
+extern M2C_UNK D_800D8624;
+extern M2C_UNK D_800D8674;
+extern M2C_UNK D_800D7500;
+extern M2C_UNK D_800D7888;
+extern M2C_UNK D_800D78D8;
+extern M2C_UNK D_800D7B08;
+extern M2C_UNK D_800D7CB8;
+extern M2C_UNK D_8009D5B4;
+extern M2C_UNK D_800A89CC;
+extern M2C_UNK D_800A89DC;
+extern s32 D_800D9248;
+
+
+M2C_UNK func_8005D630(s32 *);                       /* extern */
+void func_8006B230(s32 arg0, M2C_UNK arg1);
+extern M2C_UNK D_800A8FE4;
+extern u8 D_800B05B0;
+
+
+extern s16 D_800DA270;
+
+
+void func_80047DB4(void);
+
+
+M2C_UNK func_80076184(s32, M2C_UNK);                /* extern */
+extern s16 D_8009CF48;
+
+
+extern M2C_UNK D_800C1C54;
+extern M2C_UNK D_800CA8F4;
+
+
+M2C_UNK func_800393E4();                            /* extern */
+void func_8005414C(void *arg0);
+void func_80063ADC(void *arg0);
+extern s8 D_8009CABF;
+extern s32 D_8009CD64;
+extern u8 D_8009D002;
+extern s32 D_8009D004;
+extern s32 D_8009D26C;
+extern u8 D_8009D8D5;
+extern s32 D_8009D8D8;
+
+
+void func_800698CC(void);
+extern s32 D_800E23D8;
+extern s32 D_800E23F8;
+
+
+extern M2C_UNK D_800DDF08;
+extern M2C_UNK D_800DDFEC;
+
+
+M2C_UNK func_80026C90(M2C_UNK);                     /* extern */
+void func_8002F53C(void);
+void func_80041C28(void);
+void func_80069850(s32 arg0);
+extern s32 D_8009CAC4;
+extern u16 D_8009CFC0;
+extern s32 D_8009CFC8;
+
+
+void func_800393AC(void *arg0);
+M2C_UNK func_80060614(s32);                         /* extern */
+
+
+M2C_UNK func_80032768(s32);                         /* extern */
+extern M2C_UNK D_800A76C0;
+extern s32 D_800D2F44;
+
+
+M2C_UNK func_8005C864();                            /* extern */
+
+
+s32 func_800575FC(u8 *cmd, void *arg1, void *arg2);
+extern M2C_UNK D_800A8C78;
+
+
+s32 func_800303B4(u8 mode);
+extern M2C_UNK D_800A970C;
+
+
+extern M2C_UNK D_800A81E0;
+
+
+s32 exit(M2C_UNK);                                  /* extern */
+s32 func_800303B4(u8 mode);
+extern M2C_UNK D_800A9710;
+
+
+M2C_UNK func_80026B00(u8);                          /* extern */
+M2C_UNK Menu_ResetState();                            /* extern */
+M2C_UNK func_80061708(M2C_UNK);                     /* extern */
+M2C_UNK func_8007F0D8(M2C_UNK);                     /* extern */
+extern s32 D_8009CA9C;
+extern u8 D_800AC38C;
+extern s8 D_800AFFA8;
+extern s8 D_800AFFCC;
+extern s32 D_800AFFD0;
+extern s8 D_800B0070;
+extern s8 D_800B07C4;
+extern s8 D_800B0AE0;
+M2C_UNK func_800286EC(M2C_UNK);                     /* extern */
+M2C_UNK func_8002872C(M2C_UNK *, M2C_UNK, M2C_UNK); /* extern */
+M2C_UNK func_80042B28();                            /* extern */
+extern s32 D_8009CA8C;
+extern M2C_UNK D_800A83C8;
+extern M2C_UNK D_800A8410;
+extern M2C_UNK D_800A8418;
+extern s16 D_800B0794;
+void func_80042D1C(void);
+void func_80042E6C(void);
+void func_80043078(void);
+
+
+s32 func_800536F0(u32 arg0);
+extern s16 D_800B07B0;
+extern s16 D_800B0DA0;
+
+
+s32 func_800324C0(void);
+M2C_UNK func_80033090();                            /* extern */
+M2C_UNK func_800352B8();                            /* extern */
+M2C_UNK func_80035F04();                            /* extern */
+void func_80037A24(void);
+void func_8004BB00(void);
+M2C_UNK func_80052DB8();                            /* extern */
+M2C_UNK func_8005EF7C();                            /* extern */
+M2C_UNK func_8005F3B0();                            /* extern */
+M2C_UNK func_8005F788();                            /* extern */
+M2C_UNK func_8002D1D4();                            /* extern */
+M2C_UNK func_80031D94();                            /* extern */
+M2C_UNK func_80074E38();                            /* extern */
+M2C_UNK func_80079588();                            /* extern */
+M2C_UNK CdInit();                                   /* extern */
+M2C_UNK GsInitVcount();                             /* extern */
+M2C_UNK SsSetTickMode(M2C_UNK);                     /* extern */
+M2C_UNK SsUtReverbOff();                            /* extern */
+M2C_UNK func_8002680C();                            /* extern */
+void Pad_Init(void);
+void Gfx_Init(void);
+void func_8004E794(void);
+M2C_UNK func_8007EECC(M2C_UNK);                     /* extern */
+M2C_UNK func_80085B5C();                            /* extern */
+M2C_UNK func_80085BBC(M2C_UNK);                     /* extern */
+extern M2C_UNK D_800F1274;
+extern M2C_UNK GsTMDdivF3L;
+extern M2C_UNK GsTMDdivF3NL;
+extern M2C_UNK GsTMDdivG3L;
+extern M2C_UNK GsTMDdivG3NL;
+extern M2C_UNK GsTMDdivNF3;
+extern M2C_UNK GsTMDdivNG3;
+extern M2C_UNK GsTMDdivTF3L;
+extern M2C_UNK GsTMDdivTF3LFG;
+extern M2C_UNK GsTMDdivTF3NL;
+extern M2C_UNK GsTMDdivTG3L;
+extern M2C_UNK GsTMDdivTG3NL;
+extern M2C_UNK GsTMDdivTNF3;
+extern M2C_UNK GsTMDdivTNG3;
+extern M2C_UNK GsTMDfastF3GL;
+extern M2C_UNK GsTMDfastF3GLFG;
+extern M2C_UNK GsTMDfastF3GNL;
+extern M2C_UNK GsTMDfastF3L;
+extern M2C_UNK GsTMDfastF3LFG;
+extern M2C_UNK GsTMDfastF3NL;
+extern M2C_UNK GsTMDfastG3GL;
+extern M2C_UNK GsTMDfastG3GLFG;
+extern M2C_UNK GsTMDfastG3GNL;
+extern M2C_UNK GsTMDfastG3L;
+extern M2C_UNK GsTMDfastG3LFG;
+extern M2C_UNK GsTMDfastG3NL;
+extern M2C_UNK GsTMDfastNF3;
+extern M2C_UNK GsTMDfastNG3;
+extern M2C_UNK GsTMDfastTF3L;
+extern M2C_UNK GsTMDfastTF3LFG;
+extern M2C_UNK GsTMDfastTF3NL;
+extern M2C_UNK GsTMDfastTG3L;
+extern M2C_UNK GsTMDfastTG3LFG;
+extern M2C_UNK GsTMDfastTG3NL;
+extern M2C_UNK GsTMDfastTNF3;
+extern M2C_UNK GsTMDfastTNG3;
+extern M2C_UNK func_80089784;
+extern M2C_UNK func_80089B44;
+extern M2C_UNK func_8008B074;
+s32 func_800302AC(void);
+extern M2C_UNK D_800A7460;
+extern s32 D_800AFFB8;
+extern s32 D_800AFFBC;
+M2C_UNK func_80029868(s32, M2C_UNK, M2C_UNK, M2C_UNK, s32, s32); /* extern */
+M2C_UNK func_8002B064(s32);                         /* extern */
+extern void *D_800D4468;
+extern s32 D_800DDC44;
+extern s32 D_800DDC48;
+extern s32 D_800DDC4C;
+extern s32 D_800DDC50;
+extern s32 D_800DDC54;
+extern s32 D_800DDC58;
+extern s32 D_800DDC5C;
+extern s32 D_800DDC60;
+extern s32 D_800DDC64;
+extern s32 D_800DDC68;
+extern s32 D_800DDCC0;
+extern s32 D_800DDCC4;
+extern s32 D_800DDCC8;
+extern s32 D_800DDD8C;
+extern s32 D_800DDD90;
+extern s32 D_800DDD94;
+extern s32 D_800DDD98;
+extern s32 D_800DDDA0;
+extern s32 D_800DDDA4;
+extern s32 D_800DDDAC;
+extern s32 D_800DDDB0;
+extern s32 D_800DDDB8;
+extern s32 D_800DDE04;
+extern s32 D_800DDE08;
+extern s32 D_800DDEE8;
+extern s32 D_800DDEEC;
+extern s32 D_800DE0D8;
+extern s16 D_800DE0DC;
+extern s16 D_800DE0E0;
+void func_8005B96C(void *arg0, s32 arg1, void *arg2);
+void func_8007D1E8(s32, s32);
+extern s32 D_800D2F8C;
+void func_8004DD9C(void);
+M2C_UNK func_8005D694();                            /* extern */
+M2C_UNK func_800617AC(void *);                      /* extern */
+M2C_UNK func_80061B70(void *);                      /* extern */
+M2C_UNK func_8007A17C(M2C_UNK);                     /* extern */
+s32 func_8007A1B0();                                /* extern */
+s32 func_8007A1FC();                                /* extern */
+extern s32 D_8009CD50;
+extern s16 D_800B0DD4;
+extern s16 D_800B0DDC;
+extern s32 D_800DDDB4;
+extern s32 D_8009D2B4;
+extern s32 D_8009D2B8;
+extern s32 D_8009D2D8;
+extern s32 D_8009D2DC;
+extern s32 D_8009D2E0;
+extern s32 D_8009D2E4;
+extern s32 D_8009D2E8;
+extern s32 D_8009D2EC;
+extern s32 D_8009D318;
+s32 func_8003C88C(s32 arg0, s32 arg1);
+extern s32 D_8009D304;
+extern s32 D_8009D348;
+s32 func_80026D08(M2C_UNK, M2C_UNK);                /* extern */
+s32 func_80026F30(M2C_UNK, M2C_UNK);                /* extern */
+M2C_UNK func_800272A4(s16, M2C_UNK, M2C_UNK);       /* extern */
+M2C_UNK func_80027394(M2C_UNK, s16, M2C_UNK, M2C_UNK); /* extern */
+extern s32 D_8009E410;
+extern s32 D_8009E414;
+extern s32 D_8009E418;
+
+
+extern s8 D_8009CD73;
+extern void *D_8009CD98;
+void func_80069B74(void);
+M2C_UNK func_800604B0(s16, s16);                    /* extern */
+M2C_UNK func_80060588(s32);                         /* extern */
+extern s32 D_800AFFC8;
+extern s16 D_800B07A8;
+extern s16 D_800B0DA4;
+extern s16 D_800B0DC0;
+M2C_UNK func_80063858();                            /* extern */
+void func_80063F84(void);
+M2C_UNK func_8002BC18();                            /* extern */
+extern s32 D_8009D35C;
+extern s32 D_800B0DD0;
+M2C_UNK func_8008659C();                            /* extern */
+extern M2C_UNK D_800B0E34;
+void func_8006EEA8(void);
+void func_8006F034(void);
+M2C_UNK func_8007A17C(M2C_UNK);                     /* extern */
+void func_80059C14(u8 *arg0);
+M2C_UNK func_80059E4C(M2C_UNK *);                   /* extern */
+extern s32 D_8009CF7C;
+extern M2C_UNK D_800DDA40;
+extern M2C_UNK D_800A81D0;
+M2C_UNK Menu_ResetState();                            /* extern */
+void func_8004783C(void);
+extern s32 D_8009CFC4;
+extern s32 D_8009CDC8;
+s32 func_80026F30(M2C_UNK, M2C_UNK);
+void func_8004218C(void);
+s16 func_80043B14(M2C_UNK, s16);                    /* extern */
+extern s16 D_8009CFBE;
+M2C_UNK func_800474AC();                            /* extern */
+M2C_UNK func_80028810(M2C_UNK *, s32);              /* extern */
+extern M2C_UNK D_800A85E4;
+extern s32 D_8009CDA8;
+extern M2C_UNK D_8009D008;
+extern s16 D_8009D00C;
+extern s32 D_800D79D0;
+extern s8 D_800D8150;
+M2C_UNK func_8004CE74();                            /* extern */
+void func_8004CF00(u8 *arg0, u8 *arg1);
+M2C_UNK func_80069684();                            /* extern */
+extern u16 D_800D31B4;
+extern M2C_UNK D_800D9234;
+M2C_UNK func_8005C894();                            /* extern */
+s32 func_8002C168(M2C_UNK *, M2C_UNK);              /* extern */
+void func_8005B508(void);
+void func_80068EB4(void);
+extern M2C_UNK D_800A95BC;
+extern M2C_UNK D_800A95CC;
+void func_80068F80(void);
+extern M2C_UNK D_800A95E4;
+void func_800690B8(void);
+extern M2C_UNK D_800A95F4;
+extern M2C_UNK D_8009E440;
+extern M2C_UNK D_8009E420;
+extern M2C_UNK D_8009E428;
+extern M2C_UNK D_8009E430;
+extern M2C_UNK D_8009E438;
+extern M2C_UNK *D_800AB5B8;
+extern M2C_UNK *D_800AB5BC;
+extern M2C_UNK *D_800AB5CC;
+extern M2C_UNK *D_800AB5D0;
+extern M2C_UNK *D_800AB5D4;
+extern M2C_UNK *D_800AB5DC;
+s32 func_80053B40(s32 arg0);
+M2C_UNK func_80054414(M2C_UNK, M2C_UNK, M2C_UNK);   /* extern */
+s32 func_80039A9C(M2C_UNK, u8, M2C_UNK);            /* extern */
+M2C_UNK func_8006A2B8();                            /* extern */
+extern int D_8009D2FC;
+extern M2C_UNK D_800A96D4;
+extern s32 D_8009D270;
+extern s32 D_8009D2AC;
+
+
+s32 func_800305B4(s32 arg0);
+extern s16 D_800B0868;
+extern s16 D_800B0C8C;
+extern s32 D_800DF0E8;
+extern s32 D_800DF0EC;
+extern s8 D_8009CDE7;
+extern s32 D_800D2BEC;
+extern s32 D_800D2E74;
+extern s32 D_800D2E78;
+extern s32 D_800D2E7C;
+extern s32 D_800D2E80;
+extern s32 D_800D2FC0;
+extern s32 D_800D2F90;
+extern s32 D_800D2FA4;
+extern s32 D_800D2FA8;
+extern s32 D_800D2FAC;
+extern s32 D_8009CF10;
+extern s16 D_8009CAA4;
+extern s32 D_800D5F40;
+extern u16 D_800AC4D8;
+extern u16 D_800AC4DC;
+extern u16 D_800D86C4;
+extern u16 D_800D86C8;
+extern s16 D_8009D014;
+extern s16 D_8009D018;
+extern s16 D_8009D01A;
+extern s32 D_8009CFFC;
+extern s16 D_8009D000;
+extern s32 D_8009D010;
+extern s32 D_8009CFF0;
+extern s16 D_800D9208;
+extern s8 D_800D920C;
+extern s32 D_8009D3A8;
+extern u32 D_800D91E4;
+extern s32 D_800D9268;
+s32 func_8005AD6C();                                /* extern */
+extern s32 D_800F11F0;
+extern s32 D_8009D268;
+extern s32 D_8009D308;
+extern s32 D_8009DB3C;
+extern s32 D_8009D30C;
+extern s32 D_800E02B8;
+extern s32 D_8009D274;
+extern s32 D_8009D2B0;
+
+
+
+extern int g_CheatCodeProgress[];
+extern int g_CheatCodes[];
+
+void func_8005EDF8(void *arg0) {
+    if ((D_800D2F8C == 2) && (arg0 != g_Player)) {
+        if ((M2C_FIELD(M2C_FIELD(g_Player, void **, 0x90), s32 *, 0x2C) - M2C_FIELD(M2C_FIELD(arg0, void **, 0x90), s32 *, 0x2C)) >= 0x24B9) {
+            M2C_FIELD(arg0, s32 *, 0x7C) = (s32) (M2C_FIELD(arg0, s32 *, 0x7C) | 0x80000000);
+            return;
+        }
+        M2C_FIELD(arg0, s32 *, 0x7C) = (s32) (M2C_FIELD(arg0, s32 *, 0x7C) & 0x7FFFFFFF);
+    }
+}
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005EE6C);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005EF7C);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005F3B0);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005F788);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005F93C);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005FAA8);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005FC4C);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005FF60);
+
+void func_80060094(void *arg0) {
+    if (M2C_FIELD(arg0, s32 *, 0x4C) & 8) {
+        func_80038C44(arg0);
+        return;
+    }
+    if (M2C_FIELD(arg0, s32 *, 0x48) & 0x800) {
+        func_80060798();
+    }
+}
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_800600EC);
+
+void func_80060410(void) {
+    func_8007F2EC(&D_800B0C7C, &D_800DE8E8);
+}
+
+void func_8006043C(s32 a, s32 b) {
+ s32 j; s32 ia; s32 ib;
+ ia = D_800DE0E4[a]; ib = D_800DE0E4[b];
+ for (j = 0; j < 16; j++) { D_800DE8E8[ib][j] = D_800DE0E8[ia][j]; }
+}
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_800604B0);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80060588);
+
+void func_8006060C(void) {
+}
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80060614);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80060798);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_800608E4);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80060AC0);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80060B5C);
+
+void func_80060E0C(void *arg0) {
+    if (M2C_FIELD(arg0, s32 *, 0x34) <= 0) {
+        M2C_FIELD(arg0, s16 *, 0x56) = 0;
+    }
+}
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80060E28);
+
+void func_80061018(void *arg0, s32 arg1) {
+    s32 *temp_a0;
+    s32 *temp_v0;
+
+    temp_a0 = M2C_FIELD(arg0, s32 **, 0x118);
+    *temp_a0 |= 0x80000;
+    if (arg1 == g_Player) {
+        temp_v0 = M2C_FIELD(arg0, s32 **, 0x118);
+        *temp_v0 |= 0x200000;
+    }
+}
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80061068);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_800615C8);
+
+void func_80061700(void) {
+}
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80061708);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_800617AC);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80061AB0);
+
+INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80061B70);

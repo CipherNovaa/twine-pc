@@ -37,7 +37,25 @@ been renamed, the current name is used.
 - `func_800433F4`: sound screen; clamps `D_8009CFB8` to 0..0x68, shows `Args` s16 at +0x140 and +0x13E
   (volumes?); update `func_80043610`.
 
+## Sound
+
+- Sound table at `g_Args+0x130`: 0x69 entries of 8 bytes {u8 prog, tone, note, voice, vol, rnd, pad[2]}.
+- `func_80026D08(id, flags)` / `func_80026F30(id, flags)`: play a sound effect (volume `g_Args+0x144`,
+  scaled by `+0x138` when flags & 2, and by the entry's volume); returns the voice.
+- `func_80027248(id, pos, flags)`: positional sound: pan from `func_8003B808(pos)` into `g_Args+0x136/0x137`.
+- `func_80027394(pos, voice, id, flags)`: updates a playing voice's volume.
+- `func_80026C90(keep)`: silences voices 0–23 except `keep`.
+- Likely PsyQ names: `func_800814CC` = SsUtSetVVol, `func_80081458` = SsUtKeyOffV, `func_800815A0` =
+  SsUtKeyOn.
+
 ## Files, CD, levels
+
+- Original source file names leaked by assert/error strings, with a function in each: font.c
+  (`func_800289C0`), d3dcdrom.c (`func_8002A854`, `func_8002BF34`, `func_8002C490`), fileio.c
+  (`func_80030994`), ob_mgr.c (`func_80039520`, `func_8003A71C`), prim_ob.c (`func_80058694`), indoor.c
+  (`func_800600EC`), hmdlb01.c (`func_80067F18`); also init.c, guybo.c, SHARED.c, IMAGE.c, ANIM.c, POLY.c.
+- `func_8002AC90(a, b)`: file-name compare (skips a's first char, stops at `;`, `\` == `/`).
+- `func_8002AFF8(idx)`: CdSearchFile on `D_8009C204[idx].name` (12-byte records).
 
 - `func_8002A61C(name, *out)`: finds a file on the CD: drive mode 0x80, waits 3 frames on
   `g_Args->unk2DC` (vblank counter), `*out` = 2 if not found, else `func_800834D0(&file)`.
@@ -245,6 +263,14 @@ been renamed, the current name is used.
   `D_800DE004[slot]`.
 - `func_8002E4DC`: resets the scratchpad muzzle position; spawns `D_8009D26C` (`func_80039A9C`).
 
+- `func_8002F624`: ordering tables (`D_800B8F88`, `D_800B8EFC`, `D_800D2AFC`, two buffers each).
+- `func_80037768(obj, proj)`: can this projectile damage this object (u16 obj+0xE: 0x7FFF never, 0 always,
+  0x400 only the player, 0x800 not the player, else a type mask vs proj+0x3A).
+- `func_800493C0`: builds the green crosshair (2 LINE_F2 × 2 buffers in `D_800D7C24`).
+- `func_800637B0(x, y, z)`: allocates one of 16 × 0x34-byte records at `D_800DF200`.
+- `DevMenu_HandleInput`: `g_DevMenu` = {active; cursor; count[12]; vals[12]}; rows 7–11 mirror
+  `g_Invincible`/`g_GodMode`, `D_8009CD6C` (inverted), `D_8009CA8C`, `D_8009CDE8`, `D_8009CD6E`.
+
 ## Enemy AI: waypoints and navmesh
 
 - `func_800523E4(obj, path)`: nearest waypoint on a path (1-based, 0xFF if none); sets turn bit 2.
@@ -272,6 +298,8 @@ Command word: byte 0 opcode, byte 1 destination variable, u16 at +2 operand mode
   `g_Args+0x138` (2-word form).
 - `func_8005747C` (op 0x1B): play animation: id byte 1, start/end frames bytes 2/3 (−1 = last frame);
   wait = frames × anim+0x20; loops when start == end; `func_80057AD8`.
+- `func_80056F90`: "switch-gosub": vars[byte 1] indexes an n-entry table (n = byte 2); pushes the return
+  address on the script call stack (+0x1B0: {count; u32 *items[4]}).
 - `func_8005743C`: set wait counter (`obj->wait` = immediate or variable), pc += 1 word.
 - `func_80055620` / `func_80055778`: no-op opcodes that skip their operands.
 - `func_80055598` (op 0x10): chr->0x94->+0x34 = angle. `func_80055670` (op 0x12): set model position.

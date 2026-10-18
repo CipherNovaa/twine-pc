@@ -30,6 +30,16 @@ def level_info(level):
     return data, load_addr, o0
 
 
+def file_opt(stem):
+    """Optimization level the original developers used for a C file (Makefile O0_FILES / O1_FILES)."""
+    mk = (ROOT / "Makefile").read_text()
+    for level in ("O0", "O1"):
+        m = re.search(rf"{level}_FILES := (.*)", mk)
+        if m and stem in m.group(1).split():
+            return f"-{level}"
+    return "-O2"
+
+
 def asm_info(s_path):
     txt = s_path.read_text()
     size = int(re.search(r"nonmatching \w+, 0x([0-9A-F]+)", txt).group(1), 16)
@@ -211,7 +221,7 @@ def phase_fixups(level, results_path, max_diff, workers):
     results = json.loads(Path(results_path).read_text())
     jobs = []
     for c_file in sorted((ROOT / "src" / level).glob("*.c")):
-        opt = "-O0" if c_file.stem in o0 else "-O2"
+        opt = file_opt(c_file.stem)
         for folder, func in INCLUDE_RE.findall(c_file.read_text()):
             v = results.get(func)
             if not v or not v.get("code"):
@@ -239,7 +249,7 @@ def phase_try(level, max_size, workers, out):
     data, load_addr, o0 = level_info(level)
     jobs = []
     for c_file in sorted((ROOT / "src" / level).glob("*.c")):
-        opt = "-O0" if c_file.stem in o0 else "-O2"
+        opt = file_opt(c_file.stem)
         for folder, func in INCLUDE_RE.findall(c_file.read_text()):
             s_path = ROOT / folder / f"{func}.s"
             _, size, vram = asm_info(s_path)
@@ -288,10 +298,10 @@ def decl_name(line):
     m = re.search(r"\(\s*\*\s*(\w+)\s*\)", s)
     if m:
         return m.group(1)
-    m = re.match(r"^(?:extern\s+|static\s+)?[A-Za-z_][\w\s\*]*?\b(\w+)\s*(\[[^\]]*\])?\s*;$", s)
+    m = re.match(r"^(?:extern\s+|static\s+)?[A-Za-z_][\w\s\*]*?\b(\w+)\s*(\[[^\]]*\])*\s*;$", s)
     if m:
         return m.group(1)
-    m = re.match(r"^typedef\b.*?(\w+)\s*(\[[^\]]*\])?\s*;$", s)  # one-line typedef struct {...} X;
+    m = re.match(r"^typedef\b.*?(\w+)\s*(\[[^\]]*\])*\s*;$", s)  # one-line typedef struct {...} X;
     return m.group(1) if m else None
 
 

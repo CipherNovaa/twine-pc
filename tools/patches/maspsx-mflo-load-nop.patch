@@ -1,0 +1,84 @@
+diff --git a/maspsx/__init__.py b/maspsx/__init__.py
+index e8d93a3..4dfcbc6 100644
+--- a/maspsx/__init__.py
++++ b/maspsx/__init__.py
+@@ -619,6 +619,7 @@ class MaspsxProcessor:
+     def process_lines(self):
+         self.is_reorder = True
+         self.skip_instructions = 0
++        self.nop_after_next_load = False
+         self.file_num = 1
+ 
+         self.bss_entries = {}
+@@ -738,7 +739,7 @@ class MaspsxProcessor:
+         return False
+ 
+     def _handle_nop_before_next_instruction(
+-        self, next_instruction: str, r_dest: str
++        self, next_instruction: str, r_dest: str, load: bool = False
+     ) -> List[str]:
+         res: List[str] = []
+ 
+@@ -776,6 +777,11 @@ class MaspsxProcessor:
+                 f"#nop # DEBUG: '{next_instruction}' does not load from {r_dest}"
+             )
+ 
++        if load and self.nop_after_next_load:
++            self.nop_after_next_load = False
++            if not any(r.startswith("nop") for r in res):
++                res.append("nop # DEBUG: second instruction between mflo/mfhi and mult/div")
++
+         return res
+ 
+     def _handle_mflo_mfhi(self, r_source=None) -> List[str]:
+@@ -839,7 +845,13 @@ class MaspsxProcessor:
+                 if inst == next_instruction:
+                     op, *_ = inst.strip().split()
+                     if op in load_mnemonics:
+-                        # allow for $at handling later in the script
++                        # allow for $at handling later in the script. ASPSX keeps two
++                        # instructions between mflo/mfhi and mult/div: if the mult/div
++                        # doesn't read the loaded register, no load-delay nop would
++                        # provide the second one, so ask for an explicit nop.
++                        _, r_dest, _, _, _ = parse_load_or_store(" ".join(inst.strip().split()[1:]))
++                        if not line_loads_from_reg(next_next_instruction, r_dest, loads_to_reg=self.nop_lw_lw):
++                            self.nop_after_next_load = True
+                         skip = 0
+                         break
+ 
+@@ -1016,7 +1028,7 @@ class MaspsxProcessor:
+                 # newer GCCs can emit %hi() and %lo() separately...
+                 res.append(f"{line} # DEBUG: leaving for assembler to expand")
+                 extra_nops = self._handle_nop_before_next_instruction(
+-                    next_instruction, r_dest
++                    next_instruction, r_dest, load=True
+                 )
+                 res.extend(extra_nops)
+ 
+@@ -1041,7 +1053,7 @@ class MaspsxProcessor:
+                     res.append(line)
+ 
+                 extra_nops = self._handle_nop_before_next_instruction(
+-                    next_instruction, r_dest
++                    next_instruction, r_dest, load=True
+                 )
+                 res.extend(extra_nops)
+ 
+@@ -1074,7 +1086,7 @@ class MaspsxProcessor:
+                     )
+ 
+                 extra_nops = self._handle_nop_before_next_instruction(
+-                    next_instruction, r_dest
++                    next_instruction, r_dest, load=True
+                 )
+                 res.extend(extra_nops)
+ 
+@@ -1101,7 +1113,7 @@ class MaspsxProcessor:
+                     r_dest = actual_r_dest
+ 
+                 extra_nops = self._handle_nop_before_next_instruction(
+-                    next_instruction, r_dest
++                    next_instruction, r_dest, load=True
+                 )
+                 res.extend(extra_nops)
+ 

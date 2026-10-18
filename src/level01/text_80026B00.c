@@ -1,5 +1,27 @@
 #include "twine.h"
 
+void func_8003B808(s32);
+unsigned long func_80027248(u8 id, s32 pos, s32 flags);
+
+
+typedef struct { u8 prog; u8 tone; u8 note; u8 voice; u8 vol; u8 pad5[3]; } SfxEnt;
+s32 func_80026D08(u32 id, s32 flags);
+
+
+s32 func_80026B44(u8 arg0);
+s16 func_80026C38(int mask);
+s32 func_80026ED0(void);
+s32 SsVoKeyOn(s32, s32, u16, u16);
+s16 func_800815A0(s16, s16, s16, s16, s16, s16, s16);
+extern s32 D_8009C1E8;
+typedef struct { u8 prog; u8 tone; u8 note; u8 voice; u8 vol; u8 rnd; u8 pad[2]; } SfxDef;
+s32 func_80026F30(u32 id, s32 flags);
+
+
+void func_800814CC(s16, s32, s32);
+void func_80026C90(s32 arg0);
+
+
 s32 rand();
 
 
@@ -114,15 +136,115 @@ s16 func_80026C38(int mask) {
     return -1;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80026C90);
+void func_80026C90(s32 arg0) {
+    s16 i;
+    for (i = 0; i < 24; i++) {
+        if (i != arg0) {
+            func_800814CC(i, 0, 0);
+            func_80081458(i);
+        }
+    }
+}
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80026D08);
+s32 func_80026D08(u32 id, s32 flags) {
+    u8 vol;
+    s16 l;
+    s16 r;
+    s16 note;
+    s32 prog;
+    s32 tone;
+    s32 ret;
+
+    if (id >= 0x69) {
+        return -1;
+    }
+    if (flags & 2) {
+        vol = (*(u8 *)((u8 *)g_Args + 0x138) * *(s16 *)((u8 *)g_Args + 0x144)) / 127;
+    } else {
+        vol = *(u8 *)((u8 *)g_Args + 0x144);
+    }
+    vol = (vol * (*(SfxEnt **)((u8 *)g_Args + 0x130))[id].vol) / 127;
+    l = vol;
+    r = vol;
+    l = l < 0 ? 0 : l < 0x80 ? l : 0x7F;
+    r = r < 0 ? 0 : r < 0x80 ? r : 0x7F;
+    note = (*(SfxEnt **)((u8 *)g_Args + 0x130))[id].note;
+    prog = (*(SfxEnt **)((u8 *)g_Args + 0x130))[id].prog;
+    tone = (*(SfxEnt **)((u8 *)g_Args + 0x130))[id].tone;
+    note = note < 0 ? 0 : note < 0x80 ? note : 0x7F;
+    if ((*(SfxEnt **)((u8 *)g_Args + 0x130))[id].voice != 0) {
+        ret = ((s32 (*)(s32))func_80026C38)(SsVoKeyOn(prog, (*(SfxEnt **)((u8 *)g_Args + 0x130))[id].note << 8, l, r));
+    } else {
+        ret = func_800815A0(0, prog, tone, note, 0, l, r);
+    }
+    return ret;
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80026ED0);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80026F30);
+s32 func_80026F30(u32 id, s32 flags) {
+    u8 vol;
+    s16 l;
+    s16 r;
+    s16 pitch;
+    s32 prog;
+    s32 tone;
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80027248);
+    if (id < 0x69) {
+        if (func_80026ED0() >= 0x14) {
+            D_8009C1E8++;
+            return -1;
+        }
+        if ((g_CutScene == 2 || g_CutScene == 3) && id != 1 && id != 2) {
+            return -1;
+        }
+        if (flags & 2) {
+            vol = (M2C_FIELD(g_Args, u8 *, 0x138) * M2C_FIELD(g_Args, s16 *, 0x13A)) / 127;
+        } else {
+            vol = M2C_FIELD(g_Args, s16 *, 0x13A);
+        }
+        vol = (vol * M2C_FIELD(g_Args, SfxDef **, 0x130)[id].vol) / 127;
+        if (flags & 8) {
+            r = (vol * M2C_FIELD(g_Args, u8 *, 0x136)) / 127;
+            l = (vol * M2C_FIELD(g_Args, u8 *, 0x137)) / 127;
+        } else {
+            r = l = vol;
+        }
+        l = (l < 0) ? 0 : (l >= 0x80) ? 0x7F : l;
+        r = (r < 0) ? 0 : (r >= 0x80) ? 0x7F : r;
+        pitch = M2C_FIELD(g_Args, SfxDef **, 0x130)[id].note;
+        prog = M2C_FIELD(g_Args, SfxDef **, 0x130)[id].prog;
+        tone = M2C_FIELD(g_Args, SfxDef **, 0x130)[id].tone;
+        if (flags & 4) {
+            pitch += M2C_FIELD(g_Args, u16 *, 0x134);
+        } else if (M2C_FIELD(g_Args, SfxDef **, 0x130)[id].rnd != 0) {
+            pitch += func_80026B44(M2C_FIELD(g_Args, SfxDef **, 0x130)[id].rnd);
+        }
+        pitch = (pitch < 0) ? 0 : (pitch >= 0x80) ? 0x7F : pitch;
+        if (l == 0 && r == 0) {
+            return -1;
+        }
+        if (M2C_FIELD(g_Args, SfxDef **, 0x130)[id].voice != 0) {
+            return ((s32 (*)(int))func_80026C38)(SsVoKeyOn(prog, M2C_FIELD(g_Args, SfxDef **, 0x130)[id].note << 8, l, r));
+        }
+        return func_800815A0(0, prog, tone, pitch, 0, l, r);
+    }
+    return -1;
+}
+
+unsigned long func_80027248(u8 id, s32 pos, s32 flags) {
+    u8 f;
+
+    f = flags & 2;
+    if (flags & 4) {
+        f |= 4;
+    }
+    if (pos != 0) {
+        func_8003B808(pos);
+        f |= 8;
+    }
+    return func_80026F30(id, f);
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800272A4);
 
