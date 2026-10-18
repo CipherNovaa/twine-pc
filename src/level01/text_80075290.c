@@ -1,5 +1,32 @@
 #include "twine.h"
 
+void func_80076104(s32 idx);
+void func_800760B4(s32 arg0);
+void func_8002C490(char *, s8 *, void (*)(s32));
+
+
+extern char *D_8009DB50[];
+s32 func_8002C168(char *name, s32 arg1);
+
+
+#define gte_SetRotMatrix(r0) __asm__ volatile("lw $12, 0(%0); lw $13, 4(%0); ctc2 $12, $0; ctc2 $13, $1; lw $12, 8(%0); lw $13, 12(%0); lw $14, 16(%0); ctc2 $12, $2; ctc2 $13, $3; ctc2 $14, $4" : : "r"(r0) : "$12", "$13", "$14")
+#define gte_ldv0(r0) __asm__ volatile("lwc2 $0, 0(%0); lwc2 $1, 4(%0)" : : "r"(r0))
+#define gte_rtv0() __asm__ volatile("nop; nop; .word 0x4A486012")
+#define gte_stlvnl(r0) __asm__ volatile("swc2 $25, 0(%0); swc2 $26, 4(%0); swc2 $27, 8(%0)" : : "r"(r0) : "memory")
+extern s32 D_1F8003E8[];
+extern s32 D_1F8003D4;
+extern s32 D_1F8003D8;
+extern s32 D_1F8003DC;
+extern s32 D_800B0018[];
+extern s32 D_800B0C64;
+extern u16 D_800B0C5C;
+extern s32 D_8009CD4C;
+extern s16 D_8009CF48;
+extern char D_800A98B4[];
+s32 func_80076BF8(s32 arg0, s32 arg1, s32 arg2);
+void func_8003B53C(u8 *, s32, s32, s32);
+
+
 unsigned long func_80027248(M2C_UNK, s32, M2C_UNK);
 
 
@@ -308,7 +335,15 @@ s32 func_80075FE4(int arg0) {
   return var_a1;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80076014);
+void func_80076014(s32 idx) {
+    if (g_Args->cdArchive == 0) {
+        func_80076104(idx);
+        return;
+    }
+    D_800F0F5C = 1;
+    D_800E2F58 = M2C_FIELD(&g_Weapons[idx], u8 *, 0x5B);
+    func_8002C490(D_8009DB50[M2C_FIELD(&g_Weapons[idx], u8 *, 0x5B)], &D_800E2F58 + 4, func_800760B4);
+}
 
 void func_800760B4(s32 arg0) {
     if (arg0 == 2) {
@@ -320,7 +355,11 @@ void func_800760B4(s32 arg0) {
     D_800F0F5C = 2;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80076104);
+void func_80076104(s32 idx) {
+    func_8002C168(D_8009DB50[M2C_FIELD(&g_Weapons[idx], u8 *, 0x5B)], (s32)(&D_800E2F58 + 4));
+    D_800F0F5C = 0;
+    D_800E2F58 = M2C_FIELD(&g_Weapons[idx], u8 *, 0x5B);
+}
 
 void func_80076184(s32 idx, u32 val) {
     void *t;
@@ -376,7 +415,54 @@ s32 func_80076BF8(s32 arg0, s32 arg1, s32 arg2) {
     return 0;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80076CDC);
+void func_80076CDC(u8 *obj) {
+    u8 *player;
+    Weapon *w;
+    u8 *proj;
+    s32 *t;
+    s32 n;
+    if (obj == NULL) {
+        return;
+    }
+    t = (s32 *)(M2C_FIELD(obj, u8 **, 0x114) + 0x38);
+    D_1F8003D4 = ((struct { s16 m[3][3]; s32 t[3]; } *)t)->t[0];
+    D_1F8003D8 = ((struct { s16 m[3][3]; s32 t[3]; } *)t)->t[1];
+    D_1F8003DC = ((struct { s16 m[3][3]; s32 t[3]; } *)t)->t[2];
+    *(SVECTOR *)D_1F8003E0 = M2C_FIELD(obj, SVECTOR *, 0x3C);
+    player = g_Player;
+    w = &g_Weapons[D_800B0DD4];
+    gte_SetRotMatrix(D_800B0018);
+    gte_ldv0(D_1F8003E0);
+    gte_rtv0();
+    gte_stlvnl(D_1F8003E8);
+    D_1F8003D4 += D_1F8003E8[0];
+    D_1F8003D8 += D_1F8003E8[1];
+    D_1F8003DC += D_1F8003E8[2];
+    proj = (u8 *)func_80076BF8((s32)player, (s32)obj, obj[0x3A]);
+    if (proj == NULL) {
+        func_8006B1DC((M2C_UNK *)D_800A98B4);
+        return;
+    }
+    M2C_FIELD(obj, s16 *, 0x38) = 500;
+    if (D_8009CD4C != 0) {
+        func_8003B53C(proj, *(s32 *)&D_800B0C5C, D_800B0C64 + 0x5B, 500);
+    } else {
+        func_8003B53C(proj, M2C_FIELD(M2C_FIELD(player, u8 **, 0x90), s16 *, 0x62), M2C_FIELD(M2C_FIELD(player, u8 **, 0x90), s16 *, 0x60), 500);
+    }
+    M2C_FIELD(proj, s16 *, 0x56) = -1;
+    M2C_FIELD(M2C_FIELD(proj, u8 **, 0x90), s16 *, 0x60) = 0x400;
+    if (D_8009CD4C != 0) {
+        M2C_FIELD(M2C_FIELD(proj, u8 **, 0x90), s16 *, 0x62) = D_800B0C5C;
+    } else {
+        M2C_FIELD(M2C_FIELD(proj, u8 **, 0x90), s16 *, 0x62) = M2C_FIELD(M2C_FIELD(player, u8 **, 0x90), s16 *, 0x62);
+    }
+    M2C_FIELD(M2C_FIELD(proj, u8 **, 0x90), s32 *, 0x10) = 2;
+    D_8009CF48 = 0;
+    n = ((u32)w->flags >> 15) & 0xF;
+    if (n > 0) {
+        func_80076184(n, 0);
+    }
+}
 
 void func_80076F24(u8 *obj, s32 idx) {
     SVECTOR rot;

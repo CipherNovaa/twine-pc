@@ -1,5 +1,8 @@
 #include "twine.h"
 
+s32 rand();
+
+
 extern char D_800A6ED0[];
 extern char D_800A6EF8[];
 typedef struct { u16 w; u8 pad2[0xA]; u16 x; u16 y; char text[0x50]; } TextEnt;
@@ -31,7 +34,7 @@ extern u16 D_800AEDD4;
 extern u8 D_800AB744[];
 int toupper(int c);
 void func_80029064(s32, char *, s32, s32);
-void func_800294B4(char *, s32, s32, s32);
+void func_800294B4(char *text, s32 x, s32 y, s32 idx);
 
 
 int strlen(char *s);
@@ -83,7 +86,19 @@ s32 func_80026B00(s32 arg0) {
   return SsSetSerialVol(0, arg0, arg0);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80026B44);
+s32 func_80026B44(u8 arg0) {
+    switch (arg0) {
+    case 1:
+        return (rand() & 3) - 2;
+    case 2:
+        return ((rand() & 0xFFF) % 6) - 3;
+    case 3:
+        return (rand() & 7) - 4;
+    case 4:
+        return rand() & 0;
+    }
+    return 0;
+}
 
 void func_80026C14(s16 arg0) {
     func_80081458(arg0);
@@ -259,7 +274,13 @@ INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80029064);
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800291B0);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800294B4);
+void func_800294B4(char *text, s32 x, s32 y, s32 idx) {
+    s32 sp18;
+
+    sp18 = D_800AEDA8;
+    func_800291B0(text, x, y, &sp18, 0, 0);
+    D_800AEDA8 = sp18;
+}
 
 void func_80029504(s16 *c) {
     if (*c == 16) *c = 0x5F;

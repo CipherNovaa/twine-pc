@@ -1,5 +1,15 @@
 #include "twine.h"
 
+s32 func_8002A854(s32, s32);
+s32 func_8002BE24(char *, s32);
+s32 func_8002BF34(void *, char *);
+M2C_UNK func_8006B1DC(M2C_UNK *);
+u8 func_8002AAC4(void);
+extern char D_800A7214[];
+extern u8 D_800AFF2C[];
+s32 func_8002C168(char *name, s32 arg1);
+
+
 extern s32 D_8009CA74;
 void func_8002B0A0(void);
 
@@ -182,7 +192,23 @@ INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002BE24);
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002BF34);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002C168);
+s32 func_8002C168(char *name, s32 arg1) {
+    s32 len;
+    s32 idx;
+
+    len = -1;
+    if (g_Args->cdArchive) {
+        if (((s32 (*)(void))func_8002AAC4)()) {
+            idx = func_8002BF34(D_800AFF2C, name);
+            len = func_8002A854(idx, arg1);
+        } else {
+            func_8006B1DC((M2C_UNK *)D_800A7214);
+        }
+    } else {
+        len = func_8002BE24(name, arg1);
+    }
+    return len;
+}
 
 void CdBin_Disable(void) {
     func_8002AA94(0);

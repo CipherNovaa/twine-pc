@@ -160,8 +160,86 @@ been renamed, the current name is used.
   (`func_8006FED4`) is closest to pos.y. `func_8007240C`: collects colliding faces (`func_80071638`,
   `Vec_Dot`, `func_80072190`).
 
+- `func_8004AF0C`: fade overlay init (two full-screen semi-transparent POLY_F4 + DR_MODE); colour via
+  `func_8004B028` from `D_8009D000`.
+- `func_8004B9FC(obj)` / `func_8004BB00`: object animation scripts (pc at obj+0x78 / entry+0x10). Opcodes
+  0xFFFFF00A advance, 0xFFFFF000 jump, 0xFFFFF005 end + destroy; other words point to a u16 index →
+  `func_8004BC70(D_800D2D30[idx], flags, 0)`.
+- Morphs: `func_8004CBF4` loads a morph header (vertex buffer cached in `D_800D8BE8[type]`),
+  `func_8004CDA0` parses the target list, `func_8004CE74` copies base SVECTORs, `func_8004CF00` blends up to
+  8 weighted targets on the GTE, `func_8004D2D0` updates all `AnimEnt`s each frame.
+- `func_8004D770(set, i, j)`: list index from elapsed time (loops when `pad8[j] == 1`).
+- `func_8004E794`: camera init (GsInitCoordinate2 on `D_800D3238` and `g_Camera+0x30`, eye height 0x578,
+  `D_800B0C10` = GsRVIEW2 with super = `g_Camera+0x30`).
+
+- `func_80052CA8(out, chr)`: point in front of a character (dist 150, or 400 when crouched).
+- `func_80052C0C(chr)`: every 40 frames spawns an effect at that point (`func_80065058`).
+- `func_8005B5AC(chr, ...)`: claims one of 6 slots (`D_800DE0C8` used flags, `D_800DDEF0` owners).
+- `func_8005B96C(chr, model, sub)`: fills the character's animation data, then `func_8005BA30`,
+  `func_8005B7BC`.
+- `func_8005CFC8(q, rx, ry, rz)`: s16 quaternion (4096 = 1.0) → Euler angles.
+- `func_8005D694`: crouch button (toggle option = `g_Args->flags2` bit 5).
+- `func_800617AC`: on-foot turning: turn speed clamped by obj+0x52, scaled by g_FrameCap/g_FrameRate; sets
+  rotY, `gPsi`, +0xA0; probes the ground 125 units ahead (`func_800705A8`) → model pitch = ratan2(dy, 500).
+- Sin/cos table `D_800A0370`: s32 entries, sine in the low half, cosine in the high half.
+- Characters: +0x06 u8 type, +0x2C timestamp, +0x56 s16 turn speed, +0x90 model, +0x94 sub (+0x0A slot,
+  +0x24 flags: 0x400 crouched), +0xA7 u8 id, +0xC0 animation.
+
+- `func_800305B4`: checked `malloc3` (prints `D_800A74E0` and `exit(-1)` on failure); counts heap use in
+  `Args+0x1F4`. `func_80032880(tim, image)`: TIM magic check + GsGetTimInfo.
+- `func_80035964(obj)`: out-of-range test (box of size `D_800E2DE0` around the player).
+- `func_8003B750(p)`: volume by distance: 127 − |v|·127/64000, clamped to 0..127.
+- `func_800449BC` / `func_80044A60`: aim zoom in / out: steps Weapon+0x68 by `D_800D43AC` between
+  `D_800D43F0` and `D_800D43F4`, then `func_8007A040(weapon)`.
+- `func_8004F348`: 1 while the camera is more than 200 from its target on any axis (still moving).
+  `func_8005038C(a0..a3)`: `func_80050180`, `func_8004FD3C`, then that test.
+- `func_80058D00`: frees every effect in both pools (byte +0x9B = 0).
+- `func_80069850(arg0)`: resets `D_8009E410..1C`, `D_800E23DC[3]`, `D_800E23EC[3]`.
+- `func_80076104(idx)` / `func_80076014(idx)`: load the weapon's file `D_8009DB50[Weapon+0x5B]` into
+  `D_800E2F58+4` synchronously / asynchronously in CD-archive mode (`func_8002C490`, done callback
+  `func_800760B4`); load state `D_800F0F5C` (0 idle, 1 loading, 2 error).
+- Weapon: +0x54/+0x56 s16 pair; +0x5B u8 file index; +0x68 s16 zoom.
+
+- `func_80026B44(mode)`: random jitter (modes 1–4).
+- `func_8002C168(name, buf)`: file loader → length or −1. CD-archive mode: name lookup in `D_800AFF2C`
+  (`func_8002BF34`) + read (`func_8002A854`); otherwise the dev/PC loader `func_8002BE24`.
+- `func_8003DE58(p1..p4)`: 2D segment intersection (Graphics Gems III), intermediates kept in globals
+  `D_800D3FA8..D_800D4114`.
+- `func_800475BC`: pops the on-screen message queue (`Msg` records, 0x2C bytes at `D_800D5DA4`, count
+  `D_800D7CB4`) into the current message `D_800D4958`.
+- `func_80049B84(idx, yoff)`: menu backdrop: gradient POLY_G4 (`D_800D79D4`), grey POLY_F4 box sized by the
+  item count `D_8009CFBE` (`D_800D7554`), DR_MODE (`D_800D8138`).
+- `func_8005397C` / `func_8006D3C0`: approximate 3D distance (max + mid/8 + (mid+min)/4), VECTOR / SVECTOR.
+- `func_80058D5C(obj, yaw, pitch, r)`: direction vector at obj+0x3E/0x40/0x42.
+- `func_8006412C`: free slot in `D_800DF540` (5 × 0x18). `func_800655B8`: init `D_800DF1F4[3]`.
+- `func_80064A10` / `func_80064C28` / `func_80064E40`: per-frame effect animation (spin, shrink, wobble
+  facing the camera), frame-rate compensated with constants per 20 fps.
+
+## Enemy AI: waypoints and navmesh
+
+- `func_800523E4(obj, path)`: nearest waypoint on a path (1-based, 0xFF if none); sets turn bit 2.
+- `func_80052630(obj, dir)`: waypoint follower. Waypoint = low byte of obj+0x6C, path = (obj+0x64 & 0x7F) − 1;
+  flags 8 = reached, 0x10 = end of path; turn amount `D_800D9232`, clamped to ±0xB6.
+- `func_80052808(obj, x, y, z)`: navmesh routing toward a point: zone lookup `func_800705A8`, route table
+  `nav->0x10[self][target]` (two u16 node indices), state at ai+0x23C {zone, state, node0, node1}.
+- Data: `D_8009D5A8` = per-path {x, z} waypoints (`s32 **`), `D_8009D5AC` = waypoint count per path (`s16 *`);
+  navmesh at `D_8009CE38`: +4 zone count, +0xC SVECTOR nodes, +0x10 route table.
+- AI state at obj+0x118; flags at ai+0x10: 2 = turn left, 8 = reached, 0x10 = path end, 0x4000 = steering.
+
 ## AI scripts
 
+Command word: byte 0 opcode, byte 1 destination variable, u16 at +2 operand modes (2 bits per operand:
+0 none, 1 script variable, otherwise immediate), operands follow.
+
+- `func_80055060`: "call native": `D_8009E480[idx]()` (idx < `D_8009E490`), index from byte 2 or a variable;
+  result to vars[byte 3]. Error text `D_800A8A2C` and wait = 1 when out of range.
+- `func_8005483C` / `func_80054AC8`: set camera target X/Y/Z / rotation X/Y/Z (each operand: keep, variable,
+  or immediate).
+- `func_8005743C`: set wait counter (`obj->wait` = immediate or variable), pc += 1 word.
+- `func_80055620` / `func_80055778`: no-op opcodes that skip their operands.
+- `func_80055598` (op 0x10): chr->0x94->+0x34 = angle. `func_80055670` (op 0x12): set model position.
+- `func_80056154` (op 0x24): line-of-sight probe from the model (y − 200) along heading + angle: world
+  collision `func_800746D0`, then object hit `func_80050A70`; vars[byte 1] = 0/1/2, `D_8009D5FC` = hit object.
 - `func_800571B8(cmd, ScriptObj *, actor)`: opcode: jump/restart (pc = base + cmd[1]*4), clears the list at
   +0xA8 and vars selected by mask +0x1C, resets the actor's animation; returns 2.
 - `func_80057B2C(anim, a, b, c, d)`: sets animation fields (+0x10/+0x14/+0x12/+0x16), recomputes lengths.
