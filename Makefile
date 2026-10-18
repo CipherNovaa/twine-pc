@@ -27,7 +27,8 @@ ASFLAGS  := -EL -march=r3000 -mtune=r3000 -no-pad-sections -G0 -Iinclude
 LDFLAGS  := -EL --no-check-sections \
 	-T linkers/$(LEVEL).ld \
 	-T linkers/$(LEVEL)_undefined_syms_auto.txt \
-	-T linkers/$(LEVEL)_undefined_funcs_auto.txt
+	-T linkers/$(LEVEL)_undefined_funcs_auto.txt \
+	$(addprefix -T ,$(wildcard config/$(LEVEL)_syms.ld))
 
 S_FILES := $(shell find asm/$(LEVEL) -name '*.s' -not -path '*/nonmatchings/*' 2>/dev/null)
 C_FILES := $(shell find src/$(LEVEL) -name '*.c' 2>/dev/null)

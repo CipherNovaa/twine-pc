@@ -1,5 +1,27 @@
 #include "twine.h"
 
+extern s32 D_800B8F24;
+extern s32 D_8009CA9C;
+extern s32 D_8009CAA0;
+extern s32 D_800B0808[];
+extern u8 D_800D2AFC[][0x14];
+void GsGetLsUnit(void *, void *);
+void GsGetLwUnit(void *, void *);
+void GsSortUnit(void *, void *, void *);
+void func_80077764();
+void func_8007A554(void *);
+void func_8007A580(void *);
+
+
+extern s16 D_800B0DD4;
+extern s32 D_800A988C;
+extern s32 D_8009CDA8;
+extern s16 D_800D9208;
+extern s8 D_800D920C;
+extern u8 D_1F8003E0[];
+s32 func_80039A9C(M2C_UNK, u8, M2C_UNK);
+
+
 extern M2C_UNK D_800F0F80;
 
 
@@ -87,7 +109,42 @@ INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_8007545C);
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_800755BC);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_8007567C);
+void func_8007567C(void *arg0) {
+    u32 i;
+    u8 *flags;
+    void *model;
+    s32 *unit;
+    s32 idx;
+
+    if (arg0 != NULL) {
+        model = M2C_FIELD(arg0, void **, 0x114);
+        if (model != NULL) {
+            i = 0;
+            func_80077764();
+            unit = M2C_FIELD(model, s32 **, 4);
+            flags = M2C_FIELD(model, u8 **, 8);
+            idx = D_800B8F24;
+            for (; i < M2C_FIELD(model, u32 *, 0xC); i++, unit += 2, flags++) {
+                if (unit[1] == 0) {
+                    continue;
+                }
+                if (i == 0 && (D_8009CA9C != 0 || D_8009CAA0 != 0)) {
+                    continue;
+                }
+                if (unit[0] != 0) {
+                    if (*flags == 1) {
+                        continue;
+                    }
+                    GsGetLwUnit((void *)unit[0], D_800B0808);
+                    func_8007A580(D_800B0808);
+                    GsGetLsUnit((void *)unit[0], D_800B0808);
+                    func_8007A554(D_800B0808);
+                }
+                GsSortUnit(unit, D_800D2AFC[idx], (void *)0x1F800000);
+            }
+        }
+    }
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_800757C0);
 
@@ -201,7 +258,31 @@ void func_80076B9C(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80076BF8);
+s32 func_80076BF8(s32 arg0, s32 arg1, s32 arg2) {
+    Weapon *w;
+    s32 obj;
+
+    w = &g_Weapons[D_800B0DD4];
+    if (w->ammo > 0) {
+        obj = func_80039A9C(arg0, arg2, 1);
+        if (obj == 0) {
+            func_8006B1DC(&D_800A988C);
+            return 0;
+        }
+        M2C_FIELD(obj, u8 *, 7) = 0x2C;
+        M2C_FIELD(obj, u8 *, 0xA5) = 0x18;
+        M2C_FIELD(obj, s16 *, 0x6A) = 0x818;
+        M2C_FIELD(obj, s32 *, 0x34) = 0x4E20;
+        M2C_FIELD(obj, s16 *, 0x28) = 0x7D0;
+        D_800D920C = 2;
+        w->clip--;
+        M2C_FIELD(obj, s32 *, 0x2C) = D_8009CDA8;
+        M2C_FIELD(obj, u16 *, 0xAC) = *(u16 *)(D_1F8003E0 - 8);
+        D_800D9208 = M2C_FIELD(w, u32 *, 0x5C) >> 26;
+        return obj;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80076CDC);
 

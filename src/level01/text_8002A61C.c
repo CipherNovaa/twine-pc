@@ -1,5 +1,13 @@
 #include "twine.h"
 
+extern s32 D_8009CA74;
+void func_8002B0A0(void);
+
+
+s32 CdSearchFile(void *, char *);
+s32 func_800834D0(void *);
+
+
 M2C_UNK func_8002BB68(u8);                          /* extern */
 extern s8 D_8009CA58;
 extern s8 D_8009CA59;
@@ -12,7 +20,7 @@ extern s8 D_800A70A0;
 extern M2C_UNK D_800A70C8;
 
 
-M2C_UNK func_8002A61C(u8 *, s32 *);                 /* extern */
+void func_8002A61C(char *name, s32 *result);
 M2C_UNK func_8002A720(s32);                         /* extern */
 extern s8 D_800A7230;
 extern s8 D_800A7244;
@@ -48,7 +56,24 @@ extern s8 D_800AFEB6;
 extern s32 D_800AFEBC;
 
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002A61C);
+void func_8002A61C(char *name, s32 *result) {
+    u8 mode;
+    s32 start;
+    s32 file[6];
+
+    func_80082F78(0);
+    mode = 0x80;
+    D_800AF620 = 0x80;
+    func_80082F8C(0xE, &D_800AF620, 0);
+    start = g_Args->unk2DC;
+    while ((u32)(g_Args->unk2DC - start) < 3) {
+    }
+    if (CdSearchFile(file, name) == 0) {
+        *result = 2;
+    } else {
+        *result = func_800834D0(file);
+    }
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002A720);
 
@@ -97,7 +122,21 @@ void func_8002B064(s32 arg0) {
     func_8002B29C(arg0, -2);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002B0A0);
+void func_8002B0A0(void) {
+    do {
+        D_8009CA58 = 9;
+        if (func_80082F8C(9, NULL, 0) != 0) break;
+        D_8009CA74++;
+    } while (D_8009CA74 < 1000);
+    D_8009CA74 = 0;
+    {
+        register Args *args = g_Args;
+        args->flags &= ~8;
+    }
+    D_800AFEB6 = 0;
+    D_800AFEBC = -1;
+    func_8002BB34();
+}
 
 void func_8002B17C(void) {
     s8 sp10;

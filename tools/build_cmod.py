@@ -112,9 +112,10 @@ def main():
     (build / "cmod_aliases.txt").write_text("\n".join(aliases) + "\n")
 
     elf, exe = build / f"{level}.elf", build / f"{level}.exe"
+    extra = ["-T", f"config/{level}_syms.ld"] if (ROOT / f"config/{level}_syms.ld").exists() else []
     run(["mips-elf-ld", "-EL", "--no-check-sections", "-T", str(build / f"{level}.ld"),
          "-T", f"linkers/{level}_undefined_syms_auto.txt", "-T", f"linkers/{level}_undefined_funcs_auto.txt",
-         "-T", str(build / "cmod_aliases.txt"), "-Map", str(build / f"{level}.map"), "-o", str(elf)])
+         "-T", str(build / "cmod_aliases.txt"), *extra, "-Map", str(build / f"{level}.map"), "-o", str(elf)])
     run(["mips-elf-objcopy", "-O", "binary", str(elf), str(exe)])
     run([PY, "tools/fix_exe.py", str(exe)])
     print(f"{level}: {exe.relative_to(ROOT)} ({exe.stat().st_size} bytes; mods: {' '.join(mods)})")

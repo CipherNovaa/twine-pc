@@ -1,6 +1,7 @@
 """Splice one function's C into its source file, build, and report the compiler error or checksum result.
 Keeps the change only if the build still matches."""
 import argparse
+import fcntl
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,13 @@ import auto_match as am  # noqa: E402
 
 
 def integrate(func, code, level="level01", keep=True, replace_decls=False):
+    # Several processes (permuter, parallel decompilers) integrate into the same files: one at a time.
+    with open(ROOT / "build/.integrate.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _integrate(func, code, level, keep, replace_decls)
+
+
+def _integrate(func, code, level, keep, replace_decls):
     for c_file in sorted((ROOT / "src" / level).glob("*.c")):
         original = c_file.read_text()
         hits = [(folder, f) for folder, f in am.INCLUDE_RE.findall(original) if f == func]

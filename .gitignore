@@ -28,3 +28,4 @@ build/
 asm/
 linkers/
 tools/decomp-permuter/
+*.o

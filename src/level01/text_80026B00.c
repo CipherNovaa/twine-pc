@@ -1,5 +1,42 @@
 #include "twine.h"
 
+extern char D_800A6ED0[];
+extern char D_800A6EF8[];
+typedef struct { u16 w; u8 pad2[0xA]; u16 x; u16 y; char text[0x50]; } TextEnt;
+extern u8 D_800AB754[];
+extern u16 D_800AB5E0;
+extern u16 D_800AB5E4;
+s32 func_80028958(char *text);
+void func_800291B0(char *, s16, s16, s32 *, s32, s32);
+void func_800289C0(s16 arg0, char *text);
+
+
+extern s32 D_8009CFB4;
+extern char D_800AB618[];
+void func_800286EC(s8 arg0);
+void func_80028B58(s32, s16, s16);
+
+
+extern s8 D_8009C1EC;
+extern char D_800A6F4C[];
+void Menu_ResetState(void);
+void func_8006B230(s32 arg0, M2C_UNK arg1);
+char *strcpy(char *dst, char *src);
+
+
+extern u8 D_800AE940[];
+extern u16 D_800AEDD4;
+
+
+extern u8 D_800AB744[];
+int toupper(int c);
+void func_80029064(s32, char *, s32, s32);
+void func_800294B4(char *, s32, s32, s32);
+
+
+int strlen(char *s);
+
+
 extern M2C_UNK D_800AC4C8;
 extern M2C_UNK D_800AC4D0;
 extern u16 D_800AEDA0;
@@ -12,13 +49,13 @@ extern u16 D_800AC4D8;
 extern u16 D_800AC4DC;
 
 
-void func_80028858(char *, s16 *, s16 *);
-s32 func_8002872C(char *, s32, s32);
+void func_80028858(char *text, s16 *x, s16 *w);
+s32 func_8002872C(char *text, s32 x, s32 y);
 s32 func_80028810(char *text, s32 y);
 
 
 extern M2C_UNK D_800AC284;
-M2C_UNK func_80029868(s32, M2C_UNK, M2C_UNK, M2C_UNK, s32, s32);
+void func_80029868(char *text, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 mode);
 
 
 M2C_UNK SsSetSerialAttr(M2C_UNK, M2C_UNK, M2C_UNK); /* extern */
@@ -101,7 +138,25 @@ void func_800286EC(s8 arg0) {
     D_8009C1ED = arg0;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_8002872C);
+s32 func_8002872C(char *text, s32 x, s32 y) {
+    s32 i;
+    s32 len;
+    char *p;
+
+    if (*(u8 *)&D_8009C1ED == 0) {
+        len = strlen(text);
+        p = text;
+        for (i = 0; i < len; i++) {
+            *p = toupper(*(u8 *)p);
+            p++;
+        }
+    }
+    func_80029064(D_800AC54C, text, 0, 0);
+    M2C_FIELD(D_800AB744 + D_800AC54C * 0x60, s16 *, 0xC) = x;
+    M2C_FIELD(D_800AB744 + D_800AC54C * 0x60, s16 *, 0xE) = y;
+    func_800294B4(text, x & 0xFFFF, y & 0xFFFF, D_800AC54C);
+    return ++D_800AC54C;
+}
 
 s32 func_80028810(char *text, s32 y) {
     s16 w;
@@ -111,11 +166,80 @@ s32 func_80028810(char *text, s32 y) {
     return func_8002872C(text, w, y);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80028858);
+void func_80028858(char *text, s16 *x, s16 *w) {
+    s16 i;
+    s16 len;
+    s32 c;
+    u8 *font;
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80028958);
+    i = 0;
+    font = D_800AE940;
+    *w = 0;
+    len = strlen(text);
+    for (; i < len; i++) {
+        c = *(u8 *)text - 0x20;
+        if (c != 0x3F) {
+            *w += font[c * 8 + 2] + D_800AEDD4;
+        }
+        text++;
+    }
+    *w -= D_800AEDD4;
+    *x = ((s16)g_Args->displayW >> 1) - (*w >> 1);
+}
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800289C0);
+s32 func_80028958(char *text) {
+    s32 len;
+
+    len = strlen(text);
+    while (*text != 0) {
+        if (*text - 0x20 == 0x3F) {
+            len--;
+        }
+        text++;
+    }
+    return len;
+}
+
+void func_800289C0(s16 arg0, char *text) {
+    char buf[32];
+    s32 sp38;
+    s32 maxLen;
+    s32 len;
+    s32 vis;
+    s32 i;
+    s32 end;
+    TextEnt *te;
+    u16 x;
+    u16 y;
+
+    if (arg0 >= D_800AC54C) {
+        printf(D_800A6ED0, D_800A6EF8, 0x190);
+        exit(1);
+    }
+    maxLen = strlen((char *)(D_800AB754 + arg0 * 0x60));
+    len = strlen(text);
+    vis = func_80028958(text);
+    if (maxLen < vis) {
+        printf(D_800A6ED0, D_800A6EF8, 0x199);
+        exit(1);
+    }
+    strcpy(buf, text);
+    if (vis < maxLen) {
+        i = len;
+        end = maxLen + (len - vis);
+        for (; i < end; i++) {
+            buf[i] = ' ';
+        }
+        buf[i] = 0;
+    }
+    te = (TextEnt *)D_800AB744;
+    x = te[arg0].x;
+    y = te[arg0].y;
+    D_800AB5E0 = x;
+    D_800AB5E4 = y;
+    sp38 = te[arg0].w;
+    func_800291B0(buf, x, y, &sp38, 1, -1);
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80028B58);
 
@@ -137,14 +261,66 @@ INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800291B0);
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800294B4);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80029504);
+void func_80029504(s16 *c) {
+    if (*c == 16) *c = 0x5F;
+    else if (*c == 17) *c = 0x60;
+    else if (*c == 18) *c = 0x61;
+    else if (*c == 19) *c = 0x62;
+    else if (*c == 20) *c = 0x63;
+    else if (*c == 21) *c = 0x64;
+    else if (*c == 22) *c = 0x65;
+    else if (*c == 23) *c = 0x66;
+    else if (*c == 24) *c = 0x67;
+    else if (*c == 25) *c = 0x68;
+    else if (*c == 14) *c = 0x69;
+    else if (*c == 26) *c = 0x6A;
+    else if (*c == 12) *c = 0x6B;
+    else if (*c == 15) *c = 0x6C;
+    else if (*c == 13) *c = 0x6D;
+    else if (*c == 31) *c = 0x6E;
+    else if (*c == 7) *c = 0x6F;
+    else if (*c == 5) *c = 0x71;
+}
 
 void func_8002967C(void) {
 }
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80029684);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80029868);
+void func_80029868(char *text, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 mode) {
+    u8 *msg = (u8 *)&D_800AC284;
+    char *buf;
+
+    if ((M2C_FIELD(msg, u8 *, 0x108) == 0 || mode == 3) && ((g_Args->flags2 >> 1) & 1 || mode != 0)) {
+        D_8009C1EC = 0;
+        if (strlen(text) >= 300) {
+            func_8006B230(0, (s32)D_800A6F4C);
+        }
+        buf = (char *)msg + 0x109;
+        strcpy(buf, text);
+        M2C_FIELD(msg, u8 *, 0x108) = 1;
+        M2C_FIELD(msg, char **, 0x238) = buf;
+        M2C_FIELD(msg, s32 *, 0x100) = 0;
+        M2C_FIELD(msg, s16 *, 0xF0) = 0;
+        M2C_FIELD(msg, s16 *, 0xF2) = 0;
+        M2C_FIELD(msg, s16 *, 0xF4) = arg3;
+        M2C_FIELD(msg, s16 *, 0xF6) = arg4;
+        M2C_FIELD(msg, s16 *, 0xF8) = arg1;
+        M2C_FIELD(msg, s16 *, 0xFA) = arg2;
+        if (mode == 2) {
+            M2C_FIELD(msg, s32 *, 0x104) = 1;
+            M2C_FIELD(msg, u8 *, 0x23C) = 1;
+        } else {
+            M2C_FIELD(msg, s32 *, 0x104) = mode;
+            M2C_FIELD(msg, u8 *, 0x23C) = 0;
+        }
+        M2C_FIELD(&D_800AC284, s16 *, 0xFC) = 0x1E;
+        M2C_FIELD(&D_800AC284, u8 *, 0x242) = 0;
+        M2C_FIELD(&D_800AC284, u16 *, 0x23E) = D_800AC4D8;
+        M2C_FIELD(&D_800AC284, u16 *, 0x240) = D_800AC4DC;
+        Menu_ResetState();
+    }
+}
 
 void func_800299CC(s32 arg0, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 arg5, s32 arg6, s32 arg7) {
   M2C_UNK *new_var;
@@ -156,4 +332,57 @@ void func_800299CC(s32 arg0, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 arg5, s
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80029A34);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_8002A3C8);
+s32 func_8002A3C8(u8 centered) {
+    s16 x;
+    s16 w;
+    s16 i;
+    s16 n;
+    s16 y;
+    s16 x0;
+    s16 cx;
+    s32 len;
+    u8 c;
+
+    i = 0;
+    len = strlen(M2C_FIELD(&D_800AC284, char **, 0x238));
+    n = 0;
+    D_800AB618[0] = 0;
+    x0 = M2C_FIELD(&D_800AC284, s16 *, 0xF8) + 9;
+    y = M2C_FIELD(&D_800AC284, s16 *, 0xFA) + 4;
+    for (; i < len; i++) {
+        c = M2C_FIELD(&D_800AC284, char **, 0x238)[i];
+        if (c == '#') {
+            c = ' ';
+        }
+        if (c == '\n' || i == len - 1 || c == '\t') {
+            if (i == len - 1) {
+                D_800AB618[n++] = c;
+            }
+            D_800AB618[n] = 0;
+            if (centered) {
+                cx = M2C_FIELD(&D_800AC284, s16 *, 0xF8) + (M2C_FIELD(&D_800AC284, s16 *, 0xF4) >> 1);
+                func_80028858(D_800AB618, &x, &w);
+                func_8002872C(D_800AB618, cx - (w >> 1), y);
+            } else {
+                if (D_8009CFB4 != 0) {
+                    func_800286EC(1);
+                }
+                func_8002872C(D_800AB618, x0, y);
+                if (D_8009CFB4 != 0) {
+                    func_800286EC(0);
+                }
+            }
+            func_80028B58(D_800AC54C - 1, M2C_FIELD(&D_800AC284, s16 *, 0x23E), M2C_FIELD(&D_800AC284, s16 *, 0x240));
+            if (c == '\t') {
+                M2C_FIELD(&D_800AC284, char **, 0x238) += i + 1;
+                return 0;
+            }
+            y += 10;
+            n = 0;
+            D_800AB618[0] = 0;
+        } else {
+            D_800AB618[n++] = c;
+        }
+    }
+    return 1;
+}

@@ -12,7 +12,9 @@ typedef struct Args {
     /* 0x008 */ u8 pad008[0x10C];
     /* 0x114 */ u8 missionComplete; /* boot stub plays the next movie when set */
     /* 0x115 */ u8 unk115;
-    /* 0x116 */ u8 pad116[0x16];
+    /* 0x116 */ u8 pad116;
+    /* 0x117 */ u8 reverseSniper; /* options menu REVERSE SNIPER; boot default 1. Sets the aim pitch direction */
+    /* 0x118 */ u8 pad118[0x14];
     /* 0x12C */ s16 vabId; /* sound bank, closed with SsVabClose */
     /* 0x12E */ u8 pad12E[0x14];
     /* 0x142 */ u8 unk142;
