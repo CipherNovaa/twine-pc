@@ -79,6 +79,13 @@ def build_context(level):
     """Preprocessed C with our headers plus every file-scope declaration and definition prototype."""
     seen, lines = set(header_decl_names()), []
     for c_file in sorted((ROOT / "src" / level).glob("*.c")):
+        # One-line typedefs first, in file order: declarations below may use them.
+        for line in c_file.read_text().splitlines():
+            m = re.match(r"typedef .*?(\w+)\s*(\[[^\]]*\])?\s*;\s*$", line)
+            if m and m.group(1) not in seen:
+                seen.add(m.group(1))
+                lines.append(line)
+    for c_file in sorted((ROOT / "src" / level).glob("*.c")):
         text = c_file.read_text()
         for name, decl in top_level_decls(text).items():
             if name and name not in seen:
@@ -282,6 +289,9 @@ def decl_name(line):
     if m:
         return m.group(1)
     m = re.match(r"^(?:extern\s+|static\s+)?[A-Za-z_][\w\s\*]*?\b(\w+)\s*(\[[^\]]*\])?\s*;$", s)
+    if m:
+        return m.group(1)
+    m = re.match(r"^typedef\b.*?(\w+)\s*(\[[^\]]*\])?\s*;$", s)  # one-line typedef struct {...} X;
     return m.group(1) if m else None
 
 

@@ -1,5 +1,20 @@
 #include "twine.h"
 
+unsigned long func_80027248(M2C_UNK, s32, M2C_UNK);
+
+
+typedef struct { u16 start; u8 len; u8 flag; } AnimRec;
+typedef struct { u8 pad0[6]; u16 count; u16 unk8; u16 tag; u8 unkC; u8 padD[3]; s16 unk10; u8 pad12[4]; u16 unk16; AnimRec recs[1]; } AnimTrack;
+
+
+#define gte_SetGeomScreen(h) __asm__ volatile("ctc2 %0, $26" : : "r"(h))
+#define gte_ReadGeomScreen(r0) __asm__ volatile("cfc2 $12, $26; nop; sw $12, 0(%0)" : : "r"(r0) : "$12", "memory")
+extern M2C_UNK D_800F11D0;
+extern s32 D_800AFFC8;
+void GsSetRefView2(void *);
+void func_8007567C(void *arg0);
+
+
 extern s32 D_800B8F24;
 extern s32 D_8009CA9C;
 extern s32 D_8009CAA0;
@@ -105,9 +120,50 @@ M2C_UNK *func_800753F0(s32 arg0) {
     return &D_800E2F5C;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_8007545C);
+void func_8007545C(s32 first, s32 last) {
+    long h;
+    u8 *p;
+    u8 *end;
+    gte_ReadGeomScreen(&h);
+    func_8008D2EC(&D_800B0C10);
+    p = (u8 *)D_800AFFC8 + first * 0x124;
+    end = (u8 *)D_800AFFC8 + last * 0x124;
+    for (; p <= end; p += 0x124) {
+        if (p[4] != 0 && M2C_FIELD(p, s32 *, 0x7C) >= 0 && M2C_FIELD(p, s32 *, 0x114) != 0) {
+            if (p == D_8009CD98) {
+                func_8008D2EC(&D_800F11D0);
+                gte_SetGeomScreen(M2C_FIELD(&g_Weapons[D_800B0DD4], u16 *, 0xAA));
+            } else {
+                gte_SetGeomScreen((u16)h);
+            }
+            func_8007567C(p);
+        }
+    }
+    GsSetRefView2(&D_800B0C10);
+    gte_SetGeomScreen((u16)h);
+}
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_800755BC);
+void func_800755BC(u8 *arg0) {
+    s32 ok;
+
+    ok = 0;
+    if (*(s32 *)(arg0 + 0x6C) != 0 && *(s32 *)(arg0 + 0x84) == 0 && *(s32 *)(arg0 + 0x88) >= 0 && *(s32 *)(arg0 + 0x80) > 0) {
+        ok = D_8009CAA0 == 0;
+    }
+    if (ok) {
+        *(s32 *)(arg0 + 0x78) = *(s32 *)(arg0 + 0x88);
+        *(s32 *)(arg0 + 0x7C) = *(s32 *)(arg0 + 0x8C);
+        if (*(s32 *)(arg0 + 0x80) > 0) {
+            if (--*(s32 *)(arg0 + 0x80) == 0) {
+                if (*(u16 *)(**(u8 ***)(arg0 + 0x70) + 0xA) == 0xFFFF) {
+                    *(s32 *)(arg0 + 0x80) = (*(u8 **)(arg0 + 0x74))[*(s32 *)(arg0 + 0x78)];
+                }
+            }
+        }
+    } else {
+        *(s32 *)(arg0 + 0x80) = 0;
+    }
+}
 
 void func_8007567C(void *arg0) {
     u32 i;
@@ -146,7 +202,43 @@ void func_8007567C(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_800757C0);
+void func_800757C0(u8 *obj, s32 anim, s32 arg2) {
+    s32 i;
+    s32 tag;
+    s32 v;
+    AnimTrack *e;
+    AnimRec *r;
+
+    if (obj == NULL || anim < 0) {
+        return;
+    }
+    if (*(u16 *)(obj + 0x90) - 1 < anim) {
+        return;
+    }
+    tag = 0;
+    v = (*(u8 **)(obj + 0x74))[anim];
+    *(s32 *)(obj + 0x80) = v;
+    if (*(s32 *)(obj + 0x84) == 0) {
+        tag = 0xFFFF;
+        if (arg2 != 0) {
+            tag = v;
+        }
+    }
+    for (i = 0; i < *(s32 *)(obj + 0x6C); i++) {
+        e = (*(AnimTrack ***)(obj + 0x70))[i];
+        e->tag = tag;
+        if (anim < e->count) {
+            r = &e->recs[anim];
+            e->unk16 = r->start;
+            e->unkC = r->len;
+            e->unk10 = 0;
+            e->unk8 = 0xFFFF;
+            e->recs[0].flag = 0;
+        }
+    }
+    *(s32 *)(obj + 0x88) = anim;
+    *(s32 *)(obj + 0x8C) = 0;
+}
 
 s32 func_800758A0(void *arg0, s32 arg1) {
     return M2C_FIELD(arg0, s32 *, 0x78) == arg1;
@@ -286,4 +378,31 @@ s32 func_80076BF8(s32 arg0, s32 arg1, s32 arg2) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80076CDC);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80076F24);
+void func_80076F24(u8 *obj, s32 idx) {
+    SVECTOR rot;
+    SVECTOR pos;
+    u8 *base;
+    s16 *r;
+
+    base = *(u8 **)(obj + 0x10C);
+    if (base == NULL) {
+        return;
+    }
+    r = (s16 *)(base + idx * 0x14);
+    base[0x64] = 0;
+    *(s16 *)(obj + 0x98) = 0;
+    *(s16 *)(obj + 0x9A) = 0;
+    *(s16 *)(obj + 0x9C) = 0;
+    pos.vx = r[0];
+    pos.vy = r[1];
+    pos.vz = r[2];
+    rot.vx = r[3];
+    rot.vy = r[4];
+    rot.vz = r[5];
+    *(s16 *)(obj + 0x9E) = 0;
+    *(s16 *)(obj + 0xA0) = 0;
+    *(s16 *)(obj + 0xA2) = 0;
+    func_80065614(obj, 1, 5);
+    func_80027248(0x43, *(s32 *)(obj + 0x90) + 0x14, 0);
+    func_800395E8(obj);
+}

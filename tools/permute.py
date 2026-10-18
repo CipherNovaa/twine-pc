@@ -25,7 +25,9 @@ def setup(func, code, opt):
     d.mkdir(parents=True)
     src = d / "src.c"
     ctx = ROOT / "build/m2c_context_src.c"
-    src.write_text((ctx.read_text() if ctx.exists() else '#include "twine.h"\n') + code)
+    # Code that brings its own #include (a hand-written candidate) is compiled standalone.
+    standalone = code.lstrip().startswith("#include")
+    src.write_text(code if standalone else (ctx.read_text() if ctx.exists() else '#include "twine.h"\n') + code)
     subprocess.run([str(GCC / "cpp"), "-P", "-undef", "-D__GNUC__=2", "-D_LANGUAGE_C", f"-I{ROOT}/include",
                     str(src), str(d / "base.c")], check=True)
     s_path = next((ROOT / "asm/level01/nonmatchings").glob(f"*/{func}.s"))
@@ -72,6 +74,7 @@ def run_one(func, code, opt, minutes, threads):
     cand = zero[0].read_text()
     body = re.sub(r"\)\s*\n\s*\{", ") {", extract_function(cand, func), count=1)
     decls, _ = am.split_m2c(code)
+    decls = [d for d in decls if not d.startswith("#")]
     base_decls = am.top_level_decls((d / "base.c").read_text())
     norm = lambda t: " ".join(t.split())
     changed = [v for k, v in am.top_level_decls(cand).items()

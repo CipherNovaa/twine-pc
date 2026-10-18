@@ -124,6 +124,42 @@ been renamed, the current name is used.
   `D_800E2DE0` of the player via `func_8003C1BC` (this is how enemies appear).
 - `func_8003FC60`: clears the `D_8009CF7C` list, then `func_80058DFC(&D_800DDA40)`.
 
+- `func_800289C0(idx, text)`: replaces a text entry's text (padded to the old visible length), redraws via
+  `func_800291B0`. Text entries (`TextEnt`, 0x60 bytes at `D_800AB744`): +0 w, +0xC x, +0xE y, +0x10 text.
+- `func_8002D708`: per-frame mission end / restart: timers `D_8009CACC`/`D_8009CAD0`, then the restart
+  prompt (`unk115`) or `g_Args->flags |= 0x80`.
+- `func_8004EF44`: per-frame end of level, by `g_CutScene`: 1 → `func_8004EC70`; 2 (success) → music
+  `D_800E23E8`, fade, `D_8009CA90 = 1` after 20 frames; 3 (failure) → text `D_800A88D0`, music by health.
+- `func_8002DD6C(obj)`: applies the object's scale (s16 obj+0x6A, 4096 = 1.0) to its bounds and part
+  positions (hierarchy rows `*D_800D86E0`, index def+0x5F).
+- `func_80032648(tim)`: uploads one TIM (magic 0x10; LoadImage, LoadClut/LoadClut2, DrawSync).
+- `func_800378FC(obj, anim, off, arg3)`: one of 6 animation slots (`AnimSlot`, 0x24 bytes at `D_800D30D8`).
+- `func_80039520(obj)` / `func_8003A71C(obj)`: free / assign the object's `AnimEnt` (index at obj+0xA9).
+- `func_8004D5A8(data)`: parses "TT" animation data into `ListSet D_800D8C7C[]` (≤ 20 sets of ≤ 8 lists).
+- `func_800757C0(obj, anim, arg2)`: starts animation `anim` on every track in obj+0x70 (count obj+0x6C).
+- `func_800481B0`: initialises `POLY_FT4 D_800D4984[2][32][2]` (semi-transparent).
+- `func_8004900C`: health feedback: level = 8 − health >> 14; sounds on change (`func_80026F30`); flashing
+  `D_800D7BE8`. Player obj+0xA4 = 2 when dead.
+- `func_80058694(type)`: allocates an effect from the templates `*D_8009D8B8`; pools of 30 × 0xA0 bytes at
+  `D_800DB884` / `D_800DA5C4`; free slot when byte +0x9B == 0.
+- `func_80076F24(obj, idx)`: stops the object (velocity +0x98..+0xA2 = 0), `func_80065614(obj, 1, 5)`,
+  sound 0x43, removes it.
+
+- `func_80069B74`: per-frame tick (countdown `D_800E23F8` → `func_8006A3E0`; then `func_8003801C`,
+  `func_80069AB4`).
+- `func_80066098` / `func_800662A8`: spawn up to 10 effects across an object's bounding box (s16 min/max
+  pairs at +8..+0x12). `func_80065100`: generic spawner (count s16 at +0x18, scale at +0x1E).
+- `func_8006C8F4(arg0, ctx, idx)`: DR_TWIN texture-window prims around a POLY_GT3 (scrolling UVs).
+- `func_8006F034` / `func_8006EEA8` / `func_8006ECBC`: refresh the terrain's gouraud colours from the colour
+  table: plain; grey for unlit (flag `D_8009CABE`); night-vision green (flag `D_8009CABD`). Terrain mesh
+  `D_800E2DA8`: +4 face count, +0x1C colour table, +0x20 faces (20 bytes), +0x30/+0x34 POLY_GT3 buffers.
+- `func_8006FA54(base)` / `func_8006F9A4(hdr)`: relocate terrain data offsets; colour into `D_800B8FB0`.
+- `func_8006DD20(a, b, c, out)`: normal = normalize(a−b) × normalize(c−a) (`func_8008C5D8` ≈ VectorNormal).
+- `func_800755BC(obj)`: object animation countdown timer (+0x80).
+- `func_80070070(...)`: floor finder: of the faces with a downward normal, the one whose height
+  (`func_8006FED4`) is closest to pos.y. `func_8007240C`: collects colliding faces (`func_80071638`,
+  `Vec_Dot`, `func_80072190`).
+
 ## AI scripts
 
 - `func_800571B8(cmd, ScriptObj *, actor)`: opcode: jump/restart (pc = base + cmd[1]*4), clears the list at
