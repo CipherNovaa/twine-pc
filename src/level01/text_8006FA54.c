@@ -1,11 +1,15 @@
 #include "twine.h"
+#define gte_ldsxy3(r0, r1, r2) __asm__ volatile("lwc2 $12, 0(%0); lwc2 $13, 0(%1); lwc2 $14, 0(%2)" : : "r"(r0), "r"(r1), "r"(r2))
+s32 Math_Max(register s32 a, register s32 b);
+s32 Math_Min3(register s32 a, register s32 b, register s32 c);
+s32 Math_Max3(register s32 a, register s32 b, register s32 c);
 
 s32 func_80071638(void *, s32, s32, s32, void *, s32);
 s32 func_80072190(void *, s32, s32, s32, void *);
 s32 Vec_Dot(register s32 *row, register SVECTOR *v);
 
 
-s32 func_8006FB04(void *, void *, void *);
+s32 func_8006FB04(void *mesh, void *pos, void *face);
 s32 func_8006FED4(void *, void *, void *);
 
 
@@ -23,7 +27,66 @@ void func_8006FA54(s32 arg0) {
     M2C_FIELD(arg0, s32 *, 0x14) = arg0 + M2C_FIELD(arg0, s32 *, 0x14);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_8006FB04);
+s32 func_8006FB04(void *mesh, void *pos, void *face) {
+    s32 px;
+    s32 pz;
+    s32 x0;
+    s32 z0;
+    s32 x1;
+    s32 z1;
+    SVECTOR p;
+    SVECTOR a;
+    SVECTOR b;
+    SVECTOR c;
+    SVECTOR *v0;
+    SVECTOR *v1;
+    SVECTOR *v2;
+    SVECTOR *n;
+    s32 r0;
+    s32 r1;
+    s32 r2;
+
+    v0 = M2C_FIELD(mesh, SVECTOR **, 0x1C) + M2C_FIELD(face, u16 *, 0);
+    v1 = M2C_FIELD(mesh, SVECTOR **, 0x1C) + M2C_FIELD(face, u16 *, 2);
+    v2 = M2C_FIELD(mesh, SVECTOR **, 0x1C) + M2C_FIELD(face, u16 *, 4);
+    n = M2C_FIELD(mesh, SVECTOR **, 0x20) + M2C_FIELD(face, u16 *, 6);
+    px = ((SVECTOR *)pos)->vx;
+    pz = ((SVECTOR *)pos)->vz;
+    if (n->vy > 0 || px < v0->vx || Math_Max(v1->vx, v2->vx) < px || pz < Math_Min3(v0->vz, v1->vz, v2->vz) || Math_Max3(v0->vz, v1->vz, v2->vz) < pz) {
+        return 0;
+    }
+    p.vx = px;
+    p.vy = pz;
+    x0 = v0->vx;
+    z0 = v0->vz;
+    x1 = v1->vx;
+    z1 = v1->vz;
+    a.vx = x0;
+    a.vy = z0;
+    b.vx = x1;
+    b.vy = z1;
+    gte_ldsxy3(&a, &b, &p);
+    gte_nclip();
+    x0 = v2->vx;
+    z0 = v2->vz;
+    c.vx = x0;
+    c.vy = z0;
+    gte_mfMAC0(r0);
+    if (r0 <= 0) {
+        gte_ldsxy3(&b, &c, &p);
+        gte_nclip();
+        gte_mfMAC0(r1);
+        if (r1 <= 0) {
+            gte_ldsxy3(&c, &a, &p);
+            gte_nclip();
+            gte_mfMAC0(r2);
+            if (r2 <= 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_8006FED4);
 

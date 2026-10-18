@@ -55,8 +55,8 @@ segments:
       - [0xB00, c, text_80026B00]     # O2
       - [0x461C, c, text_8002A61C]    # O0
       - [0x6808, c, text_8002C808]    # O2 (starts with start())
-      - [0x38DF8, c, text_8005EDF8]   # O1 (indoor.c; bounded by the nearest functions proven -O2)
-      - [0x3BDC0, c, text_80061DC0]   # O2
+      - [0x38DF8, c, text_8005EDF8]   # O1 (indoor.c and neighbours; func_800617AC's prologue scheduling is -O2)
+      - [0x3B7AC, c, text_800617AC]   # O2 (player on-foot control onwards)
       - [0x49A54, c, text_8006FA54]   # O0
       - [0x4F290, c, text_80075290]   # O2
       - [0x50FE4, asm, psyq_libs]     # PsyQ 4.4 libraries

@@ -329,6 +329,29 @@ been renamed, the current name is used.
 - `func_80043B14(first, count)`: menu cursor navigation with d-pad and analog stick (edges at 0x4E/0xB3).
 - `func_80045084`: links the `D_800D5F40` prims into the OT (addPrim loop).
 
+- Camera helpers: `func_8005099C` snaps the camera to its target; `func_8004EAB8(obj)` copies the camera
+  rotation to a model; `func_8004DFF8(pos)` aim-camera collision probe (`func_800743E8`); `func_8004E89C`
+  camera init constants; `func_8004EB20` cut-scene camera aim at the actor's target.
+- `func_8004E37C`: footsteps: step 300 (150 crouched), loop sound 0x50 while moving, footstep sound at each
+  phase wrap; walk phase `D_8009D3FC`.
+- `func_8004E5D8`: **head-bob**: phase `D_8009D3FC+2` advances by `D_8009D3F8`; offset `D_8009D3BC` =
+  (`D_8009D3F0`·cos, −|`D_8009D3F4`·sin|, 0) rotated by camera yaw and added to the camera target.
+  (Mod hook for "no head-bob".)
+- `func_80052B2C(out, chr)`: eye position (player: camera; others: model + height, halved crouched).
+- `func_80053684(x, z, obj, dist)`: Manhattan distance test.
+- `func_8004CD14(hdr, buf)`: morph setup (reverse of `func_8004CE74`).
+- Cut-scene actor (`D_800D90C0`): `func_80053A7C` init, `func_80053BE0` per-frame update, `func_80053ED8`
+  picks the best point of interest among 27 `Pickup` entries (`D_800DA270`; per-type range table
+  `D_8009D660`).
+
+- Effects (cont.): `func_80057C40` resets all effect pools at level init (classes with count 0 point at the
+  start of BSS: `D_800AB540`, `_b`, `_c`); `func_8005885C(slot, type)` initialises a 0xA0-byte slot from its
+  template `D_8009D8B8[type]` (0x14 bytes: size, flags (bits 4–7 pool class), RGB, UV, w/h, clut, tpage);
+  `func_80058B6C(type)` allocates a 0x6C-byte slot (only type 0x50 = sparks has a pool); `func_80058B10(owner)`
+  frees an owner's class-0x80 effects.
+- `func_8005B6CC(obj)` / `func_8005B76C(obj)`: character colour (normal / night-vision red / grey; dead).
+- `func_8005BAE8(obj, anim)`: root motion between two keyframes (`D_800DDEE0` tables, 6-byte {x,y,z}).
+
 ## Enemy AI: waypoints and navmesh
 
 - `func_800523E4(obj, path)`: nearest waypoint on a path (1-based, 0xFF if none); sets turn bit 2.
@@ -338,6 +361,12 @@ been renamed, the current name is used.
   `nav->0x10[self][target]` (two u16 node indices), state at ai+0x23C {zone, state, node0, node1}.
 - Data: `D_8009D5A8` = per-path {x, z} waypoints (`s32 **`), `D_8009D5AC` = waypoint count per path (`s16 *`);
   navmesh at `D_8009CE38`: +4 zone count, +0xC SVECTOR nodes, +0x10 route table.
+- `func_80051728(obj, tgt)`: **sight test**: range and FOV halved when the target is the sneaking player;
+  distance (+0x110), yaw/pitch to target (+0xC4/+0xC6), raycast `func_80050A10`, 3-bit "seen" counter at
+  obj+0x64 bits 25–27 (bits 29–31 = alert level, near range −= level·128). Returns 0x40 spotted, 0x100
+  roughly facing, 0x10 near, 0x8000 < 200, 0x20000000 < far range.
+- AI sub (obj+0x118): +0x48 near range, +0x4C sight range, +0x50 FOV, +0x84 far range, +0x1D0 point-of-
+  interest type mask, +0x1D4 chosen point, +0x1D8.. fallback target position.
 - AI state at obj+0x118; flags at ai+0x10: 2 = turn left, 8 = reached, 0x10 = path end, 0x4000 = steering.
 
 ## AI scripts

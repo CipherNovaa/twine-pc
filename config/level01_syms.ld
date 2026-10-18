@@ -4,3 +4,9 @@
 D_1F8003D4 = 0x1F8003D4;
 D_1F8003D8 = 0x1F8003D8;
 D_1F8003DC = 0x1F8003DC;
+
+/* Several distinct (probably zero-size) pools at the very start of BSS: the effect pool init
+ * (func_80057C40) addresses each through its own symbol, so they need separate names. Aliases of
+ * D_800AB540, so they follow it in both the plain and the shiftable link. */
+D_800AB540_b = D_800AB540;
+D_800AB540_c = D_800AB540;

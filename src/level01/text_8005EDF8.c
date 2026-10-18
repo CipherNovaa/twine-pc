@@ -18,7 +18,7 @@ void func_8004B9FC(u8 *obj);
 
 void func_80033348(void);
 void func_800483D8(void);
-void func_8005FAA8(u8 *);
+void func_8005FAA8(u8 *obj);
 
 
 s32 func_80036E10(void *, void *);
@@ -1087,6 +1087,12 @@ extern char D_800A8318[], D_800A8320[], D_800A832C[], D_800A8340[];
 
 
 typedef s32 (*CmdHandler)(u8 *, void *, void *);
+typedef struct { u32 lo : 3; u32 dir : 4; u32 rest : 25; } DirBits;
+void func_8005FC4C(u8 *obj);
+void func_80037EB0(void *);
+void func_80052C0C(void *, void *);
+void func_8005C8C4(void *, void *);
+extern DirBits D_800DF0F0;
 void func_8003B53C(u8 *, s32, s32, u16);
 extern CmdHandler D_8009D7A8[];
 
@@ -1431,7 +1437,7 @@ void func_8004BB00(void);
 M2C_UNK func_80052DB8();                            /* extern */
 void func_8005EF7C(void);
 void func_8005F3B0(void);
-M2C_UNK func_8005F788();                            /* extern */
+void func_8005F788(void);
 M2C_UNK func_8002D1D4();                            /* extern */
 M2C_UNK func_80031D94();                            /* extern */
 M2C_UNK func_80074E38();                            /* extern */
@@ -1874,11 +1880,74 @@ void func_8005F3B0(void) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005F788);
+void func_8005F788(void) {
+    u8 *end;
+    u8 *start;
+    u8 *obj;
+    u8 *m;
+    void *args[2];
+    s32 t;
+
+    end = (u8 *)D_800AFFC8 + D_800B07B0 * 0x124;
+    start = (u8 *)D_800AFFC8 + D_800B0DA0 * 0x124;
+    for (obj = start; obj <= end; obj += 0x124) {
+        if (obj[4] != 0) {
+            func_80037EB0(obj);
+            m = *(u8 **)(obj + 0x90);
+            if (func_800377F4(obj, m + 0x14) == 0) {
+                func_8005C8C4(obj, *(void **)(obj + 0x94));
+                if (*(void **)(obj + 0x44) != NULL) {
+                    args[0] = obj;
+                    args[1] = 0;
+                    (*(void (**)(void *))(obj + 0x44))(args);
+                    if (obj[4] == 0) {
+                        continue;
+                    }
+                }
+                *(s32 *)(m + 0x10) = 2;
+                t = D_800B8F24;
+                func_8003AC1C(obj, t);
+                if ((*(s32 *)(obj + 0xA4) & 6) == 6 && *(s32 *)(m + 0x58) == 0) {
+                    func_800615C8(obj);
+                }
+                func_8005FC4C(obj);
+                if (obj[4] != 0 && !(*(s32 *)(*(u8 **)(obj + 0x94) + 0x24) & 0x20) && !(*(s32 *)(obj + 0x48) & 0x200000) && *(s32 *)(obj + 0x7C) >= 0) {
+                    func_80052C0C(obj, m);
+                }
+            }
+        }
+    }
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005F93C);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_8005FAA8);
+void func_8005FAA8(u8 *obj) {
+    VECTOR *p;
+
+    if ((*(s32 *)(obj + 0x68) & 0x380) != 0x80 && obj != *(u8 **)((u8 *)g_Player + 0x8C)) {
+        p = (VECTOR *)(*(u8 **)(obj + 0x90) + 0x28);
+        if (obj == *(u8 **)((u8 *)g_Player + 0x5C)) {
+            D_8009CFB0 = 0;
+            *(u8 **)((u8 *)g_Player + 0x5C) = 0;
+        }
+        if (*(s32 **)(obj + 0x60) != NULL) {
+            **(s32 **)(obj + 0x60) &= ~0x100;
+            if (*(s32 *)(obj + 0x34) > 0 && obj[5] == 6) {
+                if (!(*(s32 *)(obj + 0x4C) & 0x10000000) && !(*(s32 *)(obj + 0x68) & 0xF)) {
+                    (*(s32 **)(obj + 0x60))[-3] = p->vx - D_800D2FB0.x;
+                    (*(s32 **)(obj + 0x60))[-2] = p->vy - D_800D2FB0.y;
+                    (*(s32 **)(obj + 0x60))[-1] = p->vz - D_800D2FB0.z;
+                }
+                D_800DF0F0 = *(DirBits *)&(*(s32 **)(obj + 0x60))[1];
+                if (*(u8 **)(obj + 0x118) != NULL && !(*(s32 *)(*(u8 **)(obj + 0x118) + 0x10) & 0x400)) {
+                    D_800DF0F0.dir = *(u16 *)(*(u8 **)(obj + 0x90) + 0x62) >> 8;
+                }
+                *(DirBits *)&(*(s32 **)(obj + 0x60))[1] = D_800DF0F0;
+            }
+        }
+        func_800395E8(obj);
+    }
+}
 
 void func_8005FC4C(u8 *obj) {
     u8 *anim;
@@ -2347,9 +2416,3 @@ void func_80061708(s32 arg0) {
     sprintf(buf, D_800A9390, arg0);
     func_8006B1DC((s32)buf);
 }
-
-INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_800617AC);
-
-INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80061AB0);
-
-INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80061B70);
