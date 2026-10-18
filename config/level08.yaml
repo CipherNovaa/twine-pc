@@ -1,0 +1,43 @@
+name: LEVEL08.EXE
+sha1: 2ab338699db98e4dbbf1525c874c899f09d77f86
+options:
+  basename: level08
+  target_path: workbench/extracted/L08/LEVEL08.EXE
+  elf_path: build/level08/level08.elf
+  base_path: ..
+  platform: psx
+  compiler: PSYQ
+
+  asm_path: asm/level08
+  src_path: src/level08
+  build_path: build/level08
+
+  ld_script_path: linkers/level08.ld
+  undefined_funcs_auto_path: linkers/level08_undefined_funcs_auto.txt
+  undefined_syms_auto_path: linkers/level08_undefined_syms_auto.txt
+
+  find_file_boundaries: False
+  o_as_suffix: True
+  use_legacy_include_asm: False
+  section_order: [".rodata", ".text", ".data", ".bss"]
+  symbol_addrs_path: []
+  subalign: 2
+  string_encoding: ASCII
+  data_string_encoding: ASCII
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+segments:
+  - name: header
+    type: header
+    start: 0x0
+
+  - name: main
+    type: code
+    start: 0x800
+    vram: 0x80026800
+    bss_size: 0x5318C
+    subsegments:
+      - [0x800, asm]
+      - [0x785D0, data]
+  - [0x88800]

@@ -1,0 +1,30 @@
+# Copyrighted game assets - never commit these, even privately
+workbench/
+*.bin
+*.cue
+*.chd
+*.iso
+*.img
+*.pbp
+*.bios
+
+# Ghidra project databases embed the game's code
+tools/ghidra_projects/
+
+# Third-party tool checkouts
+tools/mkpsxiso/
+
+# Build artifacts
+.venv/
+__pycache__/
+*.pyc
+tools/old-gcc/
+tools/maspsx/
+tools/m2c/
+tools/asm-differ/
+
+# Generated from your own game files by splat / the build (contain game code or data)
+build/
+asm/
+linkers/
+tools/decomp-permuter/

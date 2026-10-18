@@ -1,0 +1,43 @@
+name: LEVEL10.EXE
+sha1: 6df75daf8f3c2144cc94cfabfbfb7f0127ef72f8
+options:
+  basename: level10
+  target_path: workbench/extracted/L10/LEVEL10.EXE
+  elf_path: build/level10/level10.elf
+  base_path: ..
+  platform: psx
+  compiler: PSYQ
+
+  asm_path: asm/level10
+  src_path: src/level10
+  build_path: build/level10
+
+  ld_script_path: linkers/level10.ld
+  undefined_funcs_auto_path: linkers/level10_undefined_funcs_auto.txt
+  undefined_syms_auto_path: linkers/level10_undefined_syms_auto.txt
+
+  find_file_boundaries: False
+  o_as_suffix: True
+  use_legacy_include_asm: False
+  section_order: [".rodata", ".text", ".data", ".bss"]
+  symbol_addrs_path: []
+  subalign: 2
+  string_encoding: ASCII
+  data_string_encoding: ASCII
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+segments:
+  - name: header
+    type: header
+    start: 0x0
+
+  - name: main
+    type: code
+    start: 0x800
+    vram: 0x80026800
+    bss_size: 0x58D18
+    subsegments:
+      - [0x800, asm]
+      - [0x7A330, data]
+  - [0x8A800]

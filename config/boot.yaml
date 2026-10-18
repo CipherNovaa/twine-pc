@@ -1,0 +1,44 @@
+name: SLUS_012.72
+sha1: 73604e83c0e654718d8f28c8cf10d2f98ea1ec13
+options:
+  basename: boot
+  target_path: workbench/extracted/SLUS_012.72
+  elf_path: build/boot/boot.elf
+  base_path: ..
+  platform: psx
+  compiler: PSYQ
+
+  asm_path: asm/boot
+  src_path: src/boot
+  build_path: build/boot
+
+  ld_script_path: linkers/boot.ld
+  undefined_funcs_auto_path: linkers/boot_undefined_funcs_auto.txt
+  undefined_syms_auto_path: linkers/boot_undefined_syms_auto.txt
+
+  find_file_boundaries: False
+  o_as_suffix: True
+  use_legacy_include_asm: False
+  section_order: [".rodata", ".text", ".data", ".bss"]
+  symbol_addrs_path: []
+  subalign: 2
+  string_encoding: ASCII
+  data_string_encoding: ASCII
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+segments:
+  - name: header
+    type: header
+    start: 0x0
+
+  - name: main
+    type: code
+    start: 0x800
+    vram: 0x80010000
+    bss_size: 0x6114
+    subsegments:
+      - [0x800, asm]
+      - [0xC950, data]
+
+  - [0x10000]

@@ -1,0 +1,3 @@
+# Start every level invincible (the same flag the dev menu's INVINCIBILTY switch and the
+# unlockable invincibility bonus set). Useful while testing other mods.
+LEVEL01.EXE  0x8009CA88  00000000  00000001  # invincible = 1

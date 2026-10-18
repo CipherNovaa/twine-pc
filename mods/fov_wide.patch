@@ -1,0 +1,3 @@
+# Wider field of view: projection distance 300 -> 240 (about 81 -> 94 degrees horizontal at 512px).
+# Lower = wider. Weapon zoom adds on top of this value, so scopes still work.
+LEVEL01.EXE  0x8002F6BC  2402012C  240200F0  # g_Projection = 240 (was 300) in the graphics init

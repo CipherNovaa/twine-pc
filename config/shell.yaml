@@ -1,0 +1,43 @@
+name: SHELL.EXE
+sha1: b89e14f3ba31ba77688e6c3888e1e6a6dd11ec11
+options:
+  basename: shell
+  target_path: workbench/extracted/SHDATA/SHELL.EXE
+  elf_path: build/shell/shell.elf
+  base_path: ..
+  platform: psx
+  compiler: PSYQ
+
+  asm_path: asm/shell
+  src_path: src/shell
+  build_path: build/shell
+
+  ld_script_path: linkers/shell.ld
+  undefined_funcs_auto_path: linkers/shell_undefined_funcs_auto.txt
+  undefined_syms_auto_path: linkers/shell_undefined_syms_auto.txt
+
+  find_file_boundaries: False
+  o_as_suffix: True
+  use_legacy_include_asm: False
+  section_order: [".rodata", ".text", ".data", ".bss"]
+  symbol_addrs_path: []
+  subalign: 2
+  string_encoding: ASCII
+  data_string_encoding: ASCII
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+segments:
+  - name: header
+    type: header
+    start: 0x0
+
+  - name: main
+    type: code
+    start: 0x800
+    vram: 0x80026800
+    bss_size: 0xDD8F8
+    subsegments:
+      - [0x800, asm]
+      - [0x4AE50, data]
+  - [0x71800]

@@ -1,0 +1,4 @@
+# Skip the front-end menu and boot straight into Level 1, using the boot stub's own
+# developer fast-boot path (g_Args.flags bit 6 = "don't run SHELL.EXE").
+SLUS_012.72  0x800101E4  14400003  10000003  # bnez $v0 -> b: always take the skip-menu branch
+SLUS_012.72  0x800100C0  A6060188  A6040188  # default g_Args.level = 1 ($a0) instead of 2 ($a2)

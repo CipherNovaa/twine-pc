@@ -1,0 +1,4 @@
+# Re-enable the developer cheat codes, which retail discs gate off via the CD-archive flag.
+# Enter while paused: SELECT SELECT CIRCLE CIRCLE, then: L2 R2 = debug menu,
+# SQUARE x4 = invincibility, SELECT SQUARE = mission failed (see README for the full list).
+LEVEL01.EXE  0x8002DC98  1440002D  00000000  # cheat matcher: drop `bnez g_Args.cdArchive, return`

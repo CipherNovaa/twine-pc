@@ -1,0 +1,3 @@
+# Start each level with the debug screen on the CAMERA INFO page.
+LEVEL01.EXE  0x80032D9C  AC400004  24190003  # addiu $t9, $zero, 3  (replaces a redundant cursor reset)
+LEVEL01.EXE  0x80032DA0  AC400038  AC590038  # DISPLAY page = 3 (CAMERA INFO) instead of 0 (NONE)

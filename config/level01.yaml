@@ -1,0 +1,62 @@
+name: LEVEL01.EXE
+sha1: 7557122e64fe20431b2cfff66014f1c58ccfaee3
+options:
+  basename: level01
+  target_path: workbench/extracted/L01/LEVEL01.EXE
+  elf_path: build/level01/level01.elf
+  base_path: ..
+  platform: psx
+  compiler: PSYQ
+
+  asm_path: asm/level01
+  src_path: src/level01
+  build_path: build/level01
+  create_asm_dependencies: True
+
+  ld_script_path: linkers/level01.ld
+  ld_dependencies: True
+  undefined_funcs_auto_path: linkers/level01_undefined_funcs_auto.txt
+  undefined_syms_auto_path: linkers/level01_undefined_syms_auto.txt
+
+  find_file_boundaries: False
+  gp_value: 0x800AA8E0
+
+  o_as_suffix: True
+  use_legacy_include_asm: False
+
+  section_order: [".rodata", ".text", ".data", ".bss"]
+
+  symbol_addrs_path:
+    - config/symbol_addrs.level01.txt
+    - config/psyq_syms.level01.txt
+
+  subalign: 2
+
+  string_encoding: ASCII
+  data_string_encoding: ASCII
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+segments:
+  - name: header
+    type: header
+    start: 0x0
+
+  - name: main
+    type: code
+    start: 0x800
+    vram: 0x80026800
+    # Payload ends at 0x800AB800 (sector-padded); BSS cleared by start() runs to 0x800FDB2C.
+    bss_size: 0x5232C
+    # Game code regions split where optimization level changes (O0 funcs use $fp as frame pointer).
+    subsegments:
+      - [0x800, c, text_80026800]     # O2
+      - [0x80C, c, text_8002680C]     # O0
+      - [0xB00, c, text_80026B00]     # O2
+      - [0x461C, c, text_8002A61C]    # O0
+      - [0x6808, c, text_8002C808]    # O2 (starts with start())
+      - [0x49A54, c, text_8006FA54]   # O0
+      - [0x4F290, c, text_80075290]   # O2
+      - [0x50FE4, asm, psyq_libs]     # PsyQ 4.4 libraries
+      - [0x76180, data]
+  - [0x85800]
