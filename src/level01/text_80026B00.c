@@ -18,7 +18,7 @@ typedef struct { u8 prog; u8 tone; u8 note; u8 voice; u8 vol; u8 rnd; u8 pad[2];
 s32 func_80026F30(u32 id, s32 flags);
 
 
-void func_800814CC(s16, s32, s32);
+short func_800814CC(s16, s32, s32);
 void func_80026C90(s32 arg0);
 
 
@@ -28,6 +28,7 @@ s32 rand();
 extern char D_800A6ED0[];
 extern char D_800A6EF8[];
 typedef struct { u16 w; u8 pad2[0xA]; u16 x; u16 y; char text[0x50]; } TextEnt;
+void func_80027394(s32 pos, s16 voice, s32 id, s32 flags);
 extern u8 D_800AB754[];
 extern u16 D_800AB5E0;
 extern u16 D_800AB5E4;
@@ -248,7 +249,63 @@ unsigned long func_80027248(u8 id, s32 pos, s32 flags) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800272A4);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80027394);
+void func_80027394(s32 pos, s16 voice, s32 id, s32 flags) {
+  s32 vol;
+  s32 l;
+  s32 r;
+  u8 f;
+  f = flags;
+  if (pos != 0)
+  {
+    func_8003B808(pos);
+    f = flags | 8;
+  }
+  if (f & 2)
+  {
+    vol = (((struct 
+    {
+      char pad[(0x138 > 0) ? (0x138) : (0)];
+      typeof(*((u8 *) 0)) f;
+    } *) (((char *) g_Args) + ((0x138 < 0) ? (0x138) : (0))))->f * ((struct 
+    {
+      char pad[(0x13A > 0) ? (0x13A) : (0)];
+      typeof(*((s16 *) 0)) f;
+    } *) (((char *) g_Args) + ((0x13A < 0) ? (0x13A) : (0))))->f) / 80;
+  }
+  else
+  {
+    vol = ((struct 
+    {
+      char pad[(0x13A > 0) ? (0x13A) : (0)];
+      typeof(*((s16 *) 0)) f;
+    } *) (((char *) g_Args) + ((0x13A < 0) ? (0x13A) : (0))))->f;
+  }
+  vol = (vol * ((struct 
+  {
+    char pad[(0x130 > 0) ? (0x130) : (0)];
+    typeof(*((SfxDef **) 0)) f;
+  } *) (((char *) g_Args) + ((0x130 < 0) ? (0x130) : (0))))->f[id].vol) >> 7;
+  if (f & 8)
+  {
+    r = (vol * ((struct 
+    {
+      char pad[(0x136 > 0) ? (0x136) : (0)];
+      typeof(*((u8 *) 0)) f;
+    } *) (((char *) g_Args) + ((0x136 < 0) ? (0x136) : (0))))->f) >> 7;
+    l = (vol * ((struct 
+    {
+      char pad[(0x137 > 0) ? (0x137) : (0)];
+      typeof(*((u8 *) 0)) f;
+    } *) (((char *) g_Args) + ((0x137 < 0) ? (0x137) : (0))))->f) >> 7;
+  }
+  else
+  {
+    r = (l = vol);
+  }
+  l = (l < 0) ? (0) : ((l >= 0x80) ? (0x7F) : (l));
+  r = (r < 0) ? (0) : ((r >= 0x80) ? (0x7F) : (r));
+  func_800814CC(voice, (s16) l, (s16) r);
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800274F4);
 

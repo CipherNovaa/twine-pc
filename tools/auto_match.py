@@ -302,6 +302,9 @@ def decl_name(line):
     if m:
         return m.group(1)
     m = re.match(r"^typedef\b.*?(\w+)\s*(\[[^\]]*\])*\s*;$", s)  # one-line typedef struct {...} X;
+    if m:
+        return m.group(1)
+    m = re.match(r"^(?:extern\s+)?(?:struct|union)\b.*\}\s*\**\s*(\w+)\s*(\[[^\]]*\])*\s*;$", s)  # extern struct {...} X;
     return m.group(1) if m else None
 
 

@@ -271,6 +271,64 @@ been renamed, the current name is used.
 - `DevMenu_HandleInput`: `g_DevMenu` = {active; cursor; count[12]; vals[12]}; rows 7–11 mirror
   `g_Invincible`/`g_GodMode`, `D_8009CD6C` (inverted), `D_8009CA8C`, `D_8009CDE8`, `D_8009CD6E`.
 
+- `func_8003C1BC`: spawns an object from a spawn record. Parameter word bits: 0–2 scale, 3–6 rotation,
+  7–11 path, 12–19 value at +8, 20–22 argument to `func_80053790` (AI script) for type-6 objects, 24–26
+  field +0x68. Flags word: bits 0–7 type, bit 8 already spawned, bit 9 → state +0xA4 = 2.
+- `func_80036938`: auto-aim target: closest visible object inside a yaw/pitch cone → `g_Player+0x5C`
+  (target), +0xC4/+0xC6 (yaw/pitch difference), +0x110 (distance), `D_800DDE30`.
+- `func_80031678`: per-frame level state: checkpoint reload, colour cycles and UV scrolls from the header at
+  `D_800D2FC0->+4` ({nCol, nUv, ColCycle *, pad, UvScroll *}, 0x14-byte entries), fades.
+- `func_8004A398`: scope/crosshair reticle (POLY_FT4 `D_800DDC70`), type `D_8009D8F0` (1–4), size from zoom
+  `D_800DE0D0`, position `D_800D4480`.
+- `func_80063F84`: 3 spark effects (`D_800DF1F4[3]`).
+- `func_80075920`: HMD model instance init (PsyQ libgs HMD style: units, coordinate units, primitive
+  drivers, GsLinkAnim).
+- `func_80038C8C`: object destroyed: drop carried object, death sound (def+0x5D), spawn drops (def+5,
+  def+6), award score def+4 (`func_800391B0`).
+- indoor.c (-O1, `text_8005EDF8.c`): CLUT handling: `D_800DE0E8` = 64×16 CLUT table, `D_800DE8E8` = backup,
+  `D_800DE0E4` = per-slot CLUT index; `func_8006043C(a, b)` copies a CLUT row, `func_80060410` uploads it.
+
+- `func_800373FC(proj, obj)`: applies a hit: impact sound, reactions (`func_800632AC`), health −=
+  proj+0x34 if `func_80037768` allows; kills of some types counted in `g_Args+0x2CC`; death → obj+0xA4 = 2,
+  death anim, `func_80038C8C`; else hit flash `func_80062F38`. Always removes the projectile.
+- `func_80031B58(obj)`: script op "go to loadpoint" (records at `D_8009E9DC`).
+- `func_8002E5C4`: level init; `D_8009CDD4` / `D_8009CDD8` are `void (*)(void)` hooks.
+- HUD: `func_800456D0` sets up the HUD POLY_FT4s (`D_800D7588[2][7]`); `func_8004626C` blinking icon;
+  `func_800474AC` slides HUD prims by `D_8009D014`; `func_80047B50` cinema letterbox bars (height
+  `D_8009D01A`); `func_80049220` centred 64×32 sprite.
+- `func_8004BC70(tmdObjs, model, idx)`: points the model at a TMD object and precomputes primitive run lengths.
+- `func_8004C498(idx, e)`: copies a weapon definition (`g_Args->unk228`, 0x70-byte records).
+- `func_8004C944(obj)`: ammo pickup. `func_8004CB2C(obj, w)`: ammo amount from clip size (random part).
+- Sound (cont.): `func_80026F30` fails if id ≥ 105, 20+ voices busy (`D_8009C1E8`), or during cut scenes;
+  Args +0x134 pitch offset, +0x13A master volume.
+
+- Effect/sprite pools: `func_80062394` projects the camera-facing sprites (pool `D_800DB884`, 30 × 0xA0: pos
+  SVECTOR +0x54, w/h +0x78/+0x7A, rotation +0x9C, corners +0x84..+0x92, otz +0x82, active +0x9B);
+  `func_80062784` oriented 3D quads (pool `D_800DA5C4`, rotation +0x6C, owner obj +0x74, attached to a bone);
+  `func_80062B68` updates and projects sparks (pool `D_800DCB4C`, 30 × 0x6C, 10-frame life);
+  `func_80062FAC` spawns one spark.
+- `func_80049470(obj, out)`: projects the object's bounding-box centre to the screen (target marker).
+- `func_8004841C`: light glows / lens flare for up to 5 lights (`D_800B0CB0`), at most 2 drawn per frame.
+- `func_8006CB88(poly)`: GT3 triangle setup: clip flags, nclip, OT z = (3·max+min)/4, colours (normal,
+  night-vision green, flat grey); returns 0 culled / 1 draw / 2 subdivide.
+- `func_80069D60(obj)`: builds a child object's matrix from two rotations plus table offsets.
+- `func_8006E620(planes, min, max)`: box vs view frustum (7 planes).
+
+- `func_800448F4`: entering aim mode: zoom limits from the weapon (+0x54/+0x56 u16 → `D_800D43CC`/`AC`,
+  +0x68 → `D_800D43F4`/`F0`).
+- `func_800391B0(obj, type)`: replaces an object with a new one of `type` at the same place (keeps script
+  pointer +0x60, links +0x88/+0x8C), destroys the old one.
+- `func_8003A898(type, arg1)`: effect slot from `D_800B0AB4` (0x34 bytes, count `D_800B0C84`), plays the
+  type's sound (byte 0x5C of its 0x70-byte record in `g_Args->unk228`).
+- `func_8003AA14(a, b)`: does segment a–b cross the 512×240 screen edge.
+- `func_8003B808(src)`: stereo pan/volume for a sound relative to the camera → `g_Args+0x137/+0x136`.
+- `func_8003BC98(rot, coord, part)` / `func_8003CABC`: rotation → GsCOORDINATE2 matrix (marks part+0x88
+  dirty); `func_8003C8A4(a, b)` height band + radius test; `func_8003CABC(a, b)` is a inside b's view cone
+  (range b+0x52, radius a+0x2A) — enemy sight.
+- `func_8003E494`: direction index from flag pairs `D_800D4384..8F`.
+- `func_80043B14(first, count)`: menu cursor navigation with d-pad and analog stick (edges at 0x4E/0xB3).
+- `func_80045084`: links the `D_800D5F40` prims into the OT (addPrim loop).
+
 ## Enemy AI: waypoints and navmesh
 
 - `func_800523E4(obj, path)`: nearest waypoint on a path (1-based, 0xFF if none); sets turn bit 2.

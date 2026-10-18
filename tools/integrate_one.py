@@ -42,8 +42,14 @@ def _integrate(func, code, level, keep, replace_decls):
     new += [d for d in am.missing_context_decls(original + "\n".join(new), body, am.context_decls()) if d not in new]
     text = text.replace(f'INCLUDE_ASM("{folder}", {func});', body.strip())
     if new:
-        head, sep, rest = text.partition("\n\n")
-        text = head + "\n\n" + "\n".join(new) + "\n" + sep + rest
+        # After the last typedef of the file's declaration block, so new declarations can use the types;
+        # new typedefs go first.
+        new = sorted(new, key=lambda d: not d.startswith("typedef "))
+        lines = text.split("\n")
+        first_code = next(i for i, l in enumerate(lines) if l.startswith("INCLUDE_ASM(") or am.DEF_RE.match(l))
+        typedefs = [i for i, l in enumerate(lines[:first_code]) if l.startswith("typedef ")]
+        at = typedefs[-1] + 1 if typedefs else text.partition("\n\n")[0].count("\n") + 1
+        text = "\n".join(lines[:at] + new + lines[at:])
     c_file.write_text(am.sync_prototypes(text))
     r = subprocess.run(["make", f"LEVEL={level}", "-j8"], cwd=ROOT, capture_output=True, text=True)
     ok = r.returncode == 0 and ": OK" in r.stdout

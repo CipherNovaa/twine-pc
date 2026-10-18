@@ -11,18 +11,11 @@ void func_800391B0(void *, s32);
 
 extern u8 D_800DD7F4[];
 extern s32 D_800AFF88;
-#define gte_stflg(r0) __asm__ volatile("cfc2 $12, $31; nop; sw $12, 0(%0)" : : "r"(r0) : "$12", "memory")
 
 
 void RotMatrixYXZ_gte(void *, void *);
 void func_800634C0(u8 *obj);
 typedef struct { s32 m[8]; } Mat32;
-#define gte_ldv3(r0, r1, r2) __asm__ volatile("lwc2 $0, 0(%0); lwc2 $1, 4(%0); lwc2 $2, 0(%1); lwc2 $3, 4(%1); lwc2 $4, 0(%2); lwc2 $5, 4(%2)" : : "r"(r0), "r"(r1), "r"(r2))
-#define gte_rtpt() __asm__ volatile("nop; nop; .word 0x4A280030")
-#define gte_stsxy3(r0, r1, r2) __asm__ volatile("swc2 $12, 0(%0); swc2 $13, 0(%1); swc2 $14, 0(%2)" : : "r"(r0), "r"(r1), "r"(r2) : "memory")
-#define gte_avsz3() __asm__ volatile("nop; nop; .word 0x4B58002D")
-#define gte_stotz(r0) __asm__ volatile("swc2 $7, 0(%0)" : : "r"(r0) : "memory")
-#define gte_stflg(r0) __asm__ volatile("cfc2 $12, $31; nop; sw $12, 0(%0)" : : "r"(r0) : "$12", "memory")
 
 
 typedef struct { u32 active : 1; u32 life : 5; u32 pad6 : 6; u32 state : 4; u32 pad16 : 16; s32 pad4[4]; u32 start; } Spark;
@@ -30,7 +23,6 @@ void func_80065588(void *arg0);
 s32 func_80066098(s16 *arg0, SVECTOR *arg1);
 
 
-#define gte_stflg(r0) __asm__ volatile("cfc2 $12, $31; nop; sw $12, 0(%0)" : : "r"(r0) : "$12", "memory")
 
 
 typedef struct { s32 active; s32 cursor; s32 count[12]; s32 vals[12]; } DevMenu;
@@ -1031,6 +1023,12 @@ extern char D_800A8318[], D_800A8320[], D_800A832C[], D_800A8340[];
 
 
 typedef s32 (*CmdHandler)(u8 *, void *, void *);
+typedef struct { s16 m[3][3]; s32 t[3]; } MATRIX;
+extern u8 D_800E0904[];
+extern s32 D_8009E4E4;
+extern s32 D_8009E4E8;
+extern s32 D_8009E4EC;
+void RotMatrixYXZ(void *, void *);
 extern CmdHandler D_8009D7A8[];
 
 
@@ -2944,7 +2942,88 @@ s32 func_80069D50(void) {
     return D_800E02B8;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80061DC0", func_80069D60);
+void func_80069D60(u8 *obj) {
+  MATRIX m1;
+  MATRIX m2;
+  VECTOR v;
+  VECTOR out;
+  u8 *parent;
+  u8 *a;
+  u8 *b;
+  s16 *ang;
+  u8 *tbl;
+  s32 *t;
+  MATRIX *pm1;
+  VECTOR *po;
+  VECTOR *pv;
+  if (b || D_8009E4E8)
+  {
+    parent = *((u8 **) (obj + 0x8C));
+  }
+  else
+  {
+    parent = *((u8 **) (obj + 0x8C));
+  }
+  if (parent == ((void *) 0))
+  {
+    return;
+  }
+  a = *((u8 **) (obj + 0x90));
+  ang = (s16 *) (a + 0x60);
+  b = *((u8 **) (parent + 0x90));
+  tbl = ((u8 *) D_800D86E0) + (D_800E0904[(D_8009D2FC * 0x70) + 0x5F] * 126);
+  RotMatrixYXZ(ang, &m1);
+  t = (s32 *) (a + 0x28);
+  m1.t[0] = t[0];
+  m1.t[1] = t[1];
+  m1.t[2] = t[2];
+  *((s16 *) (b + 0x60)) = ((*((s16 *) (a + 0x60))) + (*((s16 *) (a + 0xEC)))) & 0xFFF;
+  *((s16 *) (b + 0x62)) = ang[1];
+  *((s16 *) (b + 0x64)) = ang[2];
+  *((s32 *) (b + 0x10)) = 2;
+  RotMatrixYXZ(a + 0xEC, &m2);
+  po = &out;
+  m2.t[0] = *((s16 *) (tbl + 0x8));
+  m2.t[1] = *((s16 *) (tbl + 0x14));
+  m2.t[2] = *((s16 *) (tbl + 0x20));
+  pm1 = &m1;
+  asm volatile("lw $12, 0(%0); lw $13, 4(%0); ctc2 $12, $0; ctc2 $13, $1; lw $12, 8(%0); lw $13, 12(%0); lw $14, 16(%0); ctc2 $12, $2; ctc2 $13, $3; ctc2 $14, $4" : : "r"(pm1) : "$12", "$13", "$14");
+  asm volatile("lhu $13, 4(%0); lhu $12, 0(%0); sll $13, $13, 16; or $12, $12, $13; mtc2 $12, $0; lwc2 $1, 8(%0)" : : "r"(m2.t) : "$12", "$13");
+  asm volatile("nop; nop; .word 0x4A486012");
+  asm volatile("swc2 $25, 0(%0); swc2 $26, 4(%0); swc2 $27, 8(%0)" : : "r"(po) : "memory");
+  asm volatile("lhu $12, 0(%0); lhu $13, 6(%0); lhu $14, 12(%0); mtc2 $12, $9; mtc2 $13, $10; mtc2 $14, $11" : : "r"(&m2) : "$12", "$13", "$14");
+  asm volatile("nop; nop; .word 0x4A49E012");
+  asm volatile("mfc2 $12, $9; mfc2 $13, $10; mfc2 $14, $11; sh $12, 0(%0); sh $13, 6(%0); sh $14, 12(%0)" : : "r"(&m2) : "$12", "$13", "$14", "memory");
+  asm volatile("lhu $12, 0(%0); lhu $13, 6(%0); lhu $14, 12(%0); mtc2 $12, $9; mtc2 $13, $10; mtc2 $14, $11" : : "r"(&m2.m[0][1]) : "$12", "$13", "$14");
+  asm volatile("nop; nop; .word 0x4A49E012");
+  asm volatile("mfc2 $12, $9; mfc2 $13, $10; mfc2 $14, $11; sh $12, 0(%0); sh $13, 6(%0); sh $14, 12(%0)" : : "r"(&m2.m[0][1]) : "$12", "$13", "$14", "memory");
+  asm volatile("lhu $12, 0(%0); lhu $13, 6(%0); lhu $14, 12(%0); mtc2 $12, $9; mtc2 $13, $10; mtc2 $14, $11" : : "r"(&m2.m[0][2]) : "$12", "$13", "$14");
+  asm volatile("nop; nop; .word 0x4A49E012");
+  asm volatile("mfc2 $12, $9; mfc2 $13, $10; mfc2 $14, $11; sh $12, 0(%0); sh $13, 6(%0); sh $14, 12(%0)" : : "r"(&m2.m[0][2]) : "$12", "$13", "$14", "memory");
+  m2.t[0] = out.vx + pm1->t[0];
+  m2.t[1] = out.vy + pm1->t[1];
+  m2.t[2] = out.vz + pm1->t[2];
+  pv = &v;
+  v.vx = D_8009E4E4;
+  v.vy = D_8009E4E8;
+  v.vz = D_8009E4EC;
+  asm volatile("lw $12, 0(%0); lw $13, 4(%0); ctc2 $12, $0; ctc2 $13, $1; lw $12, 8(%0); lw $13, 12(%0); lw $14, 16(%0); ctc2 $12, $2; ctc2 $13, $3; ctc2 $14, $4" : : "r"(&m2) : "$12", "$13", "$14");
+  asm volatile("lhu $13, 4(%0); lhu $12, 0(%0); sll $13, $13, 16; or $12, $12, $13; mtc2 $12, $0; lwc2 $1, 8(%0)" : : "r"(pv) : "$12", "$13");
+  asm volatile("nop; nop; .word 0x4A486012");
+  asm volatile("swc2 $25, 0(%0); swc2 $26, 4(%0); swc2 $27, 8(%0)" : : "r"(pv) : "memory");
+  t = (s32 *) (b + 0x28);
+  t[0] = m2.t[0] + v.vx;
+  t[1] = m2.t[1] + v.vy;
+  t[2] = m2.t[2] + v.vz;
+  if ((abs(t[0]) > 0x7FFF) || (abs(t[2]) > 0x7FFF))
+  {
+    *((u32 *) (parent + 0x7C)) |= 0x80000000;
+  }
+  else
+  {
+    *((u32 *) (parent + 0x7C)) &= 0x7FFFFFFF;
+  }
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80061DC0", func_8006A0D8);
 
