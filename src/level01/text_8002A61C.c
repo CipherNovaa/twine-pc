@@ -1,8 +1,26 @@
 #include "twine.h"
 
+s16 func_8002AAFC(s16 *, s16 *, u8 *);
+M2C_UNK func_80082E04(M2C_UNK);
+M2C_UNK func_80082B64(s32, s8 *, s32);
+s32 VSync(s32);
+extern char D_800A7260[];
+extern char D_800A7290[];
+
+
+char *strcpy(char *dst, char *src);
+char *strcat(char *dst, char *src);
+int strlen(char *s);
+extern char D_800A71EC[];
+extern char D_800A71F0[];
+extern char D_800A71F4[];
+extern char D_800A71F8[];
+extern char D_800AFEC8[];
+
+
 s32 func_8002A854(s32, s32);
 s32 func_8002BE24(char *, s32);
-s32 func_8002BF34(void *, char *);
+s32 func_8002BF34(void *arg0, char *arg1);
 M2C_UNK func_8006B1DC(M2C_UNK *);
 u8 func_8002AAC4(void);
 extern char D_800A7214[];
@@ -18,7 +36,7 @@ s32 CdSearchFile(void *, char *);
 s32 func_800834D0(void *);
 
 
-M2C_UNK func_8002BB68(u8);                          /* extern */
+void func_8002BB68(u8 arg0);
 extern s8 D_8009CA58;
 extern s8 D_8009CA59;
 extern u8 D_8009CA5C;
@@ -178,7 +196,13 @@ void func_8002BB34(void) {
     func_80026B00(0);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002BB68);
+void func_8002BB68(u8 arg0) {
+    if (*(s16 *)&g_CutScene == 2 || *(s16 *)&g_CutScene == 3) {
+        func_80026B00(g_Args->pad143[1]);
+    } else {
+        func_80026B00((u8)(g_Args->pad12E[0xC] << 1));
+    }
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002BC18);
 
@@ -190,7 +214,42 @@ void func_8002BDE4(void) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002BE24);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002BF34);
+s32 func_8002BF34(void *arg0, char *arg1) {
+    u8 *s;
+    u8 *d;
+
+    s = arg1;
+    if (arg1 == NULL) {
+        printf(&D_800A70A0, &D_800A70C8, 0x59E);
+        exit(1);
+    }
+    strcpy(arg0, D_800A71EC);
+    if (*s != '\\') {
+        strcat(arg0, D_800A71F0);
+    }
+    d = (u8 *)arg0 + strlen(arg0);
+    while (*s != 0) {
+        if (*s >= 0x61) {
+            *d = *s - 0x20;
+        } else {
+            *d = *s;
+        }
+        if (*s == '/') {
+            *d = '\\';
+        }
+        d++;
+        s++;
+    }
+    *d = 0;
+    strcat(arg0, D_800A71F4);
+    if (strlen(arg0) >= 0x1B) {
+        sprintf(D_800AFEC8, D_800A71F8, arg0);
+        func_8006B1DC((M2C_UNK *)D_800AFEC8);
+        printf(&D_800A70A0, &D_800A70C8, 0x5CA);
+        exit(1);
+    }
+    return (s32)arg0;
+}
 
 s32 func_8002C168(char *name, s32 arg1) {
     s32 len;
@@ -251,7 +310,33 @@ void CdBin_SetLevel(s32 arg0, s32 arg1) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002C490);
+s32 func_8002C490(char *name, s8 *buf, void (*cb)(s32)) {
+    u8 mode;
+    s16 sector;
+    s16 count;
+    s8 loc[4];
+
+    if (((s32 (*)(void))func_8002AAC4)() == 0 && g_Args->cdArchive) {
+        func_8006B1DC((M2C_UNK *)D_800A7260);
+        printf(&D_800A70A0, &D_800A70C8, 0x650);
+        exit(1);
+    } else {
+    }
+    func_8002BF34(D_800AFF2C, name);
+    if (func_8002AAFC(&sector, &count, D_800AFF2C) == 0) {
+        sprintf(g_Args->exePath, D_800A7290, D_800AFF2C);
+        func_8006B1DC((M2C_UNK *)g_Args->exePath);
+        return 0;
+    }
+    func_800833CC(sector + D_800AEDD8, loc);
+    func_80082F8C(2, (u8 *)loc, 0);
+    mode = 0x80;
+    func_800831FC(0xE, (s8 *)&mode, NULL);
+    VSync(3);
+    func_80082E04((M2C_UNK)cb);
+    func_80082B64(count, buf, 0x80);
+    return 1;
+}
 
 void func_8002C664(void) {
     func_80082F78(0);

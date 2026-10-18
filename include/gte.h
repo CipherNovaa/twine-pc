@@ -13,10 +13,25 @@ typedef struct SVECTOR {
     s16 vx, vy, vz, pad;
 } SVECTOR;
 
+typedef struct VECTOR {
+    s32 vx, vy, vz, pad;
+} VECTOR;
+
 #define gte_lddp(r0) __asm__ volatile("mtc2 %0, $8" : : "r"(r0))
 #define gte_ldsv(r0) __asm__ volatile("lhu $12, 0(%0); lhu $13, 2(%0); lhu $14, 4(%0); mtc2 $12, $9; mtc2 $13, $10; mtc2 $14, $11" : : "r"(r0) : "$12", "$13", "$14")
 #define gte_gpf12() __asm__ volatile("nop; nop; .word 0x4B98003D")
 #define gte_stsv(r0) __asm__ volatile("mfc2 $12, $9; mfc2 $13, $10; mfc2 $14, $11; sh $12, 0(%0); sh $13, 2(%0); sh $14, 4(%0)" : : "r"(r0) : "$12", "$13", "$14", "memory")
+
+/* PsyQ inline_c.h: vector load, perspective/rotation transforms, result stores, matrices. */
+#define gte_ldv0(r0) __asm__ volatile("lwc2 $0, 0(%0); lwc2 $1, 4(%0)" : : "r"(r0))
+#define gte_rtps() __asm__ volatile("nop; nop; .word 0x4A180001")
+#define gte_rtv0() __asm__ volatile("nop; nop; .word 0x4A486012")
+#define gte_stsxy(r0) __asm__ volatile("swc2 $14, 0(%0)" : : "r"(r0) : "memory")
+#define gte_stlvnl(r0) __asm__ volatile("swc2 $25, 0(%0); swc2 $26, 4(%0); swc2 $27, 8(%0)" : : "r"(r0) : "memory")
+#define gte_stszotz(r0) __asm__ volatile("mfc2 $12, $19; nop; sra $12, $12, 2; sw $12, 0(%0)" : : "r"(r0) : "$12", "memory")
+#define gte_SetRotMatrix(r0) __asm__ volatile("lw $12, 0(%0); lw $13, 4(%0); ctc2 $12, $0; ctc2 $13, $1; lw $12, 8(%0); lw $13, 12(%0); lw $14, 16(%0); ctc2 $12, $2; ctc2 $13, $3; ctc2 $14, $4" : : "r"(r0) : "$12", "$13", "$14")
+#define gte_SetTransMatrix(r0) __asm__ volatile("lw $12, 20(%0); lw $13, 24(%0); ctc2 $12, $5; lw $14, 28(%0); ctc2 $13, $6; ctc2 $14, $7" : : "r"(r0) : "$12", "$13", "$14")
+#define gte_ReadGeomOffset(r0, r1) __asm__ volatile("cfc2 $12, $24; cfc2 $13, $25; sra $12, $12, 16; sra $13, $13, 16; sw $12, 0(%0); sw $13, 0(%1)" : : "r"(r0), "r"(r1) : "$12", "$13", "memory")
 
 /* Game-specific: first rotation-matrix row from three shorts, MVMVA rt*ir (no shift), MAC1 read. */
 #define gte_ldR11R12R13R21(r0) __asm__ volatile("lw $12, 0(%0); lw $13, 4(%0); ctc2 $12, $0; ctc2 $13, $1" : : "r"(r0) : "$12", "$13")

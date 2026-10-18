@@ -215,6 +215,36 @@ been renamed, the current name is used.
 - `func_80064A10` / `func_80064C28` / `func_80064E40`: per-frame effect animation (spin, shrink, wobble
   facing the camera), frame-rate compensated with constants per 20 fps.
 
+- `func_80062300`: per-frame draw setup: GsGetLs(`D_800D3238`, `D_800DF10C`) → GTE matrices, then
+  `func_80062394`, `func_80062784`, `func_80062B68`. `func_8006F6AC`: terrain draw (`func_8006E054`,
+  `func_8006E9E0(D_800E2DBC)`).
+- `func_800669A4(in, out, obj)`: local → world transform (rotation at obj+0x18, translation obj+0x38..).
+- `func_8003EA24(v, m, outAngles)`: rotate v by m, then direction → Euler angles (ratan2).
+- `func_8003EB00(obj)` / `func_800634C0(obj)`: attach an object to a model bone (0x8C-byte bone entries,
+  GsCOORDINATE2 at +0x10): world position of an offset + direction angles.
+- `func_8007545C(first, last)`: draws objects first..last from `D_800AFFC8`; the held weapon
+  (`D_8009CD98`) is drawn with view `D_800F11D0` and the weapon's own FOV (`g_Weapons[i]+0xAA`).
+- `func_800498E4(screenXY)` / `func_8004973C(VECTOR v, out)`: project the aim point (`D_800DDDDC` /
+  `D_800DDDCC`) to the screen (crosshair).
+- `func_80059C14(obj)`: projects 8 points (obj+0x184 → screen at obj+0x1C4) plus an optional line
+  (laser?).
+- `func_80076CDC(obj)`: fires the weapon: muzzle position into scratchpad `D_1F8003D4..`, projectile via
+  `func_80076BF8`, cooldown obj+0x38 = 500, launched with `func_8003B53C(proj, yaw, pitch, 500)` along the
+  aim angles in aim mode, else the player model's angles.
+- `func_800381CC(obj, type)`: debris / shell-casing spawner (random pitch and spin).
+- `func_8005BC80(obj, anim)`: interpolates a root offset between two animation frames (`D_800DDEE4`, 0x4C
+  bytes per frame), blend factor anim+0x18 (4.12).
+
+- `func_8003237C(n, arg)`: n ≥ 3 → load the next EXE (`func_8006B1DC`); else set the loadpoint
+  (`D_8009E9C4+0x10 = &D_8009E9DC[n*16]`), `func_8004B04C`, `D_800D2F90 = 2`.
+- `func_80037A24`: per-frame update of the 6 `AnimSlot`s.
+- `func_80045344(...)`: sets up a POLY_FT4 and returns its tpage.
+- `func_80058A58(type)`: reuses the oldest effect in the `D_800DA5C4` pool.
+- `func_80058DFC(grid)`: 12×2 green TILEs + 2 blue TILEs (`D_800DD818`) — a HUD grid (radar?).
+- `func_8005B508` / `func_8005BA30(obj)`: release the 6 character slots / copy a model's work matrix to
+  `D_800DE004[slot]`.
+- `func_8002E4DC`: resets the scratchpad muzzle position; spawns `D_8009D26C` (`func_80039A9C`).
+
 ## Enemy AI: waypoints and navmesh
 
 - `func_800523E4(obj, path)`: nearest waypoint on a path (1-based, 0xFF if none); sets turn bit 2.
@@ -235,6 +265,13 @@ Command word: byte 0 opcode, byte 1 destination variable, u16 at +2 operand mode
   result to vars[byte 3]. Error text `D_800A8A2C` and wait = 1 when out of range.
 - `func_8005483C` / `func_80054AC8`: set camera target X/Y/Z / rotation X/Y/Z (each operand: keep, variable,
   or immediate).
+- AI slots: 7 × 0x248 bytes at `D_800D9278` (in-use flag bit 1 at +0x1CC); `func_800540CC` allocates,
+  `func_8005414C` frees.
+- `func_80056110` (op 0x23): vars[n] = abs(vars[n]).
+- `func_800572F4`: play sound `func_80027248(id or vars[id], model+0x14, flag)`, optional volume into
+  `g_Args+0x138` (2-word form).
+- `func_8005747C` (op 0x1B): play animation: id byte 1, start/end frames bytes 2/3 (−1 = last frame);
+  wait = frames × anim+0x20; loops when start == end; `func_80057AD8`.
 - `func_8005743C`: set wait counter (`obj->wait` = immediate or variable), pc += 1 word.
 - `func_80055620` / `func_80055778`: no-op opcodes that skip their operands.
 - `func_80055598` (op 0x10): chr->0x94->+0x34 = angle. `func_80055670` (op 0x12): set model position.

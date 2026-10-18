@@ -9,10 +9,6 @@ extern char *D_8009DB50[];
 s32 func_8002C168(char *name, s32 arg1);
 
 
-#define gte_SetRotMatrix(r0) __asm__ volatile("lw $12, 0(%0); lw $13, 4(%0); ctc2 $12, $0; ctc2 $13, $1; lw $12, 8(%0); lw $13, 12(%0); lw $14, 16(%0); ctc2 $12, $2; ctc2 $13, $3; ctc2 $14, $4" : : "r"(r0) : "$12", "$13", "$14")
-#define gte_ldv0(r0) __asm__ volatile("lwc2 $0, 0(%0); lwc2 $1, 4(%0)" : : "r"(r0))
-#define gte_rtv0() __asm__ volatile("nop; nop; .word 0x4A486012")
-#define gte_stlvnl(r0) __asm__ volatile("swc2 $25, 0(%0); swc2 $26, 4(%0); swc2 $27, 8(%0)" : : "r"(r0) : "memory")
 extern s32 D_1F8003E8[];
 extern s32 D_1F8003D4;
 extern s32 D_1F8003D8;
@@ -34,8 +30,6 @@ typedef struct { u16 start; u8 len; u8 flag; } AnimRec;
 typedef struct { u8 pad0[6]; u16 count; u16 unk8; u16 tag; u8 unkC; u8 padD[3]; s16 unk10; u8 pad12[4]; u16 unk16; AnimRec recs[1]; } AnimTrack;
 
 
-#define gte_SetGeomScreen(h) __asm__ volatile("ctc2 %0, $26" : : "r"(h))
-#define gte_ReadGeomScreen(r0) __asm__ volatile("cfc2 $12, $26; nop; sw $12, 0(%0)" : : "r"(r0) : "$12", "memory")
 extern M2C_UNK D_800F11D0;
 extern s32 D_800AFFC8;
 void GsSetRefView2(void *);
