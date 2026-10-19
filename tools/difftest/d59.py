@@ -1,4 +1,4 @@
-import sys,random
+import os,sys,random
 sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 from harness import *
 asm='asm/level01/nonmatchings/text_8002C808/func_80059E4C.s'; cand=sys.argv[1]

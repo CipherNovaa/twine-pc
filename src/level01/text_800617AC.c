@@ -1054,6 +1054,7 @@ typedef struct { u8 p0[0x90]; u8 *sub; u8 p1[0x88]; u16 f11C; s16 f11E; u16 f120
 typedef struct { SVECTOR p[3]; u32 sxy[3]; u32 flg[3]; u32 col[3]; u16 uv[3]; } SubTri;
 typedef struct { SVECTOR p[6]; u32 sxy[6]; u32 flg[6]; u32 col[6]; u16 uv[6]; } SubTri6;
 typedef struct { u32 tag; u32 rgb0; u32 xy0; u32 uv0; u32 rgb1; u32 xy1; u32 uv1; u32 rgb2; u32 xy2; u32 uv2; } PolyGT3;
+typedef struct { u8 pad[0x5C]; s16 x; s16 y; s16 z; s16 w; s32 a; s32 b; u8 pad2[8]; u8 *src; } FxObj;
 #define gte_ldv0_mt(r0, r1) __asm__ volatile("mtc2 %0, $0; mtc2 %1, $1" : : "r"(r0), "r"(r1))
 #define gte_mfsxy2(r) __asm__ volatile("mfc2 %0, $14" : "=r"(r))
 #define gte_mfsz3(r) __asm__ volatile("mfc2 %0, $19; nop" : "=r"(r))
@@ -2613,30 +2614,26 @@ void func_80063230(void) {
     }
 }
 
-#ifdef NON_MATCHING
 void func_800632AC(u8 *arg0, s32 arg1) {
-    register u8 *o REG("a0");
+    FxObj *o;
     u8 t = arg1;
-    s16 a3;
+    s16 w;
     o = func_80058694(t);
     if (o != NULL || (D_800DA5C0 != 0 && (o = func_80058A58(t)) != NULL)) {
-        *(s32 *)(o + 0x5C) = D_800D4050.a;
-        *(u8 **)(o + 0x74) = arg0;
-        *(u16 *)(o + 0x60) = D_800D4050.b;
-        a3 = *(u16 *)(arg0 + 0x66) & 0x1F;
-        *(s16 *)(o + 0x5C) = (u16)*(s16 *)(o + 0x5C) + ((*(s16 *)(o + 0x5C) * 0x41) >> 12);
-        *(s16 *)(o + 0x5E) = (u16)*(s16 *)(o + 0x5E) + ((*(s16 *)(o + 0x5E) * 0x41) >> 12);
-        *(s16 *)(o + 0x62) = a3;
-        *(s32 *)(o + 0x64) = D_800D4058.a;
-        *(s32 *)(o + 0x68) = D_800D4058.b;
-        *(u16 *)(o + 0x60) = *(u16 *)(o + 0x60) + ((*(s16 *)(o + 0x60) * 0x41) >> 12);
-        *(s16 *)(o + 0x6A) = -1;
-        func_800634C0(o);
+        *(s32 *)&o->x = D_800D4050.a;
+        o->src = arg0;
+        o->z = D_800D4050.b;
+        w = *(u16 *)(arg0 + 0x66) & 0x1F;
+        o->x += (o->x * 0x41) >> 12;
+        o->y += (o->y * 0x41) >> 12;
+        o->w = w;
+        o->a = *(s32 *)&D_800D4058;
+        o->b = D_800D4058.b;
+        o->z += (o->z * 0x41) >> 12;
+        *((s16 *)&o->b + 1) = -1;
+        func_800634C0((u8 *)o);
     }
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_800632AC);
-#endif
 
 void func_800633B0(u8 type, VECTOR v) {
     SVECTOR ang;
