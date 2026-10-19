@@ -132,6 +132,7 @@ extern M2C_UNK D_800A97B0;
 
 
 
+/* This level's own declarations (kept by tools/port_level.py): */
 
 void func_8006FA54(s32 arg0) {
     M2C_FIELD(arg0, s32 *, 0x18) = arg0 + M2C_FIELD(arg0, s32 *, 0x18);

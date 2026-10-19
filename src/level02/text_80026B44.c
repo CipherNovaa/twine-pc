@@ -325,6 +325,7 @@ extern s8 D_8009C1EE;
 
 
 
+/* This level's own declarations (kept by tools/port_level.py): */
 
 s32 func_80026B44(u8 arg0) {
     switch (arg0) {

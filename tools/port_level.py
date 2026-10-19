@@ -27,6 +27,8 @@ ROOT = Path(__file__).resolve().parent.parent
 VRAM_BASE = 0x80026000  # vram - ROM offset, the same in every level EXE
 SUBSEG_RE = re.compile(r"^(\s*)- \[(0x[0-9A-F]+), (\w+)(?:, (\w+))?\](.*)$", re.M)
 IDENT = re.compile(r"\b[A-Za-z_]\w*\b")
+# In generated files, declarations for this level's own C go below this line (integrate_one puts them there).
+NATIVE_MARK = "/* This level's own declarations (kept by tools/port_level.py): */"
 
 
 def subsegments(level):
@@ -303,9 +305,16 @@ def port(level):
         for l1_stem, t_stem in zip(l1_stems, t_stems):
             header, funcs = l1[l1_stem]
             c_path = ROOT / f"src/{level}/{t_stem}.c"
-            orig = c_path.read_text()
+            current = orig = c_path.read_text()
+            native_decls, native_funcs = [], {}
             if "port_level.py" in orig.split("\n", 1)[0]:
                 orig = (ROOT / f"build/{level}/port_base/{t_stem}.c").read_text()
+                # Work done on this level itself (integrate_one --level): declarations below the marker,
+                # and function definitions that didn't come from LEVEL01. Keep them.
+                cur_header, cur_funcs = parse_c(current)
+                if NATIVE_MARK in cur_header:
+                    native_decls = [l for l in cur_header[cur_header.index(NATIVE_MARK) + 1:] if l.strip()]
+                native_funcs = {n: it for n, it in cur_funcs.items() if n not in funcs}
             else:
                 (ROOT / f"build/{level}/port_base").mkdir(parents=True, exist_ok=True)
                 (ROOT / f"build/{level}/port_base/{t_stem}.c").write_text(orig)
@@ -316,6 +325,10 @@ def port(level):
                     # splat writes empty functions as C; keep those (the LEVEL01 header includes common.h)
                     if not line.startswith("#include"):
                         body.append(line)
+                    continue
+                if m.group(2) in native_funcs:  # matched or banked on this level itself
+                    kind, code = native_funcs[m.group(2)]
+                    body.append(code if kind == "c" else f"#ifdef NON_MATCHING\n{code}\n#else\n{line}\n#endif")
                     continue
                 n = inv.get(m.group(2))
                 item = funcs.get(n) if n and n not in exclude else None
@@ -336,7 +349,7 @@ def port(level):
                         jtbl_lines.append(f"{'L1_' + n if n in renamed else n} {' '.join(dict.fromkeys(jt))}")
                 else:
                     body.append(line)
-            text = "\n".join(header) + "\n" + "\n".join(body) + "\n"
+            text = "\n".join(header + [NATIVE_MARK] + native_decls) + "\n" + "\n".join(body) + "\n"
             used = set(IDENT.findall(text)) & renamed
             # asm("name") labels bypass the preprocessor: point them at the L1_ name too.
             text = re.sub(r'(asm|__asm__)\("(\w+)"\)', lambda m: f'{m.group(1)}("L1_{m.group(2)}")'

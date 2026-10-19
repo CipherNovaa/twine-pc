@@ -85,6 +85,9 @@ def _integrate(func, code, level, keep, replace_decls, nonmatching=False):
         first_code = next(i for i, l in enumerate(lines) if l.startswith("INCLUDE_ASM(") or am.DEF_RE.match(l))
         typedefs = [i for i, l in enumerate(lines[:first_code]) if l.startswith("typedef ")]
         at = typedefs[-1] + 1 if typedefs else text.partition("\n\n")[0].count("\n") + 1
+        mark = [i for i, l in enumerate(lines[:first_code]) if "kept by tools/port_level.py" in l]
+        if mark:  # a generated file (other levels): below the marker, where port_level keeps them
+            at = mark[0] + 1
         text = "\n".join(lines[:at] + new + lines[at:])
     text = am.sync_prototypes(text)
     if nonmatching:
@@ -114,6 +117,7 @@ def main():
     ap.add_argument("--results", default=str(ROOT / "build/auto_match_refresh.json"))
     ap.add_argument("--dry", action="store_true")
     ap.add_argument("--replace-decls", action="store_true", help="overwrite conflicting existing declarations")
+    ap.add_argument("--level", default="level01")
     ap.add_argument("--nonmatching", action="store_true",
                     help="bank a near miss under #ifdef NON_MATCHING (the matching build keeps the asm)")
     args = ap.parse_args()
@@ -122,7 +126,8 @@ def main():
     else:
         import json
         code = json.loads(Path(args.results).read_text())[args.func]["code"]
-    print(integrate(args.func, code, keep=not args.dry, replace_decls=args.replace_decls, nonmatching=args.nonmatching))
+    print(integrate(args.func, code, level=args.level, keep=not args.dry, replace_decls=args.replace_decls,
+                    nonmatching=args.nonmatching))
 
 
 if __name__ == "__main__":

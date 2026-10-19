@@ -2665,6 +2665,7 @@ extern int g_CheatCodes[];
 
 
 
+/* This level's own declarations (kept by tools/port_level.py): */
 
 s32 func_8005EE6C(u8 *obj, s32 dx, s32 dz, s32 arg3) {
     SVECTOR d;

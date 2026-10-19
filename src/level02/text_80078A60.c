@@ -272,6 +272,7 @@ extern s32 D_800F0F5C;
 
 
 
+/* This level's own declarations (kept by tools/port_level.py): */
 
 s32 func_800752C0(void) {
   s32 var_v1;

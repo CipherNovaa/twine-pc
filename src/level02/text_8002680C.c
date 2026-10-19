@@ -47,6 +47,7 @@ extern s32 D_800AB540;
 
 
 
+/* This level's own declarations (kept by tools/port_level.py): */
 
 void func_8002680C(void) {
     s32 r;

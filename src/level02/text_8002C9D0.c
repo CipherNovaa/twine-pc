@@ -4388,6 +4388,7 @@ extern int g_CheatCodes[];
 
 
 
+/* This level's own declarations (kept by tools/port_level.py): */
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_8002C9D0);
 

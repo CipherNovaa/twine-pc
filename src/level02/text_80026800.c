@@ -3,6 +3,7 @@
 #include "twine.h"
 
 
+/* This level's own declarations (kept by tools/port_level.py): */
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026800", func_80026800);
 

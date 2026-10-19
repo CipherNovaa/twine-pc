@@ -270,6 +270,7 @@ extern s32 D_800AFEBC;
 
 
 
+/* This level's own declarations (kept by tools/port_level.py): */
 
 void func_8002A61C(char *name, s32 *result) {
     u8 mode;

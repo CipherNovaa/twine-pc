@@ -19510,7 +19510,7 @@ s32 func_800571B8(void *arg0, void *arg1, void *arg2) {
 s32 func_800572F4(u32 *cmd, ScriptObj *obj, u8 *chr) {
     s32 ret;
     u32 v;
-    s32 flag;
+    u8 flag;
     u32 hi;
 
     ret = 1;
@@ -19519,8 +19519,8 @@ s32 func_800572F4(u32 *cmd, ScriptObj *obj, u8 *chr) {
     hi = v >> 16;
     v >>= 8;
     if (hi & 0xC) {
-        ret = 2;
         flag = 2;
+        ret = 2;
         g_Args->pad12E[0xA] = (u32)(((s32)cmd[1] >> 6) * 5) >> 2;
     }
     if (obj != NULL) {
