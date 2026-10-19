@@ -2931,6 +2931,7 @@ s32 L2_func_80026F5C(u32 id, s32 flags);
 extern void *L2_D_800B6010;
 void L2_func_80085F1C();
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
+// func_80039A9C -> L2_func_8003AA8C (L2 own)
 void L2_func_8004AF78(void);
 void L2_func_8005CBF8(s16 arg0, s32 arg1);
 void L2_func_80055698(s32 *arg0);
@@ -2952,6 +2953,7 @@ void L2_func_8004CEB8(u8 *obj, s32 scale);
 void L2_func_8004D174(u8 *obj, s32 scale);
 void L2_func_8004C604(s32 idx, s32 x0, s32 x1, s32 y0, s32 y1, u8 r, u8 g, u8 b);
 void L2_func_800324E8(s32 arg0);
+s32 func_80039A9C(s32 arg0, u8 arg1, s32 arg2);
 extern s16 L2_D_800A1268[];
 s32 L2_func_80059A94(void *arg0, s32 arg1);
 void L2_func_8004CCC4(SVECTOR *pos);
@@ -3187,7 +3189,6 @@ M2C_UNK L2_func_8007E33C(M2C_UNK);                     /* extern */
 extern S5CF L2_D_800B6138[];
 extern s32 L2_D_800F4458;
 void L2_func_8003A3C4(void *arg0);
-void *L2_func_8003AA8C(M2C_UNK, s32, u8);              /* extern */
 M2C_UNK L2_func_8003A3FC();                            /* extern */
 void L2_func_800560EC(void *arg0);
 void L2_func_80063A54(void *arg0);
@@ -3303,6 +3304,8 @@ M2C_UNK L2_func_8005BA6C(void *, s32, void *);         /* extern */
 M2C_UNK L2_func_80081390(s32, M2C_UNK);                /* extern */
 void L2_func_8005ECF4(void *arg0, void *arg1);
 void L2_func_80039C5C(void *arg0);
+void L2_func_80038930(void);
+s32 L2_func_8004B008(void);
 void L2_func_8002E38C(void);
 s32 L2_func_80055A20(s32 arg0);
 M2C_UNK *L2_func_80055F78(s32 arg0);
@@ -3325,7 +3328,6 @@ void L2_func_80031000(void);
 void L2_func_80031E68(void);
 void L2_func_8003280C(s32 *arg0);
 s32 L2_func_800384D4(u8 *obj);
-void L2_func_80038930(void);
 void L2_func_800393F8(void);
 void L2_func_8003974C(void);
 void L2_func_8003976C(void);
@@ -3345,7 +3347,6 @@ void L2_func_80049C80(void);
 void L2_func_8004AF34(void);
 void L2_func_8004AF9C(void);
 void L2_func_8004AFD0(void);
-s32 L2_func_8004B008(void);
 s32 L2_func_8004B018(void);
 void L2_func_8004B030(void);
 void L2_func_8004B46C(void);

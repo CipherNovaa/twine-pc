@@ -2718,6 +2718,7 @@ L1_strtol = func_8008FF0C;
 L1_toupper = func_80085D0C;
 L1_vmNoiseOff = func_800946F8;
 L1_vmNoiseOn = func_80093040;
+L1_func_80026800 = func_80026800;
 D_1F8003D4 = 0x1F8003D4;
 D_1F8003D8 = 0x1F8003D8;
 D_1F8003DC = 0x1F8003DC;

@@ -2044,7 +2044,6 @@ extern int L1_g_CheatCodes[];
 
 s32 L2_func_80083044(char *, ...);
 s32 L2_func_80085C3C();                                /* extern */
-extern void *L2_D_800B6010;
 void L2_func_8006E97C(s32 arg0);
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
 extern s16 L2_D_800B72B8;
@@ -2056,7 +2055,6 @@ void L2_func_80063A54(void *arg0);
 extern s32 L2_D_800A0CD4;
 extern u8 L2_D_800A0F34;
 void L2_func_8006DEEC(s32 arg0);
-void L2_func_80069A48(void);
 extern char L2_D_800AF004[];
 extern char L2_D_800AF014[];
 void L2_func_80031070(void);
@@ -2086,20 +2084,6 @@ extern u8 L2_D_800DCD68[];
 extern s32 L2_D_800E1554[];
 extern Ent34 L2_D_800E1628[];
 extern s32 L2_D_800E6694;
-extern s32 L2_D_800A14DC;
-extern s32 L2_D_800A14E4;
-extern s32 L2_D_800A14E8;
-extern s32 L2_D_800A14FC;
-extern s32 L2_D_800A1504;
-extern s32 L2_D_800A1508;
-extern s32 L2_D_800A1568;
-extern s32 L2_D_800A156C;
-extern s32 L2_D_800A1580;
-extern s32 L2_D_800A1588;
-extern s32 L2_D_800A15F0;
-extern s32 L2_D_800A15F8;
-extern s32 L2_D_800A1604;
-extern s32 L2_D_800A1618;
 M2C_UNK L2_func_8003D7CC(M2C_UNK, s32);                /* extern */
 extern s32 L2_D_800A1514;
 extern s32 L2_D_800A1518;
@@ -3650,23 +3634,7 @@ void L1_func_800689F0(void) {
     M2C_FIELD(&L1_D_800D8FF8, s32 *, 0x50) = (s32) L1_D_8009D2AC;
 }
 
-void L2_func_80069A48(void) {
-    L2_D_800A14E4 = 1;
-    L2_D_800A14E8 = 2;
-    L2_D_800A15F8 = 3;
-    L2_D_800A14FC = 4;
-    L2_D_800A14DC = 5;
-    L2_D_800A1504 = 6;
-    L2_D_800A1508 = 7;
-    L2_D_800A1568 = 8;
-    L2_D_800A156C = 9;
-    L2_D_800A1580 = 0xA;
-    L2_D_800A1588 = 0xB;
-    L2_D_800A15F0 = 0xC;
-    L2_D_800A1604 = 0xD;
-    L2_D_800A1618 = 0xE;
-    M2C_FIELD(L2_D_800B6010, s32 *, 0x220) = 0xE;
-}
+INCLUDE_ASM("asm/level10/nonmatchings/text_80064244", func_8006C114);
 
 INCLUDE_ASM("asm/level10/nonmatchings/text_80064244", func_8006C1CC);
 

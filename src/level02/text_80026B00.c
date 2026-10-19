@@ -280,7 +280,9 @@ s32 func_80026B44(u8 arg0) {
     return 0;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B00", func_80026C14);
+void func_80026C14(s16 arg0) {
+    func_80085600(arg0);
+}
 
 s32 func_80026C38(s32 arg0) {
     s16 i;

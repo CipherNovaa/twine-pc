@@ -2931,6 +2931,7 @@ s32 L2_func_80026F5C(u32 id, s32 flags);
 extern void *L2_D_800B6010;
 void L2_func_80085F1C();
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
+// func_80039A9C -> L2_func_8003AA8C (L2 own)
 void L2_func_8004AF78(void);
 void L2_func_80055698(s32 *arg0);
 void L2_func_800304A4(void);
@@ -2957,6 +2958,7 @@ extern char L2_D_800AC94C[];
 void L2_func_800322F0(void);
 void L2_func_800324E8(s32 arg0);
 void L2_func_80037CD8(u8 *arg0, u8 *arg1);
+s32 func_80039A9C(s32 arg0, u8 arg1, s32 arg2);
 extern s16 L2_D_800A1268[];
 s32 L2_func_80059A94(void *arg0, s32 arg1);
 void L2_func_8004CCC4(SVECTOR *pos);
@@ -3190,7 +3192,6 @@ M2C_UNK L2_func_8007E33C(M2C_UNK);                     /* extern */
 extern S5CF L2_D_800B6138[];
 extern s32 L2_D_800F4458;
 void L2_func_8003A3C4(void *arg0);
-void *L2_func_8003AA8C(M2C_UNK, s32, u8);              /* extern */
 M2C_UNK L2_func_8003A3FC();                            /* extern */
 void L2_func_800560EC(void *arg0);
 void L2_func_80063A54(void *arg0);
@@ -3306,6 +3307,8 @@ M2C_UNK L2_func_8005BA6C(void *, s32, void *);         /* extern */
 M2C_UNK L2_func_80081390(s32, M2C_UNK);                /* extern */
 void L2_func_8005ECF4(void *arg0, void *arg1);
 void L2_func_80039C5C(void *arg0);
+void L2_func_80038930(void);
+s32 L2_func_8004B008(void);
 void L2_func_8002E38C(void);
 s32 L2_func_80055A20(s32 arg0);
 void L2_func_8005D5CC(u8 *p);
@@ -3328,7 +3331,6 @@ void L2_func_800309B8(void);
 void L2_func_80031000(void);
 void L2_func_80031E68(void);
 void L2_func_8003280C(s32 *arg0);
-void L2_func_80038930(void);
 void L2_func_800393F8(void);
 void L2_func_8003974C(void);
 void L2_func_8003976C(void);
@@ -3349,7 +3351,6 @@ void L2_func_80049C80(void);
 void L2_func_8004AF34(void);
 void L2_func_8004AF9C(void);
 void L2_func_8004AFD0(void);
-s32 L2_func_8004B008(void);
 s32 L2_func_8004B018(void);
 void L2_func_8004B46C(void);
 void L2_func_8004B4AC(s32 arg0);
@@ -4807,21 +4808,7 @@ void func_800320F0(void) {
     D_800E0218 = 0;
 }
 
-void L1_func_80032074(s32 arg0) {
-    s32 lvl;
-    s32 base;
-    lvl = g_Args->level;
-    base = L1_D_800D2FC0;
-    if (!(((u32)L1_D_8009E9D8 >> 23) & 1)) {
-        sprintf(g_Args->exePath, L1_D_800A77B4, lvl, lvl, arg0);
-        L1_func_8002C168(g_Args->exePath, base);
-        L1_func_80032768(base);
-    }
-    sprintf(g_Args->exePath, L1_D_800A77CC, lvl, lvl, arg0);
-    L1_func_8002C168(g_Args->exePath, base);
-    L1_D_800D2F90 = 5;
-    L1_func_800310B4(base);
-}
+INCLUDE_ASM("asm/level05/nonmatchings/text_8002C8E4", func_80032140);
 
 void func_8003221C(void) {
     s16 *var_v0;

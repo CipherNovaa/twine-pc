@@ -547,7 +547,9 @@ def port(level):
                 l2_header.sort(key=lambda d: not d.startswith("typedef"))
             text = "\n".join(l1_header + l2_header + [NATIVE_MARK] + native_decls) + "\n" + "\n".join(body) + "\n"
             used2 |= {i[3:] for i in IDENT.findall(text) if i.startswith("L2_")}
-            used1 |= {i[3:] for i in IDENT.findall("\n".join(l2_bodies)) if i.startswith("L1_")}
+            # LEVEL01 names (L1_X) this file's text uses that no rename covers (LEVEL02's C, this level's
+            # own C, or functions too small to pair): the level's same-named symbol
+            used1 |= {i[3:] for i in IDENT.findall(text) if i.startswith("L1_")}
             used = set(IDENT.findall(text)) & hdr_names
             defines = "".join(f"#define {n} L1_{n}\n" for n in sorted(used))
             # prototypes agree with the definitions here (a LEVEL01 prototype can share a name with this
@@ -568,7 +570,7 @@ def port(level):
                 ld.append(f"PROVIDE({t} = L1_{n});")
             elif n not in ported:
                 ld.append(f"L1_{n} = {t}{f' + 0x{d:X}' if d > 0 else f' - 0x{-d:X}' if d < 0 else ''};")
-        for x in sorted(used1 - renamed):  # same name in both levels, so no L1_ alias was written above
+        for x in sorted(used1 - renamed - set(aliased)):  # same name in both levels: no L1_ alias above
             ld.append(f"L1_{x} = {x};")
         for n2, (t2, d2) in sorted(l2_smap.items()):
             if n2 not in used2:
