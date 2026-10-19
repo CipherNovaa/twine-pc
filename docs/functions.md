@@ -418,6 +418,37 @@ Command word: byte 0 opcode, byte 1 destination variable, u16 at +2 operand mode
 - `func_80055BA8` / `func_80055878`: set an object property from a value / read one into `obj->vars`.
 - `func_80057B2C(anim, a, b, c, d)`: sets animation fields (+0x10/+0x14/+0x12/+0x16), recomputes lengths.
 
+## Found in session 3 (to sort into the sections above)
+
+- `func_80063858`: updates the 16 Ent34 emitters (follow attached object or distance-cull against the
+  player, periodic callback, free on expiry).
+- `func_80036328` / `func_80035F04`: rotation matrices from Euler angles (sin/cos table) for an object's
+  sub-parts / the 0x34-byte effect slots (optionally the camera angles).
+- `func_80048B4C(..., u8 prio, u8 flag)`: queues an on-screen message into the priority-sorted 5-entry list
+  `D_800D5DA4`.
+- `func_80065614(..., u8 life, u8 kind)`: spark/trail effect on an object (copies its matrix; geometry by kind).
+- `func_8004C0C0`: initialises an object from its model template (`g_Args->unk228 + i*0x70`).
+- `func_8003FCE4`: allocates a 0x44-byte slot in the `D_8009CF7C` pool from the model template and the
+  scratchpad position; returns the slot.
+- `func_8004EC70`: steps camera position/rotation toward targets, snapping within one step.
+- `func_8004FD3C` / `func_8004F3E8`: camera spring-damper (rotation toward rotX/Y/Z: current +0x80/82/84,
+  velocity +0x24/28/2C) / camera follow (position velocities +0x18/1C/20, dead zone 0xC0 on the
+  scratchpad `D_1F8003E8`); NON_MATCHING.
+- `func_8006E9E0`: frustum walk of a 3-child tree with an explicit stack; visible leaves (max 600) into
+  `D_800E2448`.
+- `func_800702CC`: k-d tree descent to a leaf, then the floor-height query `func_80070070`.
+- `func_80068B60`: Level 1 init (graphics/camera globals, handlers `D_8009CE40/44/48`); NON_MATCHING.
+- `func_800425E4`: pause/options input handler on `func_80043B14`'s result (1 open, 2 redraw, 3 confirm,
+  4/5 toggle); NON_MATCHING.
+- `func_80048794`: radar/crosshair POLY_FT4 quads (8x4) into `D_800D4984`; NON_MATCHING.
+- `func_8002B29C` (-O0): starts a CD music track from the `D_8009C204` table (12-byte entries: s32, u8, pad,
+  s16, u16), optionally a chained second track; NON_MATCHING.
+- `func_800652F0`: per-frame position/velocity update scaled by 20/`g_FrameRate`.
+- `func_80040778`: point-in-triangle test (three corner-angle sums via `func_800365B4` reach 0xF3C).
+- `func_8002847C`: menu/debug init: VRAM clut/tpage globals, primes two primitive tables.
+- `func_80054098`: calls the callback `D_8009D7A4` if set. `func_80054118`: clears flag 0x1CC bit 2 in the
+  7 AI slots. `func_8003A68C`: finds a free 0x70-byte slot (+0x65 == 0) in `D_800D3288` and initialises it.
+
 ## Struct layouts
 
 - `g_DevMenu` (0x800D3024): +0x04 s32 cursor; +0x38 s32 values[12].

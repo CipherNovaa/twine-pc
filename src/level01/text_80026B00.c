@@ -32,6 +32,10 @@ typedef struct { u16 a; s16 len; u16 c; s16 d; s8 e; s8 f; s8 g; u8 pad[5]; char
 typedef struct { u16 first; u8 p0[2]; u16 last; u8 p1[0x5A]; } Rec60;
 typedef struct { u8 p0[0xE]; s16 a; u8 p1[0x12]; s16 b; u8 p2[4]; } Rec28;
 typedef struct { u8 a, b, c, d; s16 e, f; } TP8;
+typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; s16 w, h; } SPRT;
+extern char D_800A6F34[];
+void func_80029504(s16 *c);
+void func_8002967C(void);
 void func_80028678(void);
 extern s16 D_800AB604;
 extern s16 D_800AB608;
@@ -63,7 +67,7 @@ extern u8 D_800AB754[];
 extern u16 D_800AB5E0;
 extern u16 D_800AB5E4;
 s32 func_80028958(char *text);
-void func_800291B0(char *, s16, s16, s32 *, s32, s32);
+void func_800291B0(char *s, s16 x, s16 y, s32 *n, s32 arg4, s32 pal);
 void func_800289C0(s16 arg0, char *text);
 
 
@@ -651,7 +655,63 @@ void func_80029064(s32 arg0, char *arg1, s32 arg2, s32 arg3) {
     ((TxtEnt *)D_800AB744)[arg0].d = 0;
 }
 
+#ifdef NON_MATCHING
+void func_800291B0(char *s, s16 x, s16 y, s32 *n, s32 arg4, s32 pal) {
+    s16 c;
+    u8 h;
+    s32 dx;
+    s32 quote;
+    u8 w;
+    s32 j;
+    TP8 *font;
+
+    font = (TP8 *)D_800AE940;
+    dx = 0;
+    quote = 0;
+    while (*(u8 *)s != 0) {
+        if (*n >= 230) {
+            func_8006B230(0, (s32)D_800A6F34);
+        }
+        c = *(u8 *)s - 0x20;
+        if (c == 0 && arg4 == 0) {
+            w = font[0].c;
+            s++;
+        } else if (c == 0x3F) {
+            s++;
+            quote = 1;
+            continue;
+        } else {
+            h = (c >= 0x41 && c <= 0x5A) ? 7 : 8;
+            if (quote) {
+                ((void (*)(s16 *))func_8002967C)(&c);
+            } else if (*(u8 *)&D_8009C1ED) {
+                ((void (*)(s16 *, u8 *))func_80029504)(&c, &h);
+            }
+            w = font[c].c;
+            if (font[c].d) {
+                h = font[c].d;
+            }
+            for (j = 0; j < 2; j++) {
+                (*(SPRT *)((u8 *)D_800AC550 + j * 0x14 + *n * 0x28)).w = w;
+                (*(SPRT *)((u8 *)D_800AC550 + j * 0x14 + *n * 0x28)).h = h;
+                (*(SPRT *)((u8 *)D_800AC550 + j * 0x14 + *n * 0x28)).u0 = font[c].a;
+                (*(SPRT *)((u8 *)D_800AC550 + j * 0x14 + *n * 0x28)).v0 = font[c].b;
+                (*(SPRT *)((u8 *)D_800AC550 + j * 0x14 + *n * 0x28)).x0 = x + dx;
+                if (pal >= 0) {
+                    (*(SPRT *)((u8 *)D_800AC550 + j * 0x14 + *n * 0x28)).clut = (((u16 *)&D_800AC4D0)[pal] << 6) | ((((u16 *)&D_800AC4C8)[pal] >> 4) & 0x3F);
+                }
+                (*(SPRT *)((u8 *)D_800AC550 + j * 0x14 + *n * 0x28)).y0 = y + font[c].f;
+            }
+            (*n)++;
+            s++;
+        }
+        quote = 0;
+        dx += D_800AEDD4 + w;
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800291B0);
+#endif
 
 void func_800294B4(char *text, s32 x, s32 y, s32 idx) {
     s32 sp18;

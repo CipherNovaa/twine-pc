@@ -1041,6 +1041,12 @@ typedef struct { s32 w[16]; } Q16;
 typedef struct { Q4 q[6]; s32 w; } Fr6E;
 typedef struct { u8 *n; s32 st; } Stk6E;
 typedef struct { s16 x, y, z; } V3s;
+typedef struct { u8 pad0[0x52]; s16 unk52; s16 pad54; s16 speed; u8 pad58[0x38]; u8 *sub; } PlObj;
+void Pad_StickToSpeed(s32 axis, s32 maxSpeed, s32 *out);
+extern s32 D_8009E4B8;
+extern s32 D_8009E4BC;
+extern s32 D_8009E4C4;
+void func_80069D60(u8 *obj);
 void func_8002E228(void);
 void func_80030798(void *);
 void func_80054118(void);
@@ -1583,7 +1589,7 @@ void func_8007D1E8(s32, s32);
 extern s32 D_800D2F8C;
 void func_8004DD9C(void);
 M2C_UNK func_8005D694();                            /* extern */
-M2C_UNK func_800617AC(void *);                      /* extern */
+void func_800617AC(PlObj *obj);
 void func_80061B70(u8 *obj);
 M2C_UNK func_8007A17C(M2C_UNK);                     /* extern */
 s32 func_8007A1B0();                                /* extern */
@@ -1739,7 +1745,86 @@ extern s32 D_8009D2B0;
 extern int g_CheatCodeProgress[];
 extern int g_CheatCodes[];
 
+#ifdef NON_MATCHING
+void func_800617AC(PlObj *obj) {
+    s16 pos[4];
+    s16 hit[4];
+    s32 speed;
+    s32 cur;
+    s32 limit;
+    s32 ang;
+    s32 h;
+    s32 pitch;
+    s32 *cs;
+    Args *args;
+    s32 bsp;
+    s32 l, r;
+
+    cur = obj->speed;
+    speed = cur;
+    if (*(u8 *)&D_800B0E54) {
+        Pad_StickToSpeed(0, 0x50, &speed);
+    } else {
+        l = D_800DDCC4;
+        r = D_800DDDB8;
+        if (l != 0 || r != 0) {
+        if (D_800DDC60 != 0 || D_800DDC54 != 0) {
+            if (l != 0) {
+                speed = -0x50;
+            } else {
+                speed = 0x50;
+            }
+        } else {
+            if (l != 0) {
+                if (cur < -9) {
+                    speed = cur - 10;
+                } else {
+                    speed = -10;
+                }
+            } else {
+                if (cur < 10) {
+                    speed = 10;
+                } else {
+                    speed = cur + 10;
+                }
+            }
+            limit = 0x50;
+            if (D_8009DB3C != 0 && obj->unk52 != 0) {
+                limit = 0x50 - (abs(obj->unk52) >> 4);
+            }
+            if (limit < speed) {
+                speed = limit;
+            } else if (speed < -limit) {
+                speed = -limit;
+            }
+        }
+        } else {
+            speed = 0;
+        }
+    }
+    if (!*(u8 *)&D_800B0E54 && g_FrameRate < g_FrameCap) {
+        speed = speed * g_FrameCap / g_FrameRate;
+    }
+    ang = (*(s16 *)((*(u8 **)((u8 *)g_Player + 0x90)) + 0x62) + speed) & 0xFFF;
+    obj->speed = speed;
+    *(s16 *)((*(u8 **)((u8 *)g_Player + 0x90)) + 0x62) = ang;
+    *(s16 *)((u8 *)g_Player + 0xA0) = ang >> 6;
+    cs = &D_800A0370[ang];
+    gPsi = ang;
+    pos[0] = g_Args->playerX + ((*(s16 *)cs * 125) >> 10);
+    pos[1] = g_Args->playerY;
+    pos[2] = g_Args->playerZ + (((*(volatile s32 *)cs >> 16) * 125) >> 10);
+    h = ((s32 (*)(s32, s16 *, s16 *, s32))func_800705A8)(D_800E2F54, pos, hit, 0);
+    if (h == -0x7FFF || h == pos[1] || (hit[1] < -0x7EF4 && *(s16 *)((u8 *)g_Player + 0x11E) < -0x7EF4)) {
+        pitch = 0;
+    } else {
+        pitch = ((s32 (*)(s32, s32))ratan2)(pos[1] - h, 500);
+    }
+    *(s16 *)(obj->sub + 0x60) = pitch;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_800617AC);
+#endif
 
 void func_80061AB0(s32 a, s32 b) {
     s32 d;
@@ -4190,7 +4275,111 @@ void func_8006A3E0(void) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006A41C);
+void func_8006A41C(u8 *obj) {
+    u8 *a;
+    s16 *ang;
+    s32 *pos;
+    s32 acc;
+    s32 v;
+    s32 t;
+    s32 d;
+    s32 lim;
+    s32 y;
+    s32 idx;
+    s32 s;
+    s32 fwd;
+    s32 side;
+    s16 *r;
+
+    acc = *(u16 *)(obj + 0x54);
+    a = *(u8 **)(obj + 0x90);
+    v = *(s16 *)(obj + 0x52) + acc;
+    ang = (s16 *)(a + 0x60);
+    pos = (s32 *)(a + 0x28);
+    if (v < 0) {
+        v = 0;
+    } else if (v > D_8009E4C4) {
+        v = D_8009E4C4;
+    }
+    *(s16 *)(obj + 0x52) = v;
+    v = (s16)v >> 1;
+    if (acc > 0) {
+        v = *(u16 *)(obj + 0x54) << 6;
+    } else if (*(s16 *)(obj + 0x50) > 0) {
+        v = *(s16 *)(obj + 0x50);
+    }
+    d = v - ang[0];
+    acc = D_8009E4B8;
+    v = -acc;
+    if (d > acc) {
+        d = acc;
+    } else if (d < v) {
+        d = v;
+    }
+    ang[0] = (ang[0] + d) & 0xFFF;
+    if (ang[0] > 0x800) {
+        ang[0] -= 0x1000;
+    }
+    r = (s16 *)(a + 0xEC);
+    t = *(s16 *)(obj + 0x50);
+    if (t > 0) {
+        t = 0;
+    } else {
+        t -= ang[0];
+    }
+    d = t - *r;
+    lim = D_8009E4B8;
+    if (d > lim) {
+        d = lim;
+    } else if (d < -lim) {
+        d = -lim;
+    }
+    y = (*r + d) & 0xFFF;
+    idx = (y + ang[0]) & 0xFFF;
+    if (idx != 0) {
+        s = D_800A0370[idx];
+        fwd = (*(s16 *)(obj + 0x52) * (s >> 16)) >> 12;
+        side = -(*(s16 *)(obj + 0x52) * (s16)s) >> 12;
+    } else {
+        fwd = *(s16 *)(obj + 0x52);
+        side = 0;
+    }
+    if (y > 0x800) {
+        y -= 0x1000;
+    }
+    *r = y;
+    ang[1] = (ang[1] + *(u16 *)(obj + 0xA0)) & 0xFFF;
+    if (ang[1] > 0x800) {
+        ang[1] -= 0x1000;
+    }
+    {
+    s32 dx = fwd * (s16)D_800A0370[ang[1] & 0xFFF];
+    fwd = fwd * (*(volatile s32 *)&D_800A0370[ang[1] & 0xFFF] >> 16);
+    pos[1] += side;
+    pos[0] += dx >> 12;
+    pos[2] += fwd >> 12;
+    }
+    t = *(s16 *)(obj + 0xA0) << 3;
+    if (*(s16 *)(obj + 0x52) != 0) {
+        lim = D_8009E4B8;
+    } else {
+        lim = D_8009E4BC;
+        t = *(s16 *)(obj + 0xA0) << 5;
+    }
+    d = t - ang[2];
+    if (d > lim) {
+        d = lim;
+    } else if (d < -lim) {
+        d = -lim;
+    }
+    ang[2] = (ang[2] + d) & 0xFFF;
+    if (ang[2] > 0x800) {
+        ang[2] -= 0x1000;
+    }
+    *(s32 *)(*(u8 **)(obj + 0x90) + 0x10) = 2;
+    *(s32 *)(a + 0x9C) = 2;
+    func_80069D60(obj);
+}
 
 void func_8006A700(void *a) {
     u16 v = D_8009E4C0;

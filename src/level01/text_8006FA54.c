@@ -11,6 +11,12 @@ typedef struct { u16 i0; s16 p1; s16 p2; u16 i3; s16 p4; } FB;
 typedef struct { s16 x, y, z; } FC;
 typedef struct { u8 pad[0x1C]; FE *tab1; FA *tab2; } FD;
 typedef struct { s16 a; s16 b; u16 c; } KdNode;
+typedef struct { u8 a[6]; u16 n; u16 d; u16 flags; } Face12;
+typedef struct { u8 pad[0x20]; SVECTOR *nrm; Face12 *faces; } FaceMesh;
+extern s32 D_800E2F3C[];
+extern s32 D_8009E9C0;
+s32 func_800726D0(s32, SVECTOR *, s32, s32, SVECTOR *, s32 *, s32, s32);
+s32 func_800743E8(s32 arg0, s32 *arg1, s32 arg2, s32 arg3, SVECTOR *arg4, s32 arg5, s32 arg6);
 s32 func_80070070(void *arg0, SVECTOR *arg1, u8 *arg2, s16 *arg3, s16 arg4, s32 *arg5);
 s32 Math_Abs(register s32 x);
 extern s32 D_800E2F38;
@@ -259,7 +265,46 @@ INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_80072E28);
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_8007369C);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_800743E8);
+s32 func_800743E8(s32 arg0, s32 *arg1, s32 arg2, s32 arg3, SVECTOR *arg4, s32 arg5, s32 arg6) {
+    SVECTOR sv;
+    s32 flags;
+    s32 n;
+    s32 *p;
+    Face12 *face;
+    s32 *nrm;
+    s32 dot;
+    s32 i;
+
+    flags = 0;
+    if (arg0 == 0) {
+        return 0;
+    }
+    sv.vx = ((VECTOR *)arg1)->vx;
+    sv.vy = ((VECTOR *)arg1)->vy - arg2;
+    sv.vz = ((VECTOR *)arg1)->vz;
+    n = func_800726D0(arg0, &sv, arg3, arg2, arg4, D_800E2F3C, 6, arg6);
+    if (n != 0) {
+        p = D_800E2F3C;
+        face = &((FaceMesh *)arg0)->faces[*p];
+        flags = face->flags;
+        *arg4 = ((FaceMesh *)arg0)->nrm[face->n];
+        arg4->pad = face->d;
+        if (n >= 2) {
+            for (i = 1; i < n; i++) {
+                p++;
+                face = &((FaceMesh *)arg0)->faces[*p];
+                flags |= face->flags;
+                nrm = (s32 *)(((FaceMesh *)arg0)->nrm + face->n);
+                dot = Vec_Dot(nrm, arg4);
+            }
+        }
+    }
+    if (arg5 != 0) {
+        *(s32 *)arg5 = flags;
+    }
+    D_8009E9C0 = n;
+    return n > 0;
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_800746D0);
 
