@@ -215,6 +215,9 @@ def object_mismatches(level, obj, wanted, pairs_by_l1, exe, load):
             mask = ~rel.get(off + k, 0) & 0xFFFFFFFF
             if (struct.unpack_from("<I", exe, o + k)[0] ^ struct.unpack_from("<I", text, off + k)[0]) & mask:
                 bad.add(name)
+                if "-v" in sys.argv:
+                    print(f"  {name} +0x{k:X}: {level} {struct.unpack_from('<I', exe, o + k)[0]:08X}, "
+                          f"ours {struct.unpack_from('<I', text, off + k)[0]:08X} ({obj.name} +0x{off + k:X})")
                 break
     return bad
 
@@ -301,10 +304,27 @@ def port(level):
             "# Switch jump tables each function uses, in order of first use (tools/jtbl_fix.py).\n" + "\n".join(jtbl_lines) + "\n")
 
         r = subprocess.run(["make", f"LEVEL={level}", "-j8", "-k"], cwd=ROOT, capture_output=True, text=True)
-        failed = set(re.findall(r"In function `L1_(\w+)'", r.stderr))
+        failed, unattributed, current = {}, [], None
+        for line in r.stderr.splitlines():
+            m = re.search(r"In function `L1_(\w+)'", line)
+            if m or "At top level" in line or "In function" in line:
+                current = m.group(1) if m else None
+                continue
+            if re.search(r"\.i:\d+: (?!warning)", line):  # an error (cc1 prints warnings with "warning:")
+                n = current or (re.search(r"`L1_(\w+)'", line) or [None, None])[1]
+                if n:
+                    failed.setdefault(n, line.split(": ", 1)[-1])
+                else:
+                    unattributed.append(line)
+        if unattributed and not failed:
+            print("\n".join(unattributed[:10]))
+            sys.exit("compile errors outside ported functions")
         if failed:
             print(f"pass {attempt}: {len(failed)} functions don't compile: {' '.join(sorted(failed))}")
-            exclude |= failed
+            if "-v" in sys.argv:
+                for n, e in sorted(failed.items()):
+                    print(f"  {n}: {e}")
+            exclude |= set(failed)
             continue
         if "Error" in r.stderr and not (ROOT / f"build/{level}/{level}.elf").exists():
             print(r.stderr[-3000:])

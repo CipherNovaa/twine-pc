@@ -320,7 +320,53 @@ done:
     func_8002AA94(1);
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002A7E4", func_8002AA1C);
+s32 func_8002A854(u8 *name, s32 arg1) {
+    s16 sp10;
+    s16 sp12;
+    s8 buf[8];
+    u8 mode;
+    s32 start;
+    s32 r;
+    s32 tries;
+    s8 b[3];
+    s32 len;
+    tries = 4;
+    len = strlen((char *)name);
+    if (len >= 0x1B) {
+        printf(&D_800A7060, name, 0x1A);
+        printf(&D_800A70A0, &D_800A70C8, 0x1C2);
+        exit(1);
+    }
+    mode = 0x80;
+    D_800AF620 = 0x80;
+    func_80082F8C(0xE, &D_800AF620, 0);
+    start = g_Args->unk2DC;
+    if (func_8002AAFC(&sp10, &sp12, name) == 0) {
+        printf(&D_800A70D4, name);
+        exit(1);
+    }
+    func_800833CC(sp10 + D_800AEDD8, buf);
+loop1:
+    func_80082F8C(2, buf, 0);
+    func_80082B64(sp12, arg1, mode);
+loop2:
+    r = func_80082D00(1, 0);
+    if (r == 0) goto done;
+    if (r == -1) {
+        if (--tries != -1) {
+            b[2] = 0;
+            b[1] = 0;
+            b[0] = 0;
+            func_800831FC(0x16, b, 0);
+            goto loop1;
+        } else {
+            func_8002ADF0();
+        }
+    }
+    goto loop2;
+done:
+    return sp12 * 2048;
+}
 
 void func_8002AA94(int arg0) {
   D_8009C200 = arg0;
@@ -328,7 +374,22 @@ void func_8002AA94(int arg0) {
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_8002A7E4", func_8002AC8C);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002A7E4", func_8002ACC4);
+s16 func_8002AAFC(s16 *arg0, s16 *arg1, u8 *arg2) {
+    s32 i = 0;
+    for (;;) {
+        if (func_8002AC90(arg2, (u8 *)&((Rec *)D_800AEE10)[i]) == 0) {
+            break;
+        }
+        if (++i >= 0x48) {
+            sprintf(D_800AF624, D_800A70F8, i, 0x48);
+            func_8006B1DC(D_800AF624);
+            return 0;
+        }
+    }
+    *arg0 = ((Rec *)D_800AEE10)[i].v;
+    *arg1 = ((Rec *)D_800AEE10)[i + 1].v - ((Rec *)D_800AEE10)[i].v;
+    return 1;
+}
 
 s32 func_8002AC90(u8 *a, u8 *b) {
     a++;
@@ -598,7 +659,23 @@ s32 func_8002BF34(void *arg0, char *arg1) {
     return (s32)arg0;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002A7E4", func_8002C330);
+s32 func_8002C168(char *name, s32 arg1) {
+    s32 len;
+    s32 idx;
+
+    len = -1;
+    if (g_Args->cdArchive) {
+        if (((s32 (*)(void))func_8002AAC4)()) {
+            idx = func_8002BF34(D_800AFF2C, name);
+            len = func_8002A854(idx, arg1);
+        } else {
+            func_8006B1DC((M2C_UNK *)D_800A7214);
+        }
+    } else {
+        len = func_8002BE24(name, arg1);
+    }
+    return len;
+}
 
 void CdBin_Disable(void) {
     func_8002AA94(0);

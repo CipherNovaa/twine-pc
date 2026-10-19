@@ -577,7 +577,37 @@ end:
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80029200);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_8002922C);
+void func_80029064(s32 arg0, char *arg1, s32 arg2, s32 arg3) {
+    s32 n;
+    s32 i;
+    s32 cnt;
+    if (arg0 >= 0x1E) {
+        func_8006B230(0, D_800A6F1C);
+    }
+    if (arg0 == 0) {
+        ((TxtEnt *)D_800AB744)[0].a = 0;
+    } else {
+        u8 *b = D_800AB744;
+        u8 *cur = arg0 * 0x60 + b;
+        s32 prev = arg0 - 1;
+        *(u16 *)cur = *(u16 *)(prev * 0x60 + b + 4) + 1;
+    }
+    n = strlen(arg1);
+    cnt = n;
+    for (i = 0; i < cnt; i++) {
+        s32 c = (u8)arg1[i] - 0x20;
+        if (c == 0 || c == 0x3F) {
+            n--;
+        }
+    }
+    ((TxtEnt *)D_800AB744)[arg0].len = n;
+    ((TxtEnt *)D_800AB744)[arg0].e = arg2;
+    ((TxtEnt *)D_800AB744)[arg0].f = arg3;
+    ((TxtEnt *)D_800AB744)[arg0].c = ((TxtEnt *)D_800AB744)[arg0].a + n - 1;
+    strcpy(((TxtEnt *)D_800AB744)[arg0].txt, arg1);
+    ((TxtEnt *)D_800AB744)[arg0].g = 1;
+    ((TxtEnt *)D_800AB744)[arg0].d = 0;
+}
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80029378);
 
@@ -613,7 +643,48 @@ void func_80029504(s16 *c) {
 void func_80029844(void) {
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_8002984C);
+void func_80029684(void) {
+    s32 i;
+    u8 u;
+    u8 v;
+    u8 w;
+    POLY_FT4 *p;
+    PrimHdr *f;
+    s32 uw;
+    s32 vh;
+    PrimHdr *t;
+    LINE_F4 *l;
+
+    ((Overlay *)&D_800AC284)->flag = 0;
+    u = D_800AE940[0x1D8];
+    v = D_800AE940[0x1D9];
+    w = D_800AE940[0x1DA];
+    uw = u + w;
+    vh = v + 8;
+    for (i = 0; i < 2; i++) {
+        l = &((Overlay *)&D_800AC284)->line[i];
+        SetLineF4(l);
+        l->r0 = 0; l->g0 = 0; l->b0 = 0;
+        t = (PrimHdr *)((Overlay *)&D_800AC284)->tile[i];
+        func_80081B74(t);
+        t->r0 = 0; t->g0 = 0; t->b0 = 0;
+        f = (PrimHdr *)((Overlay *)&D_800AC284)->f4[i];
+        func_80081C54(f);
+        f->r0 = 0x14; f->g0 = 0xA; f->b0 = 0x78;
+        func_80081CE4(f, 1);
+        SetDrawMode((M2C_UNK *)&((Overlay *)&D_800AC284)->dm[i], 0, 0, (u16)GetTPage(0, 0, 0, 0), 0);
+        p = &((Overlay *)&D_800AC284)->ft4[i];
+        func_80081C84(p);
+        p->r0 = 0x80; p->g0 = 0x80; p->b0 = 0x80;
+        func_80081CE4(p, 0);
+        p->clut = GetClut((s16)D_800AC4D8, (s16)D_800AC4DC);
+        p->tpage = D_800AC4E8;
+        p->u0 = u; p->v0 = v;
+        p->u1 = uw; p->v1 = v;
+        p->u2 = u; p->v2 = vh;
+        p->u3 = uw; p->v3 = vh;
+    }
+}
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80029A30);
 

@@ -891,6 +891,7 @@
 #define func_80069850 L1_func_80069850
 #define func_8006B1DC L1_func_8006B1DC
 #define func_8006B230 L1_func_8006B230
+#define func_8006B274 L1_func_8006B274
 #define func_8006B2C4 L1_func_8006B2C4
 #define func_8006C494 L1_func_8006C494
 #define func_8006C8F4 L1_func_8006C8F4
@@ -3338,7 +3339,42 @@ INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_800637D0);
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_80063A54);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_80063A98);
+s32 func_80063B20(void) {
+    s32 r;
+    s16 i;
+    PE *e;
+    r = D_8009CA9C;
+    if (r == 0) {
+        r = D_8009CDA0;
+        i = 0;
+        if (r == 0) {
+            e = D_800DF684;
+            do {
+                if (e->active != 0 && !(e->flags & 2)) {
+                    e->cnt = e->cnt + 1;
+                    if ((e->limit != -1 && e->limit < e->cnt) || (e->ptr != 0 && e->ptr[4] == 0)) {
+                        func_80063ED4(e);
+                    } else if (e->f24 == 0 || (e->f24(e), e->active != 0)) {
+                        if (e->f20 != 0) {
+                            e->f20(e);
+                        }
+                        if (e->flags & 4) {
+                            if (e->cnt >= 0xB) {
+                                func_80063D40(e);
+                            }
+                        } else if (e->b1D != 0 && e->b1C < e->b1D) {
+                            func_80063D40(e);
+                        }
+                    }
+                }
+                i++;
+                e++;
+                r = i < 0x3C;
+            } while (r);
+        }
+    }
+    return r;
+}
 
 void *func_80063CAC(void *obj, s16 x, s16 y, s16 z, s16 arg4) {
     s16 i;
@@ -4203,7 +4239,10 @@ INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_8006E97C);
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_8006E9D0);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_8006EA14);
+s16 func_8006B274(int arg0) {
+  s16 *new_var;
+  return ratan2(arg0, SquareRoot12(0x1000 - ((*(new_var = &arg0)) * (((s32) (arg0 << 0x10)) >> 0x1C))));
+}
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_8006EA64);
 

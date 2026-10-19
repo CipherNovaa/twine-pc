@@ -181,7 +181,31 @@ s32 func_8006FED4(FD *arg0, FB *arg1, FC *arg2) {
     return sp10;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_800731F4", func_80073810);
+s32 func_80070070(void *arg0, SVECTOR *arg1, u8 *arg2, s16 *arg3, s16 arg4, s32 *arg5) {
+    s32 h;
+    s32 d;
+    s32 bestH;
+    s32 bestD;
+    s32 bestIdx;
+    s16 *p;
+
+    bestH = -0x7FFF;
+    bestD = 0x7FFF;
+    bestIdx = -1;
+    for (p = arg3; p < arg3 + arg4; p++) {
+        if (M2C_FIELD(M2C_FIELD(arg0, u8 **, 0x20) + M2C_FIELD(arg2 + *p * 12, u16 *, 6) * 8, s16 *, 2) < 0 && func_8006FB04(arg0, arg1, arg2 + *p * 12)) {
+            h = func_8006FED4(arg0, arg2 + *p * 12, arg1);
+            d = (h - arg1->vy) < 0 ? -(h - arg1->vy) : (h - arg1->vy);
+            if (d < bestD) {
+                bestD = d;
+                bestH = h;
+                bestIdx = *p;
+            }
+        }
+    }
+    *arg5 = bestIdx;
+    return bestH;
+}
 
 s32 func_800702CC(void *arg0, s32 arg1, s32 *arg2) {
     s32 x;
