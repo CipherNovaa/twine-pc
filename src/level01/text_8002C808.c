@@ -1119,6 +1119,7 @@ typedef struct { u8 p0[0xE]; u16 h0E; u8 p10[0x24]; s32 w34; u8 p38[0x20]; s32 w
 typedef struct { u8 p0[0x38]; u16 h38; u8 p3A; u8 b3B; u8 p3C[0x70]; s16 hAC; u8 pAE[4]; u16 hB2; s32 wB4; } ArgHH;
 typedef struct { s32 pad; s16 m[3][3]; } QM;
 typedef struct { s16 x, y, z, pad; s32 *p8; s32 wC; u32 w10; } SObj;
+extern s32 D_800D911C;
 extern s32 D_8009D36C;
 extern s32 D_8009E908[];
 extern s32 D_8009E9A8[];
@@ -10701,7 +10702,61 @@ void func_8004EB20(void) {
     func_8004EAB8(obj);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8004EC70);
+void func_8004EC70(void) {
+    u8 *obj;
+    s32 *pos;
+    s32 *tgt;
+    s16 *rot2;
+    s32 *spd;
+    s16 *rot;
+    s32 dx;
+    s32 dy;
+    s32 dz;
+    u32 ax;
+    u32 ay;
+    u32 az;
+
+    obj = (u8 *)&D_800D90C0;
+    pos = (s32 *)&g_CamPosX;
+    tgt = (s32 *)(&g_CamPosX - 0x44);
+    rot2 = (s16 *)(&g_CamPosX + 0x38);
+    spd = (s32 *)(&g_CamPosX - 0x48);
+    rot = (s16 *)(&g_CamPosX - 0x38);
+    if (spd[6] != 0 || spd[7] != 0 || spd[8] != 0) {
+        dx = tgt[0] - pos[0];
+        if (dx < 0) dx = pos[0] - tgt[0];
+        dy = tgt[1] - pos[1];
+        if (dy < 0) dy = pos[1] - tgt[1];
+        dz = tgt[2] - pos[2];
+        if (dz < 0) dz = pos[2] - tgt[2];
+        if ((u32)dx < abs(M2C_FIELD(&g_Camera, s32 *, 0x18)) || (u32)dy < abs(M2C_FIELD(&g_Camera, s32 *, 0x1C)) || (u32)dz < abs(M2C_FIELD(&g_Camera, s32 *, 0x20))) {
+            func_8004EA68(obj);
+        } else {
+            pos[0] += M2C_FIELD(&g_Camera, s32 *, 0x18);
+            pos[1] += M2C_FIELD(&g_Camera, s32 *, 0x1C);
+            pos[2] += M2C_FIELD(&g_Camera, s32 *, 0x20);
+        }
+    }
+    if (D_800D911C != 0) {
+        func_8004EB20();
+        return;
+    }
+    if (M2C_FIELD(&g_Camera, s32 *, 0x24) != 0 || M2C_FIELD(&g_Camera, s32 *, 0x28) != 0 || M2C_FIELD(&g_Camera, s32 *, 0x2C) != 0) {
+        ax = (rot[0] - rot2[0]) & 0xFFF;
+        if (ax > 0x800) ax = 0x1000 - ax;
+        ay = (rot[1] - rot2[1]) & 0xFFF;
+        if (ay > 0x800) ay = 0x1000 - ay;
+        az = (rot[2] - rot2[2]) & 0xFFF;
+        if (az > 0x800) az = 0x1000 - az;
+        if (ax < abs(M2C_FIELD(&g_Camera, s32 *, 0x24)) || ay < abs(M2C_FIELD(&g_Camera, s32 *, 0x28)) || az < abs(M2C_FIELD(&g_Camera, s32 *, 0x2C))) {
+            func_8004EAB8(obj);
+        } else {
+            ((u16 *)rot2)[0] += M2C_FIELD(&g_Camera, u16 *, 0x24);
+            ((u16 *)rot2)[1] += M2C_FIELD(&g_Camera, u16 *, 0x28);
+            ((u16 *)rot2)[2] += M2C_FIELD(&g_Camera, u16 *, 0x2C);
+        }
+    }
+}
 
 void func_8004EF44(void) {
     if (g_Args->cdArchive != 0) {

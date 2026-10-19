@@ -464,7 +464,7 @@ extern s32 D_800E2438;
 extern s32 D_800B0018[];
 extern s32 D_800E2DBC;
 void func_8006E054(void);
-void func_8006E9E0(s32);
+void func_8006E9E0(s32 arg0);
 
 
 extern u8 D_1F8003E0[];
@@ -1036,6 +1036,58 @@ typedef struct { u8 r, g, b; } C3;
 typedef struct { SparkHdr h; s16 v[6]; s32 time; MATRIX m; s32 pos[3]; } SparkEnt;
 typedef struct { s32 a; u16 b; } V4050;
 typedef struct { s32 a; s32 b; } V4058;
+typedef struct { s32 w[4]; } Q4;
+typedef struct { s32 w[16]; } Q16;
+typedef struct { Q4 q[6]; s32 w; } Fr6E;
+typedef struct { u8 *n; s32 st; } Stk6E;
+typedef struct { s16 x, y, z; } V3s;
+void func_8002E228(void);
+void func_80030798(void *);
+void func_80054118(void);
+void func_80068AF0(void);
+void func_8005370C(void);
+void func_80053A7C(void);
+void func_80068A74(void);
+void func_80069330(void);
+void func_80069470(void);
+void func_80069478(void);
+void func_80069618(void);
+void func_8006AF88(void);
+void func_8006B16C(void);
+void func_8006B1B4(void);
+extern s32 D_8009CF14[];
+extern s32 D_8009D0FC;
+extern s32 D_8009D8F4;
+extern s32 D_8009D8F8;
+extern s32 D_8009D8FC;
+extern M2C_UNK D_8009E040;
+extern M2C_UNK D_8009E084;
+extern M2C_UNK D_8009E0C8;
+extern M2C_UNK D_8009E908;
+extern char D_800A956C[];
+extern M2C_UNK D_800A9580;
+extern M2C_UNK D_800A95A8;
+extern s16 D_800AFF94;
+extern s16 D_800AFF98;
+extern s16 D_800AFFB0;
+extern s16 D_800AFFB4;
+extern s16 D_800B0AC8;
+extern s16 D_800B0AE4;
+extern s32 D_800D30BC;
+extern u8 D_800D86DC;
+extern s32 D_800D86E4;
+extern M2C_UNK D_800E02BC;
+extern M2C_UNK D_800E0784;
+extern M2C_UNK D_800E1A84;
+extern M2C_UNK D_800E1EE4;
+extern M2C_UNK D_800E23FC;
+void func_800600EC(s32 *arg0);
+void func_800691F4(u32 arg0);
+s32 func_80069920(void);
+void func_80069928(s32 arg0);
+extern Fr6E D_800E2DE4;
+extern u8 *D_800E2448[];
+s32 func_8006E620(void *, V3s, V3s);
 extern V4050 D_800D4050;
 extern V4058 D_800D4058;
 extern s32 D_800A9488;
@@ -3447,7 +3499,84 @@ void func_80068AF0(void) {
     func_8003C88C(5, D_8009D348);
 }
 
+#ifdef NON_MATCHING
+void func_80068B60(void) {
+    s32 i;
+    func_80054118();
+    func_8005370C();
+    func_80053A7C();
+    D_8009D8F4 = 0x80;
+    D_8009D8F8 = 0x80;
+    D_8009D8FC = 0x80;
+    D_8009CF7C = (s32)&D_800E02BC;
+    D_8009CF80 = 0x12;
+    func_80069478();
+    D_800B0C84 = 0xA;
+    D_8009CF68 = 0x11;
+    D_8009CF6C = (s32 *)&D_8009E084;
+    D_8009CF70 = (SpawnEnt **)&D_8009E040;
+    D_800B0868 = 6;
+    D_800AFF94 = 0xF;
+    D_800AFF98 = 3;
+    D_800B0C8C = 0x12;
+    D_800AFFC0 = 0x14;
+    D_800AFFB0 = 5;
+    D_800AFFB4 = 0;
+    D_800B0AA4 = 5;
+    D_800B0AC8 = 0x12;
+    D_800B0AE4 = 3;
+    D_800B008C = 0x15;
+    D_800B0C30 = 0;
+    D_800AFF80 = 2;
+    D_800AFFC4 = 1;
+    func_8002E228();
+    printf(D_800A956C, D_800B0AA8);
+    D_800D86E4 = 0x28;
+    D_8009D0FC = (s32)&D_800E1A84;
+    D_800D86E0 = (s32)&D_800E1EE4;
+    D_800D86DC = 0xA;
+    g_Args->unk228 = (s32)D_800E0904;
+    func_8006B16C();
+    func_8006AF88();
+    func_80068A74();
+    func_80069470();
+    func_8006B1B4();
+    func_8006B230(g_Args->unk220 < 0xA, (M2C_UNK)&D_800A9580);
+    func_800600EC((s32 *)0x80141930);
+    D_800B0BA0 = -1;
+    D_800AFFA4 = 0;
+    D_800D30BC = 0;
+    *(s32 *)((u8 *)g_Args + 0x130) = (s32)&D_8009E0C8;
+    D_8009D35C = D_8009D260;
+    func_80030798(&D_8009E908);
+    func_80069618();
+    func_80069330();
+    D_800D31B4 = D_8009D27C;
+    func_80068AF0();
+    func_8006B230(1, (M2C_UNK)&D_800A95A8);
+    D_8009CF14[0] = 3;
+    D_8009CF14[1] = (s32)&D_800E23FC;
+    D_8009CF14[2] = 0x10;
+    D_8009CF14[3] = (s32)&D_800E0784;
+    D_8009CF14[5] = D_8009D30C;
+    D_8009CF14[4] = D_8009D304;
+    D_800E02B8 = D_8009E9C4;
+    func_800691F4(D_8009E9C4);
+    D_8009CE40 = (M2C_UNK (*)(s16))func_80069920;
+    D_8009CE48 = (s32 (*)(s32))func_800691F4;
+    D_8009CE44 = func_80069928;
+    D_800E23E8 = 0x31;
+    D_800E23D4 = 0x32;
+    D_800E02B4 = 0x33;
+    D_8009DB3C = 1;
+    for (i = 0; i < 3; i++) {
+        D_800E23DC[i] = 0x5B;
+        D_800E23EC[i] = -1;
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_80068B60);
+#endif
 
 void func_80068EB4(void) {
     M2C_FIELD(&D_800DDF08, s32 *, 0) = 0x8011292C;
@@ -4696,7 +4825,77 @@ INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006E054);
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006E620);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006E9E0);
+void func_8006E9E0(s32 arg0) {
+    Stk6E stk[32];
+    Fr6E fr;
+    u32 s3;
+    s32 s2;
+    u8 *s1;
+    s32 st;
+    u8 *v;
+    u8 **list;
+    u8 *p;
+    list = D_800E2448;
+    s3 = 0;
+    s2 = 0;
+    fr.q[1] = D_800E2DE4.q[1];
+    fr.q[2] = D_800E2DE4.q[2];
+    fr.q[3] = D_800E2DE4.q[3];
+    fr.q[4] = D_800E2DE4.q[4];
+    fr.q[0] = D_800E2DE4.q[0];
+    fr.q[5] = D_800E2DE4.q[5];
+    stk[0].n = (u8 *)arg0;
+    stk[0].st = 3;
+    fr.w = D_800E2DE0;
+    do {
+        st = stk[s2].st;
+        s1 = stk[s2].n;
+        switch (st) {
+        case 3:
+            if (*(s32 *)(s1 + 0x1C) != 0) {
+                if (s3 >= 0x258U) {
+                    s3 = 0x258;
+                    goto done;
+                }
+                list[s3] = s1;
+                s3 += 1;
+                s2 -= 1;
+                break;
+            }
+        case 0:
+            p = *(u8 **)(s1 + 0xC);
+            if (p != NULL && func_8006E620(&fr, ((V3s *)p)[0], ((V3s *)p)[1]) != 0) {
+                stk[s2].st = 1;
+                s2 += 1;
+                v = *(u8 **)(s1 + 0xC);
+                stk[s2].st = 3;
+                stk[s2].n = v;
+                break;
+            }
+        case 1:
+            p = *(u8 **)(s1 + 0x10);
+            if (p != NULL && func_8006E620(&fr, ((V3s *)p)[0], ((V3s *)p)[1]) != 0) {
+                stk[s2].st = 2;
+                s2 += 1;
+                v = *(u8 **)(s1 + 0x10);
+                stk[s2].st = 3;
+                stk[s2].n = v;
+                break;
+            }
+        case 2:
+            p = *(u8 **)(s1 + 0x14);
+            if (p != NULL && func_8006E620(&fr, ((V3s *)p)[0], ((V3s *)p)[1]) != 0) {
+                v = *(u8 **)(s1 + 0x14);
+                stk[s2].st = 3;
+                stk[s2].n = v;
+                break;
+            }
+            s2 -= 1;
+        }
+    } while (s2 >= 0);
+done:
+    D_800E2438 = s3;
+}
 
 void func_8006ECBC(void) {
     u8 *m;

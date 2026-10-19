@@ -10,9 +10,11 @@ typedef struct { s16 a; u16 b; s16 c; u16 d; } FE;
 typedef struct { u16 i0; s16 p1; s16 p2; u16 i3; s16 p4; } FB;
 typedef struct { s16 x, y, z; } FC;
 typedef struct { u8 pad[0x1C]; FE *tab1; FA *tab2; } FD;
+typedef struct { s16 a; s16 b; u16 c; } KdNode;
+s32 func_80070070(void *arg0, SVECTOR *arg1, u8 *arg2, s16 *arg3, s16 arg4, s32 *arg5);
 s32 Math_Abs(register s32 x);
 extern s32 D_800E2F38;
-s32 func_800702CC(void *, s32, s32 *);
+s32 func_800702CC(void *arg0, s32 arg1, s32 *arg2);
 s32 func_800705A8(ZoneObj *arg0, s32 arg1, SVECTOR *arg2, s32 *arg3);
 
 s32 func_80071638(void *, s32, s32, s32, void *, s32);
@@ -139,7 +141,44 @@ s32 func_80070070(void *arg0, SVECTOR *arg1, u8 *arg2, s16 *arg3, s16 arg4, s32 
     return bestH;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_800702CC);
+s32 func_800702CC(void *arg0, s32 arg1, s32 *arg2) {
+    s32 x;
+    s32 y;
+    s32 px;
+    s32 pz;
+    s32 t;
+    KdNode *base;
+    KdNode *node;
+    u8 *data;
+
+    px = ((SVECTOR *)arg1)->vx;
+    pz = ((SVECTOR *)arg1)->vz;
+    x = ((SVECTOR *)arg0)->vx;
+    y = ((SVECTOR *)arg0)->vy;
+    base = M2C_FIELD(arg0, KdNode **, 0x14);
+    node = base;
+    data = M2C_FIELD(arg0, u8 **, 0x24);
+    while (node->a >= 0) {
+        if (node->b >= 0) {
+            t = x + node->c;
+            if (px < t) {
+                node = &base[node->a];
+            } else {
+                x = t;
+                node = &base[node->b];
+            }
+        } else {
+            t = y + node->c;
+            if (pz < t) {
+                node = &base[node->a];
+            } else {
+                y = t;
+                node = &base[-(node->b + 1)];
+            }
+        }
+    }
+    return func_80070070(arg0, (SVECTOR *)arg1, data, M2C_FIELD(arg0, s16 **, 0x18) + node->b, -(node->a + 1), arg2);
+}
 
 s32 func_800705A8(ZoneObj *arg0, s32 arg1, SVECTOR *arg2, s32 *arg3) {
     s32 r;

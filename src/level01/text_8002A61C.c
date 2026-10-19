@@ -5,6 +5,10 @@ typedef struct { u8 p[0x142]; u16 v; } ArgsX;
 typedef struct { u8 pad[0x340]; s32 f[11]; } ArgsFiles;
 typedef struct { u8 p[0x1A]; u16 v; } Rec;
 typedef struct { u8 pad[0x142]; u16 v; } G142;
+typedef struct { s32 a; u8 b; u8 pad; s16 c; u16 d; } CdEnt2;
+#define T(i) (((CdEnt2 *)D_8009C204)[i])
+extern s8 D_800AEDF0;
+extern s32 D_800AEE14;
 extern s32 D_8009C180;
 extern s16 D_8009CA5E;
 extern s16 D_8009CA60;
@@ -116,7 +120,7 @@ extern u8 D_800AF620;
 
 M2C_UNK exit(M2C_UNK);                              /* extern */
 extern M2C_UNK D_800A7120;
-M2C_UNK func_8002B29C(s32, M2C_UNK);                /* extern */
+s32 func_8002B29C(s32 arg0, s32 arg1);
 s32 func_80026B00(s32 arg0);
 
 
@@ -353,7 +357,50 @@ void func_8002B17C(void) {
     }
 }
 
+#ifdef NON_MATCHING
+s32 func_8002B29C(s32 arg0, s32 arg1) {
+    s8 sp10;
+    if (D_800AFEBC == -1) {
+        D_800AFEB8 = D_800AF6A5;
+    }
+    func_800833CC(T(arg0).c + ((s32 *)((u8 *)g_Args + 0x340))[g_Args->unk18A], &sp10);
+    func_80082F8C(2, (u8 *)&sp10, 0);
+    D_800AFEAC = D_800AFEA8 = func_800834D0(&sp10) + T(arg0).c;
+    D_800AFEB0 = D_800AFEA8 + T(arg0).d;
+    D_8009CA56 = *(u16 *)((u8 *)g_Args + 0x142);
+    if ((g_Args->flags2 >> 2) & 1) {
+        if (arg0 >= 0x17 && arg0 < 0xB1) {
+            *(u16 *)((u8 *)g_Args + 0x142) = 0x7F;
+        }
+    } else {
+        *(u16 *)((u8 *)g_Args + 0x142) = 0;
+    }
+    D_8009CA5C = *(u16 *)((u8 *)g_Args + 0x142);
+    D_800AFEB6 = 1;
+    D_800AFEBC = arg0;
+    D_800AFEB7 = T(arg0).b;
+    D_800AFEB5 = g_Args->unk142;
+    if (arg1 >= 0) {
+        if (CdSearchFile(&D_800AEDF0, (char *)T(arg1).a) == 0) {
+            D_800AEE14 = T(arg1).a;
+        }
+        D_800AEDE4 = func_800834D0(&D_800AEDF0) + T(arg1).c;
+        D_800AEDE8 = D_800AEDE4 + T(arg1).d;
+        D_800AEDDC = D_800AEDE4;
+        D_800AFEB8 = T(arg1).b;
+        D_800AFEB9 = 1;
+    } else if (arg1 == -1) {
+        D_800AFEB9 = 0;
+    } else {
+        D_800AFEB9 = 2;
+    }
+    g_Args->flags |= 8;
+    D_800AFEC0 = -1;
+    return 0;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002B29C);
+#endif
 
 void func_8002B69C(void) {
     u8 sp10[16];
