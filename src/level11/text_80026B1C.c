@@ -1385,48 +1385,7 @@ void L1_func_80029504(s16 *c) {
 void func_80029834(void) {
 }
 
-void L1_func_80029684(void) {
-    s32 i;
-    u8 u;
-    u8 v;
-    u8 w;
-    POLY_FT4 *p;
-    PrimHdr *f;
-    s32 uw;
-    s32 vh;
-    PrimHdr *t;
-    LINE_F4 *l;
-
-    ((Overlay *)&L1_D_800AC284)->flag = 0;
-    u = L1_D_800AE940[0x1D8];
-    v = L1_D_800AE940[0x1D9];
-    w = L1_D_800AE940[0x1DA];
-    uw = u + w;
-    vh = v + 8;
-    for (i = 0; i < 2; i++) {
-        l = &((Overlay *)&L1_D_800AC284)->line[i];
-        L1_SetLineF4(l);
-        l->r0 = 0; l->g0 = 0; l->b0 = 0;
-        t = (PrimHdr *)((Overlay *)&L1_D_800AC284)->tile[i];
-        L1_func_80081B74(t);
-        t->r0 = 0; t->g0 = 0; t->b0 = 0;
-        f = (PrimHdr *)((Overlay *)&L1_D_800AC284)->f4[i];
-        L1_func_80081C54(f);
-        f->r0 = 0x14; f->g0 = 0xA; f->b0 = 0x78;
-        L1_func_80081CE4(f, 1);
-        L1_SetDrawMode((M2C_UNK *)&((Overlay *)&L1_D_800AC284)->dm[i], 0, 0, (u16)L1_GetTPage(0, 0, 0, 0), 0);
-        p = &((Overlay *)&L1_D_800AC284)->ft4[i];
-        L1_func_80081C84(p);
-        p->r0 = 0x80; p->g0 = 0x80; p->b0 = 0x80;
-        L1_func_80081CE4(p, 0);
-        p->clut = L1_GetClut((s16)L1_D_800AC4D8, (s16)L1_D_800AC4DC);
-        p->tpage = L1_D_800AC4E8;
-        p->u0 = u; p->v0 = v;
-        p->u1 = uw; p->v1 = v;
-        p->u2 = u; p->v2 = vh;
-        p->u3 = uw; p->v3 = vh;
-    }
-}
+INCLUDE_ASM("asm/level11/nonmatchings/text_80026B1C", func_8002983C);
 
 INCLUDE_ASM("asm/level11/nonmatchings/text_80026B1C", func_80029A20);
 

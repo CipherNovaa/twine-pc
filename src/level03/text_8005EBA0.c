@@ -2127,7 +2127,16 @@ void L2_func_80060EE0(u8 *obj, s16 dx, s16 dz) {
     L1_func_80060AC0(obj);
 }
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_8005EBA0", func_80060C80);
+void func_80060C80(void *arg0, s32 arg1) {
+    *M2C_FIELD(arg0, s32 **, 0x118) |= 0x80000;
+    if (arg1 == (s32)g_Player) {
+        *M2C_FIELD(arg0, s32 **, 0x118) |= 0x200000;
+        if (D_800F4720 == 0xD) {
+            *M2C_FIELD(arg0, s32 **, 0x118) |= 0x10000;
+            L2_func_800619F0(arg0);
+        }
+    }
+}
 
 #ifdef NON_MATCHING
 s32 L1_func_80061068(u8 *e) {

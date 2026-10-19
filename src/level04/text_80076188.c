@@ -181,10 +181,11 @@ extern s32 L1_D_800F0F5C;
 
 
 
+extern void (*L3_D_8009E9AC)(void);
+void L3_func_80076430(void);
 extern void *L2_D_800B6010;
 void L2_func_8006E97C(s32 arg0);
 void L2_func_80085F1C();
-extern void (*L2_D_800A107C)(s32);
 extern M2C_UNK L2_D_800F415C;
 void L2_func_8007997C(void);
 void L2_func_80086FAC();
@@ -216,7 +217,11 @@ M2C_UNK func_8006C128(M2C_UNK, M2C_UNK *);          /* extern */
 extern u8 D_800AB338;
 extern u8 D_800F4C80;
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_80076188", func_80076188);
+void L3_func_80076430(void) {
+    L1_func_800752C0();
+    L2_func_8007906C();
+    L2_func_800796AC();
+}
 
 s32 L1_func_800752C0(void) {
   s32 var_v1;

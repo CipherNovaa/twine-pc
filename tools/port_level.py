@@ -479,7 +479,7 @@ def port(level):
             header, funcs = l1[l1_stem]
             c_path = ROOT / f"src/{level}/{t_stem}.c"
             current = orig = c_path.read_text()
-            native_decls, native_funcs = [], {}
+            native_decls, native_funcs, cur_header = [], {}, []
             pooled, src_bodies = [], []
             if "port_level.py" in orig.split("\n", 1)[0]:
                 orig = (ROOT / f"build/{level}/port_base/{t_stem}.c").read_text()
@@ -575,6 +575,16 @@ def port(level):
                             changed = True
                 have |= {l2_decl_name(d) for d in src_header} - {None}
             src_header.sort(key=lambda d: not d.startswith("typedef"))
+            # this level's own functions may rely on declarations the previous generated header had (e.g.
+            # one that came with another level's code): keep those that the new one lacks
+            declared = {l2_decl_name(l) for l in l1_header + src_header + native_decls} - {None}
+            own = "\n".join(code for n, (k, code) in native_funcs.items() if n in native_stem.get(t_stem, ()))
+            needed = set(IDENT.findall(own)) - declared
+            for l in cur_header:
+                nm = l2_decl_name(l)
+                if nm in needed and l.strip() and not l.startswith("#"):
+                    native_decls.append(l)
+                    needed.discard(nm)
             text = "\n".join(l1_header + src_header + [NATIVE_MARK] + native_decls) + "\n" + "\n".join(body) + "\n"
             for S in srcs:
                 S.used |= {i[len(S.pre):] for i in IDENT.findall(text) if i.startswith(S.pre)}

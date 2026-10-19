@@ -215,6 +215,10 @@ s32 L2_func_80079040(void *arg0, s32 arg1);
 s32 L2_func_80079740(void);
 void L2_func_80079854(s32 arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
+typedef struct { s16 pos[3]; s16 vel[3]; u8 *tgt; s16 unk10; s16 unk12; } TrkRec;
+typedef struct { TrkRec rec[5]; u8 busy; } TrkTbl;
+typedef struct { s16 pos[3]; s16 vel[3]; s32 pad0C; s32 pad10; s32 pad14; u8 *tgt; s32 unk1C; s32 pad20; s16 unk24; } TrkDst;
+void func_80077EE4(u8 *obj);
 M2C_UNK func_8006C3D0(M2C_UNK, M2C_UNK *);          /* extern */
 extern u8 D_800AC0C4;
 extern u8 D_800F4490;
@@ -728,7 +732,54 @@ s32 L2_func_80079F1C(u8 *obj, s32 arg1) {
     return 0;
 }
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_80076430", func_800779E0);
+void func_800779E0(u8 *obj, s32 idx) {
+    TrkTbl *tbl;
+    u8 *tgt;
+    TrkDst *d;
+    s16 v[3];
+
+    tbl = *(TrkTbl **)(obj + 0x10C);
+    if (tbl == NULL) {
+        return;
+    }
+    tgt = tbl->rec[idx].tgt;
+    tbl->busy = 0;
+    d = *(TrkDst **)(obj + 0x108);
+    if (d == NULL) {
+        return;
+    }
+    *(s16 *)(obj + 0x98) = 0;
+    *(s16 *)(obj + 0x9C) = 0;
+    if (tgt != NULL && tgt[4] != 0 && tgt[5] == 6) {
+        return;
+    }
+    *(s16 *)(obj + 0x9A) = 0;
+    *(s16 *)(obj + 0x9E) = 0;
+    *(s16 *)(obj + 0xA0) = 0;
+    *(s16 *)(obj + 0xA2) = 0;
+    d->pos[0] = tbl->rec[idx].pos[0];
+    d->pos[1] = tbl->rec[idx].pos[1];
+    d->pos[2] = tbl->rec[idx].pos[2];
+    d->vel[0] = tbl->rec[idx].vel[0];
+    d->vel[1] = tbl->rec[idx].vel[1];
+    d->vel[2] = tbl->rec[idx].vel[2];
+    d->tgt = tbl->rec[idx].tgt;
+    d->unk1C = *(s32 *)(tbl->rec[idx].tgt + 0x60);
+    d->unk24 = tbl->rec[idx].unk12;
+    v[0] = d->vel[0];
+    v[1] = d->vel[1];
+    v[2] = d->vel[2];
+    d->pos[0] += v[0] >> 10;
+    d->pos[1] += v[1] >> 10;
+    d->pos[2] += v[2] >> 10;
+    if (tgt != NULL) {
+        func_80077EE4(obj);
+    } else {
+        L2_func_8007A354(obj, v);
+    }
+    tbl->busy = 0;
+    *(s32 *)(obj + 0x4C) |= 0x2000400;
+}
 
 s32 L2_func_8007A190(void *arg0) {
     s32 i;

@@ -213,6 +213,7 @@ extern s8 L1_D_8009C1EE;
 
 
 
+typedef struct { u8 pad[0x23E]; s16 a; s16 b; } S9F8;
 s32 L2_func_80026B00(s32 arg0);
 void L2_func_80027520(s32 arg0, s32 arg1, s32 *arg2, s32 arg3, s32 arg4, s32 arg5);
 void L2_func_800288B4(s8 arg0);
@@ -249,6 +250,7 @@ void L2_func_80029200(void);
 void L2_func_80027674(s32 x, s32 y, s32 z, s32 arg1, s32 *arg2, s32 arg3, s32 arg4, s32 arg5);
 s32 L2_func_80026C38(s32 arg0);
 void L2_func_80028B88(s16 arg0, char *text);
+void L3_func_800299F8(char *a0, s16 a1, s16 a2, s16 a3, s16 a4, s32 a5, s32 a6, s32 a7);
 /* This level's own declarations (kept by tools/port_level.py): */
 
 s32 L2_func_80026B00(s32 arg0) {
@@ -1572,7 +1574,11 @@ void L1_func_80029868(char *text, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 mo
     }
 }
 
-INCLUDE_ASM("asm/level08/nonmatchings/text_80026B00", func_80029AF0);
+void L3_func_800299F8(char *a0, s16 a1, s16 a2, s16 a3, s16 a4, s32 a5, s32 a6, s32 a7) {
+    L1_func_80029868(a0, a1, a2, a3, a4, a5);
+    ((S9F8 *)&L1_D_800AC284)->a = a6;
+    ((S9F8 *)&L1_D_800AC284)->b = a7;
+}
 
 #ifdef NON_MATCHING
 void L1_func_80029A34(void) {

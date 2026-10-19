@@ -182,11 +182,11 @@ extern s32 L1_D_800F0F5C;
 
 
 
+extern void (*L3_D_8009E9AC)(void);
 void L3_func_80076430(void);
 extern void *L2_D_800B6010;
 void L2_func_8006E97C(s32 arg0);
 void L2_func_80085F1C();
-extern void (*L2_D_800A107C)(s32);
 void L2_func_8007A2A0(void *arg0);
 extern M2C_UNK L2_D_800F415C;
 void L2_func_80079B2C(void);

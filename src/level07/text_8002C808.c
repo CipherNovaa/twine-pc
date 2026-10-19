@@ -3386,6 +3386,12 @@ s32 L2_func_8005AEB0(void);
 void L2_func_8005CF80(void);
 void L2_func_8005DAD0(void);
 void L2_func_8005DF80(void *arg0);
+void L3_func_80031B68(u8 *arg0);
+s32 L3_func_80030578(s32 arg0);
+void *L3_func_800305D4(s32 arg0);
+void L3_func_800325B0(s32 *arg0);
+void L3_func_80032A30(s32 arg0, GsIMAGE *arg1);
+void L3_func_80048204(void *arg0, void *arg1);
 /* This level's own declarations (kept by tools/port_level.py): */
 extern u32 D_800A1DD4;
 M2C_UNK func_80046494(M2C_UNK *, M2C_UNK, M2C_UNK, M2C_UNK, s32, s32, s32, s32, s32, s32, s32, s32); /* extern */
@@ -4484,9 +4490,31 @@ void L1_func_8003052C(void) {
 INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_80030598);
 #endif
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_80030620);
+s32 L3_func_80030578(s32 arg0) {
+    void *p;
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_8003067C);
+    p = L1_malloc3(arg0);
+    if (p == NULL) {
+        printf(L1_D_800A74E0, arg0);
+        func_80085E7C_nr(-1);
+    }
+    arg0 = ((s32 *)p)[-1] * 8;
+    M2C_FIELD(L1_g_Args, s32 *, 0x1F4) += arg0;
+    return (s32)p;
+}
+
+void *L3_func_800305D4(s32 arg0) {
+    void *p;
+
+    p = L1_calloc3(arg0, 1);
+    if (p == NULL) {
+        printf(L1_D_800A7510, arg0);
+        func_80085E7C_nr(-1);
+    }
+    arg0 = ((s32 *)p)[-1] * 8;
+    M2C_FIELD(L1_g_Args, s32 *, 0x1F4) += arg0;
+    return p;
+}
 
 void L1_func_80030670(s32 *p) {
     *(s32 *)((u8 *)g_Args + 0x1F4) -= p[-1] << 3;
@@ -4838,7 +4866,15 @@ void L2_func_800324E8(s32 arg0) {
 
 INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_80032438);
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_800324E0);
+void L3_func_800325B0(s32 *arg0) {
+    s32 a2 = arg0[1];
+    if ((void *)arg0[0] == L2_D_800B6FE4 && L1_D_800D2F90 == 0) {
+        L1_D_800D424C = 1;
+        if (L2_D_800B7328 & M2C_FIELD(L2_D_800B6010, u16 *, 0x14E)) {
+            ((void (*)(s32))L3_func_80031B68)(a2);
+        }
+    }
+}
 
 void L1_func_80032424(void *arg0) {
   typeof(*((s32 *) 0)) new_var2;
@@ -5000,7 +5036,18 @@ loop:
     }
 }
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_800329A8);
+void L3_func_80032A30(s32 arg0, GsIMAGE *arg1) {
+    u32 *p;
+    if (arg1 != NULL && arg0 != 0) {
+        p = (u32 *)arg0;
+        if (*p != 0x10) {
+            printf(L1_D_800A79F0, arg0, arg1);
+            func_80085E7C_nr(0);
+        }
+        p++;
+        L1_GsGetTimInfo(p, arg1);
+    }
+}
 
 void L1_DevMenu_HandleInput(void) {
     s32 cur;
@@ -10750,7 +10797,14 @@ void L1_func_800475BC(void) {
     }
 }
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_8004897C);
+void L3_func_80048204(void *arg0, void *arg1) {
+    L2_func_80085E4C();
+    M2C_FIELD(arg0, u8 *, 0x23) = (u8) M2C_FIELD(arg1, u8 *, 0x23);
+    M2C_FIELD(arg0, u16 *, 0x24) = (u16) M2C_FIELD(arg1, u16 *, 0x24);
+    M2C_FIELD(arg0, u8 *, 0x26) = (u8) M2C_FIELD(arg1, u8 *, 0x26);
+    M2C_FIELD(arg0, u16 *, 0x28) = (u16) M2C_FIELD(arg1, u16 *, 0x28);
+    M2C_FIELD(arg0, u16 *, 0x2A) = (u16) M2C_FIELD(arg1, u16 *, 0x2A);
+}
 
 void func_800489E8(void *arg0) {
     M2C_FIELD(arg0, s8 *, 0) = 0;

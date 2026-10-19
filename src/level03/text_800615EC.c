@@ -2068,6 +2068,14 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern void *L2_D_800B6FE4;
+extern s32 L2_D_800E0068;
+extern s32 L2_D_800E00E4;
+extern s32 L2_D_800E01B0;
+extern s32 L2_D_800E01B4;
+s32 L2_func_8002C330(M2C_UNK *, M2C_UNK);              /* extern */
+void func_8006B1DC(void);
+void func_800644D4(void *arg0);
 typedef struct { u8 pad0[0x56]; u16 a; u8 pad1[0x12]; u16 b; } S662;
 M2C_UNK func_800334CC(M2C_UNK);                     /* extern */
 M2C_UNK func_8005D1EC(s32);                         /* extern */
@@ -2082,7 +2090,7 @@ extern M2C_UNK *D_800E0628;
 M2C_UNK func_8004FC9C();                            /* extern */
 M2C_UNK func_8005D2F4();                            /* extern */
 M2C_UNK func_800615EC(void *);                      /* extern */
-M2C_UNK func_800618B0(void *);                      /* extern */
+void func_800618B0(void *arg0);
 M2C_UNK func_8007BD24(M2C_UNK);                     /* extern */
 s32 func_8007BD58();                                /* extern */
 s32 func_8007BDA4();                                /* extern */
@@ -2249,7 +2257,48 @@ extern s32 D_8009EE54;
 
 INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_800615EC);
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_800618B0);
+void func_800618B0(void *arg0) {
+    s32 ang;
+    s32 x;
+    s32 z;
+    u8 *p;
+
+    ang = M2C_FIELD(M2C_FIELD(arg0, void **, 0x90), s16 *, 0x60);
+    x = 0;
+    if (L2_D_800E01B4 ? !L2_D_800E01B0 : L2_D_800E01B0) {
+        x = -0xE1;
+        if (L2_D_800E01B4 != 0) {
+            x = 0xE1;
+        }
+    }
+    if (L2_D_800E0068 != 0) {
+        z = 0xE1;
+    } else if (L2_D_800E00E4 != 0) {
+        z = -0xE1;
+    } else {
+        z = 0;
+    }
+    if (x != 0 && z != 0) {
+        x = -0xA0;
+        if (L2_D_800E01B4 != 0) {
+            x = 0xA0;
+        }
+        z = -0xA0;
+        if (L2_D_800E0068 != 0) {
+            z = 0xA0;
+        }
+    }
+    p = L2_D_800B6FE4;
+    if (M2C_FIELD(M2C_FIELD(p, void **, 0x94), s32 *, 0x24) & 0x400) {
+        x >>= 1;
+        z >>= 1;
+    }
+    if (ang != 0) {
+        z = (z * (L1_D_800A0370[abs(ang)] >> 16)) >> 12;
+    }
+    *(s16 *)(p + 0x98) = x;
+    *(s16 *)(p + 0x9C) = z;
+}
 
 void func_800619E4(void) {
     if ((D_8009E8D0 == 0) && (D_8009E928 == 0)) {
@@ -3049,9 +3098,43 @@ s32 *L1_func_8006412C(void) {
     return NULL;
 }
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_80063D20);
+Ent34 *func_80063D20(s16 arg0, s16 arg1, s16 arg2, s16 arg3, s16 arg4) {
+    Ent34 *e;
+    e = L1_func_800637B0(arg0, arg1, arg2);
+    if (e == NULL) {
+        return NULL;
+    }
+    {
+        *(s32 *)((u8*)e + 0x10) = arg3;
+        *(void **)((u8*)e + 0x20) = L1_func_8006484C;
+        *(void **)((u8*)e + 0x24) = L1_func_80064C28;
+        *(void **)((u8*)e + 0x28) = L1_func_80063EF8;
+        *(s16 *)((u8*)e + 0x14) = 3;
+        *(s16 *)((u8*)e + 0x18) = 1;
+        *(s16 *)((u8 *)e + 0x1E) = arg4;
+        ((u8*)e)[0x1D] = 2;
+    }
+    return e;
+}
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_80063DC0);
+Ent34 *func_80063DC0(s16 arg0, s16 arg1, s16 arg2, s16 arg3, s16 arg4) {
+    Ent34 *e;
+    e = L1_func_800637B0(arg0, arg1, arg2);
+    if (e == NULL) {
+        return NULL;
+    }
+    {
+        *(s32 *)((u8*)e + 0x10) = arg3;
+        *(void **)((u8*)e + 0x20) = func_800644D4;
+        *(void **)((u8*)e + 0x24) = L1_func_80064C28;
+        *(void **)((u8*)e + 0x28) = L1_func_80063EF8;
+        *(s16 *)((u8*)e + 0x14) = 3;
+        *(s16 *)((u8*)e + 0x18) = 1;
+        *(s16 *)((u8 *)e + 0x1E) = arg4;
+        ((u8*)e)[0x1D] = 2;
+    }
+    return e;
+}
 
 Ent34 *L1_func_8006439C(s16 x, s16 y, s16 z, s16 arg3, s16 arg4, s16 arg5, s16 arg6, s16 arg7, u8 arg8) {
     Ent34 *e;
@@ -4125,7 +4208,13 @@ void func_8006B168(void) {
     M2C_FIELD(&D_800E0730, s32 *, 0x14) = 0x801419F8;
 }
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_8006B1DC);
+void func_8006B1DC(void) {
+    if (L2_func_8002C330(&D_800ABE54, 0x8011B5D8) > 0x2F000) {
+        L2_func_80083044(&D_800ABE3C);
+    }
+    func_8006B168();
+    L1_func_8005B508();
+}
 
 void func_8006B234(void) {
     func_8003D150(0, D_8009EF84);

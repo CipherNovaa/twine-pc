@@ -181,16 +181,12 @@ extern s32 L1_D_800F0F5C;
 
 
 
+extern void (*L3_D_8009E9AC)(void);
 void L3_func_80076430(void);
-extern void *L2_D_800B6010;
 void L2_func_8006E97C(s32 arg0);
-void L2_func_80085F1C();
-extern void (*L2_D_800A107C)(s32);
 void L2_func_8007A2A0(void *arg0);
 void L2_func_80079B2C(void);
 void L2_func_80086FAC();
-extern M2C_UNK (*L2_D_800A1078)(s16);
-void L2_func_8006E9D0(s32 arg0, s32 arg1);
 extern void *L2_D_800B6FE4;
 extern s32 L2_D_800A0FE0;
 void L2_func_8007906C(void);
@@ -200,8 +196,6 @@ extern s8 L2_D_800A40AC;
 extern u8 L2_D_800F430C;
 M2C_UNK L2_func_800307C0(s32);                         /* extern */
 s32 L2_func_80079784(s32 arg0);
-extern M2C_UNK L2_D_800AF160;
-extern M2C_UNK L2_D_800E6810;
 M2C_UNK L2_func_800912A4(M2C_UNK *);                   /* extern */
 extern M2C_UNK L2_D_800B70F4;
 extern s8 L2_D_800E680C;
@@ -214,10 +208,10 @@ s32 L2_func_8007A190(void *arg0);
 void L2_func_8007A4D4(u8 *obj);
 void L2_func_8007A678(void *arg0);
 void L2_func_80078B44(void *arg0);
-M2C_UNK *L2_func_80078B90(s32 arg0);
 s32 L2_func_80079040(void *arg0, s32 arg1);
 s32 L2_func_80079740(void);
 void L2_func_80079854(s32 arg0);
+extern M2C_UNK (*L2_D_800A1078)(s16);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_8006F4C0(M2C_UNK, M2C_UNK *);          /* extern */
 extern u8 D_800AE7C8;
@@ -291,16 +285,7 @@ void L2_func_80078B44(void *arg0) {
     }
 }
 
-M2C_UNK *L2_func_80078B90(s32 arg0) {
-    s32 temp_s1;
-
-    temp_s1 = arg0 & 0xFF;
-    if (L2_func_80079784(temp_s1) == 0) {
-        L2_func_80085F1C(L2_D_800B6010 + 0x234, &L2_D_800AF160, temp_s1);
-        L2_func_8006E9D0(0, L2_D_800B6010 + 0x234);
-    }
-    return &L2_D_800E6810;
-}
+INCLUDE_ASM("asm/level10/nonmatchings/text_80079520", func_80079680);
 
 void L1_func_8007545C(s32 first, s32 last) {
     long h;
