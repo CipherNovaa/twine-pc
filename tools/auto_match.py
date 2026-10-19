@@ -302,6 +302,8 @@ def decl_name(line):
     s = line.split("/*")[0].strip()
     if not s.endswith(";"):
         return None
+    # `name asm("symbol")` / attributes after the declarator
+    s = re.sub(r'\s*(?:asm|__asm__|__asm)\("[^"]*"\)|\s*__attribute__\s*\(\(.*\)\)', "", s)
     m = re.match(r"^[^(=]*?\b(\w+)\(", s)
     if m:
         return m.group(1)
@@ -348,7 +350,7 @@ def sync_prototypes(text):
     out, depth = [], 0
     for line in text.splitlines():
         stripped = line.split("/*")[0].strip()
-        if depth == 0 and stripped.endswith(";") and "(" in stripped:
+        if depth == 0 and stripped.endswith(";") and "(" in stripped and not re.search(r"\b(?:asm|__asm__|__asm)\(", stripped):
             n = decl_name(stripped)
             if n in defs:
                 line = defs[n]

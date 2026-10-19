@@ -79,7 +79,10 @@ def _integrate(func, code, level, keep, replace_decls, nonmatching=False):
             if n in existing and existing[n] != d.split("/*")[0].strip() and n not in am.header_decl_names():
                 text = "\n".join(d.strip() if am.decl_name(l) == n and l.split("/*")[0].strip() == existing[n] else l
                                  for l in text.splitlines()) + "\n"
-    new += [d for d in am.missing_context_decls(original + "\n".join(new), body, am.context_decls()) if d not in new]
+    # this level's context (another level's declarations name different symbols)
+    named = {am.decl_name(d) for d in new}
+    new += [d for d in am.missing_context_decls(original + "\n".join(new), body, am.context_decls(level))
+            if d not in new and am.decl_name(d) not in named]
     old = asm_block(text, folder, func)
     if nonmatching:
         # Banked for the native port: the matching build keeps the asm.
@@ -111,6 +114,13 @@ def _integrate(func, code, level, keep, replace_decls, nonmatching=False):
         # The restored file can share the failed build's mtime, so make would keep the stale object.
         (ROOT / f"build/{level}/src/{level}/{c_file.stem}.o").unlink(missing_ok=True)
         subprocess.run(["make", f"LEVEL={level}", "-j8"], cwd=ROOT, capture_output=True, text=True)
+    if ok and keep and not nonmatching:
+        # A LEVEL01 function port_level put in under its own name (banked here) is now this level's own C:
+        # take it off port_level's record, so the next port keeps it.
+        record = ROOT / f"config/{level}_samename.txt"
+        names = record.read_text().split() if record.exists() else []
+        if func in names:
+            record.write_text("\n".join(n for n in names if n != func) + "\n")
     if ok:
         return f"{func}: OK, build still matches" + ("" if keep else " (not kept)")
     errs = [l for l in r.stderr.splitlines()

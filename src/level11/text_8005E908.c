@@ -2080,6 +2080,16 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern s32 D_800B35A8;
+extern s16 D_800B3C20;
+extern s16 D_800B4210;
+void func_80062E24(void *arg0);
+extern s32 D_8009F80C[];
+extern void *D_800B3F70_8005EBCC asm("D_800B3F70");
+extern s32 D_800E0FA4;
+extern s32 D_800E1020;
+extern s32 D_800E10EC;
+extern s32 D_800E10F0;
 M2C_UNK func_8005A83C(s32);                         /* extern */
 s32 func_8005A874(M2C_UNK *, void *);               /* extern */
 s32 func_800812E8(M2C_UNK);                         /* extern */
@@ -2174,7 +2184,48 @@ extern s32 D_8009C8EC;
 
 INCLUDE_ASM("asm/level11/nonmatchings/text_8005E908", func_8005E908);
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8005E908", func_8005EBCC);
+void func_8005EBCC(void *arg0) {
+    s32 ang;
+    s32 x;
+    s32 z;
+    u8 *p;
+
+    ang = M2C_FIELD(M2C_FIELD(arg0, void **, 0x90), s16 *, 0x60);
+    x = 0;
+    if (D_800E10F0 ? !D_800E10EC : D_800E10EC) {
+        x = -0xE1;
+        if (D_800E10F0 != 0) {
+            x = 0xE1;
+        }
+    }
+    if (D_800E0FA4 != 0) {
+        z = 0xE1;
+    } else if (D_800E1020 != 0) {
+        z = -0xE1;
+    } else {
+        z = 0;
+    }
+    if (x != 0 && z != 0) {
+        x = -0xA0;
+        if (D_800E10F0 != 0) {
+            x = 0xA0;
+        }
+        z = -0xA0;
+        if (D_800E0FA4 != 0) {
+            z = 0xA0;
+        }
+    }
+    p = D_800B3F70_8005EBCC;
+    if (M2C_FIELD(M2C_FIELD(p, void **, 0x94), s32 *, 0x24) & 0x400) {
+        x >>= 1;
+        z >>= 1;
+    }
+    if (ang != 0) {
+        z = (z * (D_8009F80C[abs(ang)] >> 16)) >> 12;
+    }
+    *(s16 *)(p + 0x98) = x;
+    *(s16 *)(p + 0x9C) = z;
+}
 
 void L2_func_80061E1C(void) {
     if ((L2_D_800A0F34 == 0) && (L2_D_800A0F88 == 0)) {
@@ -3689,9 +3740,19 @@ void L1_func_80066704(void *arg0) {
     *(u16 *)(obj + 0x7A) += d;
 }
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8005E908", func_8006304C);
+void func_8006304C(void *arg0) {
+    u8 *p = *(u8 **)((u8 *)arg0 + 0xC);
+    *(u16 *)(p + 0x6A) += 0xC8;
+    *(u16 *)(p + 0x56) -= 0xA;
+    func_80062E24(arg0);
+}
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8005E908", func_80063088);
+void func_80063088(void *arg0) {
+    u8 *p = *(u8 **)((u8 *)arg0 + 0xC);
+    *(u16 *)(p + 0x6A) += 0xC8;
+    *(u16 *)(p + 0x56) -= 0xA;
+    func_80062E24(arg0);
+}
 
 void L1_func_800669A4(SVECTOR *arg0, s32 *arg1, void *arg2) {
     gte_SetRotMatrix((u8 *)arg2 + 0x18);
@@ -3986,7 +4047,35 @@ INCLUDE_ASM("asm/level11/nonmatchings/text_8005E908", func_80065900);
 
 INCLUDE_ASM("asm/level11/nonmatchings/text_8005E908", func_80065958);
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8005E908", func_800659F4);
+void *func_800659F4(u8 *arg0, s32 type, u8 *skip) {
+    s32 bestd;
+    u8 *best;
+    u8 *obj;
+    s32 i;
+    u8 *a;
+    u8 *b;
+    s32 dx;
+    s32 dz;
+    s32 d;
+
+    bestd = 0x70000000;
+    obj = (u8 *)D_800B35A8 + D_800B4210 * 0x124;
+    best = NULL;
+    for (i = D_800B4210; i <= D_800B3C20; i++, obj += 0x124) {
+        if (obj[4] != 0 && obj != skip && obj[6] == type) {
+            a = *(u8 **)(arg0 + 0x90);
+            b = *(u8 **)(obj + 0x90);
+            dx = *(s32 *)(a + 0x28) - *(s32 *)(b + 0x28);
+            dz = *(s32 *)(a + 0x30) - *(s32 *)(b + 0x30);
+            d = dx * dx + dz * dz;
+            if (d < bestd) {
+                bestd = d;
+                best = obj;
+            }
+        }
+    }
+    return best;
+}
 
 s32 func_80065ADC(void) {
     return 1;

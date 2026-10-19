@@ -2086,6 +2086,12 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
+void func_800661C4(void *arg0);
+extern s32 D_800A5ADC[];
+extern s32 D_800E37B4;
+extern s32 D_800E3830;
+extern s32 D_800E38FC;
+extern s32 D_800E3900;
 M2C_UNK func_80033694(M2C_UNK);                     /* extern */
 M2C_UNK func_8005D84C(s32);                         /* extern */
 s32 func_8005D884(M2C_UNK *, void *);               /* extern */
@@ -2214,7 +2220,48 @@ extern s32 D_800A1F24;
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_80061B0C);
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_80061DD0);
+void func_80061DD0(void *arg0) {
+    s32 ang;
+    s32 x;
+    s32 z;
+    u8 *p;
+
+    ang = M2C_FIELD(M2C_FIELD(arg0, void **, 0x90), s16 *, 0x60);
+    x = 0;
+    if (D_800E3900 ? !D_800E38FC : D_800E38FC) {
+        x = -0xE1;
+        if (D_800E3900 != 0) {
+            x = 0xE1;
+        }
+    }
+    if (D_800E37B4 != 0) {
+        z = 0xE1;
+    } else if (D_800E3830 != 0) {
+        z = -0xE1;
+    } else {
+        z = 0;
+    }
+    if (x != 0 && z != 0) {
+        x = -0xA0;
+        if (D_800E3900 != 0) {
+            x = 0xA0;
+        }
+        z = -0xA0;
+        if (D_800E37B4 != 0) {
+            z = 0xA0;
+        }
+    }
+    p = D_800B6AA0;
+    if (M2C_FIELD(M2C_FIELD(p, void **, 0x94), s32 *, 0x24) & 0x400) {
+        x >>= 1;
+        z >>= 1;
+    }
+    if (ang != 0) {
+        z = (z * (D_800A5ADC[abs(ang)] >> 16)) >> 12;
+    }
+    *(s16 *)(p + 0x98) = x;
+    *(s16 *)(p + 0x9C) = z;
+}
 
 void L2_func_80061E1C(void) {
     if ((L2_D_800A0F34 == 0) && (L2_D_800A0F88 == 0)) {
@@ -3729,9 +3776,19 @@ void L1_func_80066704(void *arg0) {
     *(u16 *)(obj + 0x7A) += d;
 }
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_800663EC);
+void func_800663EC(void *arg0) {
+    u8 *p = *(u8 **)((u8 *)arg0 + 0xC);
+    *(u16 *)(p + 0x6A) += 0xC8;
+    *(u16 *)(p + 0x56) -= 0xA;
+    func_800661C4(arg0);
+}
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_80066428);
+void func_80066428(void *arg0) {
+    u8 *p = *(u8 **)((u8 *)arg0 + 0xC);
+    *(u16 *)(p + 0x6A) += 0xC8;
+    *(u16 *)(p + 0x56) -= 0xA;
+    func_800661C4(arg0);
+}
 
 void L1_func_800669A4(SVECTOR *arg0, s32 *arg1, void *arg2) {
     gte_SetRotMatrix((u8 *)arg2 + 0x18);

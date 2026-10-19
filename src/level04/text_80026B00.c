@@ -244,6 +244,13 @@ void L2_func_80029200(void);
 s32 L2_func_80026C38(s32 arg0);
 void L2_func_80028B88(s16 arg0, char *text);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern s32 D_8009DA14;
+extern char D_800AD110[];
+extern int D_800AE148;
+int func_800826D4(char *s);
+typedef struct { u8 pad[0x2BE]; s16 a; s16 b; } S1CBC_04;
+extern S1CBC_04 D_800ADE00;
+void func_800299CC(s32 a0, s16 a1, s16 a2, s16 a3, s16 a4, s32 a5, s32 a6, s32 a7);
 
 s32 L2_func_80026B00(s32 arg0) {
   L1_SsSetSerialAttr(0, 0, 1);
@@ -1341,7 +1348,11 @@ void func_80029684(void) {
 
 INCLUDE_ASM("asm/level04/nonmatchings/text_80026B00", func_80029868);
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_80026B00", func_800299CC);
+void func_800299CC(s32 a0, s16 a1, s16 a2, s16 a3, s16 a4, s32 a5, s32 a6, s32 a7) {
+    func_80029868(a0, a1, a2, a3, a4, a5);
+    D_800ADE00.a = a6;
+    D_800ADE00.b = a7;
+}
 
 #ifdef NON_MATCHING
 void func_80029A34(void) {
@@ -1558,5 +1569,58 @@ void func_80029A34(void) {
 INCLUDE_ASM("asm/level04/nonmatchings/text_80026B00", func_80029A34);
 #endif
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_80026B00", func_8002A3C8);
+s32 func_8002A3C8(u8 centered) {
+    s16 x;
+    s16 w;
+    s16 i;
+    s16 n;
+    s16 y;
+    s16 x0;
+    s16 cx;
+    s32 len;
+    u8 c;
+
+    i = 0;
+    len = func_800826D4(M2C_FIELD(&D_800ADE00, char **, 0x2B8));
+    n = 0;
+    D_800AD110[0] = 0;
+    x0 = M2C_FIELD(&D_800ADE00, s16 *, 0xF8) + 9;
+    y = M2C_FIELD(&D_800ADE00, s16 *, 0xFA) + 4;
+    for (; i < len; i++) {
+        c = M2C_FIELD(&D_800ADE00, char **, 0x2B8)[i];
+        if (c == '#') {
+            c = ' ';
+        }
+        if (c == '\n' || i == len - 1 || c == '\t') {
+            if (i == len - 1) {
+                D_800AD110[n++] = c;
+            }
+            D_800AD110[n] = 0;
+            if (centered) {
+                cx = M2C_FIELD(&D_800ADE00, s16 *, 0xF8) + (M2C_FIELD(&D_800ADE00, s16 *, 0xF4) >> 1);
+                func_80028858(D_800AD110, &x, &w);
+                func_8002872C(D_800AD110, cx - (w >> 1), y);
+            } else {
+                if (D_8009DA14 != 0) {
+                    func_800286EC(1);
+                }
+                func_8002872C(D_800AD110, x0, y);
+                if (D_8009DA14 != 0) {
+                    func_800286EC(0);
+                }
+            }
+            func_80028B58(D_800AE148 - 1, M2C_FIELD(&D_800ADE00, s16 *, 0x2BE), M2C_FIELD(&D_800ADE00, s16 *, 0x2C0));
+            if (c == '\t') {
+                M2C_FIELD(&D_800ADE00, char **, 0x2B8) += i + 1;
+                return 0;
+            }
+            y += 10;
+            n = 0;
+            D_800AD110[0] = 0;
+        } else {
+            D_800AD110[n++] = c;
+        }
+    }
+    return 1;
+}
 

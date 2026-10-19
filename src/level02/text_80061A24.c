@@ -2043,6 +2043,7 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+extern s32 D_800A594C_80061CE8[] asm("D_800A594C");
 #define ENT3(x) (D_800E316C + (x) * 0x70)
 void func_80067428(void);
 void cb_8006C88C(void) asm("func_8006C88C");
@@ -2562,62 +2563,48 @@ void func_80061A24(PlObj *obj) {
 INCLUDE_ASM("asm/level02/nonmatchings/text_80061A24", func_80061A24);
 #endif
 
-#ifdef NON_MATCHING
 void func_80061CE8(void *arg0) {
-    s32 temp_a3;
-    s16 var_v0;
-    s32 var_a0;
-    s32 var_a1;
+    s32 ang;
+    s32 x;
+    s32 z;
+    u8 *p;
 
-    temp_a3 = M2C_FIELD(M2C_FIELD(arg0, void **, 0x90), s16 *, 0x60);
-    var_a1 = 0;
-    if (D_800E01B4 != 0) {
-        if (D_800E01B0 == 0) {
-            goto block_4;
-        }
-    } else if (D_800E01B0 != 0) {
-block_4:
-        var_a1 = -0xE1;
+    ang = M2C_FIELD(M2C_FIELD(arg0, void **, 0x90), s16 *, 0x60);
+    x = 0;
+    if (D_800E01B4 ? !D_800E01B0 : D_800E01B0) {
+        x = -0xE1;
         if (D_800E01B4 != 0) {
-            var_a1 = 0xE1;
+            x = 0xE1;
         }
     }
-    var_a0 = 0xE1;
-    if (D_800E0068 == 0) {
-        var_a0 = 0;
-        if (D_800E00E4 != 0) {
-            var_a0 = -0xE1;
+    if (D_800E0068 != 0) {
+        z = 0xE1;
+    } else if (D_800E00E4 != 0) {
+        z = -0xE1;
+    } else {
+        z = 0;
+    }
+    if (x != 0 && z != 0) {
+        x = -0xA0;
+        if (D_800E01B4 != 0) {
+            x = 0xA0;
+        }
+        z = -0xA0;
+        if (D_800E0068 != 0) {
+            z = 0xA0;
         }
     }
-    if (var_a1 != 0) {
-        if (var_a0 != 0) {
-            var_a1 = -0xA0;
-            if (D_800E01B4 != 0) {
-                var_a1 = 0xA0;
-            }
-            var_a0 = -0xA0;
-            if (D_800E0068 != 0) {
-                var_a0 = 0xA0;
-            }
-        }
+    p = D_800B6FE4;
+    if (M2C_FIELD(M2C_FIELD(p, void **, 0x94), s32 *, 0x24) & 0x400) {
+        x >>= 1;
+        z >>= 1;
     }
-    if (M2C_FIELD(M2C_FIELD(D_800B6FE4, void **, 0x94), s32 *, 0x24) & 0x400) {
-        var_a1 = var_a1 >> 1;
-        var_a0 = var_a0 >> 1;
+    if (ang != 0) {
+        z = (z * (D_800A594C_80061CE8[abs(ang)] >> 16)) >> 12;
     }
-    if (temp_a3 != 0) {
-        var_v0 = temp_a3;
-        if (temp_a3 < 0) {
-            var_v0 = -var_v0;
-        }
-        var_a0 = (s32) (var_a0 * D_800A594C[var_v0 * 2 + 1]) >> 0xC;
-    }
-    M2C_FIELD(D_800B6FE4, s16 *, 0x98) = (s16) var_a1;
-    M2C_FIELD(D_800B6FE4, s16 *, 0x9C) = (s16) var_a0;
+    *(s16 *)(p + 0x98) = x;
+    *(s16 *)(p + 0x9C) = z;
 }
-#else
-INCLUDE_ASM("asm/level02/nonmatchings/text_80061A24", func_80061CE8);
-#endif
 
 void func_80061E1C(void) {
     if ((D_800A0F34 == 0) && (D_800A0F88 == 0)) {

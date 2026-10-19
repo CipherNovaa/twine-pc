@@ -247,15 +247,11 @@ void func_8007A678(void *arg0);
 extern s32 D_800A0FE0;
 extern s32 D_800B6FE4;
 
-#ifdef NON_MATCHING
 void func_80078A30(void) {
     func_80078A60();
     func_8007906C();
     func_800796AC();
 }
-#else
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_80078A30);
-#endif
 
 s32 L1_func_800752C0(void) {
   s32 var_v1;

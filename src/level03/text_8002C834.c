@@ -3415,6 +3415,47 @@ void L2_func_8005CF80(void);
 void L2_func_8005DAD0(void);
 void L2_func_8005DF80(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern s32 D_8009E968;
+extern s32 D_8009EF18;
+extern s32 D_8009F354;
+extern s32 D_8009F894;
+extern u8 D_800AB070[];
+extern M2C_UNK D_800DBDB8;
+extern s32 L1_g_FrameRate;
+void func_80038630(void *objArg, s32 arg1);
+EffSlot *func_8003B0F0(s32 arg0, s32 arg1);
+void func_8003C6C4(s16 *a, s16 *b);
+void func_80055158(s32 *arg0);
+void func_800558EC(s16 arg0, s16 arg1, s32 arg2, s32 arg3, s32 arg4);
+void func_8006AFA0(void *, void *, s32 *, s32 *);
+void func_8007BDE8(void *, void *);
+s32 func_80083668();
+typedef struct { u8 pad[0x5C]; s32 v5c; } O5C;
+typedef struct { u8 pad[0x60]; s16 v60; s16 v62; s16 v64; } PM;
+extern s32 D_8009E650;
+extern s32 D_8009E658;
+extern s32 D_8009E924;
+extern void *D_8009E970;
+extern u8 D_800AA3D4[];
+extern s32 D_800B2930[];
+extern s32 D_800B299C;
+extern u16 D_800B379C;
+extern s32 D_800B37A4;
+extern s32 D_800B3890;
+extern s16 D_800B3914;
+extern Weapon L1_g_Weapons[6];
+void func_800372DC(u8 *a, u8 *b);
+void func_80038540(void *arg0, s32 arg1);
+void func_8003BD94(u8 *obj, s32 yaw, s32 pitch, s32 speed);
+void func_8006C37C(s32 arg0);
+u8 *func_8007758C(s32 arg0, u8 *arg1, s32 arg2);
+extern s32 D_8009E980;
+extern s32 D_8009EE38;
+extern void *L1_g_Player;
+unsigned long func_80027274(M2C_UNK, s32, M2C_UNK);
+void *func_8003A2F4(M2C_UNK, s32, u8);
+void func_80063D20(s32, s32, s32, s32, s32);
+void func_80077CA0(void *arg0);
 void func_80085E7C_nr(s32) asm("L2_func_80085E7C") __attribute__((noreturn));
 void func_800451E4(void *arg0, s16 arg1, s16 arg2, s16 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
 void func_80031B68(u8 *arg0);
@@ -5891,7 +5932,50 @@ s32 L1_func_80035030(void *arg0, void *arg1) {
     return (c / 45) % 8;
 }
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_8002C834", func_800355C4);
+void func_800355C4(u8 *obj) {
+    u8 *sub;
+    u32 elapsed;
+    u32 dur;
+    s32 type;
+
+    dur = *(u32 *)(obj + 0x58);
+    sub = *(u8 **)(obj + 0x90);
+    elapsed = 0;
+    if (dur != 0) {
+        elapsed = D_8009E980 - *(s32 *)(obj + 0x2C);
+        if (dur < elapsed) {
+            if ((*(u8 **)obj)[5] != 0) {
+                func_8003A2F4(0, (*(u8 **)obj)[5], 2);
+            }
+            if ((*(u8 **)obj)[0x5D] != 0) {
+                func_80027274((*(u8 **)obj)[0x5D], (s32)(sub + 0x14), 0);
+            }
+            (*(u8 **)(obj + 0x10C))[0x66] = 1;
+            return;
+        }
+    }
+    if ((*(s32 *)(obj + 0x64) & 0x800000) && (D_8009E980 & 1)) {
+        func_80063D20(*(s16 *)(sub + 0x28), *(s16 *)(sub + 0x2C), *(s16 *)(sub + 0x30), 2, 1500);
+    }
+    if (obj[6] == D_8009EE38 && (*(s32 *)(obj + 0x68) & 0x2000) && elapsed == 1) {
+        *(s16 *)(obj + 0x9C) = elapsed;
+        *(s16 *)(obj + 0x98) = elapsed;
+        *(s16 *)(obj + 0x9A) = elapsed;
+    }
+    type = obj[7] & 0x3F;
+    if (type == 0x25) {
+        *(s16 *)(obj + 0x9A) += 0x20;
+    } else if (type == 4) {
+    } else if (type == 0x2E) {
+    } else if (type == 0x2C) {
+    } else if (type == 0x2D) {
+    } else if (type == 0x28) {
+        if (*(u8 **)(obj + 0x108) != 0 && *(void **)(*(u8 **)(obj + 0x108) + 0x18) == L1_g_Player) {
+            *(s16 *)(obj + 0x9A) += 0x10;
+        }
+        func_80077CA0(obj);
+    }
+}
 
 #ifdef NON_MATCHING
 s32 L1_func_800352B8(void) {
@@ -6743,7 +6827,71 @@ void L2_func_800393F8(void) {
     L2_func_8007E33C(0xC);
 }
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_8002C834", func_80038D6C);
+void func_80038D6C(u8 *obj) {
+    u8 *player;
+    Weapon *w;
+    s32 *t;
+    u8 *proj;
+    u8 *pm;
+
+    if (obj == NULL) {
+        return;
+    }
+    player = L1_g_Player;
+    w = &L1_g_Weapons[D_800B3914];
+    if (obj[5] == 10) {
+        t = (s32 *)(*(u8 **)(obj + 0x114) + 0x38);
+    } else {
+        t = (s32 *)(*(u8 **)(obj + 0x90) + 0x34);
+    }
+    D_1F8003D4 = ((struct { s16 m[3][3]; s32 t[3]; } *)t)->t[0];
+    D_1F8003D8 = ((struct { s16 m[3][3]; s32 t[3]; } *)t)->t[1];
+    D_1F8003DC = ((struct { s16 m[3][3]; s32 t[3]; } *)t)->t[2];
+    D_1F8003D4 -= D_8009E650;
+    D_1F8003DC -= D_8009E658;
+    *(SVECTOR *)D_1F8003E0 = *(SVECTOR *)(obj + 0x3C);
+    gte_SetRotMatrix(D_800B2930);
+    if (obj != D_8009E970) {
+        ((SVECTOR *)D_1F8003E0)->vx -= 500;
+    }
+    gte_ldv0(D_1F8003E0);
+    gte_rtv0();
+    gte_stlvnl(D_1F8003E8);
+    D_1F8003D4 += D_1F8003E8[0];
+    D_1F8003D8 += D_1F8003E8[1];
+    D_1F8003DC += D_1F8003E8[2];
+    proj = func_8007758C((s32)player, obj, 1);
+    if (proj == NULL) {
+        func_8006C37C((s32)D_800AA3D4);
+        return;
+    }
+    pm = *(u8 **)(proj + 0x90);
+    if (*(s32 *)((u8 *)L1_g_Player + 0x5C) != 0 && !(*(u32 *)(*(u8 **)(player + 0x94) + 0x24) & 0x800)) {
+        func_800372DC(*(u8 **)(player + 0x5C), proj);
+        *(u16 *)(pm + 0x62) = *(u16 *)&D_800B299C;
+        if (proj[7] != 0x25) {
+            *(u16 *)(pm + 0x60) = *(u16 *)&D_800B3890;
+        }
+    } else {
+        if (D_8009E924 != 0) {
+            ((PM *)pm)->v60 = *(u16 *)&D_800B37A4;
+            ((PM *)pm)->v62 = D_800B379C;
+        } else {
+            *(u16 *)(pm + 0x60) = *(u16 *)(*(u8 **)((u8 *)L1_g_Player + 0x90) + 0x60);
+            *(u16 *)(pm + 0x62) = *(u16 *)(*(u8 **)((u8 *)L1_g_Player + 0x90) + 0x62);
+        }
+        if (((u32)w->flags >> 2) & 1) {
+            func_80038540(pm, (((u32)w->flags >> 3) & 0x3F) * 11);
+        }
+    }
+    func_8003BD94(proj, *(s16 *)(pm + 0x62), *(s16 *)(pm + 0x60), 200);
+    *(s16 *)(pm + 0x60) -= 100;
+    *(s16 *)(pm + 0x62) += 0x2BC;
+    *(s16 *)(pm + 0x64) -= 0xDC;
+    *(s16 *)(proj + 0xA0) = 200;
+    D_8009EB20 = 0;
+    ((O5C *)proj)->v5c = ((O5C *)player)->v5c;
+}
 
 void L2_func_8003974C(void) {
     L2_func_8007E33C(0x14);
@@ -15310,7 +15458,129 @@ void L2_func_80055188(void) {
     M2C_FIELD(&L2_D_800DBA98, u16 *, 4) = (u16) L2_D_800D58E0;
 }
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_8002C834", func_80054C68);
+void func_80054C68(u8 *obj) {
+    u8 *tgt;
+    u8 *sub;
+    u8 *s3;
+    u8 *s2;
+    u8 *eff;
+    s32 ok;
+    s32 a0;
+    u32 sp18;
+    s32 sp1C;
+    s32 a2;
+    s32 t;
+    s32 half;
+    s32 fr;
+    s32 rv;
+    s32 gt;
+    s32 oa;
+    u32 okv;
+    u16 tv;
+    u16 px;
+    u16 py;
+    s32 m;
+    u32 v;
+    s32 *pos;
+    s32 idx;
+
+    tgt = *(u8 **)(obj + 0x8C);
+    if (tgt != 0) {
+        {
+            s32 h = *(s16 *)(obj + 0xC4);
+            if (*(u32 *)(*(u8 **)(obj + 0x94) + 0x24) & 0x40000) {
+                ok = (u32)(h + 0x200) < 0x401;
+            } else {
+                ok = (u32)(h + 0xFA) < 0x1F5U;
+            }
+        }
+        if (ok) {
+            sp18 = (*(*(u8 **)(obj + 0x94))) >> 4;
+            if (L1_g_Args->pad118[0x12] == 2) {
+                func_80055158((s32 *)&sp18);
+            }
+            sub = *(u8 **)(tgt + 0x90);
+            func_8007BDE8(sub + 0x10, sub + 0x68);
+            *(SVECTOR *)D_1F8003E0 = *(SVECTOR *)(tgt + 0x3C);
+            gte_SetRotMatrix(sub + 0x34);
+            gte_ldv0(D_1F8003E0);
+            gte_rtv0();
+            gte_stlvnl(D_1F8003E8);
+            pos = (s32 *)(sub + 0x48);
+            D_1F8003D4 = pos[0] + D_1F8003E8[0];
+            sp1C = 0;
+            D_1F8003D8 = pos[1] + D_1F8003E8[1];
+            D_1F8003DC = pos[2] + D_1F8003E8[2];
+            func_8006AFA0(obj, tgt, &sp1C, &D_8009F354);
+            if (sp1C != 0 || D_8009F354 != 0) {
+                s3 = (u8 *)func_8003A2F4((s32)obj, tgt[0x3A], 7);
+            } else {
+                s3 = (u8 *)func_8003A2F4((s32)obj, tgt[0x3A], *(u8 *)(L1_g_Args->unk228 + tgt[0x3A] * 0x70 + 1));
+            }
+            D_8009F354 = 0;
+            if (s3 != 0) {
+                gt = D_8009E980;
+                s2 = *(u8 **)(s3 + 0x90);
+                D_8009F894 = gt;
+                if (*(u32 *)(obj + 0x48) & 0x4000000) {
+                    if (*(u8 **)(obj + 0x5C) != 0) {
+                        func_800372DC(*(u8 **)(obj + 0x5C), s3);
+                        if (obj == (u8 *)D_8009E968 || (obj[0xA] & 2) || sp18 == 0xA) {
+                            px = *(u16 *)&D_800B299C;
+                            py = *(u16 *)&D_800B3890;
+                            *(u16 *)(s2 + 0x62) = px;
+                            *(u16 *)(s2 + 0x60) = py;
+                        } else {
+                            m = (L1_g_Args->pad118[0x12] == 1) ? 0x17 : 0x11;
+                            t = (0xA - sp18) * m;
+                            half = t >> 1;
+                            rv = half - func_80083668() % t;
+                            *(u16 *)(s2 + 0x62) = *(u16 *)&D_800B299C + rv;
+                            rv = half - func_80083668() % t;
+                            *(u16 *)(s2 + 0x60) = *(u16 *)&D_800B3890 + rv;
+                        }
+                    } else {
+                        func_8003C6C4(sub + 0x34, s2 + 0x60);
+                    }
+                } else {
+                    func_8003C6C4(sub + 0x34, s2 + 0x60);
+                }
+                func_8003BD94(s3, *(s16 *)(s2 + 0x62), *(s16 *)(s2 + 0x60), 0xBB8);
+                *(u8 **)(s3 + 0x5C) = *(u8 **)(obj + 0x5C);
+                *(u32 *)(s3 + 0x7C) |= 0x80000000;
+                if (*(u32 *)(obj + 0x48) & 0x800000) {
+                    if (*(s16 *)(*(u8 **)obj + 0x36) >= 3) {
+                        func_8006C3D0(0, (s32)D_800AB070);
+                    }
+                    tv = *(u16 *)((u8 *)&D_800DBDB8 + *(s16 *)(*(u8 **)obj + 0x36) * 2);
+                    if (tv != 0) {
+                        eff = (u8 *)func_8003B0F0(tv & 0xFF, 0);
+                        if (eff != 0) {
+                            *(u16 *)(*(u8 **)(eff + 0x1C) + 0x62) = *(u16 *)(*(u8 **)(obj + 0x90) + 0x62);
+                            rv = (func_80083668() & 7) * 0x44;
+                            fr = L1_g_FrameRate;
+                            *(s16 *)(*(u8 **)(eff + 0x1C) + 0x64) = rv;
+                            if (fr >= 0x14) {
+                                ((SVECTOR *)D_1F8003E0)->vy = -0x3C;
+                                ((SVECTOR *)D_1F8003E0)->vz = 0xC8;
+                                ((SVECTOR *)D_1F8003E0)->vx = 0;
+                                func_80038630(tgt, D_8009EF18);
+                            }
+                        }
+                    }
+                }
+                a0 = *(s32 *)(tgt + 0x34);
+                if (a0 > 0) {
+                    *(s32 *)(s3 + 0x34) = a0;
+                }
+                if ((L1_g_Args->flags2 >> 12) & 1) {
+                    *(s32 *)(s3 + 0x34) = *(s32 *)(s3 + 0x34) * 2;
+                }
+                func_800558EC(0, 0, D_1F8003D4, D_1F8003D8, D_1F8003DC);
+            }
+        }
+    }
+}
 
 void L2_func_80055698(s32 *arg0) {
     s32 temp_v1;
