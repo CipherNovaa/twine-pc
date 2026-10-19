@@ -2043,6 +2043,24 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+extern char D_800AF004[];
+extern char D_800AF014[];
+int L1_sprintf(char *buf, char *fmt, ...);
+s32 L1_func_80031F18(void);
+void func_80031070(void);
+void func_80030E58(s32, s32, char *);
+void func_80030AE4(char *);
+void func_8006D93C(void);
+void func_8006D994(void);
+void func_8006DA70(void);
+void func_8006DAC8(void);
+void func_8006DBB0(void);
+void func_8006DC08(void);
+void func_8006DCF0(void);
+void func_8006DD48(void);
+void func_8006DE2C(void);
+void func_8006DE84(void);
+void func_8006BB4C(void);
 extern s16 L1_gPsi;
 extern Args *L1_g_Args;
 extern s32 L1_g_FrameCap;
@@ -4070,7 +4088,18 @@ INCLUDE_ASM("asm/level02/nonmatchings/text_80061A24", func_8006D128);
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80061A24", func_8006D1CC);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80061A24", func_8006D29C);
+void func_8006D29C(void **arg0) {
+    s8 *f;
+    s32 m;
+    if (*arg0 == L1_g_Player) {
+        f = &D_800D6978;
+        m = D_800B7328 & L1_g_Args->buttonMap[3];
+        *f = 1;
+        if (m) {
+            func_8006BB4C();
+        }
+    }
+}
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80061A24", func_8006D2F8);
 
@@ -4312,7 +4341,39 @@ void func_8006DE84(void) {
     func_8003D7CC(5, D_800A1520);
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80061A24", func_8006DEEC);
+void func_8006DEEC(s32 arg0) {
+    s32 v;
+    v = L1_func_80031F18();
+    func_80030504(0);
+    func_80031070();
+    L1_sprintf(L1_g_Args->exePath, D_800AF004, L1_g_Args->level, arg0);
+    func_80030E58(5, v, L1_g_Args->exePath);
+    L1_sprintf(L1_g_Args->exePath, D_800AF014, L1_g_Args->level, L1_g_Args->level, arg0);
+    func_80030AE4(L1_g_Args->exePath);
+    switch (arg0) {
+    case 1:
+        func_8006D93C();
+        func_8006D994();
+        break;
+    case 2:
+        func_8006DA70();
+        func_8006DAC8();
+        break;
+    case 3:
+        func_8006DBB0();
+        func_8006DC08();
+        break;
+    case 4:
+        func_8006DCF0();
+        func_8006DD48();
+        break;
+    case 5:
+        func_8006DE2C();
+        func_8006DE84();
+        break;
+    }
+    func_80030504(1);
+}
 
 s32 func_8006E034(s32 arg0) {
     if ((arg0 == D_800A1540) || (arg0 == D_800A1620) || (arg0 == D_800A154C)) {

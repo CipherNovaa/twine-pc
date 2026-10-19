@@ -1728,8 +1728,13 @@ extern int L1_g_CheatCodes[];
 
 
 
+void func_80085E7C_nr(s32) asm("L2_func_80085E7C") __attribute__((noreturn));
+M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
 s32 L2_func_8003BC0C(u8 *o, s32 arg1);
 void L2_func_8005F74C(void);
+extern char L2_D_800AE8D8[];
+extern char L2_D_800AE8EC[];
+extern char L2_D_800AE914[];
 void L2_func_80060EC4(void *arg0);
 // func_80061068 -> L2_func_8006114C (L2 own)
 s32 func_80061068(u8 *e);
@@ -1739,10 +1744,12 @@ void L2_func_800387C4(void *);
 void L2_func_8005C9C4(void *, void *);
 s32 L2_func_8003815C(void *, void *);
 void L2_func_800616AC(u8 *obj);
+extern M2C_UNK L2_D_800B7160;
 void L2_func_80061890(s32 id);
 M2C_UNK L2_func_8002D6AC(M2C_UNK *);                   /* extern */
 extern M2C_UNK L2_D_800AE968;
 void L2_func_8005FEC4(void);
+void L2_func_8006004C(s32 *arg0);
 void L2_func_80060EE0(u8 *obj, s16 dx, s16 dz);
 void L2_func_800619F0(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
@@ -1915,7 +1922,76 @@ void func_8005FD80(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level05/nonmatchings/text_8005EBC4", func_8005FDD8);
+void L2_func_8006004C(s32 *arg0) {
+    s32 i;
+    s32 j;
+    s32 *p;
+    s16 x;
+    s16 y;
+    s16 w;
+    s16 cx;
+    s16 cy;
+    s32 idx;
+    u16 *src;
+    u16 *dst;
+
+    *(s32 *)((u8 *)L1_g_Args + 0x218) = 4;
+    for (i = 0; i < 64; i++) {
+        for (j = 0; j < 16; j++) {
+            L1_D_800DE0E8[i][j] = 0;
+            L1_D_800DE8E8[i][j] = 0;
+        }
+    }
+    p = arg0;
+    L1_func_8007F0D8(0);
+    for (i = 0; i < *(s32 *)((u8 *)L1_g_Args + 0x218); i++) {
+        if (*p != 0x11) {
+            L1_printf(L2_D_800AE8D8, i);
+            break;
+        }
+        p += 3;
+        x = ((u16 *)p)[0];
+        y = ((u16 *)p)[1];
+        p++;
+        w = 16;
+        if (x < 0x200) {
+            L1_printf(L2_D_800AE8EC, L2_D_800AE914, 0x4BB);
+            func_80085E7C_nr(1);
+        }
+        if (x >= 0x300) {
+            L1_printf(L2_D_800AE8EC, L2_D_800AE914, 0x4BC);
+            func_80085E7C_nr(1);
+        }
+        if (y < 0x1EC) {
+            L1_printf(L2_D_800AE8EC, L2_D_800AE914, 0x4BE);
+            func_80085E7C_nr(1);
+        }
+        if (y >= 0x1F0) {
+            L1_printf(L2_D_800AE8EC, L2_D_800AE914, 0x4BF);
+            func_80085E7C_nr(1);
+        }
+        src = (u16 *)(p + 1);
+        cx = x % 512;
+        cx = cx / w;
+        cy = y % 492;
+        idx = cy * w + cx;
+        L1_D_800DE0E4[i] = idx;
+        dst = L1_D_800DE0E8[idx];
+        for (j = 0; j < 16; j++) {
+            *dst++ = *src++;
+        }
+        p = (s32 *)src;
+    }
+    ((s16 *)&L2_D_800B7160)[0] = 0x200;
+    ((s16 *)&L2_D_800B7160)[1] = 0x1EC;
+    ((s16 *)&L2_D_800B7160)[2] = 0x100;
+    ((s16 *)&L2_D_800B7160)[3] = 4;
+    for (i = 0; i < 64; i++) {
+        for (j = 0; j < 16; j++) {
+            L1_D_800DE8E8[i][j] = L1_D_800DE0E8[i][j];
+        }
+    }
+}
 
 INCLUDE_ASM("asm/level05/nonmatchings/text_8005EBC4", func_800600FC);
 

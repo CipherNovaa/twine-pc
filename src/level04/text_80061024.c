@@ -2046,11 +2046,14 @@ s32 L2_func_80083044(char *, ...);
 s32 L2_func_80085C3C();                                /* extern */
 void L2_func_8006E97C(s32 arg0);
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
+extern s8 L2_D_800D6978;
+extern s32 L2_D_800B7328;
 void L2_func_8006E9D0(s32 arg0, s32 arg1);
 void L2_func_800637D0(void);
 extern s32 L2_D_800F4458;
 void L2_func_80063A54(void *arg0);
 extern s32 L2_D_800A0CD4;
+void L2_func_8006BB4C(void);
 void L2_func_80063630();
 extern u8 *L2_D_800A1C74;
 extern u8 L2_D_800DCD68[];
@@ -2067,6 +2070,7 @@ void L2_func_80064F24(void *arg0);
 void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
+void L2_func_8006D29C(void **arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_8005CAB8(s32);                         /* extern */
 s32 func_8005CAF0(M2C_UNK *, void *);               /* extern */
@@ -4155,7 +4159,18 @@ INCLUDE_ASM("asm/level04/nonmatchings/text_80061024", func_8006B264);
 
 INCLUDE_ASM("asm/level04/nonmatchings/text_80061024", func_8006B3D8);
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_80061024", func_8006B5B8);
+void L2_func_8006D29C(void **arg0) {
+    s8 *f;
+    s32 m;
+    if (*arg0 == L1_g_Player) {
+        f = &L2_D_800D6978;
+        m = L2_D_800B7328 & L1_g_Args->buttonMap[3];
+        *f = 1;
+        if (m) {
+            L2_func_8006BB4C();
+        }
+    }
+}
 
 void func_8006B614(void *arg0) {
     if ((M2C_FIELD(arg0, s32 *, 0) == D_800B43B4) && (D_800B4688 == 7) && (D_800F4EA0 == 0x1B)) {

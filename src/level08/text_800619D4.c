@@ -2052,6 +2052,21 @@ void L2_func_800637D0(void);
 extern s32 L2_D_800F4458;
 void L2_func_80063A54(void *arg0);
 extern s32 L2_D_800A0CD4;
+extern char L2_D_800AF004[];
+extern char L2_D_800AF014[];
+void L2_func_80031070(void);
+void L2_func_80030E58(s32, s32, char *);
+void L2_func_80030AE4(char *);
+void L2_func_8006D93C(void);
+void L2_func_8006D994(void);
+void L2_func_8006DA70(void);
+void L2_func_8006DAC8(void);
+void L2_func_8006DBB0(void);
+void L2_func_8006DC08(void);
+void L2_func_8006DCF0(void);
+void L2_func_8006DD48(void);
+void L2_func_8006DE2C(void);
+void L2_func_8006DE84(void);
 void L2_func_80063630();
 extern u8 *L2_D_800A1C74;
 extern u8 L2_D_800DCD68[];
@@ -2083,6 +2098,7 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069A48(void);
 void L2_func_80069DD8(void);
+void L2_func_8006DEEC(s32 arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_80033448(M2C_UNK);                     /* extern */
 M2C_UNK func_8005D844(s32);                         /* extern */
@@ -3997,7 +4013,39 @@ void func_8006B378(void *arg0) {
 
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619D4", func_8006B3A4);
 
-INCLUDE_ASM("asm/level08/nonmatchings/text_800619D4", func_8006B464);
+void L2_func_8006DEEC(s32 arg0) {
+    s32 v;
+    v = L1_func_80031F18();
+    L2_func_80030504(0);
+    L2_func_80031070();
+    L1_sprintf(L1_g_Args->exePath, L2_D_800AF004, L1_g_Args->level, arg0);
+    L2_func_80030E58(5, v, L1_g_Args->exePath);
+    L1_sprintf(L1_g_Args->exePath, L2_D_800AF014, L1_g_Args->level, L1_g_Args->level, arg0);
+    L2_func_80030AE4(L1_g_Args->exePath);
+    switch (arg0) {
+    case 1:
+        L2_func_8006D93C();
+        L2_func_8006D994();
+        break;
+    case 2:
+        L2_func_8006DA70();
+        L2_func_8006DAC8();
+        break;
+    case 3:
+        L2_func_8006DBB0();
+        L2_func_8006DC08();
+        break;
+    case 4:
+        L2_func_8006DCF0();
+        L2_func_8006DD48();
+        break;
+    case 5:
+        L2_func_8006DE2C();
+        L2_func_8006DE84();
+        break;
+    }
+    L2_func_80030504(1);
+}
 
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619D4", func_8006B5AC);
 

@@ -2918,6 +2918,7 @@ typedef struct { s32 f0; u16 a; u16 b; u16 c; u16 d; s32 e; s16 g; s16 h; s32 p2
 typedef struct { u8 pad0[0x44]; s16 f44; u8 padx[2]; s16 f48; s16 f4a; u8 pad1[4]; u8 f50; u8 pad2[0x67]; } S5CF;
 typedef struct { s32 a, b, c, d, e; } R14;
 void L2_func_80026B00(s32 arg0);
+s32 L2_func_80032684(void);
 void L2_func_800288B4(s8 arg0);
 s32 L2_func_80083044(char *, ...);
 void func_80085E7C_nr(s32) asm("L2_func_80085E7C") __attribute__((noreturn));
@@ -2927,6 +2928,13 @@ M2C_UNK L2_func_80026F5C(s32, M2C_UNK);                /* extern */
 extern void *L2_D_800B6010;
 void L2_func_80085F1C();
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
+void L2_func_8005584C(void);
+s32 L2_func_80055938(void *arg0);
+void L2_func_8005979C(void *arg0);
+void L2_func_800458C8(void *arg0, s8 arg1, s8 arg2, s8 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
+void L2_func_8004F628(void);
+extern s32 L2_D_800DB67C[][32];
+extern s32 L2_D_800DB7FC[][2];
 extern u8 L2_D_800ADD00;
 extern u8 L2_D_800D8840[];
 void L2_func_8004C530(s32 dist, u8 *r, u8 *g, u8 *b, s32 *scale);
@@ -3084,7 +3092,6 @@ extern s32 L2_D_800B6A94;
 extern s8 L2_D_800A0FAB;
 extern void *L2_D_800A0FD0;
 extern void *L2_D_800B6FE4;
-s32 L2_func_80032684(void);
 M2C_UNK L2_func_80033254();                            /* extern */
 M2C_UNK L2_func_80035C7C();                            /* extern */
 M2C_UNK L2_func_800368C8();                            /* extern */
@@ -3207,14 +3214,14 @@ extern s32 L2_D_800D6B48;
 void L2_func_8002B22C(s32 arg0);
 extern void *L2_D_800D6BB8;
 M2C_UNK L2_func_800288F4(M2C_UNK *, M2C_UNK, M2C_UNK); /* extern */
-M2C_UNK L2_func_80043908();                            /* extern */
+void L2_func_80043908(void);
 extern s32 L2_D_800A0CC4;
 extern s16 L2_D_800A11FE;
 extern M2C_UNK L2_D_800ADA08;
 extern M2C_UNK L2_D_800ADA50;
 extern M2C_UNK L2_D_800ADA58;
 extern M2C_UNK L2_func_80043AFC;
-M2C_UNK L2_func_80043C4C();                            /* extern */
+void L2_func_80043C4C(void);
 extern M2C_UNK L2_func_80043E58;
 extern s32 L2_D_800A0F8C;
 extern s32 L2_D_800A11F0;
@@ -3328,7 +3335,6 @@ void L2_func_800421C8(void);
 void L2_func_800427AC(void *arg0);
 void L2_func_80043874(void);
 void L2_func_80043C14(void);
-void L2_func_800458C8(void *arg0, s8 arg1, s8 arg2, s8 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
 void L2_func_80048C74(s32 arg0, s32 arg1);
 void L2_func_80049C80(void);
 void L2_func_8004AF34(void);
@@ -3354,11 +3360,9 @@ void L2_func_80050790(void);
 void L2_func_80050D78(void *arg0);
 void L2_func_80051444(s16 arg0, s8 arg1);
 void L2_func_80055698(s32 *arg0);
-s32 L2_func_80055938(void *arg0);
 s32 L2_func_80055A20(s32 arg0);
 void L2_func_80055C8C(void);
 s32 L2_func_80058570(s32 arg0, void *arg1);
-void L2_func_8005979C(void *arg0);
 void L2_func_80059B48(void *arg0, s16 arg1, s16 arg2);
 void L2_func_80059C04(void *arg0, s16 arg1, s16 arg2, s16 arg3);
 void L2_func_80059C6C(void *arg0, s16 arg1);
@@ -12331,7 +12335,30 @@ void L1_func_8004CF00(u8 *arg0, u8 *arg1) {
 
 INCLUDE_ASM("asm/level05/nonmatchings/text_8002C8E4", func_8004F0A8);
 
-INCLUDE_ASM("asm/level05/nonmatchings/text_8002C8E4", func_8004F274);
+void L2_func_8004F628(void) {
+    s32 i;
+    u32 j;
+    s32 k;
+    u8 *p;
+    for (i = 0; i < 3; i++) {
+        p = L1_D_800D8FF8[i];
+        j = 0;
+        do {
+            *p = 0;
+            j++;
+            p++;
+        } while (j < 0x48);
+        ((E2 *)L1_D_800D8E8C)[i].f = 1;
+        ((E2 *)L1_D_800D8E8C)[i].x = 0;
+        ((E2 *)L1_D_800D8E8C)[i].c = L2_D_800DB7FC[i];
+        ((E1 *)L1_D_800D8E74)[i].f = 1;
+        ((E1 *)L1_D_800D8E74)[i].b = L2_D_800DB67C[i];
+        ((E1 *)L1_D_800D8E74)[i].a = L1_D_800D8EA8[i];
+    }
+    for (i = 0x29; i >= 0; i--) {
+        L1_D_800D8BE8[i] = 0;
+    }
+}
 
 void L1_func_8004D2D0(void) {
     AnimEnt *r;
@@ -14132,7 +14159,9 @@ void func_80055504(void) {
 
 INCLUDE_ASM("asm/level05/nonmatchings/text_8002C8E4", func_80055588);
 
-INCLUDE_ASM("asm/level05/nonmatchings/text_8002C8E4", func_800555FC);
+void L2_func_8005584C(void) {
+    s32 buf[4];
+}
 
 u32 L1_func_8005397C(VECTOR *a, VECTOR *b) {
     u32 dx;

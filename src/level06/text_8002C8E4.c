@@ -2918,6 +2918,7 @@ typedef struct { s32 f0; u16 a; u16 b; u16 c; u16 d; s32 e; s16 g; s16 h; s32 p2
 typedef struct { u8 pad0[0x44]; s16 f44; u8 padx[2]; s16 f48; s16 f4a; u8 pad1[4]; u8 f50; u8 pad2[0x67]; } S5CF;
 typedef struct { s32 a, b, c, d, e; } R14;
 void L2_func_80026B00(s32 arg0);
+s32 L2_func_80032684(void);
 void L2_func_800288B4(s8 arg0);
 s32 L2_func_80083044(char *, ...);
 void func_80085E7C_nr(s32) asm("L2_func_80085E7C") __attribute__((noreturn));
@@ -2927,12 +2928,16 @@ M2C_UNK L2_func_80026F5C(s32, M2C_UNK);                /* extern */
 extern void *L2_D_800B6010;
 void L2_func_80085F1C();
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
+s32 L2_func_80055938(void *arg0);
+void L2_func_8005979C(void *arg0);
+void L2_func_800458C8(void *arg0, s8 arg1, s8 arg2, s8 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
 extern u8 L2_D_800ADD00;
 extern u8 L2_D_800D8840[];
 void L2_func_8004C530(s32 dist, u8 *r, u8 *g, u8 *b, s32 *scale);
 void L2_func_8004CEB8(u8 *obj, s32 scale);
 void L2_func_8004D174(u8 *obj, s32 scale);
 void L2_func_8004C604(s32 idx, s32 minX, s32 maxX, s32 minY, s32 maxY, s32 r, s32 g, s32 b);
+void L2_func_8002E440(void);
 void L2_func_800324E8(s32 arg0);
 void L2_func_80037CD8(u8 *arg0, u8 *arg1);
 extern s16 L2_D_800A1268[];
@@ -2948,7 +2953,7 @@ extern SVECTOR L2_D_800D6D84[];
 void L2_func_800466D8(void);
 void L2_func_80046638(void);
 void L2_func_800462CC(void);
-void L2_func_80049EB8(Args *);
+void L2_func_80049EB8(u8 *arg0);
 void L2_func_80045E88(void);
 void L2_func_80046174(void);
 void L2_func_80048F5C(void);
@@ -3104,7 +3109,6 @@ extern s32 L2_D_800B6A94;
 extern s8 L2_D_800A0FAB;
 extern void *L2_D_800A0FD0;
 extern void *L2_D_800B6FE4;
-s32 L2_func_80032684(void);
 M2C_UNK L2_func_80033254();                            /* extern */
 M2C_UNK L2_func_80035C7C();                            /* extern */
 M2C_UNK L2_func_800368C8();                            /* extern */
@@ -3227,14 +3231,14 @@ extern s32 L2_D_800D6B48;
 void L2_func_8002B22C(s32 arg0);
 extern void *L2_D_800D6BB8;
 M2C_UNK L2_func_800288F4(M2C_UNK *, M2C_UNK, M2C_UNK); /* extern */
-M2C_UNK L2_func_80043908();                            /* extern */
+void L2_func_80043908(void);
 extern s32 L2_D_800A0CC4;
 extern s16 L2_D_800A11FE;
 extern M2C_UNK L2_D_800ADA08;
 extern M2C_UNK L2_D_800ADA50;
 extern M2C_UNK L2_D_800ADA58;
 extern M2C_UNK L2_func_80043AFC;
-M2C_UNK L2_func_80043C4C();                            /* extern */
+void L2_func_80043C4C(void);
 extern M2C_UNK L2_func_80043E58;
 extern s32 L2_D_800A0F8C;
 extern s32 L2_D_800A11F0;
@@ -3331,9 +3335,11 @@ void L2_func_80031000(void);
 void L2_func_80031E68(void);
 void L2_func_8003280C(s32 *arg0);
 void L2_func_800334E0(s32 h, s32 v);
+void L2_func_8003726C(void);
 s32 L2_func_800384D4(u8 *obj);
 void L2_func_80038930(void);
 void L2_func_80038D5C(void);
+void L2_func_800391D4(void);
 void L2_func_800393F8(void);
 void L2_func_8003974C(void);
 void L2_func_8003976C(void);
@@ -3349,7 +3355,6 @@ void L2_func_800421C8(void);
 void L2_func_800427AC(void *arg0);
 void L2_func_80043874(void);
 void L2_func_80043C14(void);
-void L2_func_800458C8(void *arg0, s8 arg1, s8 arg2, s8 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
 void L2_func_80048B0C(s32 arg0);
 void L2_func_80048C74(s32 arg0, s32 arg1);
 void L2_func_80049C80(void);
@@ -3370,6 +3375,7 @@ void L2_func_8004BEC0(s32 arg0, s32 arg1, s32 arg2);
 void L2_func_8004C13C(void);
 void L2_func_8004D48C(s32 arg0);
 void *L2_func_8004DFDC(u8 *arg0, s32 type, u8 *skip);
+void *L2_func_8004E300(void *arg0, s32 *arg1);
 u8 *L2_func_8004EAE8(void *arg0);
 void L2_func_8004F24C(s32 arg0, M2C_UNK arg1);
 void L2_func_8004F9BC(s32 *arg0);
@@ -3377,12 +3383,10 @@ void L2_func_80050790(void);
 void L2_func_80050D78(void *arg0);
 void L2_func_80051444(s16 arg0, s8 arg1);
 void L2_func_80055698(s32 *arg0);
-s32 L2_func_80055938(void *arg0);
 s32 L2_func_80055A20(s32 arg0);
 void L2_func_80055C8C(void);
 M2C_UNK *L2_func_80055F78(s32 arg0);
 s32 L2_func_80058570(s32 arg0, void *arg1);
-void L2_func_8005979C(void *arg0);
 void L2_func_80059B48(void *arg0, s16 arg1, s16 arg2);
 void L2_func_80059C04(void *arg0, s16 arg1, s16 arg2, s16 arg3);
 void L2_func_80059C6C(void *arg0, s16 arg1);
@@ -3805,7 +3809,24 @@ void L2_func_8002E38C(void) {
 
 INCLUDE_ASM("asm/level06/nonmatchings/text_8002C8E4", func_8002E318);
 
-INCLUDE_ASM("asm/level06/nonmatchings/text_8002C8E4", func_8002E368);
+void L2_func_8002E440(void) {
+    Weapon *w;
+    s32 i;
+    s32 max;
+    s32 clip;
+
+    i = 0;
+    w = L1_g_Weapons;
+    do {
+        max = w->maxAmmo;
+        clip = w->clipSize;
+        i++;
+        w->ammo = max;
+        w->clip = clip;
+        w->reserve = max - clip;
+        w++;
+    } while (i < 12);
+}
 
 void L1_func_8002E318(void) {
     GsIMAGE image;
@@ -5876,7 +5897,29 @@ void L1_func_80036670(u8 *obj, u8 *tgt) {
     L1_D_800DDDCC[2] = *(s32 *)(*(u8 **)(obj + 0x90) + 0x30) + dist * *(s16 *)(obj + 0x9C) / len;
 }
 
-INCLUDE_ASM("asm/level06/nonmatchings/text_8002C8E4", func_800371D4);
+void L2_func_8003726C(void) {
+    s32 size;
+    s32 i;
+    s32 j;
+    s8 *w;
+    s32 *p;
+
+    size = sizeof(Weapon);
+    for (i = 0; i < 12; i++) {
+        w = (s8 *)&L1_g_Weapons[i];
+        p = (s32 *)w;
+        for (j = 0; j < size / 4; j++) {
+            *p++ = 0;
+        }
+        *(s16 *)(w + 0x60) = 0x3C;
+        for (j = 0; j < 0x35; j++) {
+            w[0x74 + j] = -1;
+        }
+        *(s16 *)(w + 0xAE) = -1;
+        *(s16 *)(w + 0xB0) = -1;
+        w[0x5A] = -1;
+    }
+}
 
 INCLUDE_ASM("asm/level06/nonmatchings/text_8002C8E4", func_80037264);
 
@@ -6377,7 +6420,63 @@ void L1_func_8003872C(void *arg0, void *arg1, void *arg2) {
     L1_D_8009CF48 = 0;
 }
 
-INCLUDE_ASM("asm/level06/nonmatchings/text_8002C8E4", func_8003913C);
+void L2_func_800391D4(void) {
+    void *s2;
+    void *player;
+    Weapon *w;
+    u8 id;
+    s32 obj;
+    s32 n;
+    s32 snd;
+    s32 k;
+
+    s2 = L1_D_8009CD98;
+    player = L1_g_Player;
+    w = &L1_g_Weapons[L1_D_800B0DD4];
+    id = M2C_FIELD(s2, u8 *, 0x3A);
+    if (id == 0) {
+        id = L2_func_8006B2F0();
+    }
+    n = 5;
+    do {
+        obj = L2_func_8003AA8C(player, id, 1);
+        if (obj == 0) {
+            return;
+        }
+        L1_func_8003872C(s2, (void *)obj, w);
+    } while (n-- > 0);
+    M2C_FIELD(L1_g_Args, s32 *, 0x2C8) += 2;
+    if (!((L1_g_Args->flags2 >> 14) & 1)) {
+        if (((u32)w->flags >> 13) & 1) {
+            w->clip -= 2;
+            w->ammo = w->clip + w->reserve;
+        }
+    }
+    if (*(u8 *)&L1_g_Args->flags2 >> 7) {
+        u32 t = M2C_FIELD(w, u32 *, 0x5C);
+        L1_func_8002F564(player, (t >> 16) & 0x3FF, t >> 26, 0, 0);
+    }
+    if ((s8)w->pad51[9] >= 0) {
+        if (((u32)w->flags >> 1) & 1) {
+            L1_D_800AFFA4 = 1;
+            L2_D_800A1EEC = L1_D_8009CDA8;
+        } else {
+            L1_func_80026F30((s8)w->pad51[9], 0);
+        }
+    }
+    snd = 8;
+    if (L1_D_800DDEE8 != 0 && L1_D_8009D910 >= 3) {
+        snd = 9;
+    }
+    L1_func_8007A17C(snd);
+    k = ((u32)w->flags >> 15) & 0xF;
+    if (k > 0) {
+        L1_func_80076184(k, 0);
+    }
+    if (((u32)w->flags >> 21) & 1) {
+        L1_func_80038404((void *)(s32)L1_D_800B0DD4, L1_g_Player);
+    }
+}
 
 INCLUDE_ASM("asm/level06/nonmatchings/text_8002C8E4", func_80039360);
 
@@ -12608,7 +12707,41 @@ void *L2_func_8004E1B0(void *arg0, s32 arg1) {
     return (void *) var_s4;
 }
 
-INCLUDE_ASM("asm/level06/nonmatchings/text_8002C8E4", func_8004E27C);
+void *L2_func_8004E300(void *arg0, s32 *arg1) {
+    s32 dx;
+    s32 dz;
+    s32 d;
+    s32 best;
+    u32 last;
+    u32 p;
+    u32 found;
+    void *a;
+    void *b;
+
+    found = 0;
+    p = L1_D_800AFFC8 + (L1_D_800B0DA0 * 0x124);
+    last = L1_D_800AFFC8 + (L1_D_800B07B0 * 0x124);
+    best = 0x70000000;
+    if (last >= p) {
+        do {
+            if ((M2C_FIELD(p, u8 *, 4) != 0) && (p != (u32)arg0) && ((L2_func_80055738((void *)p) << 0x10) == 0)) {
+                a = M2C_FIELD(arg0, void **, 0x90);
+                b = M2C_FIELD(p, void **, 0x90);
+                dx = M2C_FIELD(a, s32 *, 0x28) - M2C_FIELD(b, s32 *, 0x28);
+                dz = M2C_FIELD(a, s32 *, 0x30) - M2C_FIELD(b, s32 *, 0x30);
+                d = L1_SquareRoot0(dx * dx + dz * dz);
+                *arg1 = d;
+                if (d < best) {
+                    best = d;
+                    found = p;
+                }
+            }
+            p += 0x124;
+        } while (last >= p);
+    }
+    *arg1 = best;
+    return (void *)found;
+}
 
 void L1_func_8004C0C0(s32 arg0, void *arg1) {
     DstT *d = arg1;

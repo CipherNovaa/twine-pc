@@ -1742,6 +1742,7 @@ void L2_func_80061890(s32 id);
 void L2_func_800619B8();
 M2C_UNK L2_func_8002D6AC(M2C_UNK *);                   /* extern */
 extern M2C_UNK L2_D_800AE968;
+void L2_func_80060410(s32 dst, s32 a, s32 b, u32 t, s32 j);
 void L2_func_80060EE0(u8 *obj, s16 dx, s16 dz);
 void L2_func_800619F0(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
@@ -1903,7 +1904,21 @@ void L1_func_8006043C(s32 a, s32 b) {
  for (j = 0; j < 16; j++) { L1_D_800DE8E8[ib][j] = L1_D_800DE0E8[ia][j]; }
 }
 
-INCLUDE_ASM("asm/level10/nonmatchings/text_800615C4", func_80062C3C);
+void L2_func_80060410(s32 dst, s32 a, s32 b, u32 t, s32 j) {
+    s32 id;
+    s32 ca, cb;
+    s32 r, g, bl;
+    id = L1_D_800DE0E4[dst];
+    ca = L1_D_800DE0E8[L1_D_800DE0E4[a]][j];
+    cb = L1_D_800DE0E8[L1_D_800DE0E4[b]][j];
+    r = (ca >> 10) & 0x1F;
+    r += (((cb >> 10) & 0x1F) - r) * t >> 12;
+    g = (ca >> 5) & 0x1F;
+    g += (((cb >> 5) & 0x1F) - g) * t >> 12;
+    bl = ca & 0x1F;
+    bl += ((cb & 0x1F) - bl) * t >> 12;
+    L1_D_800DE8E8[id][j] = (ca & 0x8000) | (r << 10) | (g << 5) | bl;
+}
 
 void func_80062D38(s32 arg0, M2C_UNK arg1, M2C_UNK arg2, u32 arg3) {
     s32 var_s0;
