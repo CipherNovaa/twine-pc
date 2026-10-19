@@ -2914,6 +2914,26 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+#define AIM_CLAMP(v, lo, hi) ((v) < (lo) ? (lo) : (v) > (hi) ? (hi) : (v))
+s32 func_800516F8(void);
+void func_800457C0(void);
+void func_80045624(void);
+void func_80045728(void);
+void func_8005CB20(void *);
+typedef struct { s32 a, b, c; } Rec12;
+extern s32 D_800A1278;
+extern char *D_800D6B70[];
+extern s32 L1_D_800B8F24, L1_D_800D2BE8;
+s32 func_8003BC0C(u8 *o, s32 arg1);
+s32 func_8003D7E4(u8 *a, u8 *b);
+s32 func_8004EDDC(void *arg0, void *arg1);
+s32 func_8005590C(void *o);
+s32 func_8005F8AC(void *);
+s32 func_800609C8(u8 *);
+extern List D_800DAE44[][8];
+extern char D_800ADE6C[];
+extern char D_800ADE80[];
+extern char D_800ADEB8[];
 s32 func_8004E88C(void *arg0, s32 arg1);
 extern s16 D_800A1344;
 extern s16 D_800A1346;
@@ -3075,7 +3095,7 @@ M2C_UNK func_80035C7C();                            /* extern */
 M2C_UNK func_800368C8();                            /* extern */
 M2C_UNK func_8003838C();                            /* extern */
 M2C_UNK func_8004DC58();                            /* extern */
-M2C_UNK func_80054E54();                            /* extern */
+void func_80054E54(void);
 M2C_UNK func_8005EF48();                            /* extern */
 M2C_UNK func_8005F374();                            /* extern */
 M2C_UNK func_8005F74C();                            /* extern */
@@ -7201,7 +7221,45 @@ u8 *L1_func_8003A68C(void) {
 INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_8003B67C);
 #endif
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_8003B70C);
+AnimEnt *func_8003B70C(u8 **obj) {
+    s32 i;
+    u32 j;
+    AnimEnt *r;
+    AnimEnt *found;
+    ListSet *set;
+
+    if ((*obj)[3] == 0) {
+        return NULL;
+    }
+    found = NULL;
+    for (i = 0; i < D_800A1640; i++) {
+        r = &((AnimEnt *)D_800DB814)[i];
+        if (r->active == 0 && r->type == (*obj)[3]) {
+            found = r;
+            break;
+        }
+    }
+    if (found != NULL) {
+        found->active = 1;
+        found->obj = (u8 *)obj;
+        ((u8 *)obj)[0xA9] = i;
+        set = &((ListSet *)D_800DB3D8)[((AnimEnt *)D_800DB814)[i].animIdx];
+        if (*(u32 *)set >= 9) {
+            ((void (*)(void *, void *, s32))func_80083044)(D_800AD400, D_800AD428, 0x5B6);
+            func_80085E7C_nr(1);
+        }
+        for (j = 0; j < *(u32 *)set; j++) {
+            found->startTime[j] = D_800A0FE0;
+            found->enable[j] = 1;
+            if (found->flags & 0x20) {
+                set->pad8[j] = 0;
+            } else {
+                set->pad8[j] = 1;
+            }
+        }
+    }
+    return found;
+}
 
 EffSlot *L1_func_8003A898(s32 arg0, s32 arg1) {
     EffSlot *e;
@@ -9274,7 +9332,27 @@ void L1_func_800417C4(void) {
     }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_800426E8);
+s32 func_800426E8(s32 a, s32 b, s32 c) {
+    s32 i;
+    Rec12 *r;
+    Rec12 *base;
+
+    for (i = 0; i < *(s32 *)&D_800A1200; i++) {
+        if (((Rec12 *)D_800D6B70)[i].c == c) {
+            return 0;
+        }
+    }
+    base = (Rec12 *)D_800D6B70;
+    D_800A1278 = 0;
+    D_800A1204 = 1;
+    r = &base[*(s32 *)&D_800A1200];
+    r->a = a;
+    r->b = b;
+    r->c = c;
+    *(Rec12 *)D_800D6BB8 = *r;
+    (*(s32 *)&D_800A1200)++;
+    return 1;
+}
 
 void func_800427AC(void *arg0) {
     s32 temp_a0;
@@ -9898,7 +9976,202 @@ s16 L1_func_80043B14(s16 arg0, s16 arg1) {
 INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_800448F4);
 #endif
 
+#ifdef NON_MATCHING
+void func_80044CC0(void) {
+    s32 sp10;
+    Weapon *wp;
+    u16 prevYaw;
+    u16 prevPitch;
+    s16 pitchDir;
+    s32 moved;
+    s32 held;
+    s32 yawStep;
+    s32 pitchStep;
+    s32 t;
+    s32 a0;
+    s16 v;
+    s16 cnt;
+    s32 btnA;
+    s32 btnB;
+
+    prevYaw = (*(s32 *)&L1_D_800B0C5C);
+    wp = &g_Weapons[L1_D_800B0DD4];
+    prevPitch = L1_D_800B0C64;
+    if (g_Args->reverseSniper == 0) {
+        pitchDir = -(s16) wp->pad4C[2];
+    } else {
+        pitchDir = (s16) wp->pad4C[2];
+    }
+    moved = 0;
+    M2C_FIELD(g_Player, s16 *, 0x98) = 0;
+    M2C_FIELD(g_Player, s16 *, 0xA0) = 0;
+    M2C_FIELD(g_Player, s16 *, 0x56) = 0;
+    M2C_FIELD(g_Player, s16 *, 0x9C) = 0;
+    if (L1_D_8009CD54 != 0) {
+        /* camera glides back out of aim mode */
+        if (L1_g_PadHeld & g_Args->buttonMap[5]) {
+            L1_Camera_ResetZoom();
+            L1_func_8004DD9C();
+            return;
+        }
+        L1_D_800B0B10 = 0xFA0;
+        g_Camera.targetX = M2C_FIELD(L1_D_800D9200, s16 *, 0);
+        g_Camera.targetY = M2C_FIELD(L1_D_800D9200, s16 *, 2);
+        g_Camera.targetZ = M2C_FIELD(L1_D_800D9200, s16 *, 4);
+        g_Camera.rotX = M2C_FIELD(&g_Camera, u16 *, 0x80);
+        g_Camera.rotY = M2C_FIELD(&g_Camera, u16 *, 0x82);
+        g_Camera.rotZ = M2C_FIELD(&g_Camera, u16 *, 0x84);
+        func_800516F8();
+        if (L1_D_800B0C74 <= 0) {
+            L1_Camera_ResetZoom();
+        } else {
+            L1_D_800B0C74 -= L1_D_800B0B10;
+            L1_D_800B0C74 = AIM_CLAMP(L1_D_800B0C74, 0, L1_D_800B0B14);
+            func_800457C0();
+        }
+        M2C_FIELD(M2C_FIELD(g_Player, void **, 0x90), u16 *, 0x62) = (*(s32 *)&L1_D_800B0C5C);
+        return;
+    }
+    L1_func_8005D694();
+    if (!(L1_g_PadHeld & g_Args->buttonMap[5])) {
+        func_80045624();
+        return;
+    }
+    /* zoom in towards L1_D_800B0B14 */
+    if (L1_D_800B0C74 < L1_D_800B0B14) {
+        L1_D_800B0C74 = L1_D_800B0C74 + L1_D_800B0B10;
+    } else if (L1_D_800B0B14 < L1_D_800B0C74) {
+        L1_D_800B0C74 = L1_D_800B0C74 - L1_D_800B0B10;
+    }
+    L1_D_800B0C74 = AIM_CLAMP(L1_D_800B0C74, 0, L1_D_800B0B14);
+    func_80045728();
+    if (*(u8 *) &L1_D_800B0E54 != 0) {
+        /* analog stick aiming */
+        L1_Pad_StickToSpeed(0, wp->pad51[2], &sp10);
+        sp10 = sp10 * 2;
+        held = L1_g_PadHeld & 0x200;
+        if (held != 0) {
+            t = sp10 / 4;
+            if (abs(t) > 0) {
+                sp10 = t;
+            }
+        }
+        (*(s32 *)&L1_D_800B0C5C) = (*(s32 *)&L1_D_800B0C5C) + sp10;
+        L1_Pad_StickToSpeed(1, wp->pad51[7], &sp10);
+        sp10 = sp10 * pitchDir * 2;
+        if (held != 0) {
+            t = sp10 / 4;
+            if (abs(t) > 0) {
+                sp10 = t;
+            }
+        }
+        L1_D_800B0C64 += sp10;
+        L1_D_800B0C64 = AIM_CLAMP(L1_D_800B0C64, -0x280, 0x320);
+        if (((s16) prevYaw != (s32) (*(s32 *)&L1_D_800B0C5C)) || ((s16) prevPitch != L1_D_800B0C64)) {
+            moved = 1;
+        }
+    } else {
+        /* digital pad aiming with acceleration */
+        yawStep = 0;
+        if (L1_g_PadHeld & 0xA000) {
+            moved = 1;
+            a0 = wp->pad51[1];
+            cnt = L1_D_800B0C9C + 1;
+            L1_D_800B0C9C = cnt;
+            v = cnt + (a0 + (cnt >> 1));
+            if (v >= a0) {
+                if ((s32) wp->pad51[2] < v) {
+                    v = wp->pad51[2];
+                }
+            } else {
+                v = a0;
+            }
+            if (L1_g_PadHeld & 0x8000) {
+                v = -v;
+            }
+            yawStep = v * wp->pad4C[3] * 2;
+            if (g_FrameRate < g_FrameCap) {
+                yawStep = (yawStep * g_FrameCap) / g_FrameRate;
+            }
+            (*(s32 *)&L1_D_800B0C5C) = ((*(s32 *)&L1_D_800B0C5C) + yawStep) & 0xFFF;
+        }
+        if (L1_g_PadHeld & 0x5000) {
+            moved = 1;
+            a0 = wp->pad51[1];
+            cnt = L1_D_800B0C9C + 1;
+            L1_D_800B0C9C = cnt;
+            v = cnt + (a0 + (cnt >> 1));
+            if (v < a0) {
+                t = pitchDir * a0;
+            } else if ((s32) wp->pad51[7] < v) {
+                t = pitchDir * wp->pad51[7];
+            } else {
+                t = pitchDir * v;
+            }
+            v = t;
+            if (L1_g_PadHeld & 0x4000) {
+                v = -t;
+            }
+            pitchStep = v * wp->pad4C[2] * 2;
+            if (g_FrameRate < g_FrameCap) {
+                pitchStep = (pitchStep * g_FrameCap) / g_FrameRate;
+            }
+            if (pitchStep != 0) {
+                if (yawStep != 0) {
+                    pitchStep -= pitchStep >> 2;
+                    (*(s32 *)&L1_D_800B0C5C) = ((*(s32 *)&L1_D_800B0C5C) - (yawStep >> 2)) & 0xFFF;
+                }
+                L1_D_800B0C64 += pitchStep;
+                L1_D_800B0C64 = AIM_CLAMP(L1_D_800B0C64, -0x280, 0x320);
+            }
+        }
+    }
+    /* limit the yaw swing around the locked direction */
+    if (L1_D_800B0D94 >= 0) {
+        if (L1_D_800B0D94 >= 0x801) {
+            v = 0x1000 - (u16) L1_D_800B0D94;
+        } else {
+            v = -(s16) (u16) L1_D_800B0D94;
+        }
+        t = ((*(s32 *)&L1_D_800B0C5C) + v) & 0xFFF;
+        if ((u32) (t - 0xEAB) >= 0x156U) {
+            if ((u32) t >= 0x156U) {
+                a0 = 0x155;
+                if (t >= 0x801) {
+                    a0 = -0x155;
+                }
+                (*(s32 *)&L1_D_800B0C5C) = a0 - v;
+            }
+        }
+    }
+    btnA = L1_g_PadHeld & g_Args->buttonMap[6];
+    btnB = L1_g_PadHeld & g_Args->buttonMap[7];
+    if ((btnA != 0) && (btnB != 0)) {
+        L1_D_800B0AEC = (*(s32 *)&L1_D_800B0C5C);
+    } else if (btnA != 0) {
+        if (!(L1_g_PadPrev & g_Args->buttonMap[6])) {
+            L1_D_800B0D94 = (*(s32 *)&L1_D_800B0C5C);
+        }
+        L1_D_800B0AEC = ((u16) L1_D_800B0D94 - 0x400) & 0xFFF;
+    } else if (btnB != 0) {
+        if (!(L1_g_PadPrev & g_Args->buttonMap[7])) {
+            L1_D_800B0D94 = (*(s32 *)&L1_D_800B0C5C);
+        }
+        L1_D_800B0AEC = ((u16) L1_D_800B0D94 + 0x400) & 0xFFF;
+    } else {
+        L1_D_800B0D94 = -1;
+        L1_D_800B0AEC = (*(s32 *)&L1_D_800B0C5C);
+    }
+    if (moved == 0) {
+        L1_D_800B0C9C = 0;
+        L1_D_8009CD5C = L1_D_8009CD5C + 1;
+        return;
+    }
+    L1_D_8009CD5C = 0;
+}
+#else
 INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_80044CC0);
+#endif
 
 void L1_Pad_StickToSpeed(s32 axis, s32 maxSpeed, s32 *out) {
     s32 deadzone;
@@ -12717,7 +12990,47 @@ void L1_func_8004D2D0(void) {
     }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_8004F9BC);
+void func_8004F9BC(s32 *arg0) {
+    s32 i;
+    u32 j;
+    u32 max;
+    u32 n;
+    ListSet *set;
+    s32 *data;
+
+    i = 0;
+    data = arg0;
+    if (g_Args->unk21C > 20) {
+        func_8006E9D0(0, (M2C_UNK *)D_800ADE6C);
+    }
+    for (; i < g_Args->unk21C; i++) {
+        set = &((ListSet *)D_800DB3D8)[i + 1];
+        if (*data++ != 0x5454) {
+            return;
+        }
+        set->lists = D_800DAE44[i];
+        *(u32 *)set = n = *data++;
+        if (n >= 9) {
+            printf(D_800ADE80, i, n);
+            func_80085E7C_nr(-1);
+        }
+        max = 0;
+        for (j = 0; j < *(u32 *)set; j++) {
+            set->pad8[j] = 1;
+            set->lists[j].count = *data++;
+            if (max < set->lists[j].count) {
+                max = set->lists[j].count;
+            }
+            set->lists[j].items = data;
+            data += set->lists[j].count;
+        }
+        M2C_FIELD(set, u32 *, 0x10) = max;
+        if (max == 0) {
+            printf(D_800ADEB8, i);
+            func_80085E7C_nr(-1);
+        }
+    }
+}
 
 s32 func_8004D72C(ListSet *set, s32 which) {
     if (set->index >= set->lists[which].count) {
@@ -13030,7 +13343,31 @@ void L1_func_8004E328(void) {
   }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_80050790);
+void func_80050790(void) {
+    s32 step;
+    s32 t;
+
+    step = 300;
+    if (*(s32 *)(*(u8 **)((u8 *)g_Player + 0x94) + 0x24) & 0x400) {
+        step = 150;
+    }
+    if (*(s16 *)((u8 *)g_Player + 0x98) != 0 || *(s16 *)((u8 *)g_Player + 0x9C) != 0) {
+        if (D_800E0068 != 0 || D_800E00E4 != 0 || D_800E01B0 != 0 || D_800E01B4 != 0) {
+            t = step + L1_D_8009D3FC;
+            if (t > 0x1000 || (t >= 0x800 && L1_D_8009D3FC < 0x800)) {
+                if (*(s32 *)(*(u8 **)((u8 *)g_Player + 0x94) + 0x24) & 0x400) {
+                    g_Args->pad12E[0xA] = 0x20;
+                } else {
+                    g_Args->pad12E[0xA] = 0x7F;
+                }
+                func_8005CB20(g_Player);
+            }
+            L1_D_8009D3FC = (L1_D_8009D3FC + step) & 0xFFF;
+        }
+    } else {
+        L1_D_8009D3FC = 0xC00;
+    }
+}
 
 #ifdef NON_MATCHING
 void L1_func_8004E5D8(void) {
@@ -14295,7 +14632,60 @@ void func_80054E34(void) {
     func_8006A084();
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_80054E54);
+void func_80054E54(void) {
+    u8 *o;
+    u8 *end;
+    u8 *s1;
+    s32 v1;
+    s32 t;
+    o = (u8 *)(L1_D_800AFFC8 + L1_D_800B0DB4 * 0x124);
+    end = (u8 *)(L1_D_800AFFC8 + L1_D_800B07A4 * 0x124);
+    for (; o <= end; o += 0x124) {
+        if (o[4] == 0) {
+            continue;
+        }
+        if (func_8005F8AC(o) != 0) {
+            continue;
+        }
+        func_8003BC0C(o, L1_D_800B8F24);
+        if (func_8005590C(o) != 0) {
+            L1_GsGetLs(M2C_FIELD(o, u8 **, 0x90) + 0x10, M2C_FIELD(o, u8 **, 0x90) + 0x68);
+            continue;
+        }
+        if (func_8003D7E4(o, g_Player) != 0 && func_8004EDDC(o, g_Player) != 0) {
+            continue;
+        }
+        s1 = M2C_FIELD(o, u8 **, 0x90);
+        if (o[7] == 0x26) {
+            if (func_800609C8(o) == 0) {
+                M2C_FIELD(s1, s32 *, 0x10) = 2;
+                M2C_FIELD(s1, s32 *, 0x2C) -= 0xC8;
+                o[7] = 0;
+            }
+        } else {
+            M2C_FIELD(o, s32 *, 0x64) &= 0xFFBFFFFF;
+        }
+        t = (o[6] * 0x70) + g_Args->unk228;
+        if (M2C_FIELD(t, s16 *, 0x50) != 0) {
+            M2C_FIELD(s1, s16 *, 0x60) = -M2C_FIELD(t, s16 *, 0x50);
+            M2C_FIELD(s1, s32 *, 0x10) = 2;
+        }
+        if (M2C_FIELD(o, s32 *, 0x64) & 0x200000) {
+            v1 = 0x384 - (L1_D_8009CDA8 - M2C_FIELD(o, s32 *, 0x2C));
+            if (v1 <= 0) {
+                L1_func_800395E8(o);
+                continue;
+            }
+            if (v1 < 0x64) {
+                if ((v1 % 16) >= 9) {
+                    M2C_FIELD(o, s32 *, 0x7C) &= 0x7FFFFFFF;
+                } else {
+                    M2C_FIELD(o, s32 *, 0x7C) |= 0x80000000;
+                }
+            }
+        }
+    }
+}
 
 s16 L1_func_80053004(u8 *obj, s32 x, s32 z) {
     u8 *t;

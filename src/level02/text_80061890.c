@@ -2043,6 +2043,9 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+extern s32 D_800A0CD4;
+extern Ent34 D_800E1628[];
+extern s32 D_800E6694;
 extern s16 D_800A594C[];
 extern s32 D_800E0068;
 extern s32 D_800E00E4;
@@ -2781,7 +2784,65 @@ Ent34 *L1_func_800637B0(s16 x, s16 y, s16 z) {
     return NULL;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_800637D0);
+void func_800637D0(void) {
+    s16 i;
+    Ent34 *e;
+    s32 range;
+    s32 px;
+    s32 pz;
+    s32 dx;
+    s32 dz;
+    u16 period;
+    s32 *src;
+
+    if (D_800A0CD4 == 0 && L1_D_8009CDA0 == 0) {
+        i = 0;
+        e = D_800E1628;
+        px = g_Args->playerX;
+        range = D_800E6694;
+        pz = g_Args->playerZ;
+        for (; i < 16; i++, e++) {
+            if (e->flags & 1) {
+                dz = 0;
+                dx = 0;
+                if (e->unk2C != 0 && (e->flags & 0xFE) != 4) {
+                    src = (s32 *)(*(u8 **)(e->unk2C + 0x90) + 0x28);
+                    e->x = src[0];
+                    e->y = src[1];
+                    e->z = src[2];
+                    if ((e->flags & 0xFE) == 6) {
+                        e->x += *(s16 *)(e->unk30 + 0x10);
+                        e->y += *(s16 *)(e->unk30 + 0x12);
+                        e->z += *(s16 *)(e->unk30 + 0x14);
+                    }
+                } else if (e->unk10 != -1) {
+                    dx = e->x - px;
+                    if (dx < 0) dx = -dx;
+                    if (dx > range) goto kill;
+                    dz = e->z - pz;
+                    if (dz < 0) dz = -dz;
+                    if (dz > range) goto kill;
+                }
+                if (e->unk20 != 0) {
+                    period = *(u16 *)&e->unk14;
+                    if ((e->flags & 0xFE) == 4 && (dx > 7000 || dz > 7000)) {
+                        period <<= 1;
+                    }
+                    if (e->unkC == 0 || e->unkC - ((s16 *)&e->unk14)[1] >= (s16)period) {
+                        ((s16 *)&e->unk14)[1] = e->unkC;
+                        ((u16 *)&e->unk18)[1]++;
+                        ((void (*)(Ent34 *))e->unk20)(e);
+                    }
+                }
+                e->unkC++;
+                if (e->unk10 != -1 && e->unk10 < e->unkC) {
+kill:
+                    L1_func_80063ADC(e);
+                }
+            }
+        }
+    }
+}
 
 void func_80063A54(void *arg0) {
     s32 *temp_a0;
@@ -3312,7 +3373,53 @@ void L1_func_80064C28(u8 *arg0) {
     *(u16 *)(obj + 0x58) += z >> 12;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_80064C38);
+void func_80064C38(u8 *arg0) {
+    u8 *obj;
+    s32 d;
+    u32 t;
+    s32 amp;
+    s32 *p;
+    s32 x;
+    s32 z;
+
+    obj = *(u8 **)(arg0 + 0xC);
+    d = 8;
+    if (g_FrameRate != 20) {
+        d = 160 / g_FrameRate;
+    }
+    if (*(s32 *)(obj + 0x94) & 1) {
+        *(u16 *)(obj + 0x9C) += d;
+    } else {
+        *(u16 *)(obj + 0x9C) -= d;
+    }
+    d = -50;
+    if (g_FrameRate != 20) {
+        d = -1000 / g_FrameRate;
+    }
+    *(u16 *)(obj + 0x56) += d;
+    d = 4;
+    if (g_FrameRate != 20) {
+        d = 80 / g_FrameRate;
+    }
+    *(u16 *)(obj + 0x78) += d;
+    *(u16 *)(obj + 0x7A) += d;
+    *(u16 *)(obj + 0x78) = *(s16 *)(obj + 0x78) < 0 ? 0 : (*(s16 *)(obj + 0x78) > 200 ? 200 : *(s16 *)(obj + 0x78));
+    *(u16 *)(obj + 0x7A) = *(s16 *)(obj + 0x7A) < 0 ? 0 : (*(s16 *)(obj + 0x7A) > 200 ? 200 : *(s16 *)(obj + 0x7A));
+    d = 80;
+    if (g_FrameRate != 20) {
+        d = 1600 / g_FrameRate;
+    }
+    t = L1_D_8009CDA8 - *(s32 *)(obj + 0x94);
+    amp = ((s16)((t >> 4) + 8) * -(L1_D_800A0370[(t * d) & 0xFFF] >> 16)) >> 12;
+    if (*(s32 *)(obj + 0x94) & 1) {
+        amp = -amp;
+    }
+    p = &L1_D_800A0370[(L1_D_800B0066 + 0x400) & 0xFFF];
+    x = amp * *(s16 *)p;
+    z = amp * (*(volatile s32 *)p >> 16);
+    *(u16 *)(obj + 0x54) += x >> 12;
+    *(u16 *)(obj + 0x58) += z >> 12;
+}
 
 SparkHdr *L1_func_80065510(void) {
     s16 i;

@@ -214,6 +214,21 @@ extern s8 D_8009C1EE;
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+extern s32 D_800A11F4;
+extern char D_800B1030[];
+void func_800288B4(s8 arg0);
+extern char D_800AC4AC[];
+extern char D_800AC4D4[];
+extern u8 D_800B118C[];
+extern u8 D_800B117C[];
+extern u16 D_800B0FF8;
+extern u16 D_800B0FFC;
+s32 func_80085E1C(char *);
+char *func_80085E4C(char *, char *);
+s32 func_80028B20(char *text);
+void func_80029378(char *s, s16 x, s16 y, s32 *n, s32 arg4, s32 pal);
+s32 func_80083044(char *, ...);
+void func_80085E7C_nr(s32) asm("func_80085E7C") __attribute__((noreturn));
 void func_80026C14(s16 arg0);
 typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
 void func_80029A30(s32, s16, s16, s16, s16, s32);
@@ -1130,7 +1145,46 @@ s32 L1_func_80028958(char *text) {
     return len;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B00", func_80028B88);
+void func_80028B88(s16 arg0, char *text) {
+    char buf[32];
+    s32 sp38;
+    s32 maxLen;
+    s32 len;
+    s32 vis;
+    s32 i;
+    s32 end;
+    TextEnt *te;
+    u16 x;
+    u16 y;
+
+    if (arg0 >= D_800B1FA0) {
+        func_80083044(D_800AC4AC, D_800AC4D4, 0x190);
+        func_80085E7C_nr(1);
+    }
+    maxLen = func_80085E1C((char *)(D_800B118C + arg0 * 0x60));
+    len = func_80085E1C(text);
+    vis = func_80028B20(text);
+    if (maxLen < vis) {
+        func_80083044(D_800AC4AC, D_800AC4D4, 0x199);
+        func_80085E7C_nr(1);
+    }
+    func_80085E4C(buf, text);
+    if (vis < maxLen) {
+        i = len;
+        end = maxLen + (len - vis);
+        for (; i < end; i++) {
+            buf[i] = ' ';
+        }
+        buf[i] = 0;
+    }
+    te = (TextEnt *)D_800B117C;
+    x = te[arg0].x;
+    y = te[arg0].y;
+    D_800B0FF8 = x;
+    D_800B0FFC = y;
+    sp38 = te[arg0].w;
+    func_80029378(buf, x, y, &sp38, 1, -1);
+}
 
 void L1_func_80028B58(s32 arg0, s32 arg1, s32 arg2) {
     s16 v;
@@ -1556,5 +1610,58 @@ void L1_func_80029A34(void) {
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B00", func_80029BFC);
 #endif
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B00", func_8002A590);
+s32 func_8002A590(u8 centered) {
+    s16 x;
+    s16 w;
+    s16 i;
+    s16 n;
+    s16 y;
+    s16 x0;
+    s16 cx;
+    s32 len;
+    u8 c;
+
+    i = 0;
+    len = func_80085E1C(M2C_FIELD(&D_800B1CBC, char **, 0x254));
+    n = 0;
+    D_800B1030[0] = 0;
+    x0 = M2C_FIELD(&D_800B1CBC, s16 *, 0xF8) + 9;
+    y = M2C_FIELD(&D_800B1CBC, s16 *, 0xFA) + 4;
+    for (; i < len; i++) {
+        c = M2C_FIELD(&D_800B1CBC, char **, 0x254)[i];
+        if (c == '#') {
+            c = ' ';
+        }
+        if (c == '\n' || i == len - 1 || c == '\t') {
+            if (i == len - 1) {
+                D_800B1030[n++] = c;
+            }
+            D_800B1030[n] = 0;
+            if (centered) {
+                cx = M2C_FIELD(&D_800B1CBC, s16 *, 0xF8) + (M2C_FIELD(&D_800B1CBC, s16 *, 0xF4) >> 1);
+                L1_func_80028858(D_800B1030, &x, &w);
+                L1_func_8002872C(D_800B1030, cx - (w >> 1), y);
+            } else {
+                if (D_800A11F4 != 0) {
+                    func_800288B4(1);
+                }
+                L1_func_8002872C(D_800B1030, x0, y);
+                if (D_800A11F4 != 0) {
+                    func_800288B4(0);
+                }
+            }
+            L1_func_80028B58(D_800B1FA0 - 1, M2C_FIELD(&D_800B1CBC, s16 *, 0x25A), M2C_FIELD(&D_800B1CBC, s16 *, 0x25C));
+            if (c == '\t') {
+                M2C_FIELD(&D_800B1CBC, char **, 0x254) += i + 1;
+                return 0;
+            }
+            y += 10;
+            n = 0;
+            D_800B1030[0] = 0;
+        } else {
+            D_800B1030[n++] = c;
+        }
+    }
+    return 1;
+}
 
