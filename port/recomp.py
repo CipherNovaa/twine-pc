@@ -345,6 +345,7 @@ class Gen:
         exe = (ROOT / f"build/{level}/{level}.exe").read_bytes()
         self.exe, self.base = exe, int.from_bytes(exe[0x18:0x1C], "little") - 0x800
         self.used_natives = set()
+        self.replaced = {}                      # address -> name: recompiled functions a mod replaces
         self.main_addr = addr_of.get("game_main")
 
     def word(self, a):
@@ -353,6 +354,10 @@ class Gen:
 
     def call(self, target, pc):
         """C for a call to a PS1 address from recompiled code"""
+        if target in self.replaced:
+            n = self.replaced[target]
+            self.used_natives.add(n)
+            return f"{{ u32 a[16] = {{R(4), R(5), R(6), R(7), {STACK_ARGS}}}; R(2) = port_call16((void *){n}, a); }}"
         if target in self.entry:
             return f"rc_{target:08X}(c);"
         n = self.name_at.get(target)
@@ -496,6 +501,8 @@ class Gen:
                 continue
             params = ", ".join(f"u32 a{k}" for k in range(NARGS))
             copies = " ".join(f"M32(sp + {16 + 4 * (k - 4)}) = a{k};" for k in range(4, NARGS))
+            if a in self.replaced:  # the mod calls the original by this name
+                n = f"{n}_orig"
             exports.append(f"u32 {n}({params}) {{\n"
                            f"    R3000 ctx; R3000 *c = &ctx; u32 sp = port_rc_enter();\n"
                            f"    R(4) = a0; R(5) = a1; R(6) = a2; R(7) = a3; R(29) = sp; R(31) = 0;\n"
@@ -507,15 +514,19 @@ class Gen:
         text += [f"u32 {n}();" for n in sorted(self.used_natives)]
         text += [""] + bodies + [""] + exports
         text += ["", "const struct { u32 addr; RcFunc fn; } port_rc_funcs[] = {"]
-        text += [f"    {{0x{a:08X}u, rc_{a:08X}}}," for _, a, _ in self.funcs]
+        # (calls by address to replaced functions find the mod's version among the native functions)
+        text += [f"    {{0x{a:08X}u, rc_{a:08X}}}," for _, a, _ in self.funcs if a not in self.replaced]
         text += ["};", "const int port_rc_func_count = sizeof(port_rc_funcs) / sizeof(port_rc_funcs[0]);", ""]
         Path(out_path).write_text("\n".join(text))
         return len(self.funcs), len(exports)
 
 
 def main():
-    level, out = sys.argv[1], sys.argv[2]
-    native = {f[2] for f in nm(sys.argv[3:]) if len(f) == 3 and f[1] in "TW"}
+    level, out, objs = sys.argv[1], sys.argv[2], sys.argv[3:]
+    replaced = []
+    if objs[:1] == ["--replaced"]:  # port/mods.py's list of the recompiled functions mods replace
+        replaced, objs = Path(objs[1]).read_text().split(), objs[2:]
+    native = {f[2] for f in nm(objs) if len(f) == 3 and f[1] in "TW"}
     names = psyq_names(level)
     native |= {n for n, t in names.items() if t in native}
     funcs, addr_of = functions(level)
@@ -524,6 +535,10 @@ def main():
     # start() (BSS clear, jump to main) is done by the runtime
     todo = [(n, a, s) for n, a, s in funcs if n not in native_set and n != "start"]
     g = Gen(level, todo, addr_of, {n: True for n in native_set})
+    for n in replaced:
+        if n not in {t for t, _, _ in todo}:
+            sys.exit(f"{level}: {n} is replaced by a mod but not recompiled")
+        g.replaced[addr_of[n]] = n
     # aliased names (psyq_names) resolve to the native implementation
     for n, t in names.items():
         if n in addr_of and t in native:

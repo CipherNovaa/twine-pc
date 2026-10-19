@@ -26,25 +26,23 @@ def run(cmd, **kw):
     return r.stdout
 
 
-def main():
-    level, mods = sys.argv[1], sys.argv[2].split()
-    build = ROOT / f"build/{level}_cmod"
-    sources = [p for m in mods for p in [ROOT / f"src/mods/{m.lower()}.c"] if p.exists()]
-    # Objects get -DMOD_* flags and weakened symbols, so start over whenever the set of mods changes.
-    stamp = build / "cmods.txt"
-    if not stamp.exists() or stamp.read_text() != " ".join(sorted(mods)):
-        subprocess.run(["rm", "-rf", str(build)])
-        build.mkdir(parents=True)
-        stamp.write_text(" ".join(sorted(mods)))
-    run(["make", f"LEVEL={level}", f"CMODS={' '.join(mods)}", "-j8", "cmod-objs"])
-
+def replaced_functions(sources, native=False):
+    """The functions the mods replace (their `MOD_REPLACES:` lines; with native, `MOD_REPLACES_NATIVE:` too:
+    replacements only the native PC build makes)."""
     replaces = []
     for src in sources:
-        m = re.search(r"MOD_REPLACES:([^\n*]*)", src.read_text())
-        replaces += m.group(1).split() if m else []
+        for key in ("MOD_REPLACES", "MOD_REPLACES_NATIVE") if native else ("MOD_REPLACES",):
+            m = re.search(rf"{key}:([^\n*]*)", src.read_text())
+            replaces += m.group(1).split() if m else []
     dupes = {f for f in replaces if replaces.count(f) > 1}
     if dupes:
         sys.exit(f"two mods replace the same function: {' '.join(sorted(dupes))}")
+    return replaces
+
+
+def level_names(level, sources, replaces):
+    """The mods' LEVEL01 names in LEVEL: (-D flags for compiling the mods, linker aliases, the name of each
+    replaced function's definition)."""
     used = set()
     for src in sources:
         used |= set(IDENT.findall(src.read_text()))
@@ -76,6 +74,23 @@ def main():
                 defines.append(f"-D{name}={target}")
         for f in replaces:
             defines.append(f"-D{f}_orig={mapping[f][0]}_orig")
+    return defines, aliases, {f: mapping[f][0] if level != "level01" else f for f in replaces}
+
+
+def main():
+    level, mods = sys.argv[1], sys.argv[2].split()
+    build = ROOT / f"build/{level}_cmod"
+    sources = [p for m in mods for p in [ROOT / f"src/mods/{m.lower()}.c"] if p.exists()]
+    # Objects get -DMOD_* flags and weakened symbols, so start over whenever the set of mods changes.
+    stamp = build / "cmods.txt"
+    if not stamp.exists() or stamp.read_text() != " ".join(sorted(mods)):
+        subprocess.run(["rm", "-rf", str(build)])
+        build.mkdir(parents=True)
+        stamp.write_text(" ".join(sorted(mods)))
+    run(["make", f"LEVEL={level}", f"CMODS={' '.join(mods)}", "-j8", "cmod-objs"])
+
+    replaces = replaced_functions(sources)
+    defines, aliases, defined_as = level_names(level, sources, replaces)
 
     # Compile the mods.
     mod_objs = []
@@ -94,7 +109,7 @@ def main():
     objs = sorted(build.rglob("*.o"))
     objs = [o for o in objs if "src/mods" not in str(o)]
     for f in replaces:
-        sym = mapping[f][0] if level != "level01" else f
+        sym = defined_as[f]
         for o in objs:
             nm = run(["mips-elf-nm", str(o)])
             m = re.search(rf"^([0-9a-f]+) ([TtWw]) {re.escape(sym)}$", nm, re.M)

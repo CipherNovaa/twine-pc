@@ -1,6 +1,11 @@
 /* Window, display and input (SDL3). Each game frame (VSync) the displayed VRAM rectangle is shown scaled
- * to the window; keyboard and gamepad fill the pad state libpad.c hands the game every vblank.
- * TWINE_HEADLESS=1 runs without a window; TWINE_SHOT=<frame>[,<frame>...] dumps frames as PPM. */
+ * to the window; keyboard, mouse and gamepad fill the pad state libpad.c hands the game every vblank.
+ * In a level the mouse is captured: it looks around (port_mouse_look, taken by the twin-stick mod,
+ * src/mods/twinstick.c), and its buttons and some keys do the actions of the game's button map, so they follow
+ * the options menu. TWINE_MOUSE_SENS (default 1) scales the look, TWINE_MOUSE_INVERT=1 inverts it vertically.
+ * TWINE_HEADLESS=1 runs without a window; TWINE_SHOT=<frame>[,<frame>...] dumps frames as PPM;
+ * TWINE_TEST_LOOK=<yaw>,<pitch> stands in for the mouse there (angle units each game frame), and
+ * TWINE_TEST_PAD=<frame>:<hex>[,...] for the pad (from each frame on, the pad bits below are held). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +13,7 @@
 #include "port.h"
 #include "gpu.h"
 #include "intro.h"
+#include "module.h"
 
 extern u16 port_pad_buttons[2];
 extern u8 port_pad_sticks[2][4];
@@ -28,16 +34,30 @@ enum {
     P_CROSS = 0x4000, P_SQUARE = 0x8000
 };
 
+/* menus and the pad's own buttons */
 static const struct {
     SDL_Scancode key;
     u16 bit;
 } keymap[] = {
     {SDL_SCANCODE_UP, P_UP}, {SDL_SCANCODE_DOWN, P_DOWN}, {SDL_SCANCODE_LEFT, P_LEFT},
-    {SDL_SCANCODE_RIGHT, P_RIGHT}, {SDL_SCANCODE_RETURN, P_START}, {SDL_SCANCODE_RSHIFT, P_SELECT},
-    {SDL_SCANCODE_BACKSPACE, P_SELECT}, {SDL_SCANCODE_SPACE, P_CROSS}, {SDL_SCANCODE_Z, P_CROSS},
-    {SDL_SCANCODE_X, P_CIRC}, {SDL_SCANCODE_C, P_SQUARE}, {SDL_SCANCODE_V, P_TRI}, {SDL_SCANCODE_Q, P_L1},
-    {SDL_SCANCODE_E, P_R1}, {SDL_SCANCODE_1, P_L2}, {SDL_SCANCODE_3, P_R2},
+    {SDL_SCANCODE_RIGHT, P_RIGHT}, {SDL_SCANCODE_RETURN, P_START}, {SDL_SCANCODE_ESCAPE, P_START},
+    {SDL_SCANCODE_TAB, P_SELECT}, {SDL_SCANCODE_SPACE, P_CROSS}, {SDL_SCANCODE_BACKSPACE, P_TRI},
 };
+
+/* the game's actions (g_Args->buttonMap) */
+enum { A_FIRE, A_PREV_WEAPON, A_NEXT_WEAPON, A_RELOAD, A_CROUCH, A_AIM, A_STRAFE_LEFT, A_STRAFE_RIGHT };
+
+static const struct {
+    SDL_Scancode key;
+    int action;
+} actionkeys[] = {
+    {SDL_SCANCODE_F, A_FIRE}, {SDL_SCANCODE_Q, A_PREV_WEAPON}, {SDL_SCANCODE_E, A_NEXT_WEAPON},
+    {SDL_SCANCODE_R, A_RELOAD}, {SDL_SCANCODE_C, A_CROUCH}, {SDL_SCANCODE_LCTRL, A_CROUCH},
+    {SDL_SCANCODE_A, A_STRAFE_LEFT}, {SDL_SCANCODE_D, A_STRAFE_RIGHT},
+};
+
+static int mouse_captured, wheel, wheel_pulse;
+static float look_yaw, look_pitch; /* angle units not yet taken */
 
 static const struct {
     SDL_GamepadButton b;
@@ -128,9 +148,52 @@ static u8 axis(Sint16 v) {
     return (u8)((v + 32768) >> 8);
 }
 
+/* The pad bits of one of the game's actions: g_Args->buttonMap holds them in the game's bit order, which is
+ * libpad's with the bytes swapped. g_Args is the boot stub's (0x8001F158). */
+static u16 action_bits(int action) {
+    u32 args = *(u32 *)0x8001F158;
+    u16 b;
+    if (args < 0x80000000u || args >= 0x80200000u)
+        return 0;
+    b = *(u16 *)(args + 0x148 + action * 2);
+    return (u16)((b << 8) | (b >> 8));
+}
+
+/* the mouse's movement since the last call, in angle units (4096 = 360 degrees; pitch positive is up) */
+void port_mouse_look(s32 *yaw, s32 *pitch) {
+    const char *test = getenv("TWINE_TEST_LOOK");
+    if (headless && test) {
+        *yaw = 0;
+        *pitch = 0;
+        sscanf(test, "%d,%d", yaw, pitch);
+        return;
+    }
+    *yaw = (s32)look_yaw;
+    *pitch = (s32)look_pitch;
+    look_yaw -= *yaw;
+    look_pitch -= *pitch;
+}
+
+static void mouse_event(const SDL_Event *e) {
+    static float scale;
+    if (!mouse_captured)
+        return;
+    if (!scale) {
+        const char *sens = getenv("TWINE_MOUSE_SENS");
+        scale = 0.5f * (sens && atof(sens) > 0 ? (float)atof(sens) : 1.0f);
+    }
+    if (e->type == SDL_EVENT_MOUSE_MOTION) {
+        look_yaw += e->motion.xrel * scale;
+        look_pitch -= e->motion.yrel * scale * (getenv("TWINE_MOUSE_INVERT") ? -1 : 1);
+    }
+    if (e->type == SDL_EVENT_MOUSE_WHEEL && e->wheel.y != 0)
+        wheel += e->wheel.y > 0 ? -1 : 1; /* up: the previous weapon */
+}
+
 static void window_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_QUIT)
         exit(0);
+    mouse_event(e);
     if (e->type == SDL_EVENT_GAMEPAD_ADDED && !gamepad)
         gamepad = SDL_OpenGamepad(e->gdevice.which);
     if (e->type == SDL_EVENT_GAMEPAD_REMOVED && gamepad && e->gdevice.which == SDL_GetGamepadID(gamepad)) {
@@ -144,13 +207,41 @@ static void poll_input(void) {
     const bool *keys;
     u16 down = 0;
     u8 lx = 0x80, ly = 0x80, rx = 0x80, ry = 0x80;
+    SDL_MouseButtonFlags mouse;
+    int capture;
     size_t i;
+    /* the mouse looks around in the levels, while the window has the focus */
+    capture = port_module && port_module->level && (SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS);
+    if (capture != mouse_captured) {
+        SDL_SetWindowRelativeMouseMode(window, capture);
+        mouse_captured = capture;
+        look_yaw = look_pitch = 0;
+        wheel = 0;
+    }
     while (SDL_PollEvent(&e))
         window_event(&e);
     keys = SDL_GetKeyboardState(NULL);
     for (i = 0; i < sizeof(keymap) / sizeof(keymap[0]); i++)
         if (keys[keymap[i].key])
             down |= keymap[i].bit;
+    for (i = 0; i < sizeof(actionkeys) / sizeof(actionkeys[0]); i++)
+        if (keys[actionkeys[i].key])
+            down |= action_bits(actionkeys[i].action);
+    if (mouse_captured) {
+        mouse = SDL_GetMouseState(NULL, NULL);
+        if (mouse & SDL_BUTTON_LMASK)
+            down |= action_bits(A_FIRE);
+        if (mouse & SDL_BUTTON_RMASK)
+            down |= action_bits(A_AIM);
+        /* each wheel step presses the weapon button for one game frame */
+        if (wheel_pulse)
+            wheel_pulse = 0;
+        else if (wheel) {
+            down |= action_bits(wheel < 0 ? A_PREV_WEAPON : A_NEXT_WEAPON);
+            wheel += wheel < 0 ? 1 : -1;
+            wheel_pulse = 1;
+        }
+    }
     if (keys[SDL_SCANCODE_W])
         ly = 0x00;
     if (keys[SDL_SCANCODE_S])
@@ -185,6 +276,22 @@ static void poll_input(void) {
     port_pad_sticks[0][1] = ry;
     port_pad_sticks[0][2] = lx;
     port_pad_sticks[0][3] = ly;
+}
+
+/* headless: the pad bits TWINE_TEST_PAD holds at this frame */
+static void test_pad(void) {
+    const char *s = getenv("TWINE_TEST_PAD");
+    u32 bits = 0;
+    while (s && *s) {
+        char *end;
+        u32 from = (u32)strtoul(s, &end, 10), b = 0;
+        if (*end == ':')
+            b = (u32)strtoul(end + 1, &end, 16);
+        if (from <= frames)
+            bits = b;
+        s = *end ? end + 1 : end;
+    }
+    port_pad_buttons[0] = (u16)~bits;
 }
 
 static void present(void) {
@@ -280,6 +387,7 @@ void port_frame_end(void) {
     if (!headless) {
         poll_input();
         present();
-    }
+    } else if (getenv("TWINE_TEST_PAD"))
+        test_pad();
     RT_LEAVE();
 }

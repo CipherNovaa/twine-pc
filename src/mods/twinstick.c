@@ -1,7 +1,9 @@
 /* Modern twin-stick controls for every level: the left stick moves and strafes, the right stick turns and
  * looks up and down (no need to hold the aim button to look). Analog mode is switched on automatically.
+ * In the native PC build the mouse turns and looks too, on foot and in aim mode.
  *
  * MOD_REPLACES: Pad_StickToSpeed func_8005D760 func_80061DC0
+ * MOD_REPLACES_NATIVE: func_80043EE0
  *
  * Names are LEVEL01's; `make cmod` maps them onto each level (tools/port_symbols.py). */
 #include "twine.h"
@@ -16,9 +18,22 @@ extern s32 D_800DDDB8;  /* turn right */
 extern s16 D_800DE0DC;  /* turn amount */
 extern s32 D_8009CD00;  /* with g_CutScene: the mapper leaves the flags alone while set */
 extern s32 D_8009CD4C;  /* aim mode (aim button held): func_80043EE0 runs instead of the on-foot update */
-extern s32 D_800B0C64;  /* aim mode's pitch, -0x280 (up) to 0x320 (down); 4096 = 360 degrees */
+extern s32 D_800B0C64;  /* aim mode's pitch, -0x280 (down) to 0x320 (up); 4096 = 360 degrees */
 void func_8005D760_orig(void);
 void func_80061DC0_orig(void);
+
+#ifdef NATIVE_PORT
+extern s32 g_PadHeld;
+extern s32 D_8009CD54; /* aim mode is gliding back out */
+extern s16 D_8009CD5C; /* frames the aim has held still */
+extern u16 D_800B0C5C; /* aim mode's yaw */
+void func_80043EE0_orig(void);
+/* The mouse's movement since the last call, in angle units (4096 = 360 degrees; pitch positive is up);
+ * port/src/video.c. */
+void port_mouse_look(s32 *yaw, s32 *pitch);
+static s32 s_MouseYaw = 0;
+static s32 s_MousePitch = 0;
+#endif
 
 /* Looking up and down is an offset on the player model's pitch (s16 at model+0x60, signed), which the
  * on-foot camera (func_8004DA60: camera pitch = model pitch - 0x17) and firing (func_80076CDC) follow.
@@ -90,6 +105,9 @@ void func_8005D760(void) {
     D_800DDCC4 = turn < -0x32;
     D_800DDDB8 = turn > 0x32;
     D_800DE0DC = (D_800DDCC4 || D_800DDDB8) ? turn : 0;
+#ifdef NATIVE_PORT
+    port_mouse_look(&s_MouseYaw, &s_MousePitch);
+#endif
 
     /* Aim mode drives its own pitch (it starts from the model pitch, offset included): follow it, so the
      * view stays put when the aim button is released. */
@@ -104,6 +122,14 @@ void func_80061DC0(void) {
     s32 look;
     s32 p;
 
+#ifdef NATIVE_PORT
+    /* The mouse turns the model before the update turns it further by the stick and moves the player. */
+    if (s_MouseYaw != 0 && g_CutScene == 0 && D_8009CD00 == 0) {
+        s16 *yaw = (s16 *)((u8 *)M2C_FIELD(g_Player, void **, 0x90) + 0x62);
+        *yaw = (*yaw + s_MouseYaw) & 0xFFF;
+    }
+    s_MouseYaw = 0;
+#endif
     func_80061DC0_orig();
     if (D_800B0E54 == 0 || g_CutScene != 0 || D_8009CD00 != 0) {
         return;
@@ -117,6 +143,10 @@ void func_80061DC0(void) {
     if (g_Args->reverseSniper == 0) {
         look = -look;
     }
+#ifdef NATIVE_PORT
+    look += s_MousePitch;
+    s_MousePitch = 0;
+#endif
     p = s_BasePitch + s_LookOffset + look;
     if (p < -0x280 + 0x17) {
         p = -0x280 + 0x17;
@@ -127,3 +157,31 @@ void func_80061DC0(void) {
     *pitch = p;
     s_Written = *pitch;
 }
+
+#ifdef NATIVE_PORT
+/* Aim mode (the aim button held): the mouse moves the aim like the stick does, within the same limits. */
+void func_80043EE0(void) {
+    s32 moved;
+    s32 p;
+
+    moved = s_MouseYaw != 0 || s_MousePitch != 0;
+    if (D_8009CD54 == 0 && (g_PadHeld & g_Args->buttonMap[5])) {
+        D_800B0C5C = (D_800B0C5C + s_MouseYaw) & 0xFFF;
+        p = D_800B0C64 + s_MousePitch;
+        if (p < -0x280) {
+            p = -0x280;
+        } else if (p > 0x320) {
+            p = 0x320;
+        }
+        D_800B0C64 = p;
+    } else {
+        moved = 0;
+    }
+    s_MouseYaw = 0;
+    s_MousePitch = 0;
+    func_80043EE0_orig();
+    if (moved) {
+        D_8009CD5C = 0; /* not holding still */
+    }
+}
+#endif

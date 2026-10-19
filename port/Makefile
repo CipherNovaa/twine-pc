@@ -11,6 +11,8 @@ PB := $(ROOT)/build/port
 RT_OUT := $(PB)/rt
 MODULES ?= boot movie shell level01 level02 level03 level04 level05 level06 level07 level08 level09 level10 \
            level11
+# C mods built into the levels (port/mods.py): twin-stick controls, with the PC's mouse look
+PORT_MODS ?= TWINSTICK
 
 CC := gcc
 # gnu89 and -fpermissive: the decompiled C keeps the original's K&R-era idioms. -fwrapv and
@@ -27,6 +29,7 @@ LDFLAGS := -m32 -no-pie
 RT_SRC := $(wildcard $(ROOT)/port/src/*.c)
 RT_OBJ := $(patsubst $(ROOT)/port/src/%.c,$(RT_OUT)/%.o,$(RT_SRC))
 GEN := gen_native.py psyq_names.txt native_names.txt
+MOD_SRC := $(wildcard $(ROOT)/src/mods/*.c $(ROOT)/port/mods/*.c)
 
 all: $(PB)/twine
 
@@ -44,26 +47,31 @@ $(1)_OUT := $(PB)/$(1)
 $(1)_SRC := $(wildcard $(ROOT)/src/$(1)/*.c)
 $(1)_OBJ := $$(patsubst $(ROOT)/src/$(1)/%.c,$(PB)/$(1)/game/%.o,$$($(1)_SRC))
 $(1)_DEPS := $(ROOT)/build/$(1)/$(1).elf $(GEN) $(wildcard $(ROOT)/config/$(1)_syms.ld)
+$(1)_MODFLAGS := $(if $(filter level%,$(1)),$(foreach m,$(PORT_MODS),-DMOD_$(m)))
 
 # Single-file GTE macros are MIPS asm; the native ones come from include/gte_native.h.
 $(PB)/$(1)/game/%.c: $(ROOT)/src/$(1)/%.c
 	@mkdir -p $$(dir $$@)
 	sed -e '/^#define gte_[A-Za-z0-9_]*(.*__asm__/d' $$< > $$@
 
-$(PB)/$(1)/game/%.o: $(PB)/$(1)/game/%.c $(wildcard $(ROOT)/include/*.h) Makefile
-	$(CC) $(CFLAGS) -c $$< -o $$@
+$(PB)/$(1)/game/%.o: $(PB)/$(1)/game/%.c $(wildcard $(ROOT)/include/*.h) Makefile $(PB)/mods.txt
+	$(CC) $(CFLAGS) $$($(1)_MODFLAGS) -c $$< -o $$@
+
+# the mods' objects, and copies of the game objects whose functions they replace
+$(PB)/$(1)/mods/objs.txt: $$($(1)_OBJ) $(PB)/mods.txt mods.py $(ROOT)/tools/build_cmod.py $(MOD_SRC)
+	python3 mods.py $(1) $(PB)/$(1) "$(PORT_MODS)" "$(CC) $(CFLAGS) $$($(1)_MODFLAGS)" $$($(1)_OBJ)
 
 # MIPS code that has no C yet (PsyQ libraries, hand-written GTE code, the stub) is statically recompiled
-$(PB)/$(1)/recomp.c: $$($(1)_OBJ) $(RT_OBJ) $$($(1)_DEPS) recomp.py
+$(PB)/$(1)/recomp.c: $$($(1)_OBJ) $(RT_OBJ) $$($(1)_DEPS) recomp.py $(PB)/$(1)/mods/objs.txt
 	@mkdir -p $$(dir $$@)
-	python3 recomp.py $(1) $$@ $$($(1)_OBJ) $(RT_OBJ)
+	python3 recomp.py $(1) $$@ --replaced $(PB)/$(1)/mods/recompiled.txt $$($(1)_OBJ) $(RT_OBJ)
 
 $(PB)/$(1)/recomp.o: $(PB)/$(1)/recomp.c src/recomp.h
 	$(CC) -m32 -std=gnu11 -fno-builtin -fpermissive -fno-pie -fno-stack-protector -O1 -g -w -DNATIVE_PORT -I$(ROOT)/include -Isrc \
 	    -c $$< -o $$@
 
-$(PB)/$(1)/gen.stamp: $$($(1)_OBJ) $(RT_OBJ) $(PB)/$(1)/recomp.o $$($(1)_DEPS)
-	python3 gen_native.py $(1) $(PB)/$(1) $$($(1)_OBJ) $(PB)/$(1)/recomp.o -- $(RT_OBJ)
+$(PB)/$(1)/gen.stamp: $(PB)/$(1)/mods/objs.txt $(RT_OBJ) $(PB)/$(1)/recomp.o $$($(1)_DEPS)
+	python3 gen_native.py $(1) $(PB)/$(1) $$$$(cat $(PB)/$(1)/mods/objs.txt) $(PB)/$(1)/recomp.o -- $(RT_OBJ)
 	@touch $$@
 
 $(PB)/$(1)/stubs.o $(PB)/$(1)/funcs.o: $(PB)/$(1)/%.o: $(PB)/$(1)/gen.stamp src/module.h
@@ -71,11 +79,18 @@ $(PB)/$(1)/stubs.o $(PB)/$(1)/funcs.o: $(PB)/$(1)/%.o: $(PB)/$(1)/gen.stamp src/
 
 # The module is linked on its own (data symbols at their PS1 addresses, names bound to its functions) and all
 # but its descriptor is made local.
-$(PB)/$(1)/module.o: $$($(1)_OBJ) $(PB)/$(1)/recomp.o $(PB)/$(1)/stubs.o $(PB)/$(1)/funcs.o
-	ld -m elf_i386 -r -T $(PB)/$(1)/syms.ld $$^ -o $(PB)/$(1)/module.r.o
+$(PB)/$(1)/module.o: $(PB)/$(1)/mods/objs.txt $(PB)/$(1)/recomp.o $(PB)/$(1)/stubs.o $(PB)/$(1)/funcs.o
+	ld -m elf_i386 -r -T $(PB)/$(1)/syms.ld -T $(PB)/$(1)/mods/mods.ld $$$$(cat $(PB)/$(1)/mods/objs.txt) \
+	    $(PB)/$(1)/recomp.o $(PB)/$(1)/stubs.o $(PB)/$(1)/funcs.o -o $(PB)/$(1)/module.r.o
 	objcopy --keep-global-symbol=port_module_$(1) $(PB)/$(1)/module.r.o $$@
 endef
 $(foreach m,$(MODULES),$(eval $(call MODULE,$(m))))
+
+# rewritten only when the list of mods changes
+$(PB)/mods.txt: FORCE
+	@mkdir -p $(dir $@)
+	@echo "$(PORT_MODS)" > $@.new
+	@cmp -s $@.new $@ && rm $@.new || mv $@.new $@
 
 # rewritten only when the list of modules changes
 $(PB)/modules.c: FORCE
