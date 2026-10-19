@@ -406,7 +406,7 @@ void func_8004514C(void);
 void func_80028DBC(s32, s32);
 void func_80028C08(s32, s32);
 void DevMenu_Draw(void);
-void DebugScreen_DrawPage(s32);
+void DebugScreen_DrawPage(s32 arg0);
 void func_80030234(void);
 
 
@@ -1058,7 +1058,7 @@ void func_800324D0(s32, s16, s16);
 extern char D_800A7778[];
 extern char D_800A7784[];
 void func_80030DA0(u8 *data, s32 len, s32 mode);
-void func_80030B04(u8 *);
+void func_80030B04(char *arg0);
 void func_80061700(void);
 void *memchr(void *, int, int);
 
@@ -1097,6 +1097,52 @@ typedef struct { u8 a; u8 p[0x22]; u8 b; } T23;
 typedef struct { s32 w0; s16 h4, h6, h8, hA, hC; u8 b0E, b0F; u16 h10, h12; u8 pad[0x10]; } E24;
 typedef struct { u8 b[8]; } PB;
 typedef struct { u8 p0; u8 b1; u8 b2; u8 b3; u8 b4; u8 b5; s16 w6; s16 w8; s16 wA; } RumbleSt;
+typedef struct { u8 b[32]; } Rec32;
+typedef struct { char *key; s32 type; } CmdEnt;
+typedef struct { char c[10]; } Buf10 __attribute__((aligned(4)));
+typedef struct { u8 b[8]; } R8;
+void func_8005CAF8(s16 arg0, s32 arg1);
+void *memset(void *, int, int);
+s32 func_8003E494(void);
+R8 func_8003E5A0(s32, s32, VECTOR *, VECTOR *, VECTOR *);
+s32 func_8002D4E4(s32 arg0);
+void Cheat_AllWeapons(void);
+void Cheat_RefillAmmo(void);
+void func_800314A0(void);
+void func_80032150(void);
+void func_800321F0(s32 arg0);
+void func_80032348(s32 arg0);
+void func_800406E0(s32 *arg0);
+void func_8005B86C(void);
+void func_80059634(s32);
+extern s32 D_8009CDC4;
+extern char D_800A7370[];
+extern s32 D_800B0A98;
+extern CmdEnt D_8009CDF0[6];
+extern s32 D_8009CE20;
+extern s32 D_8009CE24;
+extern Buf10 D_800A7750;
+extern char D_800A775C[];
+extern char D_800D2E90[];
+char *strstr(char *, char *);
+char *strtok(char *, char *);
+int strcmp(char *, char *);
+long strtol(char *, char **, int);
+char *strcpy(char *dst, char *src);
+extern s32 D_800D74FC;
+extern char D_800A7474[];
+extern char D_800A747C[];
+extern char D_800A7498[];
+extern char *g_DebugPageNames[];
+void func_80032E4C(s32 arg0, s32 arg1);
+void DebugPage_Framerate(void);
+void DebugPage_FPWeapon(void);
+void DebugPage_Camera(void);
+void DebugPage_Loadpoint(void);
+void DebugPage_ObjectCount(void);
+void DebugPage_Profile(void);
+void DebugPage_ArtProfile(void);
+void DebugPage_ContourMask(void);
 extern s16 D_800B0DB4;
 s32 func_8003AC1C(void *, s32);
 s32 func_8003C8A4(u8 *a, u8 *b);
@@ -1145,7 +1191,7 @@ extern s8 D_800D8620;
 void func_80048FE8(void);
 void func_80041DBC(void);
 s16 func_8006B274(int arg0);
-void func_8005CB38(s32);
+void func_8005CB38(s32 arg0);
 void func_8005C8C4(s32 arg0, AnimTick *e);
 extern POLY_G4 D_800D7A20[2][2];
 s32 func_8003DE58(VECTOR *p1, VECTOR *p2, VECTOR *p3, VECTOR *p4);
@@ -1973,7 +2019,101 @@ void func_8002D708(void) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", Cheat_DoAction);
+void Cheat_DoAction(s32 action) {
+    s16 hp;
+    g_Args->flags2 |= 8;
+    switch (action) {
+    case 0:
+        *g_DevMenu = 1;
+        func_80026F30(1U, 0);
+        break;
+    case 1:
+        func_8004B270(-D_800B0DD0, 0, 0);
+        break;
+    case 2:
+        func_8004B270(*(s32 *)((u8 *)g_Player + 0x34) - 1, 0, 0);
+        break;
+    case 3:
+        g_Invincible = g_Invincible == 0;
+        g_GodMode = g_GodMode == 0;
+        D_8009CD6C = D_8009CD6C == 0;
+    default:
+        break;
+    case 4:
+        if (*(u16 *)&g_Args->missionComplete == 0) {
+            D_8009D3AC = 1;
+            D_8009CF54 = 1;
+            D_8009D914 = 0;
+            func_80061708(2);
+            Camera_ResetZoom();
+            D_800AFFA4 = 0;
+            g_Args->missionComplete = 1;
+        }
+        break;
+    case 5:
+        func_8002D4E4((s32)D_800A7370);
+        break;
+    case 6:
+        D_800B0A98 = D_800B0A98 == 0;
+        if (D_800B0A98 != 0) {
+            D_800AFF64.r = 0xFF;
+            D_800AFF64.g = 0xFF;
+            D_800AFF64.b = 0;
+            D_8009CAC0 = 0xFA0;
+        } else {
+            D_8009CAC0 = 0;
+        }
+        break;
+    case 13:
+        {
+            s32 t = D_8009CABD == 0;
+            if (t != D_8009CABD) {
+                D_8009CABD = t;
+                func_800321F0(t);
+                func_8005B86C();
+            }
+        }
+        break;
+    case 14:
+        {
+            s32 t = D_8009CABE == 0;
+            if (t != D_8009CABE) {
+                D_8009CABE = t;
+                func_80032348(t);
+                func_8005B86C();
+            }
+        }
+        break;
+    case 7:
+        Cheat_RefillAmmo();
+        break;
+    case 8:
+        Cheat_AllWeapons();
+        break;
+    case 9:
+        D_8009CDC0 = D_8009CDC0 == 0;
+        D_8009CDC4 = -1;
+    case 10:
+        if (D_8009CDC0 != 0) {
+            func_800406E0(&D_8009CDC4);
+            if (D_8009CDC4 >= 0) {
+                func_80059634(D_8009CF7C + D_8009CDC4 * 0x44);
+            }
+        }
+        break;
+    case 11:
+        func_80032150();
+        break;
+    case 12:
+        func_800314A0();
+        break;
+    }
+    if (g_GodMode) {
+        *(s16 *)((u8 *)g_Player + 0xE) = 0x7FFF;
+    } else {
+        *(s16 *)((u8 *)g_Player + 0xE) = *(u16 *)((u8 *)g_Player + 0xE) & 0x8000;
+    }
+}
 
 s32 Cheat_CheckCodes(void) {
     s32 triggered;
@@ -2580,7 +2720,27 @@ void func_8002F7CC(void) {
     func_8007F4C0(D_800B8F88[D_800D2BE8].tag);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", DebugScreen_DrawPage);
+void DebugScreen_DrawPage(s32 arg0) {
+    func_80032E4C(g_DebugTextY + 1, g_DebugTextX);
+    FntPrint(D_800A7474, g_DebugPageNames[arg0]);
+    switch (arg0) {
+    case 1: DebugPage_Framerate(); break;
+    case 2: DebugPage_FPWeapon(); break;
+    case 3: DebugPage_Camera(); break;
+    case 5: DebugPage_Loadpoint(); break;
+    case 6: DebugPage_ObjectCount(); break;
+    case 7: DebugPage_Profile(); break;
+    case 8: DebugPage_ArtProfile(); break;
+    case 4:
+        g_DebugTextX = 0x23;
+        g_DebugTextY = 2;
+        FntPrint(D_800A747C, g_Args->playerX, g_Args->playerY, g_Args->playerZ);
+        FntPrint(D_800A7498, *((u8 *)g_Player + 0x122));
+        break;
+    case 9: DebugPage_ContourMask(); break;
+    }
+    FntFlush(-1);
+}
 
 void func_8002FE04(void) {
     M2C_FIELD(&D_800F1274, M2C_UNK **, 0) = &GsTMDfastF3L;
@@ -2830,7 +2990,45 @@ void func_80030868(void) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80030994);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80030B04);
+void func_80030B04(char *arg0) {
+    Buf10 sp10;
+    char *sp20;
+    char *p;
+    char *tok;
+    char *dst;
+    s32 off;
+    s16 i;
+    sp10 = D_800A7750;
+    for (i = 0; i < 6; i++) {
+        p = strstr(arg0, D_8009CDF0[i].key);
+        if (p) {
+            strcmp(strtok(p, (char *)&sp10), D_800A775C);
+            tok = strtok(0, (char *)&sp10);
+            switch (D_8009CDF0[i].type) {
+            case 2:
+                strcpy(&D_800D2E90[D_8009CE20 << 5], tok);
+                break;
+            case 1:
+                D_8009CE20 = strtol(tok, &sp20, 10) - 1;
+                ((Rec32 *)&D_800D2E84)[D_8009CE20].b[0] = 1;
+                ((Rec32 *)&D_800D2E84)[D_8009CE20].b[2] = D_8009CE20;
+                ((Rec32 *)&D_800D2E84)[D_8009CE20].b[3] = D_8009CE20;
+                ((Rec32 *)&D_800D2E84)[D_8009CE20].b[5] = 0;
+                break;
+            case 3:
+                strcpy(&D_800D2F48[0][D_8009CE24 * 16], tok);
+                break;
+            case 5:
+                D_8009CE24 = strtol(tok, &sp20, 10) - 1;
+                break;
+            case 4:
+                ((Rec32 *)&D_800D2E84)[D_8009CE20].b[1] = strtol(tok, &sp20, 10) - 1;
+                break;
+            }
+            return;
+        }
+    }
+}
 
 void func_80030D08(u8 arg0, u8 *buf, u8 *name) {
     s32 len;
@@ -5994,7 +6192,89 @@ s32 func_8003DE58(VECTOR *p1, VECTOR *p2, VECTOR *p3, VECTOR *p4) {
     return 1;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8003E158);
+R8 func_8003E158(s32 arg1, s32 arg2, SVECTOR *P, SVECTOR *Q) {
+    VECTOR v[3];
+    R8 r;
+    R8 z;
+    s8 t;
+    s8 u;
+    memset(&z, 0, 8);
+    t = func_8003E494();
+    D_8009D8D4 = t;
+    u = t + 1;
+    switch (u) {
+    case 2:
+        v[0].vx = P->vx;
+        v[0].vy = Q->vy;
+        v[0].vz = P->vz;
+        v[1].vx = Q->vx;
+        v[1].vy = Q->vy;
+        v[1].vz = P->vz;
+        v[2].vx = P->vx;
+        v[2].vy = P->vy;
+        v[2].vz = P->vz;
+        break;
+    case 1:
+        v[0].vx = Q->vx;
+        v[0].vy = Q->vy;
+        v[0].vz = Q->vz;
+        v[1].vx = P->vx;
+        v[1].vy = Q->vy;
+        v[1].vz = Q->vz;
+        v[2].vx = Q->vx;
+        v[2].vy = P->vy;
+        v[2].vz = Q->vz;
+        break;
+    case 3:
+        v[0].vx = Q->vx;
+        v[0].vy = Q->vy;
+        v[0].vz = P->vz;
+        v[1].vx = Q->vx;
+        v[1].vy = Q->vy;
+        v[1].vz = Q->vz;
+        v[2].vx = Q->vx;
+        v[2].vy = P->vy;
+        v[2].vz = P->vz;
+        break;
+    case 4:
+        v[0].vx = P->vx;
+        v[0].vy = Q->vy;
+        v[0].vz = Q->vz;
+        v[1].vx = P->vx;
+        v[1].vy = Q->vy;
+        v[1].vz = P->vz;
+        v[2].vx = P->vx;
+        v[2].vy = P->vy;
+        v[2].vz = Q->vz;
+        break;
+    case 5:
+        v[0].vx = P->vx;
+        v[0].vy = P->vy;
+        v[0].vz = P->vz;
+        v[1].vx = Q->vx;
+        v[1].vy = P->vy;
+        v[1].vz = P->vz;
+        v[2].vx = P->vx;
+        v[2].vy = P->vy;
+        v[2].vz = Q->vz;
+        break;
+    case 6:
+        v[0].vx = P->vx;
+        v[0].vy = Q->vy;
+        v[0].vz = Q->vz;
+        v[1].vx = Q->vx;
+        v[1].vy = Q->vy;
+        v[1].vz = Q->vz;
+        v[2].vx = P->vx;
+        v[2].vy = Q->vy;
+        v[2].vz = P->vz;
+        break;
+    case 0:
+        return z;
+    }
+    r = func_8003E5A0(arg1, arg2, &v[0], &v[1], &v[2]);
+    return r;
+}
 
 s32 func_8003E494(void) {
     if (D_800D438A == 1 && D_800D438F == D_800D438A) {
@@ -7259,7 +7539,55 @@ void func_8004626C(u32 *ot) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_800463C8);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80047318);
+void func_80047318(void) {
+    s16 t;
+    if (D_8009D018 != 0) {
+        func_800474AC();
+    }
+    t = (u16)D_8009D018 + 1;
+    switch (t) {
+    case 2:
+        D_8009D014 -= 8;
+        if (D_8009D014 <= 0) {
+            D_8009D018 = 3;
+            D_8009D014 = 0;
+        }
+        break;
+    case 4:
+        D_8009D01A += 4;
+        if (D_8009D01A > 0x20) {
+            D_8009D018 = 5;
+            D_8009D01A = 0x20;
+            D_800D74FC = D_8009CDA8;
+        }
+        break;
+    case 5:
+        D_8009D01A -= 4;
+        if (D_8009D01A <= 0) {
+            D_8009D018 = -1;
+            D_8009D014 = 0;
+            D_8009D01A = 0;
+        }
+        break;
+    case 6:
+    default:
+        break;
+    case 0:
+        D_8009D014 += 8;
+        if (D_8009D014 > 0x40) {
+            D_8009D018 = 2;
+            D_8009D014 = 0x40;
+        }
+        break;
+    case 3:
+        D_8009D014 += 8;
+        if (D_8009D014 > 0x40) {
+            D_8009D018 = 0;
+            D_8009D014 = 0x40;
+        }
+        break;
+    }
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_800474AC);
 
@@ -13293,7 +13621,47 @@ void func_8005CAF8(s16 arg0, s32 arg1) {
   func_80027248(*(new_var = &var_a0), arg1 + 0x14, 0);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8005CB38);
+void func_8005CB38(s32 arg0) {
+    u8 *p;
+    s32 x;
+    u16 code;
+    s16 t;
+    s16 c1;
+    s16 sw1;
+    p = *(u8 **)(arg0 + 0x94);
+    code = *(u16 *)(p + 0x12);
+    x = *(s32 *)(arg0 + 0x90);
+    sw1 = code - 0x25;
+    switch (sw1) {
+    case 0x0: t = *(s16 *)(p + 0x16); if (t == 6 || t == 0xC || t == 0xE) func_8005CA20((void *)arg0); break;
+    case 0xF: t = *(s16 *)(p + 0x16); if (t == 7 || t == 0xC || t == 0xF) func_8005CA20((void *)arg0); break;
+    case 0x50: t = *(s16 *)(p + 0x16); if (t == 5 || t == 9 || t == 0xC || t == 0xE || t == 0x11) func_8005CA20((void *)arg0); break;
+    case 0x47: t = *(s16 *)(p + 0x16); if (t == 8 || t == 0xD || t == 0x10 || t == 0x13) func_8005CA20((void *)arg0); break;
+    case 0x34: t = *(s16 *)(p + 0x16); if (t == 2 || t == 5) func_8005CA20((void *)arg0); break;
+    case 0x54: t = *(s16 *)(p + 0x16); if (t == 5 || t == 0xA) func_8005CA20((void *)arg0); break;
+    case 0x1A: t = *(s16 *)(p + 0x16); if (t == 4 || t == 0xB) func_8005CA20((void *)arg0); break;
+    case 0x42: t = *(s16 *)(p + 0x16); if (t == 3 || t == 5) func_8005CA20((void *)arg0); break;
+    case 0x53: t = *(s16 *)(p + 0x16); if (t == 4 || t == 0xB) func_8005CA20((void *)arg0); break;
+    case 0x2A: t = *(s16 *)(p + 0x16); if (t == 4 || t == 0xB) func_8005CA20((void *)arg0);
+    case 0x3D: t = *(s16 *)(p + 0x16); if (t == 4 || t == 9) func_8005CA20((void *)arg0); break;
+    case 0x35: t = *(s16 *)(p + 0x16); if (t == 6 || t == 0xD || t == 0x14 || t == 0x1B) func_8005CA20((void *)arg0); break;
+    case 0x6: t = *(s16 *)(p + 0x16); if (t == 8 || t == 0xC || t == 0xF || t == 0x12) func_8005CA20((void *)arg0); break;
+    case 0x4B: t = *(s16 *)(p + 0x16); if (t == 9 || t == 0xD || t == 0xF || t == 0x11) func_8005CA20((void *)arg0); break;
+    case 0x48: t = *(s16 *)(p + 0x16); if (t == 8 || t == 4) func_8005CA20((void *)arg0); break;
+    case 0x5: t = *(s16 *)(p + 0x16); if (t == 2 || t == 5 || t == 8 || t == 0xA) func_8005CA20((void *)arg0); break;
+    case 0x43: t = *(s16 *)(p + 0x16); if (t == 3 || t == 8 || t == 0xD || t == 0x14) func_8005CA20((void *)arg0); break;
+    }
+    c1 = code - 1;
+    switch (c1) {
+    case 34: t = *(s16 *)(p + 0x16); if (t == 9) func_8005CAF8(1, x); else if (t == 0x10) func_8005CAF8(2, x); break;
+    case 48: t = *(s16 *)(p + 0x16); if (t == 0xB || t == 0x13) func_8005CAF8(1, x); break;
+    case 2: if (*(s16 *)(p + 0x16) == 0xA) func_8005CAF8(1, x); break;
+    case 0: if (*(s16 *)(p + 0x16) == 8) func_8005CAF8(1, x); break;
+    case 49: t = *(s16 *)(p + 0x16); if (t == 5 || t == 0xB) func_8005CAF8(1, x); break;
+    case 47: if (*(s16 *)(p + 0x16) == 5) func_8005CAF8(1, x); break;
+    case 23: if (*(s16 *)(p + 0x16) == 9) func_8005CAF8(2, x); break;
+    }
+}
 
 void func_8005CED0(void *arg0) {
   Weapon (*new_var)[6];

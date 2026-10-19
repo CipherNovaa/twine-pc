@@ -4,6 +4,19 @@ typedef struct { char *name; s32 unk4; s32 unk8; } CdFileEnt;
 typedef struct { u8 p[0x142]; u16 v; } ArgsX;
 typedef struct { u8 pad[0x340]; s32 f[11]; } ArgsFiles;
 typedef struct { u8 p[0x1A]; u16 v; } Rec;
+typedef struct { u8 pad[0x142]; u16 v; } G142;
+extern s32 D_800AEDE8;
+extern s32 D_800AEDEC;
+extern s32 D_800AFEAC;
+extern s32 D_800AFEB0;
+extern u8 D_800AFEB8;
+extern u8 D_800AFEB9;
+extern s32 D_800AFEC0;
+void func_8002AE34(u8 arg0);
+s32 func_800830C8(s32, s32);
+s32 func_8002AF08(void);
+void func_8002B17C(void);
+void func_8002B69C(void);
 extern s8 D_800A7060;
 extern s8 D_800A70D4;
 extern char D_800AF624[];
@@ -60,7 +73,7 @@ s32 func_800834D0(void *);
 
 void func_8002BB68(u8 arg0);
 extern s8 D_8009CA58;
-extern s8 D_8009CA59;
+extern u8 D_8009CA59;
 extern u8 D_8009CA5C;
 extern s32 D_800AEDDC;
 void func_8002AA94(int arg0);
@@ -78,11 +91,11 @@ extern s32 D_800AEDD8;
 
 
 void func_8002BB34(void);
-s32 func_80082F24(M2C_UNK, M2C_UNK);                /* extern */
-M2C_UNK func_800831FC(M2C_UNK, s8 *, M2C_UNK *);    /* extern */
+s32 func_80082F24(s32, s32);
+s32 func_800831FC(s32, u8 *, u8 *);
 M2C_UNK func_800833CC(s32, s8 *);                   /* extern */
-extern s8 D_8009CA5A;
-extern s8 D_800AF6A4;
+extern u8 D_8009CA5A;
+extern u8 D_800AF6A4;
 extern u8 D_800AF6A5;
 extern s32 D_800AFEA8;
 extern u8 D_800AFEB7;
@@ -90,19 +103,19 @@ extern M2C_UNK D_800AFF20;
 
 
 M2C_UNK func_80082F78(M2C_UNK);                     /* extern */
-M2C_UNK func_80082F8C(M2C_UNK, u8 *, M2C_UNK);      /* extern */
+s32 func_80082F8C(s32, u8 *, s32);
 extern u8 D_800AF620;
 
 
 M2C_UNK exit(M2C_UNK);                              /* extern */
 extern M2C_UNK D_800A7120;
 M2C_UNK func_8002B29C(s32, M2C_UNK);                /* extern */
-M2C_UNK func_80026B00(M2C_UNK);                     /* extern */
+s32 func_80026B00(s32 arg0);
 
 
 extern u8 D_8009C200;
-extern s8 D_800AFEB5;
-extern s8 D_800AFEB6;
+extern u8 D_800AFEB5;
+extern u8 D_800AFEB6;
 extern s32 D_800AFEBC;
 
 
@@ -335,7 +348,97 @@ void func_8002B17C(void) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002B29C);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002B69C);
+void func_8002B69C(void) {
+    u8 sp10[16];
+    u8 sp20;
+    s32 sp24;
+    s32 sp28;
+    s32 sp2C;
+    sp2C = func_80082F24(1, (s32)sp10);
+    if (sp2C == 5) {
+        func_8002AE34(6);
+        return;
+    }
+    if (sp2C != 2) {
+        return;
+    }
+    switch (D_800AFEB6) {
+    case 0:
+        if (D_800AEDDC > D_800AEDE8) {
+            func_8002AE34(6);
+        } else {
+            if (D_8009CA59 != 0) {
+                func_80082F8C(6, 0, 0);
+                func_8002BB68(D_8009CA5C);
+                D_8009CA59 = 0;
+            }
+            sp28 = func_800834D0((sp10 + 5));
+            if (sp28 > 0) {
+                D_800AEDDC = sp28;
+            }
+            func_800830C8(0x11, 0);
+        }
+        return;
+    case 2:
+        if (func_8002AF08() == 0) {
+            D_800AFEB6 = 3;
+            func_80082F8C(6, 0, 0);
+        }
+        return;
+    case 1:
+        if (D_800AFEB5 != 0) {
+            D_800AFEB5 = D_800AFEB5 >> 2;
+            func_80026B00(D_800AFEB5);
+        } else {
+            func_80026B00(0);
+            D_800AFEB6 = 2;
+        }
+        return;
+    case 5:
+        func_8002B0A0();
+        D_800AFEB6 = 6;
+        return;
+    case 3:
+        if (D_800AFEC0 > 0) {
+            func_80082F8C(1, 0, (s32)&sp20);
+            if ((sp20 & 0x20) && (D_800AFEAC >= D_800AFEC0)) {
+                D_800AFEB6 = 5;
+            }
+        }
+        if ((D_8009CA5A != 0) && (func_80082F24(1, 0) != 0)) {
+            func_8002BB68(D_8009CA5C);
+            D_8009CA5A = 0;
+            D_800AEDEC = g_Args->unk2DC;
+            return;
+        }
+        if (((u32)(g_Args->unk2DC - D_800AEDEC) >= 0x3D) && ((D_800AFEB0 - 1) < D_800AFEAC)) {
+            ((G142 *)g_Args)->v = D_8009CA56;
+            *(u16 *)&D_8009CA5C = D_8009CA56;
+            D_8009CA56 = -1;
+            if (D_800AFEB9 == 2) {
+                func_8002B0A0();
+                D_800AFEB6 = 0;
+                D_800AFEBC = -1;
+                return;
+            }
+            D_800AF6A4 = 1;
+            D_800AF6A5 = D_800AFEB8;
+            func_8002BB34();
+            func_800831FC(0xD, &D_800AF6A4, sp10);
+            func_8002B17C();
+            func_80026B00(g_Args->unk142);
+            D_800AFEB6 = 0;
+            D_800AFEBC = -1;
+        } else {
+            sp28 = func_800834D0((sp10 + 5));
+            if (sp28 > 0) {
+                D_800AFEAC = sp28;
+            }
+            func_800830C8(0x11, 0);
+        }
+        break;
+    }
+}
 
 void func_8002BB34(void) {
     func_80026B00(0);

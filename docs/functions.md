@@ -36,6 +36,9 @@ been renamed, the current name is used.
 - `func_80043200`: controls screen draw (update `func_800433A8`).
 - `func_800433F4`: sound screen; clamps `D_8009CFB8` to 0..0x68, shows `Args` s16 at +0x140 and +0x13E
   (volumes?); update `func_80043610`.
+- `DebugScreen_DrawPage(page)`: prints the page name, then switches to the page's draw function.
+- `Cheat_DoAction`: actions of the cheat/debug menu entries.
+- `func_80047318`: slide-in bar fade state machine (`D_8009D018` state, `D_8009D014`/`D_8009D01A` positions).
 
 ## Sound
 
@@ -75,6 +78,8 @@ been renamed, the current name is used.
   named from (level, level, id), loads a third file into `D_8009CE38` (fatal if over 0x1800 bytes).
 - `func_80048DE4(name)`: 0 if `strlen(name) < 35`; else, when not in CD-archive mode,
   `sprintf(Args.exePath, D_800A85D4, name)` + `func_8006B230(0, exePath)` and returns 1.
+- `func_80030B04`: parses one config text line (keyword table `D_8009CDF0`) into the records at `D_800D2E84`.
+- `func_8002B69C` (-O0): memory card / save operation polling state machine.
 
 ## World
 
@@ -361,6 +366,10 @@ been renamed, the current name is used.
   frees an owner's class-0x80 effects.
 - `func_8005B6CC(obj)` / `func_8005B76C(obj)`: character colour (normal / night-vision red / grey; dead).
 - `func_8005BAE8(obj, anim)`: root motion between two keyframes (`D_800DDEE0` tables, 6-byte {x,y,z}).
+- `func_8005CB38`: checks the current animation against per-code lists, then `func_8005CA20` or
+  `func_8005CAF8` (case 0x2A falls through into 0x3D in the original).
+- `func_8003E158`: picks 3 bounding-box corner triangles from two SVECTORs and calls `func_8003E5A0`
+  (8-byte struct returned through the hidden pointer).
 
 ## Enemy AI: waypoints and navmesh
 
@@ -404,6 +413,9 @@ Command word: byte 0 opcode, byte 1 destination variable, u16 at +2 operand mode
   collision `func_800746D0`, then object hit `func_80050A70`; vars[byte 1] = 0/1/2, `D_8009D5FC` = hit object.
 - `func_800571B8(cmd, ScriptObj *, actor)`: opcode: jump/restart (pc = base + cmd[1]*4), clears the list at
   +0xA8 and vars selected by mask +0x1C, resets the actor's animation; returns 2.
+- `func_800566F8` (op 0x06): compares two operands (immediate or variable) with operator 0..7
+  (== != > >= < <= all-bits no-bits); pc skips one word more when true; returns 3.
+- `func_80055BA8` / `func_80055878`: set an object property from a value / read one into `obj->vars`.
 - `func_80057B2C(anim, a, b, c, d)`: sets animation fields (+0x10/+0x14/+0x12/+0x16), recomputes lengths.
 
 ## Struct layouts

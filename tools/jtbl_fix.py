@@ -24,9 +24,10 @@ def blob_tables(level):
                 cur = tables.setdefault(m.group(1), [])
             elif cur is not None:
                 m = re.search(r"\.word (\w+)", line)
-                if m:
+                # A block can run on into other data (strings): the table is its leading code pointers.
+                if m and (m.group(1).startswith("jtgt_") or re.fullmatch(r"0x800[2-9A-F][0-9A-F]{4}", m.group(1))):
                     cur.append(m.group(1))
-                elif line.startswith("enddlabel"):
+                elif m or line.startswith("enddlabel"):
                     cur = None
     return tables
 
@@ -64,16 +65,17 @@ def main():
         out.append(lines[i])
         i += 1
 
+    # Uses in instructions: `lui %hi($Ln)` at -O2, `la $4,$Ln` at -O0.
+    insns = "\n".join(l for l in out if not l.endswith(":") and not l.startswith("\t.word"))
     blob, rename, labels = blob_tables(level), {}, {}
     for f in dict.fromkeys(owner for owner, _ in gcc_tables.values()):
-        used = [l for l in dict.fromkeys(re.findall(r"%hi\((\$L\d+)\)", "\n".join(out)))
-                if gcc_tables.get(l, (None,))[0] == f]
+        used = [l for l in dict.fromkeys(re.findall(r"\$L\d+", insns)) if gcc_tables.get(l, (None,))[0] == f]
         targets = target_tables(level, f)
         if len(used) != len(targets):
             sys.exit(f"jtbl_fix: {f} has {len(used)} switch tables, the original uses {len(targets)}")
         for lab, jt in zip(used, targets):
             entries = gcc_tables[lab][1]
-            if len(entries) != len(blob.get(jt, [])):
+            if len(entries) > len(blob.get(jt, [])):
                 sys.exit(f"jtbl_fix: {f}: {lab} has {len(entries)} entries, {jt} has {len(blob.get(jt, []))}")
             rename[lab] = jt
             for e, t in zip(entries, blob[jt]):

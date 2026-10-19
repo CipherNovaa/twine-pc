@@ -10,3 +10,6 @@ D_1F8003DC = 0x1F8003DC;
  * D_800AB540, so they follow it in both the plain and the shiftable link. */
 D_800AB540_b = D_800AB540;
 D_800AB540_c = D_800AB540;
+
+/* Second word of D_8009CE20, which func_80030B04 addresses as its own symbol. */
+D_8009CE24 = D_8009CE20 + 4;
