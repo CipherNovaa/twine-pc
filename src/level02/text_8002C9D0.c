@@ -10387,9 +10387,17 @@ INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_80045890);
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_800458C8);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_80045900);
+void func_80045900(u8 *p, u8 r, u8 g, u8 b) {
+    p[4] = r;
+    p[5] = g;
+    p[6] = b;
+}
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_80045910);
+void func_80045910(u8 *p, u8 r, u8 g, u8 b) {
+    p[4] = r;
+    p[5] = g;
+    p[6] = b;
+}
 
 #ifdef NON_MATCHING
 void func_80044BCC(s32 arg0) {

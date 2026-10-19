@@ -431,4 +431,8 @@ def port(level):
 
 
 if __name__ == "__main__":
-    {"split": split, "port": port}[sys.argv[1]](sys.argv[2])
+    import fcntl
+    # Helpers integrate into the same files (tools/integrate_one.py): one at a time.
+    with open(ROOT / "build/.integrate.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        {"split": split, "port": port}[sys.argv[1]](sys.argv[2])
