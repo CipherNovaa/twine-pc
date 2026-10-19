@@ -5,7 +5,8 @@ which only takes code that is byte-identical, this also adapts constants that di
 a literal in the C and replaced. Names are mapped through the two functions' asm, so the result is the
 level's own C (its own symbol names) and goes in with integrate_one.py --level.
 
-  twin_port.py LEVEL [FUNC ...] [--dry] [-v]    try every asm (or banked) function of LEVEL with a twin"""
+  twin_port.py LEVEL [FUNC ...] [--dry] [-v]    try every asm (or banked) function of LEVEL with a twin
+  twin_port.py LEVEL --bank [--dry]              bank twins' near misses for plain asm functions"""
 import argparse
 import re
 import struct
@@ -47,7 +48,7 @@ class Level:
         self.funcs = {name: (a, s) for a, s, name in shared_code.functions(level)}
         self.asm_path = {p.stem: p for p in (ROOT / f"asm/{level}/nonmatchings").glob("*/*.s")}
         # status from the source files: plain INCLUDE_ASM, banked (NON_MATCHING block) or C
-        self.asm, self.banked, self.c_defs, self.file_of = set(), set(), {}, {}
+        self.asm, self.banked, self.c_defs, self.nm_defs, self.file_of = set(), set(), {}, {}, {}
         for c in sorted((ROOT / f"src/{level}").glob("*.c")):
             text = c.read_text()
             depth = 0
@@ -64,6 +65,8 @@ class Level:
             for name, (kind, code) in pl.parse_c(text)[1].items():
                 if kind == "c":
                     self.c_defs[name] = (c, code)
+                elif not pl.PREFIXED.match(pl.defined_name(code) or "L1_"):  # this level's own near miss
+                    self.nm_defs[name] = (c, code)
         self.addr, self.at = {}, defaultdict(list)
         elf = ROOT / f"build/{level}/{level}.elf"
         for line in subprocess.run(["mips-elf-nm", str(elf)], capture_output=True, text=True).stdout.splitlines():
@@ -81,8 +84,11 @@ class Level:
     def masked(self, name):
         return tuple(shared_code.masked(w) for w in self.words(name))
 
-    def c_for(self, name):
-        """(file, code) of the C this level compiles for its function NAME, under whatever name it defines."""
+    def c_for(self, name, banked=False):
+        """(file, code) of the C this level compiles for its function NAME, under whatever name it defines
+        (BANKED: its near-miss C, which only NON_MATCHING builds compile)."""
+        if banked:
+            return self.nm_defs.get(name)
         a = self.funcs[name][0]
         for n in self.at.get(a, ()):
             if n in self.c_defs:
@@ -370,10 +376,11 @@ def map_names(code, src, s_name, dst, t_name, want=None):
     return out, mapping, problems
 
 
-def candidates(src, s_name, dst, t_name, skip=frozenset()):
+def candidates(src, s_name, dst, t_name, skip=frozenset(), banked=False):
     """([(includes, C text for integrate_one)] to try, problems): constants replaced in the code only,
     then also in the typedefs, #defines and declarations it brings (a changed typedef gets a new name)."""
-    c_file, code = src.c_for(s_name)
+    c_file, code = src.c_for(s_name, banked)
+    code = re.sub(r"[ \t]*/\*.*?\*/\n?", "", code, flags=re.S)  # (comments can name the source's symbols)
     defined = pl.defined_name(code)
     code = re.sub(rf"\b{re.escape(defined)}\(", "__TWIN_SELF__(", code, count=1)
     cp = const_pairs(src, s_name, dst, t_name)
@@ -394,6 +401,10 @@ def candidates(src, s_name, dst, t_name, skip=frozenset()):
         return [], problems
     code, labeled = code.split("\n\0\n")[0], [l for l in code.split("\n\0\n")[1].split("\n") if l]
     code = code.replace("__TWIN_SELF__(", t_name + "(")
+    # local labels named in asm statements (`.set .L8002D0F0, main`): same offset in the twin
+    s0, t0 = src.funcs[s_name][0], dst.funcs[t_name][0]
+    code = re.sub(r"\.L([0-9A-F]{8})\b", lambda m: f".L{int(m.group(1), 16) - s0 + t0:08X}"
+                  if 0 <= int(m.group(1), 16) - s0 < src.funcs[s_name][1] else m.group(0), code)
     used = set(pl.IDENT.findall(code))
     rev = {v: k for k, v in mapping.items()}
     decls, typedefs, defines = [], [], []
@@ -496,6 +507,59 @@ def precheck(dst, t_name, includes, text, opt):
     return None if bad == 0 else f"{bad} words differ"
 
 
+def words_differ(level, name, includes, text, opt):
+    """How many words the compiled C differs in from the function (None: doesn't compile)."""
+    a, s = level.funcs[name]
+    orig = level.exe[0x800 + a - level.load:0x800 + a - level.load + s]
+    with tempfile.TemporaryDirectory() as td:
+        res, err = am.compile_unit(includes + "\n" + text, opt, td)
+    return am.compare(orig, *res) if res else None
+
+
+def bank(args, lv, dst, by_key, opts):
+    """Plain asm functions whose twin elsewhere is a banked near miss: bank the twin's C here too, if it
+    comes out no further from this function than it is from its own."""
+    done = fail = 0
+    for t in sorted(args.funcs or dst.asm):
+        if t not in dst.funcs or dst.funcs[t][1] < 16 or t not in dst.asm:
+            continue
+        twins = [(l, s) for l, s in by_key[dst.masked(t)] if l != dst.level and lv[l].c_for(s, banked=True)
+                 and const_pairs(lv[l], s, dst, t) is not None]
+        if not twins or any(r.startswith("jtbl_") for _, refs in dst.insns(t) for r, _ in refs):
+            continue
+        result = None
+        for l, s in twins[:3]:
+            src = lv[l]
+            own, _ = candidates(src, s, src, s, banked=True)
+            s_opt = pl.opt_files(l).get(src.file_of[s].stem, "-O2")
+            base = words_differ(src, s, *own[0][:2], s_opt) if own else None
+            cands, problems = candidates(src, s, dst, t, banked=True)
+            if base is None or not cands:
+                result = (l, s, "; ".join(problems[:2]) or "the near miss doesn't compile alone")
+                continue
+            best = None
+            for includes, text, _ in cands:
+                d = words_differ(dst, t, includes, text, opts.get(dst.file_of[t].stem, "-O2"))
+                if d is not None and d <= base and (best is None or d < best[0]):
+                    best = (d, text)
+            if not best:
+                result = (l, s, f"further off than the source's {base} words")
+                continue
+            if args.dry:
+                result = (l, s, f"OK (pre-check: {best[0]} words differ, source {base})")
+                break
+            r = integrate_one.integrate(t, dealias(best[1], t, dst.file_of[t]), level=dst.level, nonmatching=True)
+            result = (l, s, r.split("\n")[0] + f" ({best[0]} words differ, source {base})")
+            if ": OK" in r:
+                break
+        if result:
+            ok = "OK" in result[2]
+            done += ok
+            fail += not ok
+            print(f"{t}: from {result[0]} {result[1]}: {result[2]}", flush=True)
+    print(f"{dst.level}: banked {done}, {fail} not")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("level")
@@ -503,6 +567,8 @@ def main():
     ap.add_argument("--dry", action="store_true", help="don't integrate, only report")
     ap.add_argument("-v", action="store_true")
     ap.add_argument("--keep", help="write candidates here")
+    ap.add_argument("--bank", action="store_true",
+                    help="bank twins' near-miss C (NON_MATCHING) for plain asm functions instead")
     args = ap.parse_args()
     lv = {l: Level(l) for l in LEVELS}
     dst = lv[args.level]
@@ -512,6 +578,8 @@ def main():
             if s >= 16:
                 by_key[L.masked(name)].append((l, name))
     opts = pl.opt_files(args.level)
+    if args.bank:
+        return bank(args, lv, dst, by_key, opts)
     targets = args.funcs or sorted(dst.asm | dst.banked)
     done = fail = 0
     for t in targets:

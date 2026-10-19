@@ -2068,6 +2068,11 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern s16 L1_gPsi;
+extern Args *L1_g_Args;
+extern s32 L1_g_FrameCap;
+extern s32 L1_g_FrameRate;
+extern void *L1_g_Player;
 extern void *L2_D_800B6FE4;
 extern s32 L2_D_800E0068;
 extern s32 L2_D_800E00E4;
@@ -2089,7 +2094,7 @@ extern M2C_UNK *D_800E0624;
 extern M2C_UNK *D_800E0628;
 M2C_UNK func_8004FC9C();                            /* extern */
 M2C_UNK func_8005D2F4();                            /* extern */
-M2C_UNK func_800615EC(void *);                      /* extern */
+void func_800615EC(PlObj *obj);
 void func_800618B0(void *arg0);
 M2C_UNK func_8007BD24(M2C_UNK);                     /* extern */
 s32 func_8007BD58();                                /* extern */
@@ -2255,7 +2260,86 @@ extern s32 D_8009EE5C;
 extern s32 D_8009EE50;
 extern s32 D_8009EE54;
 
+#ifdef NON_MATCHING
+void func_800615EC(PlObj *obj) {
+    s16 pos[4];
+    s16 hit[4];
+    s32 speed;
+    s32 cur;
+    s32 limit;
+    s32 ang;
+    s32 h;
+    s32 pitch;
+    s32 *cs;
+    s32 sn, cn;
+    Args *args;
+    s32 bsp;
+    s32 l, r;
+
+    cur = obj->speed;
+    speed = cur;
+    if (*(u8 *)&L1_D_800B0E54) {
+        L1_Pad_StickToSpeed(0, 0x50, &speed);
+    } else {
+        l = L1_D_800DDCC4;
+        r = L1_D_800DDDB8;
+        if (l != 0 || r != 0) {
+        if (L1_D_800DDC60 != 0 || L1_D_800DDC54 != 0) {
+            if (l != 0) {
+                speed = -0x50;
+            } else {
+                speed = 0x50;
+            }
+        } else {
+            if (l != 0) {
+                if (cur < -9) {
+                    speed = cur - 10;
+                } else {
+                    speed = -10;
+                }
+            } else {
+                if (cur < 10) {
+                    speed = 10;
+                } else {
+                    speed = cur + 10;
+                }
+            }
+            limit = 0x50;
+            if (limit < speed) {
+                speed = limit;
+            } else if (speed < -limit) {
+                speed = -limit;
+            }
+        }
+        } else {
+            speed = 0;
+        }
+    }
+    if (!*(u8 *)&L1_D_800B0E54 && L1_g_FrameRate < L1_g_FrameCap) {
+        speed = speed * L1_g_FrameCap / L1_g_FrameRate;
+    }
+    ang = (*(s16 *)((*(u8 **)((u8 *)L1_g_Player + 0x90)) + 0x62) + speed) & 0xFFF;
+    obj->speed = speed;
+    *(s16 *)((*(u8 **)((u8 *)L1_g_Player + 0x90)) + 0x62) = ang;
+    *(s16 *)((u8 *)L1_g_Player + 0xA0) = ang >> 6;
+    cs = &L1_D_800A0370[ang];
+    sn = *(s16 *)cs;
+    cn = *(volatile s32 *)cs >> 16;
+    pos[0] = L1_g_Args->playerX + ((sn * 125) >> 10);
+    L1_gPsi = ang;
+    pos[1] = L1_g_Args->playerY;
+    pos[2] = L1_g_Args->playerZ + ((cn * 125) >> 10);
+    h = ((s32 (*)(s32, s16 *, s16 *, s32))L1_func_800705A8)(L1_D_800E2F54, pos, hit, 0);
+    if (h == -0x7FFF || h == pos[1] || (hit[1] < -0x7EF4 && *(s16 *)((u8 *)L1_g_Player + 0x11E) < -0x7EF4)) {
+        pitch = 0;
+    } else {
+        pitch = ((s32 (*)(s32, s32))L1_ratan2)(pos[1] - h, 500);
+    }
+    *(s16 *)(obj->sub + 0x60) = pitch;
+}
+#else
 INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_800615EC);
+#endif
 
 void func_800618B0(void *arg0) {
     s32 ang;

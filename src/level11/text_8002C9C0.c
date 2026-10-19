@@ -3350,6 +3350,12 @@ void L2_func_8005DAD0(void);
 void L2_func_8005DF80(void *arg0);
 void L3_func_80048204(void *arg0, void *arg1);
 /* This level's own declarations (kept by tools/port_level.py): */
+#define AIM_CLAMP(v, lo, hi) ((v) < (lo) ? (lo) : (v) > (hi) ? (hi) : (v))
+extern s32 L1_g_FrameCap;
+void func_80044188(void);
+void func_8004428C(void);
+void func_80044324(void);
+s32 func_8004CA68(void);
 extern u8 **D_800E1244;
 extern char D_800A7FF8[];
 extern char D_800A7FCC[];
@@ -10978,7 +10984,197 @@ s16 L1_func_80043B14(s16 arg0, s16 arg1) {
 INCLUDE_ASM("asm/level11/nonmatchings/text_8002C9C0", func_80043458);
 #endif
 
+#ifdef NON_MATCHING
+void func_80043824(void) {
+    s32 sp10;
+    Weapon *wp;
+    u16 prevYaw;
+    u16 prevPitch;
+    s16 pitchDir;
+    s32 moved;
+    s32 held;
+    s32 yawStep;
+    s32 pitchStep;
+    s32 t;
+    s32 a0;
+    s16 v;
+    s16 cnt;
+    s32 btnA;
+    s32 btnB;
+
+    prevYaw = (*(s32 *)&L1_D_800B0C5C);
+    wp = &L1_g_Weapons[L1_D_800B0DD4];
+    prevPitch = L1_D_800B0C64;
+    if (L1_g_Args->reverseSniper == 0) {
+        pitchDir = -(s16) wp->pad4C[2];
+    } else {
+        pitchDir = (s16) wp->pad4C[2];
+    }
+    moved = 0;
+    M2C_FIELD(L1_g_Player, s16 *, 0x98) = 0;
+    M2C_FIELD(L1_g_Player, s16 *, 0xA0) = 0;
+    M2C_FIELD(L1_g_Player, s16 *, 0x56) = 0;
+    M2C_FIELD(L1_g_Player, s16 *, 0x9C) = 0;
+    if (L1_D_8009CD54 != 0) {
+        if (L1_g_PadHeld & L1_g_Args->buttonMap[5]) {
+            L1_Camera_ResetZoom();
+            L1_func_8004DD9C();
+            return;
+        }
+        L1_D_800B0B10 = 0xFA0;
+        L1_g_Camera.targetX = M2C_FIELD(L1_D_800D9200, s16 *, 0);
+        L1_g_Camera.targetY = M2C_FIELD(L1_D_800D9200, s16 *, 2);
+        L1_g_Camera.targetZ = M2C_FIELD(L1_D_800D9200, s16 *, 4);
+        L1_g_Camera.rotX = M2C_FIELD(&L1_g_Camera, u16 *, 0x80);
+        L1_g_Camera.rotY = M2C_FIELD(&L1_g_Camera, u16 *, 0x82);
+        L1_g_Camera.rotZ = M2C_FIELD(&L1_g_Camera, u16 *, 0x84);
+        func_8004CA68();
+        if (L1_D_800B0C74 <= 0) {
+            L1_Camera_ResetZoom();
+        } else {
+            L1_D_800B0C74 -= L1_D_800B0B10;
+            L1_D_800B0C74 = AIM_CLAMP(L1_D_800B0C74, 0, L1_D_800B0B14);
+            func_80044324();
+        }
+        M2C_FIELD(M2C_FIELD(L1_g_Player, void **, 0x90), u16 *, 0x62) = (*(s32 *)&L1_D_800B0C5C);
+        return;
+    }
+    L1_func_8005D694();
+    if (!(L1_g_PadHeld & L1_g_Args->buttonMap[5])) {
+        func_80044188();
+        return;
+    }
+    if (L1_D_800B0C74 < L1_D_800B0B14) {
+        L1_D_800B0C74 = L1_D_800B0C74 + L1_D_800B0B10;
+    } else if (L1_D_800B0B14 < L1_D_800B0C74) {
+        L1_D_800B0C74 = L1_D_800B0C74 - L1_D_800B0B10;
+    }
+    L1_D_800B0C74 = AIM_CLAMP(L1_D_800B0C74, 0, L1_D_800B0B14);
+    func_8004428C();
+    if (*(u8 *) &L1_D_800B0E54 != 0) {
+        L1_Pad_StickToSpeed(0, wp->pad51[2], &sp10);
+        sp10 = sp10 * 2;
+        held = L1_g_PadHeld & 0x200;
+        if (held != 0) {
+            t = sp10 / 4;
+            if (abs(t) > 0) {
+                sp10 = t;
+            }
+        }
+        (*(s32 *)&L1_D_800B0C5C) = (*(s32 *)&L1_D_800B0C5C) + sp10;
+        L1_Pad_StickToSpeed(1, wp->pad51[7], &sp10);
+        sp10 = sp10 * pitchDir * 2;
+        if (held != 0) {
+            t = sp10 / 4;
+            if (abs(t) > 0) {
+                sp10 = t;
+            }
+        }
+        L1_D_800B0C64 += sp10;
+        L1_D_800B0C64 = AIM_CLAMP(L1_D_800B0C64, -0x280, 0x320);
+        if (((s16) prevYaw != (s32) (*(s32 *)&L1_D_800B0C5C)) || ((s16) prevPitch != L1_D_800B0C64)) {
+            moved = 1;
+        }
+    } else {
+        yawStep = 0;
+        if (L1_g_PadHeld & 0xA000) {
+            moved = 1;
+            a0 = wp->pad51[1];
+            cnt = L1_D_800B0C9C + 1;
+            L1_D_800B0C9C = cnt;
+            v = cnt + (a0 + (cnt >> 1));
+            if (v >= a0) {
+                if ((s32) wp->pad51[2] < v) {
+                    v = wp->pad51[2];
+                }
+            } else {
+                v = a0;
+            }
+            if (L1_g_PadHeld & 0x8000) {
+                v = -v;
+            }
+            yawStep = v * wp->pad4C[3] * 2;
+            if (L1_g_FrameRate < L1_g_FrameCap) {
+                yawStep = (yawStep * L1_g_FrameCap) / L1_g_FrameRate;
+            }
+            (*(s32 *)&L1_D_800B0C5C) = ((*(s32 *)&L1_D_800B0C5C) + yawStep) & 0xFFF;
+        }
+        if (L1_g_PadHeld & 0x5000) {
+            moved = 1;
+            a0 = wp->pad51[1];
+            cnt = L1_D_800B0C9C + 1;
+            L1_D_800B0C9C = cnt;
+            v = cnt + (a0 + (cnt >> 1));
+            if (v < a0) {
+                t = pitchDir * a0;
+            } else if ((s32) wp->pad51[7] < v) {
+                t = pitchDir * wp->pad51[7];
+            } else {
+                t = pitchDir * v;
+            }
+            v = t;
+            if (L1_g_PadHeld & 0x4000) {
+                v = -t;
+            }
+            pitchStep = v * wp->pad4C[2] * 2;
+            if (L1_g_FrameRate < L1_g_FrameCap) {
+                pitchStep = (pitchStep * L1_g_FrameCap) / L1_g_FrameRate;
+            }
+            if (pitchStep != 0) {
+                if (yawStep != 0) {
+                    pitchStep -= pitchStep >> 2;
+                    (*(s32 *)&L1_D_800B0C5C) = ((*(s32 *)&L1_D_800B0C5C) - (yawStep >> 2)) & 0xFFF;
+                }
+                L1_D_800B0C64 += pitchStep;
+                L1_D_800B0C64 = AIM_CLAMP(L1_D_800B0C64, -0x280, 0x320);
+            }
+        }
+    }
+    if (L1_D_800B0D94 >= 0) {
+        if (L1_D_800B0D94 >= 0x801) {
+            v = 0x1000 - (u16) L1_D_800B0D94;
+        } else {
+            v = -(s16) (u16) L1_D_800B0D94;
+        }
+        t = ((*(s32 *)&L1_D_800B0C5C) + v) & 0xFFF;
+        if ((u32) (t - 0xEAB) >= 0x156U) {
+            if ((u32) t >= 0x156U) {
+                a0 = 0x155;
+                if (t >= 0x801) {
+                    a0 = -0x155;
+                }
+                (*(s32 *)&L1_D_800B0C5C) = a0 - v;
+            }
+        }
+    }
+    btnA = L1_g_PadHeld & L1_g_Args->buttonMap[6];
+    btnB = L1_g_PadHeld & L1_g_Args->buttonMap[7];
+    if ((btnA != 0) && (btnB != 0)) {
+        L1_D_800B0AEC = (*(s32 *)&L1_D_800B0C5C);
+    } else if (btnA != 0) {
+        if (!(L1_g_PadPrev & L1_g_Args->buttonMap[6])) {
+            L1_D_800B0D94 = (*(s32 *)&L1_D_800B0C5C);
+        }
+        L1_D_800B0AEC = ((u16) L1_D_800B0D94 - 0x400) & 0xFFF;
+    } else if (btnB != 0) {
+        if (!(L1_g_PadPrev & L1_g_Args->buttonMap[7])) {
+            L1_D_800B0D94 = (*(s32 *)&L1_D_800B0C5C);
+        }
+        L1_D_800B0AEC = ((u16) L1_D_800B0D94 + 0x400) & 0xFFF;
+    } else {
+        L1_D_800B0D94 = -1;
+        L1_D_800B0AEC = (*(s32 *)&L1_D_800B0C5C);
+    }
+    if (moved == 0) {
+        L1_D_800B0C9C = 0;
+        L1_D_8009CD5C = L1_D_8009CD5C + 1;
+        return;
+    }
+    L1_D_8009CD5C = 0;
+}
+#else
 INCLUDE_ASM("asm/level11/nonmatchings/text_8002C9C0", func_80043824);
+#endif
 
 void L1_Pad_StickToSpeed(s32 axis, s32 maxSpeed, s32 *out) {
     s32 deadzone;
