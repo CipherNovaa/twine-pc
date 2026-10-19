@@ -2,6 +2,12 @@
 
 typedef struct { char *name; s32 unk4; s32 unk8; } CdFileEnt;
 typedef struct { u8 p[0x142]; u16 v; } ArgsX;
+typedef struct { u8 pad[0x340]; s32 f[11]; } ArgsFiles;
+typedef struct { u8 p[0x1A]; u16 v; } Rec;
+extern char D_800AF624[];
+extern char D_800A70F8[];
+s32 func_8002AC90(u8 *a, u8 *b);
+extern char D_800A72E8[];
 extern u8 D_800AF6A8[];
 extern u8 *D_800AEE10;
 s32 func_80082D00(s32, s32);
@@ -14,7 +20,7 @@ extern s32 D_800AEDE4;
 extern CdFileEnt D_8009C204[];
 
 
-s16 func_8002AAFC(s16 *, s16 *, u8 *);
+s16 func_8002AAFC(s16 *arg0, s16 *arg1, u8 *arg2);
 M2C_UNK func_80082E04(M2C_UNK);
 M2C_UNK func_80082B64(s32, s8 *, s32);
 s32 VSync(s32);
@@ -157,7 +163,22 @@ u8 func_8002AAC4(void) {
     return D_8009C200;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002AAFC);
+s16 func_8002AAFC(s16 *arg0, s16 *arg1, u8 *arg2) {
+    s32 i = 0;
+    for (;;) {
+        if (func_8002AC90(arg2, (u8 *)&((Rec *)D_800AEE10)[i]) == 0) {
+            break;
+        }
+        if (++i >= 0x48) {
+            sprintf(D_800AF624, D_800A70F8, i, 0x48);
+            func_8006B1DC(D_800AF624);
+            return 0;
+        }
+    }
+    *arg0 = ((Rec *)D_800AEE10)[i].v;
+    *arg1 = ((Rec *)D_800AEE10)[i + 1].v - ((Rec *)D_800AEE10)[i].v;
+    return 1;
+}
 
 s32 func_8002AC90(u8 *a, u8 *b) {
     a++;
@@ -438,4 +459,17 @@ void func_8002C664(void) {
     func_80082F8C(0xE, &D_800AF620, 0);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002C6BC);
+void func_8002C6BC(s32 arg0) {
+    if (arg0 != 0x63) {
+        if (arg0 >= 0 && arg0 < 0xB) {
+        } else {
+            printf(&D_800A70A0, &D_800A70C8, 0x6DF);
+            exit(1);
+        }
+    }
+    if (((ArgsFiles *)g_Args)->f[arg0] != -1) {
+        return;
+    }
+    sprintf(g_Args->exePath, D_800A72E8, g_Args->level, arg0 + 1);
+    func_8002A61C(g_Args->exePath, &((ArgsFiles *)g_Args)->f[arg0]);
+}

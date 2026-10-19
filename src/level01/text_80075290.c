@@ -51,6 +51,14 @@ unsigned long func_80027248(M2C_UNK, s32, M2C_UNK);
 
 typedef struct { u16 start; u8 len; u8 flag; } AnimRec;
 typedef struct { u8 pad0[6]; u16 count; u16 unk8; u16 tag; u8 unkC; u8 padD[3]; s16 unk10; u8 pad12[4]; u16 unk16; AnimRec recs[1]; } AnimTrack;
+typedef struct { s32 id; char name[0x64]; } SrcRec;
+typedef struct { s32 idx; char name[0x64]; u8 a; u8 b; u8 pad[2]; } DstRec;
+extern SrcRec D_8009EA0C[];
+extern DstRec D_800F10A8[];
+extern char D_800F10AC[];
+extern char D_800A9808[];
+extern char D_800A9820[];
+void func_800761DC(void);
 extern s16 D_800B0DA0;
 extern s16 D_800B07B0;
 u32 func_8005397C(s32, s32);
@@ -487,7 +495,32 @@ void func_80076184(s32 idx, u32 val) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_800761DC);
+void func_800761DC(void) {
+    s32 i, j;
+    u8 found;
+    for (i = 0; i < 2; i++) {
+        j = 0;
+        found = 0;
+        D_800F10A8[i].a = 0;
+        D_800F10A8[i].b = 1;
+        for (; j < 2; j++) {
+            if (D_8009EA0C[j].id == i) {
+                if ((s32)strlen(D_8009EA0C[j].name) >= 100) {
+                    sprintf(g_Args->exePath, D_800A9808, D_8009EA0C[j].name);
+                    func_8006B230(0, g_Args->exePath);
+                }
+                strcpy(&D_800F10AC[i * 0x6C], D_8009EA0C[j].name);
+                D_800F10A8[i].idx = j;
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            sprintf(g_Args->exePath, D_800A9820, i);
+            func_8006B230(0, g_Args->exePath);
+        }
+    }
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_8007632C);
 

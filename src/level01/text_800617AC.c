@@ -1031,6 +1031,8 @@ typedef struct { TerrVert *verts; TerrVCache *cache; s32 pad8; TerrCol *cols; u8
 typedef struct { u32 active : 1; u32 life : 5; u32 f6 : 3; u32 f9 : 3; u32 state : 4; u32 pad16 : 16; s32 unk4; } SparkHdr;
 typedef struct { u32 pad0 : 11; u32 f11 : 1; u32 f12 : 1; u32 pad13 : 19; } WFlags;
 typedef struct { s16 sin; s16 cos; } SinCos;
+typedef struct PE { u8 active; u8 flags; u8 pad2[0xE]; s32 cnt; s32 limit; u8 *ptr; u8 b1C; u8 b1D; u8 pad1E[2]; void (*f20)(struct PE *); void (*f24)(struct PE *); u8 pad28[0xC]; } PE;
+void func_80063D40(void *arg0);
 extern s32 D_8009E47C;
 extern u8 D_800A9668[];
 void func_8002E1B0(void);
@@ -1130,7 +1132,7 @@ extern u8 D_8009D5E4;
 
 M2C_UNK func_80057E80(s32);                         /* extern */
 void func_80062300(void);
-M2C_UNK func_80063B20();                            /* extern */
+s32 func_80063B20(void);
 extern s32 D_800B8F24;
 extern GsOT D_800B8F88[];
 
@@ -2270,7 +2272,42 @@ void func_80063ADC(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_80063B20);
+s32 func_80063B20(void) {
+    s32 r;
+    s16 i;
+    PE *e;
+    r = D_8009CA9C;
+    if (r == 0) {
+        r = D_8009CDA0;
+        i = 0;
+        if (r == 0) {
+            e = D_800DF684;
+            do {
+                if (e->active != 0 && !(e->flags & 2)) {
+                    e->cnt = e->cnt + 1;
+                    if ((e->limit != -1 && e->limit < e->cnt) || (e->ptr != 0 && e->ptr[4] == 0)) {
+                        func_80063ED4(e);
+                    } else if (e->f24 == 0 || (e->f24(e), e->active != 0)) {
+                        if (e->f20 != 0) {
+                            e->f20(e);
+                        }
+                        if (e->flags & 4) {
+                            if (e->cnt >= 0xB) {
+                                func_80063D40(e);
+                            }
+                        } else if (e->b1D != 0 && e->b1C < e->b1D) {
+                            func_80063D40(e);
+                        }
+                    }
+                }
+                i++;
+                e++;
+                r = i < 0x3C;
+            } while (r);
+        }
+    }
+    return r;
+}
 
 void *func_80063CAC(void *obj, s16 x, s16 y, s16 z, s16 arg4) {
     s16 i;

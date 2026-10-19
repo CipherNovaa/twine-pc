@@ -28,6 +28,8 @@ s32 rand();
 extern char D_800A6ED0[];
 extern char D_800A6EF8[];
 typedef struct { u16 w; u8 pad2[0xA]; u16 x; u16 y; char text[0x50]; } TextEnt;
+typedef struct { u16 a; s16 len; u16 c; s16 d; s8 e; s8 f; s8 g; u8 pad[5]; char txt[0x50]; } TxtEnt;
+extern char D_800A6F1C[];
 void func_800272A4(s16 arg0, s32 arg1, s32 arg2);
 void func_80081A08(u8 *);
 void func_80027394(s32 pos, s16 voice, s32 id, s32 flags);
@@ -58,7 +60,7 @@ extern u16 D_800AEDD4;
 
 extern u8 D_800AB744[];
 int toupper(int c);
-void func_80029064(s32, char *, s32, s32);
+void func_80029064(s32 arg0, char *arg1, s32 arg2, s32 arg3);
 void func_800294B4(char *text, s32 x, s32 y, s32 idx);
 
 
@@ -473,7 +475,37 @@ void Menu_ResetState(void) {
     D_8009C1EE = 0;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80029064);
+void func_80029064(s32 arg0, char *arg1, s32 arg2, s32 arg3) {
+    s32 n;
+    s32 i;
+    s32 cnt;
+    if (arg0 >= 0x1E) {
+        func_8006B230(0, D_800A6F1C);
+    }
+    if (arg0 == 0) {
+        ((TxtEnt *)D_800AB744)[0].a = 0;
+    } else {
+        u8 *b = D_800AB744;
+        u8 *cur = arg0 * 0x60 + b;
+        s32 prev = arg0 - 1;
+        *(u16 *)cur = *(u16 *)(prev * 0x60 + b + 4) + 1;
+    }
+    n = strlen(arg1);
+    cnt = n;
+    for (i = 0; i < cnt; i++) {
+        s32 c = (u8)arg1[i] - 0x20;
+        if (c == 0 || c == 0x3F) {
+            n--;
+        }
+    }
+    ((TxtEnt *)D_800AB744)[arg0].len = n;
+    ((TxtEnt *)D_800AB744)[arg0].e = arg2;
+    ((TxtEnt *)D_800AB744)[arg0].f = arg3;
+    ((TxtEnt *)D_800AB744)[arg0].c = ((TxtEnt *)D_800AB744)[arg0].a + n - 1;
+    strcpy(((TxtEnt *)D_800AB744)[arg0].txt, arg1);
+    ((TxtEnt *)D_800AB744)[arg0].g = 1;
+    ((TxtEnt *)D_800AB744)[arg0].d = 0;
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800291B0);
 

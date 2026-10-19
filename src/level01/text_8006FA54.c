@@ -3,6 +3,17 @@
 s32 Math_Max(register s32 a, register s32 b);
 s32 Math_Min3(register s32 a, register s32 b, register s32 c);
 s32 Math_Max3(register s32 a, register s32 b, register s32 c);
+typedef struct { u8 a[6]; u16 b; u8 c[2]; u16 d; } ZoneEnt;
+typedef struct { u8 pad[0x20]; SVECTOR *pts; ZoneEnt *zones; } ZoneObj;
+typedef struct { s16 a; s16 b; s16 c; u16 d; } FA;
+typedef struct { s16 a; u16 b; s16 c; u16 d; } FE;
+typedef struct { u16 i0; s16 p1; s16 p2; u16 i3; s16 p4; } FB;
+typedef struct { s16 x, y, z; } FC;
+typedef struct { u8 pad[0x1C]; FE *tab1; FA *tab2; } FD;
+s32 Math_Abs(register s32 x);
+extern s32 D_800E2F38;
+s32 func_800702CC(void *, s32, s32 *);
+s32 func_800705A8(ZoneObj *arg0, s32 arg1, SVECTOR *arg2, s32 *arg3);
 
 s32 func_80071638(void *, s32, s32, s32, void *, s32);
 s32 func_80072190(void *, s32, s32, s32, void *);
@@ -10,7 +21,7 @@ s32 Vec_Dot(register s32 *row, register SVECTOR *v);
 
 
 s32 func_8006FB04(void *mesh, void *pos, void *face);
-s32 func_8006FED4(void *, void *, void *);
+s32 func_8006FED4(FD *arg0, FB *arg1, FC *arg2);
 
 
 void func_8006FA54(s32 arg0);
@@ -88,7 +99,19 @@ s32 func_8006FB04(void *mesh, void *pos, void *face) {
     return 0;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_8006FED4);
+s32 func_8006FED4(FD *arg0, FB *arg1, FC *arg2) {
+    s16 sp10;
+    FE *sp14;
+    FA *sp18;
+    sp14 = arg0->tab1 + arg1->i0;
+    sp18 = arg0->tab2 + arg1->i3;
+    if (Math_Abs(sp18->b) > 0x100) {
+        sp10 = -(sp18->a * arg2->x + sp18->c * arg2->z + (arg1->p4 << 15)) / sp18->b;
+    } else {
+        sp10 = sp14->b;
+    }
+    return sp10;
+}
 
 s32 func_80070070(void *arg0, SVECTOR *arg1, u8 *arg2, s16 *arg3, s16 arg4, s32 *arg5) {
     s32 h;
@@ -118,7 +141,24 @@ s32 func_80070070(void *arg0, SVECTOR *arg1, u8 *arg2, s16 *arg3, s16 arg4, s32 
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_800702CC);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_800705A8);
+s32 func_800705A8(ZoneObj *arg0, s32 arg1, SVECTOR *arg2, s32 *arg3) {
+    s32 r;
+    ZoneEnt *p;
+    if (arg0 == 0) {
+        return -0x7FFF;
+    }
+    r = func_800702CC(arg0, arg1, &D_800E2F38);
+    if (r != -0x7FFF) {
+        p = &arg0->zones[D_800E2F38];
+        if (arg2 != 0) {
+            *arg2 = arg0->pts[p->b];
+        }
+        if (arg3 != 0) {
+            *arg3 = p->d;
+        }
+    }
+    return r;
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_800706F0);
 
@@ -224,7 +264,27 @@ void Vec_Scale(register s32 scale, register SVECTOR *in, register SVECTOR *out) 
     gte_stsv(out);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_80074FE8);
+void func_80074FE8(register s32 *a, register s32 *b, register s32 *c) {
+    s32 s0, s1, s2, s3;
+    s1 = a[0];
+    s3 = ((s16 *)a)[2];
+    s0 = ((s16 *)b)[2];
+    s2 = s1 >> 16;
+    s1 = s1 << 16;
+    s3 = s3 - s0;
+    s0 = b[0];
+    c[1] = s3;
+    s1 = s1 >> 16;
+    s3 = s0 >> 16;
+    s2 = s2 - s3;
+    s0 = s0 << 16;
+    s2 = s2 << 16;
+    s0 = s0 >> 16;
+    s1 = s1 - s0;
+    s1 = s1 & 0xFFFF;
+    s1 = s1 | s2;
+    c[0] = s1;
+}
 
 s32 Math_Abs(register s32 x) {
     return abs(x);
