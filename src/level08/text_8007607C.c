@@ -1092,8 +1092,8 @@ void *arg0; {
     }
 }
 
-void func_80078968(void) {
-    func_80078858();
+void func_80078968(void *arg0) {
+    func_80078858(arg0);
 }
 
 INCLUDE_ASM("asm/level08/nonmatchings/text_8007607C", func_80078988);

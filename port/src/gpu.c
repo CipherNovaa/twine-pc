@@ -8,6 +8,8 @@
 #include "gpu.h"
 
 u16 gpu_vram[512 * 1024];
+u32 gpu_stats[8];
+int gpu_poly_log; /* per frame: polys, polys skipped (size), lines, rects, fills, env, other, pixels */
 GpuDisplay gpu_display = {0, 0, 320, 240, 0, 1};
 
 /* drawing environment */
@@ -68,8 +70,10 @@ static void plot(const Prim *p, s32 x, s32 y, s32 r, s32 g, s32 b, u32 u, u32 v)
         return;
     if (p->textured) {
         u16 t = tex_fetch(p, u, v);
-        if (t == 0)
+        if (t == 0) {
+            gpu_stats[4]++;
             return;
+        }
         semi = semi && (t & 0x8000);
         cr = t & 31;
         cg = (t >> 5) & 31;
@@ -128,6 +132,7 @@ static void plot(const Prim *p, s32 x, s32 y, s32 r, s32 g, s32 b, u32 u, u32 v)
         cg = cg < 0 ? 0 : cg > 31 ? 31 : cg;
         cb = cb < 0 ? 0 : cb > 31 ? 31 : cb;
     }
+    gpu_stats[7]++;
     *dst = out | (mask_set ? 0x8000 : 0) | cr | (cg << 5) | (cb << 10);
 }
 
@@ -170,8 +175,10 @@ static void triangle(const Prim *p, Vtx v0, Vtx v1, Vtx v2) {
     maxy = v0.y > v1.y ? v0.y : v1.y;
     maxy = maxy > v2.y ? maxy : v2.y;
     /* the GPU skips polygons with an edge longer than 1023x511 */
-    if (maxx - minx > 1023 || maxy - miny > 511)
+    if (maxx - minx > 1023 || maxy - miny > 511) {
+        gpu_stats[1]++;
         return;
+    }
     if (minx < area_x1)
         minx = area_x1;
     if (maxx > area_x2)
@@ -185,8 +192,8 @@ static void triangle(const Prim *p, Vtx v0, Vtx v1, Vtx v2) {
     b2 = top_left(&v0, &v1) ? 0 : -1;
     for (y = miny; y <= maxy; y++) {
         for (x = minx; x <= maxx; x++) {
-            /* edge functions are negative inside for this winding: flip */
-            s64 w0 = -edge(&v1, &v2, x, y), w1 = -edge(&v2, &v0, x, y), w2 = -edge(&v0, &v1, x, y);
+            /* barycentric weights: positive inside (the winding was made to give a positive area) */
+            s64 w0 = edge(&v1, &v2, x, y), w1 = edge(&v2, &v0, x, y), w2 = edge(&v0, &v1, x, y);
             s32 r, g, b, u = 0, v = 0;
             if (w0 + b0 < 0 || w1 + b1 < 0 || w2 + b2 < 0)
                 continue;
@@ -271,6 +278,11 @@ static int poly(const u32 *w) {
         }
     }
     p.dither = dither_on && (p.gouraud || (p.textured && !p.raw));
+    if (gpu_poly_log > 0) {
+        gpu_poly_log--;
+        port_log("poly %02X: (%d,%d) (%d,%d) (%d,%d)%s area %d,%d-%d,%d off %d,%d\n", cmd, v[0].x, v[0].y, v[1].x,
+                 v[1].y, v[2].x, v[2].y, quad ? " quad" : "", area_x1, area_y1, area_x2, area_y2, off_x, off_y);
+    }
     triangle(&p, v[0], v[1], v[2]);
     if (quad)
         triangle(&p, v[1], v[2], v[3]);
@@ -419,12 +431,16 @@ void gpu_gp0(const u32 *w, int n) {
     while (k < n) {
         u32 cmd = w[k] >> 24;
         int used = 1;
-        if (cmd >= 0x20 && cmd < 0x40)
+        if (cmd >= 0x20 && cmd < 0x40) {
             used = poly(w + k);
-        else if (cmd >= 0x40 && cmd < 0x60)
+            gpu_stats[0]++;
+        } else if (cmd >= 0x40 && cmd < 0x60) {
             used = lines(w + k, n - k);
-        else if (cmd >= 0x60 && cmd < 0x80)
+            gpu_stats[2]++;
+        } else if (cmd >= 0x60 && cmd < 0x80) {
             used = rect(w + k);
+            gpu_stats[3]++;
+        }
         else if (cmd == 0x02) {
             fill(w + k);
             used = 3;
@@ -437,8 +453,11 @@ void gpu_gp0(const u32 *w, int n) {
             s32 wd = ((w[k + 2] - 1) & 1023) + 1, ht = (((w[k + 2] >> 16) - 1) & 511) + 1;
             gpu_load_image(x, y, wd, ht, (const u16 *)&w[k + 3]);
             used = 3 + (wd * ht + 1) / 2;
-        } else if (cmd >= 0xE1 && cmd <= 0xE6)
+        } else if (cmd >= 0xE1 && cmd <= 0xE6) {
             env(w[k]);
+            gpu_stats[5]++;
+        } else
+            gpu_stats[6]++;
         k += used;
     }
 }

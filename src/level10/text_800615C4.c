@@ -2065,11 +2065,11 @@ void L1_func_8005FF60(void) {
 
 void func_80062820(void *arg0) {
     if (M2C_FIELD(arg0, s32 *, 0x4C) & 8) {
-        func_800395C4();
+        func_800395C4(arg0);
         return;
     }
     if (M2C_FIELD(arg0, s32 *, 0x48) & 0x800) {
-        func_800630A8();
+        func_800630A8(arg0);
     }
 }
 

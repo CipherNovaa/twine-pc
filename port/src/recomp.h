@@ -34,6 +34,7 @@ static inline void ST8(u32 a, u32 v) { if (IS_IO(a)) port_io_write(a, v, 1); els
 
 /* call a PS1 address (recompiled or native code) from recompiled code */
 void port_rc_call(R3000 *c, u32 addr);
+u32 port_call16(void *fn, const u32 *args);
 void port_rc_bad(u32 addr, u32 word);
 void port_rc_syscall(R3000 *c, u32 pc);
 u32 port_rc_enter(void);

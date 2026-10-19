@@ -2042,6 +2042,7 @@ extern int L1_g_CheatCodes[];
 
 
 
+typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
 extern s32 L2_D_800A0CD4;
 s32 L2_func_80083044(char *, ...);
 s32 L2_func_80085C3C();                                /* extern */
@@ -2054,7 +2055,13 @@ void L2_func_800637D0(void);
 extern s32 L2_D_800F4458;
 void L2_func_80063A54(void *arg0);
 extern u8 L2_D_800A0F34;
+extern s32 L2_D_800E0068;
+extern s32 L2_D_800E00E4;
+extern s32 L2_D_800E01B0;
+extern s32 L2_D_800E01B4;
+extern s32 D_800A594C_80061CE8[] asm("L2_D_800A594C");
 void L2_func_80061A24(PlObj *obj);
+extern s16 L2_D_800A594C[];
 void L2_func_80061CE8(void *arg0);
 M2C_UNK L2_func_800501B0();                            /* extern */
 M2C_UNK L2_func_8005D6D4();                            /* extern */
@@ -2079,6 +2086,8 @@ void L2_func_80064F24(void *arg0);
 void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
+extern M2C_UNK D_800B1CBC_80029BFC asm("L2_D_800B1CBC");
+extern S1CBC L2_D_800B1CBC;
 /* This level's own declarations (kept by tools/port_level.py): */
 void *func_8005A778(u8);
 void *func_80063B14(void *, s16, s16, s16, s32);
@@ -2330,7 +2339,7 @@ void func_80061920(PlObj *obj) {
 INCLUDE_ASM("asm/level06/nonmatchings/text_80061920", func_80061920);
 #endif
 
-void func_80061BE4(void *arg0) {
+void L2_func_80061CE8(void *arg0) {
     s32 ang;
     s32 x;
     s32 z;
@@ -2338,36 +2347,36 @@ void func_80061BE4(void *arg0) {
 
     ang = M2C_FIELD(M2C_FIELD(arg0, void **, 0x90), s16 *, 0x60);
     x = 0;
-    if (D_800E2664 ? !D_800E2660 : D_800E2660) {
+    if (L2_D_800E01B4 ? !L2_D_800E01B0 : L2_D_800E01B0) {
         x = -0xE1;
-        if (D_800E2664 != 0) {
+        if (L2_D_800E01B4 != 0) {
             x = 0xE1;
         }
     }
-    if (D_800E2518 != 0) {
+    if (L2_D_800E0068 != 0) {
         z = 0xE1;
-    } else if (D_800E2594 != 0) {
+    } else if (L2_D_800E00E4 != 0) {
         z = -0xE1;
     } else {
         z = 0;
     }
     if (x != 0 && z != 0) {
         x = -0xA0;
-        if (D_800E2664 != 0) {
+        if (L2_D_800E01B4 != 0) {
             x = 0xA0;
         }
         z = -0xA0;
-        if (D_800E2518 != 0) {
+        if (L2_D_800E0068 != 0) {
             z = 0xA0;
         }
     }
-    p = D_800B4540;
+    p = L2_D_800B6FE4;
     if (M2C_FIELD(M2C_FIELD(p, void **, 0x94), s32 *, 0x24) & 0x400) {
         x >>= 1;
         z >>= 1;
     }
     if (ang != 0) {
-        z = (z * (D_800A3050[abs(ang)] >> 16)) >> 12;
+        z = (z * (D_800A594C_80061CE8[abs(ang)] >> 16)) >> 12;
     }
     *(s16 *)(p + 0x98) = x;
     *(s16 *)(p + 0x9C) = z;
@@ -3107,7 +3116,7 @@ void L2_func_80063E4C(void *arg0) {
 
 void func_80063D60(void *arg0) {
     if (!(M2C_FIELD(M2C_FIELD(arg0, void **, 0xC), s32 *, 0x98) & 0xFFFFFF)) {
-        func_80063D3C();
+        func_80063D3C(arg0);
     }
 }
 

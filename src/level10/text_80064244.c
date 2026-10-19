@@ -3135,7 +3135,7 @@ void L2_func_80063E4C(void *arg0) {
 
 void func_800666B4(void *arg0) {
     if (!(M2C_FIELD(M2C_FIELD(arg0, void **, 0xC), s32 *, 0x98) & 0xFFFFFF)) {
-        func_80066690();
+        func_80066690(arg0);
     }
 }
 

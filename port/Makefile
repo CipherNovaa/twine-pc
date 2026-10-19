@@ -13,7 +13,7 @@ CC := gcc
 # variables its interrupt handlers change (which gcc 2.8 reloaded each time); an optimizing modern gcc
 # hoists those loads out of the loops. The game logic is small next to what a PC runs anyway.
 CFLAGS := -m32 -std=gnu89 -fpermissive -O0 -g -fno-omit-frame-pointer -fwrapv -fno-strict-aliasing -fno-pie \
-          -fno-stack-protector -fcommon -w -DNATIVE_PORT -DNON_MATCHING -D_LANGUAGE_C \
+          -fno-stack-protector -fcommon -w -DNATIVE_PORT -D_LANGUAGE_C \
           -I$(ROOT)/include -I$(ROOT)/src
 RT_CFLAGS := -m32 -std=gnu11 -O2 -g -fno-pie -fno-stack-protector -Wall -Wno-unused-function -DNATIVE_PORT \
              -I$(ROOT)/include -I$(ROOT)/port/src

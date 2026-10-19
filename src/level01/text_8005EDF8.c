@@ -2086,7 +2086,7 @@ void func_80060094(void *arg0) {
         return;
     }
     if (M2C_FIELD(arg0, s32 *, 0x48) & 0x800) {
-        func_80060798();
+        func_80060798(arg0);
     }
 }
 

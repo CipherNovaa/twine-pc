@@ -765,7 +765,7 @@ void *arg0; {
 }
 
 void func_80076B9C(void *arg0) {
-    func_80076A8C();
+    func_80076A8C(arg0);
     if (M2C_FIELD(M2C_FIELD(arg0, void **, 0x90), s32 *, 0x2C) >= 0x2AF9) {
         func_80065614(arg0, 1, 5);
         func_800697C8(arg0);

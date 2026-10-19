@@ -78,7 +78,7 @@ void L1_func_80048794(s16 arg0, s16 arg1);
 
 
 extern char L1_D_800A7D74[];
-void L1_func_80052BEC(void);
+void L1_func_80052BEC(void *arg0);
 void *L1_func_800390F8(s32 arg0);
 void L1_func_80060094(void *arg0);
 void L1_func_80063F34(void *arg0, s32 arg1);
@@ -1705,7 +1705,7 @@ void L1_func_80057B2C(void *arg0, s16 arg1, s16 arg2, s16 arg3, s16 arg4);
 extern s32 L1_D_800B0084;
 extern s32 L1_D_800B0D50;
 void L1_func_80036E10(u8 *a, u8 *b);
-s32 L1_func_8005ADB0(void);
+s32 L1_func_8005ADB0(s32 arg0);
 extern s32 L1_D_8009CD88;
 extern s32 *L1_D_8009CD8C;
 M2C_UNK *L1_func_800698B8(void);
@@ -3425,7 +3425,7 @@ void L2_func_80059B48(void *arg0, s16 arg1, s16 arg2);
 void L2_func_80059C04(void *arg0, s16 arg1, s16 arg2, s16 arg3);
 void L2_func_80059C6C(void *arg0, s16 arg1);
 void *L2_func_8005A704(u8 type);
-s32 L2_func_8005AEB0(void);
+s32 L2_func_8005AEB0(s32 arg0);
 void L2_func_8005DAD0(void);
 void L2_func_8005DF80(void *arg0);
 extern M2C_UNK D_800B1CBC_80029BFC asm("L2_D_800B1CBC");
@@ -8022,7 +8022,7 @@ void L2_func_8003A600(void *arg0) {
     void *temp_v1;
 
     if ((arg0 != NULL) && (M2C_FIELD(arg0, u8 *, 4) != 0)) {
-        L2_func_8003A3FC();
+        L2_func_8003A3FC(arg0);
         if (M2C_FIELD(arg0, u8 *, 6) == L2_D_800A14A8) {
             L2_D_800A0CF7 = 0;
         }
@@ -15525,7 +15525,7 @@ void L1_func_8004CDA0(s32 *arg0, u8 *arg1) {
 }
 
 void L2_func_8004F24C(s32 arg0, M2C_UNK arg1) {
-    L2_func_8004F288();
+    L2_func_8004F288(arg0);
     L2_func_8004F314(arg0, arg1);
 }
 
@@ -17343,8 +17343,8 @@ void L1_func_80052B2C(s32 *out, u8 *obj) {
     }
 }
 
-void func_80054F00(void) {
-    func_8006ACBC();
+void func_80054F00(void *arg0) {
+    func_8006ACBC(arg0);
 }
 
 void L2_func_80054E54(void) {
@@ -20220,7 +20220,7 @@ s32 L1_func_80057AB0(s32 arg0) {
 void L2_func_80059B48(void *arg0, s16 arg1, s16 arg2) {
     M2C_FIELD(arg0, s16 *, 0x12) = arg1;
     M2C_FIELD(arg0, s16 *, 0x16) = arg2;
-    L2_func_8005C994();
+    L2_func_8005C994(arg0);
     M2C_FIELD(arg0, s32 *, 0x28) = 0;
     M2C_FIELD(arg0, s32 *, 0x2C) = 0;
     M2C_FIELD(arg0, s32 *, 0x30) = 0;
@@ -20247,7 +20247,7 @@ void L2_func_80059C04(void *arg0, s16 arg1, s16 arg2, s16 arg3) {
     M2C_FIELD(arg0, s16 *, 0x14) = 0;
     M2C_FIELD(arg0, s16 *, 0x12) = arg2;
     M2C_FIELD(arg0, s16 *, 0x16) = 0;
-    L2_func_8005C964();
+    L2_func_8005C964(arg0);
     L2_func_8005C994(arg0);
     M2C_FIELD(arg0, s16 *, 0x18) = arg3;
     M2C_FIELD(arg0, s32 *, 0x28) = 0;
@@ -20785,8 +20785,8 @@ s32 arg0; {
     return ((s32 (*)(s32, s32))L1_ratan2)(arg0, L1_SquareRoot12(0x1000 - ((s32) (arg0 * arg0) >> 0xC)));
 }
 
-s32 L2_func_8005AEB0(void) {
-    return 0x400 - L2_func_8005AE6C();
+s32 L2_func_8005AEB0(s32 arg0) {
+    return 0x400 - L2_func_8005AE6C(arg0);
 }
 
 #ifdef NON_MATCHING
@@ -21998,7 +21998,7 @@ void L1_func_8005E228(void *arg0) {
     s32 b;
 
     if (M2C_FIELD(arg0, s32 *, 0x118) != 0) {
-        L1_func_8005E020();
+        L1_func_8005E020(arg0);
         return;
     }
     if (arg0 != g_Player) {

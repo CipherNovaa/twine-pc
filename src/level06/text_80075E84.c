@@ -1097,7 +1097,7 @@ void func_800787D4(void *arg0) {
     if (M2C_FIELD(arg0, s32 *, 0x88) == 0) {
         temp_v1 = D_8009ED88 - M2C_FIELD(arg0, s32 *, 0x2C);
         if (temp_v1 >= 0x50) {
-            func_8003A450();
+            func_8003A450(arg0);
             return;
         }
         if (temp_v1 >= 0x3C) {

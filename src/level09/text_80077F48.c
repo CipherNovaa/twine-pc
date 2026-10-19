@@ -946,8 +946,8 @@ void *arg0; {
     }
 }
 
-void func_80079868(void) {
-    func_80079758();
+void func_80079868(void *arg0) {
+    func_80079758(arg0);
 }
 
 s32 L1_func_80076BF8(s32 arg0, s32 arg1, s32 arg2) {

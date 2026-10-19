@@ -3107,7 +3107,7 @@ void L2_func_80063E4C(void *arg0) {
 
 void func_800634D8(void *arg0) {
     if (!(M2C_FIELD(M2C_FIELD(arg0, void **, 0xC), s32 *, 0x98) & 0xFFFFFF)) {
-        func_800634B4();
+        func_800634B4(arg0);
     }
 }
 
@@ -4468,11 +4468,11 @@ loop_1:
     goto loop_1;
 }
 
-s32 func_80069EF4(void) {
+s32 func_80069EF4(u32 arg0) {
     s32 var_v1;
     void *temp_v0;
 
-    temp_v0 = func_80069EAC();
+    temp_v0 = func_80069EAC(arg0);
     var_v1 = 0;
     if (temp_v0 != NULL) {
         var_v1 = (u32) M2C_FIELD(temp_v0, u32 *, 8) > 0U;
@@ -4480,10 +4480,10 @@ s32 func_80069EF4(void) {
     return var_v1;
 }
 
-void func_80069F28(void) {
+void func_80069F28(u32 arg0) {
     void *temp_v0;
 
-    temp_v0 = func_80069EAC();
+    temp_v0 = func_80069EAC(arg0);
     if (temp_v0 != NULL) {
         M2C_FIELD(temp_v0, s32 *, 8) = 1;
     }

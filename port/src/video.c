@@ -69,6 +69,26 @@ void port_video_init(void) {
 static void dump_display(const char *path) {
     FILE *f;
     s32 x, y, w = gpu_display.w, h = gpu_display.h;
+    if (getenv("TWINE_SHOT_VRAM")) {
+        GpuDisplay all = {0, 0, 1024, 512, 0, 0}, keep = gpu_display;
+        gpu_display = all;
+        w = 1024;
+        h = 512;
+        (void)keep;
+        f = fopen(path, "wb");
+        if (!f)
+            return;
+        fprintf(f, "P6\n%d %d\n255\n", w, h);
+        for (y = 0; y < h; y++)
+            for (x = 0; x < w; x++) {
+                u16 c = gpu_vram[y * 1024 + x];
+                u8 rgb[3] = {(u8)((c & 31) << 3), (u8)(((c >> 5) & 31) << 3), (u8)(((c >> 10) & 31) << 3)};
+                fwrite(rgb, 1, 3, f);
+            }
+        fclose(f);
+        gpu_display = keep;
+        return;
+    }
     if (w <= 0 || h <= 0 || w > 1024 || h > 512)
         return;
     f = fopen(path, "wb");
@@ -194,9 +214,19 @@ static void present(void) {
     SDL_RenderPresent(renderer);
 }
 
+extern u32 gpu_stats[8];
+extern int gpu_poly_log;
+
 void port_frame_end(void) {
     RT_ENTER();
     frames++;
+    if (getenv("TWINE_GPUSTATS") && frames % 50 == 0)
+        port_log("frame %u: polys %u (skipped %u) lines %u rects %u env %u other %u pixels %u transparent %u\n",
+                 frames, gpu_stats[0], gpu_stats[1], gpu_stats[2], gpu_stats[3], gpu_stats[5], gpu_stats[6],
+                 gpu_stats[7], gpu_stats[4]);
+    memset(gpu_stats, 0, sizeof(gpu_stats));
+    if (getenv("TWINE_POLYLOG") && frames == (u32)atoi(getenv("TWINE_POLYLOG")))
+        gpu_poly_log = 40;
     maybe_shot();
     if (!headless) {
         poll_input();

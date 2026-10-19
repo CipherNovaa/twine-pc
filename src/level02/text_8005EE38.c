@@ -2171,11 +2171,11 @@ void func_8005FEC4(void) {
 
 void func_8005FFF4(void *arg0) {
     if (M2C_FIELD(arg0, s32 *, 0x4C) & 8) {
-        func_80039C5C();
+        func_80039C5C(arg0);
         return;
     }
     if (M2C_FIELD(arg0, s32 *, 0x48) & 0x800) {
-        func_8006087C();
+        func_8006087C(arg0);
     }
 }
 

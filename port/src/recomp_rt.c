@@ -73,7 +73,30 @@ static void *native_lookup(u32 addr) {
     return NULL;
 }
 
-typedef u32 (*NativeFn)(u32, u32, u32, u32, u32, u32, u32, u32);
+typedef u32 (*NativeFn)(u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32);
+
+/* Call a native function with 16 stack arguments and restore the stack pointer afterwards ourselves: a
+ * function returning a struct pops its hidden result pointer (`ret $4`), which a plain call through a
+ * generic function pointer wouldn't expect. */
+u32 port_call16(void *fn, const u32 *a) {
+    u32 r;
+    __asm__ volatile("mov %%esp, %%edi\n\t"
+                     "sub $64, %%esp\n\t"
+                     "and $-16, %%esp\n\t"
+                     "mov $0, %%ecx\n\t"
+                     "1:\n\t"
+                     "mov (%%esi,%%ecx,4), %%eax\n\t"
+                     "mov %%eax, (%%esp,%%ecx,4)\n\t"
+                     "inc %%ecx\n\t"
+                     "cmp $16, %%ecx\n\t"
+                     "jne 1b\n\t"
+                     "call *%%ebx\n\t"
+                     "mov %%edi, %%esp\n\t"
+                     : "=a"(r)
+                     : "b"(fn), "S"(a)
+                     : "ecx", "edx", "edi", "memory", "cc");
+    return r;
+}
 
 s32 OpenEvent(u32 cls, s32 spec, s32 mode, void *fn);
 s32 CloseEvent(u32 h);
@@ -200,8 +223,14 @@ void port_rc_call(R3000 *c, u32 addr) {
         n = (NativeFn)addr;
     if (!n)
         port_fatal("recompiled code called %08X: no function there\n", addr);
-    c->r[2] = n(c->r[4], c->r[5], c->r[6], c->r[7], M32(c->r[29] + 16), M32(c->r[29] + 20), M32(c->r[29] + 24),
-                M32(c->r[29] + 28));
+    {
+        u32 sp = c->r[29], a[16], k;
+        for (k = 0; k < 4; k++)
+            a[k] = c->r[4 + k];
+        for (k = 4; k < 16; k++)
+            a[k] = M32(sp + 16 + (k - 4) * 4);
+        c->r[2] = port_call16((void *)n, a);
+    }
 }
 
 void port_rc_bad(u32 addr, u32 word) {

@@ -3122,7 +3122,7 @@ void L2_func_80063E4C(void *arg0) {
 
 void func_80063F94(void *arg0) {
     if (!(M2C_FIELD(M2C_FIELD(arg0, void **, 0xC), s32 *, 0x98) & 0xFFFFFF)) {
-        func_80063F70();
+        func_80063F70(arg0);
     }
 }
 
@@ -4282,11 +4282,11 @@ void func_8006ABD8(void) {
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_8006AC10);
 
-s32 func_8006AC58(void) {
+s32 func_8006AC58(u32 arg0) {
     s32 var_v1;
     void *temp_v0;
 
-    temp_v0 = func_8006AC10();
+    temp_v0 = func_8006AC10(arg0);
     var_v1 = 0;
     if (temp_v0 != NULL) {
         var_v1 = (u32) M2C_FIELD(temp_v0, u32 *, 8) > 0U;
@@ -4294,10 +4294,10 @@ s32 func_8006AC58(void) {
     return var_v1;
 }
 
-void func_8006AC8C(void) {
+void func_8006AC8C(u32 arg0) {
     void *temp_v0;
 
-    temp_v0 = func_8006AC10();
+    temp_v0 = func_8006AC10(arg0);
     if (temp_v0 != NULL) {
         M2C_FIELD(temp_v0, s32 *, 8) = 1;
     }

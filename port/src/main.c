@@ -6,9 +6,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/mman.h>
+#include <ucontext.h>
 #include <unistd.h>
 #include "port.h"
+#include "spu.h"
 
 /* Generated per level (port/gen_native.py): PS1 address -> native function, for code that calls through a
  * function pointer read from PS1 data (callback tables, object update functions). */
@@ -63,6 +66,82 @@ __attribute__((constructor(101))) static void map_ps1_memory(void) {
     map_fixed(fd, 0, 0xA0000000u, PS1_RAM_SIZE, PROT_READ | PROT_WRITE);
     map_fixed(fd, 0x10000, 0x00010000u, PS1_RAM_SIZE - 0x10000, PROT_READ | PROT_WRITE);
     map_fixed(-1, 0, PS1_SCRATCH_BASE, PS1_SCRATCH_SIZE, PROT_READ | PROT_WRITE);
+}
+
+/* The PS1 maps RAM at 0x00000000 too (KUSEG); its first 64 KB is kernel workspace, and the game does
+ * touch it through NULL-based pointers (e.g. `*p->e &= ~0x100` with e still NULL at level load). Linux
+ * can't map that page range, so an access there faults: decode the instruction's address registers and
+ * move the small one onto the KSEG0 mirror at 0x80000000 (the same RAM on the PS1), then retry. */
+static int x86reg_to_greg(int r) {
+    static const int map[8] = {REG_EAX, REG_ECX, REG_EDX, REG_EBX, REG_ESP, REG_EBP, REG_ESI, REG_EDI};
+    return map[r & 7];
+}
+
+static void crash_report(u32 fault, u32 eip) {
+    char cmd[256];
+    fprintf(stderr, "crash: access to %08X from %08X\n", fault, eip);
+    port_log("crash: access to %08X from %08X\n", fault, eip);
+    snprintf(cmd, sizeof(cmd), "addr2line -f -e /proc/%d/exe %08X >&2", (int)getpid(), eip);
+    if (system(cmd)) {
+    }
+}
+
+static void on_segv(int sig, siginfo_t *si, void *ctx) {
+    ucontext_t *uc = ctx;
+    greg_t *g = uc->uc_mcontext.gregs;
+    u8 *ip = (u8 *)g[REG_EIP];
+    u32 fault = (u32)si->si_addr;
+    static u32 logged[64];
+    int n, base = -1, index = -1, scale = 0;
+    u8 op;
+    if (fault >= 0x10000) {
+        crash_report(fault, (u32)g[REG_EIP]);
+        signal(SIGSEGV, SIG_DFL);
+        return; /* a real crash: let it happen again with the default action */
+    }
+    while (*ip == 0x66 || *ip == 0x67 || *ip == 0xF2 || *ip == 0xF3 || *ip == 0x2E || *ip == 0x3E || *ip == 0x26 ||
+           *ip == 0x64 || *ip == 0x65 || *ip == 0x36)
+        ip++;
+    op = *ip++;
+    if (op == 0xA4 || op == 0xA5 || op == 0xA6 || op == 0xA7 || op == 0xAA || op == 0xAB || op == 0xAC ||
+        op == 0xAD) {
+        /* string instructions: ESI source, EDI destination */
+        if ((u32)g[REG_ESI] < 0x10000)
+            base = 6;
+        else
+            base = 7;
+    } else {
+        u8 modrm, mod, rm;
+        if (op == 0x0F)
+            ip++;
+        modrm = *ip++;
+        mod = modrm >> 6;
+        rm = modrm & 7;
+        if (mod != 3) {
+            if (rm == 4) {
+                u8 sib = *ip++;
+                scale = sib >> 6;
+                index = ((sib >> 3) & 7) == 4 ? -1 : (sib >> 3) & 7;
+                base = ((sib & 7) == 5 && mod == 0) ? -1 : sib & 7;
+            } else if (!(rm == 5 && mod == 0))
+                base = rm;
+        }
+    }
+    if (base >= 0 && (u32)g[x86reg_to_greg(base)] < 0x10000)
+        g[x86reg_to_greg(base)] += 0x80000000;
+    else if (index >= 0 && ((u32)g[x86reg_to_greg(index)] << scale) < 0x10000)
+        g[x86reg_to_greg(index)] += 0x80000000u >> scale;
+    else {
+        crash_report(fault, (u32)g[REG_EIP]);
+        signal(SIGSEGV, SIG_DFL);
+        return;
+    }
+    for (n = 0; n < 64 && logged[n] && logged[n] != (u32)g[REG_EIP]; n++)
+        ;
+    if (n < 64 && !logged[n]) {
+        logged[n] = g[REG_EIP];
+        port_log("low-memory access %08X from %08X (redirected to the KSEG0 mirror)\n", fault, (u32)g[REG_EIP]);
+    }
 }
 
 static int unimpl_seen[4096];
@@ -173,7 +252,15 @@ int main(int argc, char **argv) {
     boot_init_args(level);
     /* start(): clear the level's BSS */
     memset((void *)0x800AB540, 0, 0x800FDB2C - 0x800AB540);
+    {
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_sigaction = on_segv;
+        sa.sa_flags = SA_SIGINFO | SA_NODEFER;
+        sigaction(SIGSEGV, &sa, NULL);
+    }
     port_video_init();
+    port_audio_init();
     port_irq_start();
     r = game_main(1, (void *)ARGS_ADDR);
     port_log("game main returned %d\n", r);
