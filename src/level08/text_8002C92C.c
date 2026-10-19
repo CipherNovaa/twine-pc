@@ -3776,15 +3776,7 @@ INCLUDE_ASM("asm/level08/nonmatchings/text_8002C92C", func_8002E35C);
 
 INCLUDE_ASM("asm/level08/nonmatchings/text_8002C92C", func_8002E3AC);
 
-void L1_func_8002E318(void) {
-    GsIMAGE image;
-
-    sprintf(g_Args->exePath, L1_D_800A7344, g_Args->level);
-    L1_func_8002C168(g_Args->exePath, L1_D_800D2BEC);
-    L1_func_80032648(L1_D_800D2BEC);
-    L1_func_80032880(L1_D_800D2BEC, &image);
-    L1_func_800324D0(L1_D_800D2BEC, image.px, image.py + 0xF0);
-}
+INCLUDE_ASM("asm/level08/nonmatchings/text_8002C92C", func_8002E3EC);
 
 void L2_func_8002E508(void) {
     L2_func_8005F74C();

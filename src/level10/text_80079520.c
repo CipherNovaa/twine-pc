@@ -182,11 +182,9 @@ extern s32 L1_D_800F0F5C;
 
 
 extern void *L2_D_800B6010;
-void L2_func_8006E97C(s32 arg0);
 void L2_func_80085F1C();
 void L2_func_80079B2C(void);
 extern void (*L2_D_800A100C)(void);
-void L2_func_80086FAC();
 extern M2C_UNK (*L2_D_800A1078)(s16);
 void L2_func_8006E9D0(s32 arg0, s32 arg1);
 extern void *L2_D_800B6FE4;
@@ -205,7 +203,6 @@ extern M2C_UNK L2_D_800B70F4;
 extern s8 L2_D_800E680C;
 extern s32 L2_D_800F4010;
 M2C_UNK L2_func_80086EA8(M2C_UNK, M2C_UNK);            /* extern */
-extern M2C_UNK L2_D_800AF188;
 void L2_func_8003A600(void *arg0);
 M2C_UNK L2_func_80064FB0(void *, M2C_UNK, M2C_UNK);    /* extern */
 s32 L2_func_8007A190(void *arg0);
@@ -215,7 +212,6 @@ void L2_func_80078B44(void *arg0);
 M2C_UNK *L2_func_80078B90(s32 arg0);
 s32 L2_func_80079040(void *arg0, s32 arg1);
 s32 L2_func_80079740(void);
-void L2_func_80079854(s32 arg0);
 void L2_func_8007A2A0(void *arg0);
 // D_8009CDD4 -> L2_D_800A100C (L2 own)
 /* This level's own declarations (kept by tools/port_level.py): */
@@ -645,15 +641,7 @@ void L1_func_80076014(s32 idx) {
     L1_func_8002C490(L1_D_8009DB50[M2C_FIELD(&g_Weapons[idx], u8 *, 0x5B)], &L1_D_800E2F58 + 4, L1_func_800760B4);
 }
 
-void L2_func_80079854(s32 arg0) {
-    if (arg0 == 2) {
-        L2_D_800F4010 = 0;
-        L2_func_80086FAC(0);
-        return;
-    }
-    L2_func_8006E97C(&L2_D_800AF188);
-    L2_D_800F4010 = 2;
-}
+INCLUDE_ASM("asm/level10/nonmatchings/text_80079520", func_8007A344);
 
 void L1_func_80076104(s32 idx) {
     L1_func_8002C168(L1_D_8009DB50[M2C_FIELD(&g_Weapons[idx], u8 *, 0x5B)], (s32)(&L1_D_800E2F58 + 4));
