@@ -53,6 +53,12 @@ typedef struct { u16 start; u8 len; u8 flag; } AnimRec;
 typedef struct { u8 pad0[6]; u16 count; u16 unk8; u16 tag; u8 unkC; u8 padD[3]; s16 unk10; u8 pad12[4]; u16 unk16; AnimRec recs[1]; } AnimTrack;
 typedef struct { s32 id; char name[0x64]; } SrcRec;
 typedef struct { s32 idx; char name[0x64]; u8 a; u8 b; u8 pad[2]; } DstRec;
+typedef struct { u8 pad[0x92]; u8 used; u8 pad2[1]; } Slot94;
+extern char D_800A97BC[];
+extern u8 *D_8009D0FC;
+M2C_UNK *func_800753F0(s32 arg0);
+void func_80075920(HmdModel *arg0);
+void func_80075E9C(void *arg0);
 extern s32 D_800E2F54;
 extern s32 D_800A0370[];
 void func_8003EA24(SVECTOR *arg0, s32 *arg1, SVECTOR *arg2);
@@ -163,7 +169,37 @@ s32 func_800752C0(void) {
   return (s32) var_v0;
 }
 
+#ifdef NON_MATCHING
+u8 *func_800752E8(u8 arg0) {
+    u8 *s1;
+    Slot94 *p;
+    s32 i;
+    s32 s0;
+    u8 *e;
+    i = 0;
+    p = D_800F0F80;
+    do {
+        s1 = (u8 *)p;
+        i += 1;
+        if (s1[0x92] == 0) {
+            s0 = arg0;
+            s1[0x92] = 1;
+            *(void **)s1 = func_800753F0(s0);
+            e = D_8009D0FC + s0 * 0x70;
+            *(u16 *)(s1 + 0x90) = *(u16 *)(e + 0x6C);
+            *(s32 *)(s1 + 0x74) = *(s32 *)(e + 0x68);
+            func_80075920(s1);
+            func_80075E9C(s1);
+            return s1;
+        }
+        p++;
+    } while (i < 2);
+    func_8006B1DC(D_800A97BC);
+    return NULL;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_800752E8);
+#endif
 
 void func_800753A4(void *arg0) {
     if (arg0 != NULL) {

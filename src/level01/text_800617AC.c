@@ -1050,6 +1050,9 @@ typedef struct { s32 w[10]; } W40;
 typedef struct { u8 b[20]; } B20;
 typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; u8 r1, g1, b1, p1; s16 x1, y1; u8 u1, v1; u16 tpage; u8 r2, g2, b2, p2; s16 x2, y2; u8 u2, v2; u16 pad2; u8 r3, g3, b3, p3; s16 x3, y3; u8 u3, v3; u16 pad3; } POLY_GT4;
 typedef struct { s32 pad0; s32 rows; s32 cols; s32 w; s32 h; s32 *tiles; } SkyGrid;
+#define gte_ldsxy3c(r0) __asm__ volatile("lwc2 $12, 0(%0); lwc2 $13, 4(%0); lwc2 $14, 8(%0)" : : "r"(r0))
+#define gte_nclip() __asm__ volatile("nop; nop; .word 0x4B400006")
+#define gte_mfMAC0(r) __asm__ volatile("mfc2 %0, $24; nop" : "=r"(r))
 extern s32 D_800E2DF4;
 void func_8006DD20(s32 *a, s32 *b, s32 *c, s32 *out);
 #define NORM(i, o, w) { s32 ax, az, ay, k, sh; u32 m; ax = abs((i)->vx); az = abs((i)->vz); ay = abs((i)->vy); m = 0x40000000; k = 30; do { if ((ax & m) || (ay & m) || (az & m)) break; k--; m >>= 1; } while (k >= 0xE); sh = k - 13; if (sh > 0) { (o)->vx = (i)->vx >> sh; (o)->vz = (i)->vz >> sh; (o)->vy = (i)->vy >> sh; } else { (o)->vx = (i)->vx; (o)->vy = (i)->vy; (o)->vz = (i)->vz; } func_8008C5D8((s32 *)(o), (s32 *)(w)); }
@@ -1095,7 +1098,7 @@ extern C3 D_800AFF64;
 extern H3 D_800AFF68;
 void func_8006C8F4(u8 *arg0, u8 *arg1, s32 arg2);
 void func_8006B2C4();
-s32 func_8006CB88();
+s32 func_8006CB88(u8 *t);
 void func_8006D470();
 #define SP(o) (*(s32 *)((u8 *)spad + (o)))
 #define SPH(o) (*(u16 *)((u8 *)spad + (o)))
@@ -5552,7 +5555,143 @@ void func_8006C8F4(u8 *arg0, u8 *arg1, s32 arg2) {
     *(s16 *)((u8 *)prim + 0x24) = u2;
 }
 
+#ifdef NON_MATCHING
+s32 func_8006CB88(u8 *t) {
+    u8 c0[4];
+    u8 c1[4];
+    u8 c2[4];
+    u8 c3[4];
+    u8 c4[4];
+    u8 c5[4];
+    s32 f0;
+    s32 f1;
+    s32 f2;
+    s32 all;
+    s32 any;
+    s32 clip;
+    s32 any40;
+    s32 z0;
+    s32 z1;
+    s32 z2;
+    s32 mn;
+    s32 mx;
+    s32 z;
+    s32 idx;
+    u32 semi;
+    u16 flags;
+    s32 bit;
+    s32 grey;
+    s32 dim;
+    u8 *c;
+    s32 opz;
+
+    f0 = *(s32 *)(t + 0x64);
+    f1 = *(s32 *)(t + 0x68);
+    f2 = *(s32 *)(t + 0x6C);
+    all = f0 & f1 & f2 & 0x3F000000;
+    any = f0 | f1 | f2;
+    clip = any & 0x30000000;
+    any40 = any & 0x40000000;
+    z0 = (s16)f0;
+    z1 = (s16)f1;
+    z2 = (s16)f2;
+    if (all) {
+        goto ret0;
+    }
+    if (!clip) {
+        gte_ldsxy3c(t + 0x58);
+        gte_nclip();
+        gte_mfMAC0(opz);
+        if (opz <= 0) {
+            goto ret0;
+        }
+    }
+    if (z0 < z1) {
+        mn = (z0 < z2) ? z0 : z2;
+        mx = (z1 < z2) ? z2 : z1;
+    } else {
+        mn = (z1 < z2) ? z1 : z2;
+        mx = (z0 < z2) ? z2 : z0;
+    }
+    z = (mx * 3 + mn) >> 2;
+    *(s32 *)(t + 0x48) = z;
+    idx = (u32)z >> 2;
+    semi = *(u16 *)(t + 0x44) >> 15;
+    if (idx > 0xFFF) {
+        idx = 0xFFF;
+    }
+    if (idx < 0) {
+        idx = 0;
+    }
+    *(u32 *)(t + 0x50) = (semi << 25) | 0x34000000;
+    *(u32 **)(t + 0x1C) = *(u32 **)(t + 0x18) + idx;
+    flags = *(u16 *)(t + 0x44);
+    bit = 0x2000 << D_800B8F24;
+    if (flags & bit) {
+        dim = D_8009CABD;
+        grey = D_8009CABE;
+        if (*(s32 *)(t + 0x70) < 0) {
+            c = *(u8 **)(t + 0x8) + *(u16 *)(t + 0x3E) * 4;
+            if (dim) {
+                c0[1] = ((c[0] + c[1] + c[2]) >> 3) + 0x30;
+                c0[0] = 0;
+                c0[2] = 0;
+                c0[3] = c[3];
+                c = c0;
+            } else if (grey) {
+                c1[0] = 0x18;
+                c1[1] = 0x18;
+                c1[2] = 0x18;
+                c1[3] = c[3];
+                c = c1;
+            }
+            *(u32 *)(*(u8 **)(t + 0x20) + 4) = *(u32 *)c | *(u32 *)(t + 0x50);
+        }
+        if (*(s32 *)(t + 0x74) < 0) {
+            c = *(u8 **)(t + 0x8) + *(u16 *)(t + 0x40) * 4;
+            if (dim) {
+                c2[1] = ((c[0] + c[1] + c[2]) >> 3) + 0x30;
+                c2[0] = 0;
+                c2[2] = 0;
+                c = c2;
+            } else if (grey) {
+                c3[0] = 0x18;
+                c3[1] = 0x18;
+                c3[2] = 0x18;
+                c = c3;
+            }
+            *(u32 *)(*(u8 **)(t + 0x20) + 0x10) = *(u32 *)c;
+        }
+        if (*(s32 *)(t + 0x78) < 0) {
+            c = *(u8 **)(t + 0x8) + *(u16 *)(t + 0x42) * 4;
+            if (dim) {
+                c4[1] = ((c[0] + c[1] + c[2]) >> 3) + 0x30;
+                c4[0] = 0;
+                c4[2] = 0;
+                c = c4;
+            } else if (grey) {
+                c5[0] = 0x18;
+                c5[1] = 0x18;
+                c5[2] = 0x18;
+                c = c5;
+            }
+            *(u32 *)(*(u8 **)(t + 0x20) + 0x1C) = *(u32 *)c;
+        }
+        if (!any40) {
+            flags &= ~bit;
+        }
+    }
+    *(u16 *)(t + 0x44) = flags;
+    if (clip || (*(u32 *)(t + 0x48) < *(u32 *)(t + 0x4C) && !semi)) {
+        return 2;
+    }
+    return 1;
+ret0:
+    return 0;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006CB88);
+#endif
 
 #ifdef NON_MATCHING
 void func_8006CEA4(s32 arg0) {

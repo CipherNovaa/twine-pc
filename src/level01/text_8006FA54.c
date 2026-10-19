@@ -14,6 +14,8 @@ typedef struct { s16 a; s16 b; u16 c; } KdNode;
 typedef struct { u8 a[6]; u16 n; u16 d; u16 flags; } Face12;
 typedef struct { u8 pad[0x20]; SVECTOR *nrm; Face12 *faces; } FaceMesh;
 typedef struct KdBox { s16 xmin, zmin, xmax, zmax; u8 pad8[0xC]; KdNode *nodes; s16 *leaf; u8 pad1C[8]; s32 data; } KdBox;
+typedef struct { u8 pad[6]; u16 idx; s16 d; } PlaneEnt;
+typedef struct { u8 pad[0x20]; SVECTOR *verts; } PlaneSet;
 s32 func_8007369C(s32 a, u16 *b, u16 *c, s32 d, s32 e, s32 f);
 s32 func_800746D0(s32 arg0, s32 *arg1, s32 *arg2, s16 *arg3, s16 *arg4, s32 *arg5);
 extern u8 D_800E2E4C[];
@@ -28,7 +30,7 @@ s32 func_800702CC(void *arg0, s32 arg1, s32 *arg2);
 s32 func_800705A8(ZoneObj *arg0, s32 arg1, SVECTOR *arg2, s32 *arg3);
 
 s32 func_80071638(void *, s32, s32, s32, void *, s32);
-s32 func_80072190(void *, s32, s32, s32, void *);
+s32 func_80072190(PlaneSet *arg0, SVECTOR *arg1, s32 arg2, s32 arg3, PlaneEnt *arg4);
 s32 Vec_Dot(register s32 *row, register SVECTOR *v);
 
 
@@ -213,7 +215,39 @@ INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_800706F0);
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_80071638);
 
+#ifdef NON_MATCHING
+s32 func_80072190(PlaneSet *arg0, SVECTOR *arg1, s32 arg2, s32 arg3, PlaneEnt *arg4) {
+    s32 sp10;
+    s32 sp14;
+    s32 sp18;
+    SVECTOR sp20;
+    SVECTOR *sp28;
+    register s32 s0;
+    register s32 s1;
+    sp28 = arg0->verts + arg4->idx;
+    sp10 = (Vec_Dot((s32 *)arg1, sp28) >> 15) + arg4->d;
+    sp14 = sp10 + ((sp28->vy * arg3) >> 15);
+    if ((sp10 ^ sp14) < 0) {
+        return 1;
+    }
+    if (sp10 < 0) {
+        return 0;
+    }
+    s0 = arg1->vx;
+    sp20.vx = sp28->vx > 0 ? s0 - arg2 : s0 + arg2;
+    sp20.vy = arg1->vy;
+    s1 = arg1->vz;
+    sp20.vz = sp28->vz > 0 ? s1 - arg2 : s1 + arg2;
+    sp18 = (Vec_Dot((s32 *)&sp20, sp28) >> 15) + arg4->d;
+    sp14 = sp18 + ((sp28->vy * arg3) >> 15);
+    if ((sp18 ^ sp14) < 0 || (sp18 ^ sp10) < 0) {
+        return 1;
+    }
+    return 0;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_80072190);
+#endif
 
 s32 func_8007240C(void *arg0, s32 arg1, s32 arg2, s32 arg3, s32 (*arg4)[3], s16 *arg5, s16 arg6, s32 *arg7, s32 arg8, s32 *arg9, s32 arg10, s32 arg11) {
     s32 i;
