@@ -1730,6 +1730,7 @@ extern int L1_g_CheatCodes[];
 
 s32 L2_func_8003BC0C(u8 *o, s32 arg1);
 void L2_func_8005F74C(void);
+void L2_func_80060EC4(void *arg0);
 void L2_func_8005FBBC(u8 *obj);
 void L2_func_800387C4(void *);
 void L2_func_8005C9C4(void *, void *);
@@ -1738,7 +1739,6 @@ void L2_func_800616AC(u8 *obj);
 M2C_UNK L2_func_8002D6AC(M2C_UNK *);                   /* extern */
 extern M2C_UNK L2_D_800AE968;
 void L2_func_8005FEC4(void);
-void L2_func_80060EC4(void *arg0);
 void L2_func_800619F0(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_80039CA8();                            /* extern */

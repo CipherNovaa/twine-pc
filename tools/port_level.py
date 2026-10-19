@@ -583,6 +583,13 @@ def port(level):
             else:
                 ld.append(f"L1_{n} = {IDENT.sub(lambda m: 'L1_' + m.group(0) if m.group(0) in renamed else m.group(0), e)};")
         (ROOT / f"config/{level}_syms.ld").write_text("\n".join(ld) + "\n")
+        # every function of this level under its own name too, for its own C (matched here or later)
+        keyed = {l.split()[0] for l in jtbl_lines}
+        for s in sorted(asm_dir.glob("*/*.s")):
+            jt = re.findall(r"%hi\((jtbl_\w+)\)", s.read_text())
+            if jt and s.stem not in keyed:
+                keyed.add(s.stem)
+                jtbl_lines.append(f"{s.stem} {' '.join(dict.fromkeys(jt))}")
         (ROOT / f"config/{level}_jtbl.txt").write_text(
             "# Switch jump tables each function uses, in order of first use (tools/jtbl_fix.py).\n" + "\n".join(jtbl_lines) + "\n")
 
@@ -667,6 +674,28 @@ def port(level):
             native_drop |= {n for s, n in bad if s == "N"}
             continue
         ok = r.returncode == 0 and ": OK" in r.stdout
+        if not ok and (ROOT / f"build/{level}/{level}.exe").exists():
+            # Bytes matched function by function (relocations masked), so a symbol is bound wrongly
+            # somewhere: find the ported functions the linked EXE differs in and leave them out.
+            built = (ROOT / f"build/{level}/{level}.exe").read_bytes()
+            diff = [k for k in range(0x800, min(len(built), len(exe))) if built[k] != exe[k]]
+            syms = sorted((int(a, 16), name) for a, typ, name in (
+                l.split() for l in subprocess.run(["mips-elf-nm", "-n", str(ROOT / f"build/{level}/{level}.elf")],
+                                                   capture_output=True, text=True).stdout.splitlines() if len(l.split()) == 3)
+                if typ in "Tt")
+            hit = set()
+            for k in diff:
+                addr = k - 0x800 + load
+                at = max((s[0] for s in syms if s[0] <= addr), default=None)
+                # several names can sit at one address (this level's name is an alias of L1_/L2_ ones)
+                for key in filter(None, (owner(n) for a, n in syms if a == at)):
+                    hit.add(key)
+            if hit:
+                print(f"pass {attempt}: the linked EXE differs in {' '.join(sorted(s + ':' + n for s, n in hit))}")
+                exclude |= {n for s, n in hit if s == "L1"}
+                exclude2 |= {n for s, n in hit if s == "L2"}
+                native_drop |= {n for s, n in hit if s == "N"}
+                continue
         print(f"{level}: {len(ported)} functions from LEVEL01's C, {len(ported2)} from LEVEL02's; "
               f"EXE {'matches' if ok else 'DOES NOT MATCH'}")
         if ok:

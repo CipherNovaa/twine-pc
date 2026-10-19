@@ -1730,6 +1730,7 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+void func_80060EC4(void *arg0);
 // func_80061068 -> func_8006114C (L2 own)
 // UNMAPPED extern s32 D_8009DB3C;
 // UNMAPPED extern s32 D_8009DB44;
@@ -1786,6 +1787,7 @@ extern s32 L1_D_800D4390;
 void func_800619B8();
 M2C_UNK func_8002D6AC(M2C_UNK *);                   /* extern */
 extern M2C_UNK D_800AE968;
+/* pairs: func_80060AC0>func_80060BA4 func_80060E0C>func_80060EC4 func_80061068>func_8006114C */
 
 s32 L1_func_8005EE6C(u8 *obj, s32 dx, s32 dz, s32 arg3) {
     SVECTOR d;
@@ -2341,7 +2343,55 @@ void L1_func_80060AC0(u8 *obj) {
     }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8005EE38", func_80060C40);
+void func_80060C40(u8 *obj, s16 dx, s16 dz) {
+    s32 len;
+    s32 max;
+    s32 ang;
+
+    *(s16 *)(obj + 0x9C) = 0;
+    *(s16 *)(obj + 0x9A) = 0;
+    *(s16 *)(obj + 0x98) = 0;
+    ang = *(u16 *)(obj + 0xA0) & 0xFFF;
+    *(u16 *)(obj + 0xA0) = ang;
+    if (ang > 0x800) {
+        *(u16 *)(obj + 0xA0) = ang - 0x1000;
+    }
+    func_80060EC4(obj);
+    if (dx != 0 || dz != 0) {
+        len = L1_SquareRoot0(dx * dx + dz * dz);
+        max = *(u16 *)(obj + 0x2A);
+        if (max < len) {
+            dx = dx * max / len;
+            dz = dz * max / len;
+        }
+        *(s16 *)(obj + 0x98) = dx;
+        *(s16 *)(obj + 0x9C) = dz;
+        if (func_8006114C(obj) != 0) {
+            *(s16 *)(obj + 0x98) = 0;
+            *(s16 *)(obj + 0x9C) = 0;
+        }
+        *(s32 *)(*(u8 **)(obj + 0x90) + 0x28) += *(s16 *)(obj + 0x98);
+        *(s32 *)(*(u8 **)(obj + 0x90) + 0x30) += *(s16 *)(obj + 0x9C);
+        if (obj[4] == 0) {
+            return;
+        }
+    }
+    L1_func_80060AC0(obj);
+    if (*(u32 *)(obj + 0x64) & 0x700) {
+        if (((*(u32 *)(obj + 0x64) >> 8) & 7) < 2) {
+            *(s16 *)(obj + 0xA0) = (s16)*(u16 *)(obj + 0xA0) >> 1;
+        } else if (((*(u32 *)(obj + 0x64) >> 8) & 7) < 3) {
+            *(s16 *)(obj + 0xA0) = (s16)*(u16 *)(obj + 0xA0) >> 2;
+        }
+    }
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x62) += *(s16 *)(obj + 0xA0);
+    if (*(s16 *)(*(u8 **)(obj + 0x90) + 0x62) > 0x800) {
+        *(s16 *)(*(u8 **)(obj + 0x90) + 0x62) -= 0x1000;
+    }
+    *(s32 *)(*(u8 **)(obj + 0x90) + 0x10) = 2;
+    obj[0xA5] &= 0x3F;
+    *(s16 *)(obj + 0xA0) = 0;
+}
 
 void func_80060EC4(void *arg0) {
     if (M2C_FIELD(arg0, s32 *, 0x34) <= 0) {

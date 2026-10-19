@@ -1,6 +1,7 @@
 # Switch jump tables each function uses, in order of first use (tools/jtbl_fix.py).
 L1_func_80029A34 jtbl_800A95A8
 L1_func_8002B69C jtbl_800A97A8
+L2_func_8002DB48 jtbl_800A99C0
 L1_DebugScreen_DrawPage jtbl_800A9AF0
 L1_func_80030B04 jtbl_800A9DA4
 L1_func_80039A9C jtbl_800AA54C
@@ -10,3 +11,20 @@ L1_func_80047318 jtbl_800AAC10
 L1_func_80055878 jtbl_800AB174
 L1_func_80055BA8 jtbl_800AB1D4
 L1_func_800566F8 jtbl_800AB29C
+func_80029A60 jtbl_800A95A8
+func_8002B6C8 jtbl_800A97A8
+func_8002D9AC jtbl_800A99C0
+func_8002FC6C jtbl_800A9AF0
+func_80030AC8 jtbl_800A9DA4
+func_8003A2F4 jtbl_800AA54C
+func_8003DFC0 jtbl_800AA69C
+func_8003E9AC jtbl_800AA6FC
+func_80047D5C jtbl_800AAC10
+func_800538DC jtbl_800AB03C
+func_80057504 jtbl_800AB174
+func_80057834 jtbl_800AB1D4
+func_80058384 jtbl_800AB29C
+func_8005C854 jtbl_800AB418
+func_80069EFC jtbl_800ABB44
+func_8006AB70 jtbl_800ABDEC
+func_8006BB60 jtbl_800ABEFC

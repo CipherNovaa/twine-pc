@@ -189,8 +189,11 @@ extern void (*L2_D_800A100C)(void);
 void L2_func_80086FAC();
 extern M2C_UNK (*L2_D_800A1078)(s16);
 void L2_func_8006E9D0(s32 arg0, s32 arg1);
+extern void *L2_D_800B6FE4;
 void L2_func_8007906C(void);
 void L2_func_800796AC(void);
+s32 L2_func_80079F1C(u8 *obj, s32 arg1);
+extern u8 L2_D_800AF28C;
 void L2_func_8007A354(u8 *obj, s16 *vel);
 extern s8 L2_D_800A40AC;
 extern u8 L2_D_800F430C;
@@ -703,7 +706,24 @@ INCLUDE_ASM("asm/level03/nonmatchings/text_80076430", func_8007758C);
 
 INCLUDE_ASM("asm/level03/nonmatchings/text_80076430", func_8007781C);
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_80076430", func_8007791C);
+s32 L2_func_80079F1C(u8 *obj, s32 arg1) {
+    s16 i;
+    u8 *e;
+    L2_func_8006E9D0(*(u8 *)&L2_D_800A40AC, (s32)&L2_D_800AF28C);
+    for (i = 0; i < 5; i++) {
+        e = (i * 0x2C) + &L2_D_800F430C;
+        if (e[0x20] == 0) {
+            *(u8 **)(obj + 0x108) = e;
+            e[0x20] = 1;
+            e[0x21] = 1;
+            *(s32 *)(e + 0x18) = L2_D_800B6FE4;
+            *(s32 *)(e + 0x1C) = 0;
+            *(s32 *)(e + 0x28) = arg1;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/level03/nonmatchings/text_80076430", func_800779E0);
 
