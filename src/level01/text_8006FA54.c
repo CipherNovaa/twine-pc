@@ -16,6 +16,24 @@ typedef struct { u8 pad[0x20]; SVECTOR *nrm; Face12 *faces; } FaceMesh;
 typedef struct KdBox { s16 xmin, zmin, xmax, zmax; u8 pad8[0xC]; KdNode *nodes; s16 *leaf; u8 pad1C[8]; s32 data; } KdBox;
 typedef struct { u8 pad[6]; u16 idx; s16 d; } PlaneEnt;
 typedef struct { u8 pad[0x20]; SVECTOR *verts; } PlaneSet;
+typedef struct { u16 i0, i1, i2, n; s16 d; u16 f; } HPoly;
+typedef struct { u8 pad[0x1C]; SVECTOR *vtx; SVECTOR *nrm; } HMesh;
+typedef struct HitCtx { SVECTOR a; SVECTOR b; SVECTOR c; SVECTOR d; SVECTOR e; SVECTOR f; SVECTOR g; HPoly *polys; s16 *idx; s32 count; SVECTOR *outN; SVECTOR *outP; s32 best; s32 cur; s32 hit; s32 lo; s32 hi; SVECTOR *n; SVECTOR *v0; SVECTOR *v1; SVECTOR *v2; s32 *outF; } HitCtx;
+void func_80074FE8(register s32 *a, register s32 *b, register s32 *c);
+void func_80072D48(register void *arg0, register void *arg1, register void *arg2, register s32 *arg3, register s32 *arg4);
+void Vec_ProjectXZ(register SVECTOR *v, register s32 *rowA, register s32 *rowC, register s32 *out1, register s32 *out3);
+void Vec_Scale(register s32 scale, register SVECTOR *in, register SVECTOR *out);
+#define gte_ldopv1(r0) __asm__ volatile("lh $12, 0(%0); lh $13, 2(%0); ctc2 $12, $0; lh $14, 4(%0); ctc2 $13, $2; ctc2 $14, $4" : : "r"(r0) : "$12", "$13", "$14")
+#define gte_ldopv2(r0) __asm__ volatile("lh $12, 0(%0); lh $13, 2(%0); lh $14, 4(%0); mtc2 $12, $9; mtc2 $13, $10; mtc2 $14, $11" : : "r"(r0) : "$12", "$13", "$14")
+#define gte_op1() __asm__ volatile("nop; nop; .word 0x4B78000C")
+#define EDGE(p, q, r) \
+func_80074FE8((s32 *)&h->c, (s32 *)h->p, (s32 *)&h->e); \
+func_80074FE8((s32 *)h->q, (s32 *)h->p, (s32 *)&h->f); \
+gte_ldopv1(&h->e); \
+gte_ldopv2(&h->f); \
+gte_op1(); \
+gte_stsv(&h->g); \
+if (Vec_Dot((s32 *)h->n, &h->g) >= 0) {
 s32 func_8007369C(s32 a, u16 *b, u16 *c, s32 d, s32 e, s32 f);
 s32 func_800746D0(s32 arg0, s32 *arg1, s32 *arg2, s16 *arg3, s16 *arg4, s32 *arg5);
 extern u8 D_800E2E4C[];
@@ -384,7 +402,62 @@ void func_80072D48(register void *arg0, register void *arg1, register void *arg2
     *arg4 = sp4;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_80072E28);
+s32 func_80072E28(HMesh *m, HitCtx *h) {
+    HPoly *pe;
+    s32 i;
+    s32 lo, hi;
+    s32 sx, sz;
+    s32 aa, bb;
+
+    if (h->a.vy < h->b.vy) {
+        h->lo = h->a.vy;
+        h->hi = h->b.vy;
+    } else {
+        h->lo = h->b.vy;
+        h->hi = h->a.vy;
+    }
+    func_80074FE8((s32 *)&h->b, (s32 *)h, (s32 *)&h->d);
+    h->hit = -1;
+    h->cur = h->best;
+    for (i = 0; i < h->count; i++) {
+        pe = (HPoly *)((u8 *)h->polys + h->idx[i] * 12);
+        h->n = m->nrm + pe->n;
+        h->v0 = m->vtx + pe->i0;
+        h->v1 = m->vtx + pe->i1;
+        h->v2 = m->vtx + pe->i2;
+        func_80072D48(h->v0, h->v1, h->v2, &lo, &hi);
+        if (!(h->lo > hi) && !(h->hi < lo)) {
+            Vec_ProjectXZ(h->n, (s32 *)h, (s32 *)&h->b, &sx, &sz);
+            sx = (sx >> 15) + pe->d;
+            sz = (sz >> 15) + pe->d;
+            if ((sx ^ sz) < 0) {
+                aa = Math_Abs(sx);
+                bb = Math_Abs(sz);
+                aa = (aa << 12) / (aa + bb);
+                if (aa >= h->cur) {
+                } else {
+                    Vec_Scale(aa, &h->d, &h->c);
+                    h->c.vx += h->a.vx;
+                    h->c.vy += h->a.vy;
+                    h->c.vz += h->a.vz;
+                    EDGE(v0, v1, v2)
+                    EDGE(v1, v2, v0)
+                    EDGE(v2, v0, v1)
+                    h->best = h->cur = aa;
+                    h->hit = h->idx[i];
+                    *h->outP = h->c;
+                    *h->outN = *h->n;
+                    if (h->outF != 0) *h->outF = pe->f;
+                    h->outN->pad = pe->d;
+                    }
+                    }
+                    }
+                }
+            }
+        }
+    }
+    return h->hit;
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_8007369C);
 

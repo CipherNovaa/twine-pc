@@ -2212,12 +2212,12 @@ void func_80060588(u8 *obj) {
 void func_8006060C(void) {
 }
 
-#ifdef NON_MATCHING
 s32 func_80060614(u8 *obj) {
     u8 *src;
     s32 a;
     s32 speed;
     s32 f;
+    s32 m = ~0x80;
 
     src = *(u8 **)(obj + 0x88);
     obj[5] = 4;
@@ -2232,25 +2232,22 @@ s32 func_80060614(u8 *obj) {
         speed = rand() & 7;
         speed *= 8;
         speed += 150;
-        func_8003B53C(obj, a, *(s16 *)(obj + 0xB0), speed);
+        ((void (*)(u8 *, s32, s32, s32))func_8003B53C)(obj, a, *(s16 *)(obj + 0xB0), speed);
     } else {
         speed = rand() & 7;
         speed *= 8;
         speed += 80;
         a = *(s16 *)(*(u8 **)(src + 0x90) + 0x62);
-        func_8003B53C(obj, a, *(s16 *)(obj + 0xB0), speed);
+        ((void (*)(u8 *, s32, s32, s32))func_8003B53C)(obj, a, *(s16 *)(obj + 0xB0), speed);
     }
     *(s16 *)(obj + 0xAE) = -((speed * (s16)D_800A0370[*(u16 *)(obj + 0xB0) & 0xFFF]) >> 12);
     *(s16 *)(obj + 0xA0) = (rand() & 3) * 34 + 11;
     *(s32 *)(src + 0x8C) = 0;
     f = *(s32 *)(obj + 0x68);
-    *(s32 *)(obj + 0x68) = f & ~0x80;
+    *(s32 *)(obj + 0x68) = m & f;
     *(s32 *)(obj + 0x88) = 0;
     return f;
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_8005EDF8", func_80060614);
-#endif
 
 M2C_UNK func_80060798(obj)
 u8 *obj;

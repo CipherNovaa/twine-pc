@@ -1051,6 +1051,69 @@ typedef struct { u8 b[20]; } B20;
 typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; u8 r1, g1, b1, p1; s16 x1, y1; u8 u1, v1; u16 tpage; u8 r2, g2, b2, p2; s16 x2, y2; u8 u2, v2; u16 pad2; u8 r3, g3, b3, p3; s16 x3, y3; u8 u3, v3; u16 pad3; } POLY_GT4;
 typedef struct { s32 pad0; s32 rows; s32 cols; s32 w; s32 h; s32 *tiles; } SkyGrid;
 typedef struct { u8 p0[0x90]; u8 *sub; u8 p1[0x88]; u16 f11C; s16 f11E; u16 f120; s16 f122; } Obj6A;
+#define gte_ldv0_mt(r0, r1) __asm__ volatile("mtc2 %0, $0; mtc2 %1, $1" : : "r"(r0), "r"(r1))
+#define gte_mfsxy2(r) __asm__ volatile("mfc2 %0, $14" : "=r"(r))
+#define gte_mfsz3(r) __asm__ volatile("mfc2 %0, $19; nop" : "=r"(r))
+#define VERT(OI, OP, OF, OC, AN) do { \
+idx = *(u16 *)(arg0 + OI); \
+v = (u32 *)(*(u8 **)(arg0 + 4) + idx * 0xC); \
+f = v[1]; \
+if (f < 0) { \
+*(s32 *)(arg0 + OF) = f; \
+col = (f << 8) >> 24; \
+if (col >= 0) col = v[2]; \
+*(s32 *)(arg0 + OP) = v[0]; \
+if (f & 0x40000000) { \
+col = v[2]; \
+AN = 1; \
+} \
+*(s32 *)(arg0 + OC) = col; \
+} else { \
+p = *(u8 **)arg0 + idx * 8; \
+gte_ldv0_mt(*(u32 *)p, *(u16 *)(p + 4)); \
+gte_rtps(); \
+col = (f << 8) >> 24; \
+if (col >= 0) { \
+col = *(s32 *)(*(u8 **)(arg0 + 0xC) + col * 0x14 + 0xC); \
+v[2] = col; \
+} \
+d = func_8006D3C0((SVECTOR *)(*(u8 **)arg0 + idx * 8), (SVECTOR *)(arg0 + 0x30)); \
+lim = *(s32 *)(arg0 + 0x38); \
+if (lim >= d) { \
+if (col < 0) col = (*(s32 **)(arg0 + 8))[*(u16 *)(arg0 + OI)]; \
+t = 0x10000 - (d << 16) / lim; \
+r = (col & 0xFF) + ((t * arg0[0x2C]) >> 16); \
+g = ((col >> 8) & 0xFF) + ((t * arg0[0x2D]) >> 16); \
+b = ((col >> 16) & 0xFF) + ((t * arg0[0x2E]) >> 16); \
+if (r >= 0x100) r = 0xFF; \
+if (g >= 0x100) g = 0xFF; \
+if (b >= 0x100) b = 0xFF; \
+col = g << 8; \
+if (D_8009CABD == 0) col = r | (g << 8) | (b << 16); \
+v[2] = col; \
+f |= 0x40000000; \
+AN = 1; \
+} \
+*(s32 *)(arg0 + OC) = col; \
+gte_mfsxy2(sxy); \
+gte_mfsz3(sz); \
+f |= sz >> 2; \
+sy = sxy >> 16; \
+v[0] = sxy; \
+*(s32 *)(arg0 + OP) = sxy; \
+sx = (s16)sxy; \
+gte_cfFLAG(flag); \
+if (flag & 0x46000) f |= 0x20000000; \
+if (!(sy < 0x300 && sx < 0x300 && sy >= -0x100 && sx >= -0x100)) f |= 0x10000000; \
+if (sx < 0) f |= 0x08000000; \
+if (!(sx < 0x21C)) f |= 0x04000000; \
+if (sy < 0) f |= 0x02000000; \
+if (!(sy < 0xF0)) f |= 0x01000000; \
+f |= 0x80000000; \
+v[1] = f; \
+*(s32 *)(arg0 + OF) = f; \
+} \
+} while (0)
 void func_8006A41C(u8 *obj);
 extern u16 D_8009E4D4;
 extern u16 D_8009E4D8;
@@ -1110,7 +1173,7 @@ extern H3 D_800AFF68;
 void func_8006C8F4(u8 *arg0, u8 *arg1, s32 arg2);
 void func_8006B2C4();
 s32 func_8006CB88(u8 *t);
-void func_8006D470();
+void func_8006D470(u8 *arg0);
 #define SP(o) (*(s32 *)((u8 *)spad + (o)))
 #define SPH(o) (*(u16 *)((u8 *)spad + (o)))
 void Pad_StickToSpeed(s32 axis, s32 maxSpeed, s32 *out);
@@ -6067,7 +6130,32 @@ u32 func_8006D3C0(SVECTOR *a, SVECTOR *b) {
     return dx + dy + dz;
 }
 
+#ifdef NON_MATCHING
+void func_8006D470(u8 *arg0) {
+    s32 a0, a1, a2;
+    s32 idx;
+    u32 *v;
+    s32 f;
+    s32 col;
+    s32 d;
+    s32 lim;
+    s32 t;
+    s32 r, g, b;
+    s32 sxy, sz, flag;
+    s32 sx, sy;
+    u8 *p;
+
+    a0 = 0;
+    a1 = 0;
+    a2 = 0;
+    VERT(0x3E, 0x58, 0x64, 0x70, a0);
+    VERT(0x40, 0x5C, 0x68, 0x74, a1);
+    VERT(0x42, 0x60, 0x6C, 0x78, a2);
+    if ((a0 | a1 | a2) != 0) *(u16 *)(arg0 + 0x44) |= 0x2000 << D_800B8F24;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006D470);
+#endif
 
 void func_8006DD20(s32 *a, s32 *b, s32 *c, s32 *out) {
   s32 d[4];
