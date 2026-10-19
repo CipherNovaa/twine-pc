@@ -285,7 +285,17 @@ been renamed, the current name is used.
   drivers, GsLinkAnim).
 - `func_80038C8C`: object destroyed: drop carried object, death sound (def+0x5D), spawn drops (def+5,
   def+6), award score def+4 (`func_800391B0`).
-- indoor.c (-O1, `text_8005EDF8.c`): CLUT handling: `D_800DE0E8` = 64×16 CLUT table, `D_800DE8E8` = backup,
+- -O1 file `text_8005EDF8.c` (0x8005EDF8–0x800617AC): object management around indoor.c:
+  `func_800600EC` loads up to `g_Args+0x218` CLUTs into the 64×16 table and backs it up;
+  `func_80061708(id)` switches cut-scene (stops the player); `func_800604B0`/`func_80060588` object light
+  colours (light index obj+0xCD into `D_8009EADC`); `func_8005EE6C` collision probe (radius 500 for the
+  player, else obj+0x2A); `func_80060AC0` snaps a model to the floor; `func_800615C8` floor probe + motion;
+  `func_8005FF60` kills all objects; `func_80060798`/`func_80060614` knockback arc (state 0x25/0x26, base
+  height +0xAC, vertical speed +0xAE, angle +0xB0, spin +0x9E..); `func_8005FAA8` removes an object;
+  `func_8005F93C` removes it when out of range; `func_8005F788` per-frame object update; `func_80061068`
+  movement collision vs objects and world (full move, then X-only / Z-only).
+- `func_80061B70`: on-foot movement speed (forward/strafe); `func_80061AB0`: strafe/lean clamp.
+- indoor.c CLUT handling: `D_800DE0E8` = 64×16 CLUT table, `D_800DE8E8` = backup,
   `D_800DE0E4` = per-slot CLUT index; `func_8006043C(a, b)` copies a CLUT row, `func_80060410` uploads it.
 
 - `func_800373FC(proj, obj)`: applies a hit: impact sound, reactions (`func_800632AC`), health −=
