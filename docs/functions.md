@@ -426,3 +426,11 @@ Command word: byte 0 opcode, byte 1 destination variable, u16 at +2 operand mode
   `func_80044BAC`/`func_80044BBC` colours are u8; `ratan2` is `s32 (s32, s32)`.
 - `Menu` (`g_MenuUpdateFunc`, 0x800D441C): +0x04 is the "resume" row index; the real cursor is
   `D_800B0794`. Neighbouring globals (0x800D439C–0x800D4474) are probably part of a larger menu struct.
+
+## Non-natural matches (revisit)
+
+These match byte for byte but through tricks rather than natural source; worth another look:
+
+- `func_80061AB0`: an empty `__asm__("" : "+r"(t))` barrier to get `sra; negu; addu` for `b -= a >> 4`.
+- `func_80063F34`: the permuter gave `func_80065614` a `volatile int` parameter.
+- `func_80037768`: a `volatile` read (it also matches with -fno-cse-skip-blocks — maybe another -O1 module).

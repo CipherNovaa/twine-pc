@@ -1,6 +1,16 @@
 #include "twine.h"
 
 typedef struct { char *name; s32 unk4; s32 unk8; } CdFileEnt;
+typedef struct { u8 p[0x142]; u16 v; } ArgsX;
+extern u8 D_800AF6A8[];
+extern u8 *D_800AEE10;
+s32 func_80082D00(s32, s32);
+void func_8002ADF0(void);
+extern char D_800A7048[];
+extern char D_800A7190[];
+extern s16 D_8009CA56;
+extern s32 D_800AEDE0;
+extern s32 D_800AEDE4;
 extern CdFileEnt D_8009C204[];
 
 
@@ -23,7 +33,7 @@ extern char D_800AFEC8[];
 
 
 s32 func_8002A854(s32, s32);
-s32 func_8002BE24(char *, s32);
+s32 func_8002BE24(char *arg0, s32 arg1);
 s32 func_8002BF34(void *arg0, char *arg1);
 M2C_UNK func_8006B1DC(M2C_UNK *);
 u8 func_8002AAC4(void);
@@ -53,7 +63,7 @@ extern M2C_UNK D_800A70C8;
 
 
 void func_8002A61C(char *name, s32 *result);
-M2C_UNK func_8002A720(s32);                         /* extern */
+void func_8002A720(s32 arg0);
 extern s8 D_800A7230;
 extern s8 D_800A7244;
 extern s32 D_800AEDD8;
@@ -107,7 +117,35 @@ void func_8002A61C(char *name, s32 *result) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002A720);
+void func_8002A720(s32 arg0) {
+    s32 r;
+    s32 tries;
+    u8 b[3];
+    u8 buf[24];
+    tries = 4;
+    func_800833CC(arg0, buf);
+loop1:
+    func_80082F8C(2, buf, 0);
+    func_80082B64(1, D_800AF6A8, 0x80);
+loop2:
+    r = func_80082D00(1, 0);
+    if (r == 0) goto done;
+    if (r == -1) {
+        if (--tries != -1) {
+            b[2] = 0;
+            b[1] = 0;
+            b[0] = 0;
+            func_800831FC(0x16, b, 0);
+            goto loop1;
+        } else {
+            func_8002ADF0();
+        }
+    }
+    goto loop2;
+done:
+    D_800AEE10 = D_800AF6A8;
+    func_8002AA94(1);
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002A854);
 
@@ -145,7 +183,18 @@ void func_8002ADF0(void) {
     exit(0);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002AE34);
+void func_8002AE34(u8 arg0) {
+    u8 sp18[8];
+    if (D_8009CA56 != -1) {
+        ((ArgsX *)g_Args)->v = D_8009CA56;
+        *(u16 *)&D_8009CA5C = D_8009CA56;
+        D_8009CA56 = -1;
+    }
+    func_800833CC(D_800AEDE4, (s8 *)sp18);
+    func_80082F8C(arg0, sp18, 0);
+    D_800AEDDC = D_800AEDE4;
+    D_800AEDE0 = D_800AEDE0 + 1;
+}
 
 s32 func_8002AF08(void) {
     s8 sp10;
@@ -239,7 +288,25 @@ void func_8002BDE4(void) {
     D_800AFEB5 = 0x7F;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002BE24);
+s32 func_8002BE24(char *arg0, s32 arg1) {
+    s32 fd;
+    s32 size;
+    s32 got;
+    fd = PCopen(arg0, 0, 0);
+    if (fd == -1) {
+        printf(D_800A7048, arg0);
+        exit(1);
+    }
+    size = PClseek(fd, 0, 2);
+    PClseek(fd, 0, 0);
+    got = PCread(fd, arg1, size);
+    if (got != size) {
+        printf(D_800A7190, arg0);
+        exit(1);
+    }
+    func_80083F14(fd);
+    return size;
+}
 
 s32 func_8002BF34(void *arg0, char *arg1) {
     u8 *s;

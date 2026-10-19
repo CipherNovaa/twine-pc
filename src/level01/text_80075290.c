@@ -51,10 +51,14 @@ unsigned long func_80027248(M2C_UNK, s32, M2C_UNK);
 
 typedef struct { u16 start; u8 len; u8 flag; } AnimRec;
 typedef struct { u8 pad0[6]; u16 count; u16 unk8; u16 tag; u8 unkC; u8 padD[3]; s16 unk10; u8 pad12[4]; u16 unk16; AnimRec recs[1]; } AnimTrack;
+extern s16 D_800B0DA0;
+extern s16 D_800B07B0;
+u32 func_8005397C(s32, s32);
+s32 func_80051728(s32, s32);
 
 
 extern M2C_UNK D_800F11D0;
-extern s32 D_800AFFC8;
+extern u8 *D_800AFFC8;
 void GsSetRefView2(void *);
 void func_8007567C(void *arg0);
 
@@ -505,7 +509,24 @@ s32 func_80076A0C(u8 *arg0) {
     return v;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80076A8C);
+s32 func_80076A8C(arg0)
+void *arg0; {
+    s32 i;
+    u8 *p;
+    s32 pos;
+    i = D_800B0DA0;
+    p = D_800AFFC8 + i * 0x124;
+    pos = *(s32 *)((u8 *)arg0 + 0x90) + 0x28;
+    if (i <= D_800B07B0) {
+        do {
+            if (p[4] != 0 && func_8005397C(pos, *(s32 *)(p + 0x90) + 0x28) < (u32)(*(u16 *)(p + 0x2A) + 0x1388) && *(s32 *)(p + 0x118) != 0 && (func_80051728((s32)p, *(s32 *)(p + 0x5C)) & 0x40)) {
+                **(u32 **)(p + 0x118) |= 0x04000000;
+            }
+            i++;
+            p += 0x124;
+        } while (i <= D_800B07B0);
+    }
+}
 
 void func_80076B9C(void *arg0) {
     func_80076A8C();

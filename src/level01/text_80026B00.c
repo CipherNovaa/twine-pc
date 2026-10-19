@@ -28,6 +28,7 @@ s32 rand();
 extern char D_800A6ED0[];
 extern char D_800A6EF8[];
 typedef struct { u16 w; u8 pad2[0xA]; u16 x; u16 y; char text[0x50]; } TextEnt;
+void func_800272A4(s16 arg0, s32 arg1, s32 arg2);
 void func_80081A08(u8 *);
 void func_80027394(s32 pos, s16 voice, s32 id, s32 flags);
 extern u8 D_800AB754[];
@@ -257,7 +258,20 @@ unsigned long func_80027248(u8 id, s32 pos, s32 flags) {
     return func_80026F30(id, f);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800272A4);
+void func_800272A4(s16 arg0, s32 arg1, s32 arg2) {
+    s32 vol;
+    s32 v;
+    s16 a, b;
+    if (arg2 & 2) {
+        vol = (g_Args->pad12E[0xA] * M2C_FIELD(g_Args, s16 *, 0x144)) / 80;
+    } else {
+        vol = M2C_FIELD(g_Args, s16 *, 0x144);
+    }
+    v = (vol * M2C_FIELD(((arg1 * 8) + M2C_FIELD(g_Args, s32 *, 0x130)), u8 *, 4)) >> 7;
+    if (v >= 0) { a = 0x7F; if (v < 0x80) a = v; } else a = 0;
+    if (v >= 0) { b = 0x7F; if (v < 0x80) b = v; } else b = 0;
+    func_800814CC(arg0, a, b);
+}
 
 void func_80027394(s32 pos, s16 voice, s32 id, s32 flags) {
   s32 vol;
