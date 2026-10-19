@@ -1051,6 +1051,13 @@ typedef struct { u8 b[20]; } B20;
 typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; u8 r1, g1, b1, p1; s16 x1, y1; u8 u1, v1; u16 tpage; u8 r2, g2, b2, p2; s16 x2, y2; u8 u2, v2; u16 pad2; u8 r3, g3, b3, p3; s16 x3, y3; u8 u3, v3; u16 pad3; } POLY_GT4;
 typedef struct { s32 pad0; s32 rows; s32 cols; s32 w; s32 h; s32 *tiles; } SkyGrid;
 typedef struct { u8 p0[0x90]; u8 *sub; u8 p1[0x88]; u16 f11C; s16 f11E; u16 f120; s16 f122; } Obj6A;
+typedef struct { SVECTOR p[3]; u32 sxy[3]; u32 flg[3]; u32 col[3]; u16 uv[3]; } SubTri;
+typedef struct { SVECTOR p[6]; u32 sxy[6]; u32 flg[6]; u32 col[6]; u16 uv[6]; } SubTri6;
+typedef struct { u32 tag; u32 rgb0; u32 xy0; u32 uv0; u32 rgb1; u32 xy1; u32 uv1; u32 rgb2; u32 xy2; u32 uv2; } PolyGT3;
+#define gte_ldv0_mt(r0, r1) __asm__ volatile("mtc2 %0, $0; mtc2 %1, $1" : : "r"(r0), "r"(r1))
+#define gte_mfsxy2(r) __asm__ volatile("mfc2 %0, $14" : "=r"(r))
+#define gte_mfsz3(r) __asm__ volatile("mfc2 %0, $19; nop" : "=r"(r))
+void *memset(void *, int, unsigned int);
 #define PTF(k) { a = ((s32 *)fr)[k]; b = ((s32 *)fr)[k + 1]; c = ((s32 *)fr)[k + 2]; if (a < 0) v[0] = lo.x; else v[0] = hi.x; if (b < 0) v[1] = lo.y; else v[1] = hi.y; if (c < 0) v[2] = lo.z; else v[2] = hi.z; }
 void func_800679AC(void);
 void func_80032424(void *arg0);
@@ -1177,7 +1184,7 @@ extern s32 D_800D3068;
 extern C3 D_800AFF64;
 extern H3 D_800AFF68;
 void func_8006C8F4(u8 *arg0, u8 *arg1, s32 arg2);
-void func_8006B2C4();
+void func_8006B2C4(u8 *ctx, SubTri *t, s32 depth, s32 unused);
 s32 func_8006CB88(u8 *t);
 void func_8006D470(u8 *arg0);
 #define SP(o) (*(s32 *)((u8 *)spad + (o)))
@@ -5942,7 +5949,173 @@ s16 func_8006B274(int arg0) {
   return ratan2(arg0, SquareRoot12(0x1000 - ((*(new_var = &arg0)) * (((s32) (arg0 << 0x10)) >> 0x1C))));
 }
 
+#ifdef NON_MATCHING
+void func_8006B2C4(u8 *ctx, SubTri *t, s32 depth, s32 unused) {
+    SubTri c;
+    SubTri6 v;
+    u8 fl[3];
+    s32 nd;
+    s32 j;
+    s32 k;
+    s32 ia;
+    s32 ib;
+    s32 ic;
+    s32 cls;
+    s32 mac;
+    u32 f0;
+    u32 f1;
+    u32 f2;
+    u32 c0;
+    u32 c1;
+    u32 c2;
+    u32 uvw;
+    u32 gteflg;
+    u32 sxy;
+    s32 sz;
+    s32 sx;
+    s32 sy;
+    s32 x;
+    s32 y;
+    s32 z;
+    u32 fm;
+    PolyGT3 *prim;
+    u32 *ot;
+
+    memset(fl, 0, 3);
+    nd = depth - 1;
+    if (depth <= 0) return;
+
+    /* vertices 0-2 are the triangle's own, 3-5 are the edge midpoints (01, 12, 02) */
+    for (k = 0; k < 3; k++) {
+        v.p[k] = t->p[k];
+        v.sxy[k] = t->sxy[k];
+        v.flg[k] = t->flg[k];
+        v.col[k] = t->col[k];
+        v.uv[k] = t->uv[k];
+    }
+    for (k = 0; k < 3; k++) {
+        ia = (k == 2) ? 0 : k;
+        ib = (k == 0) ? 1 : 2;
+        x = (t->p[ia].vx + t->p[ib].vx) >> 1;
+        y = (t->p[ia].vy + t->p[ib].vy) >> 1;
+        z = (t->p[ia].vz + t->p[ib].vz) >> 1;
+        ((u32 *)&v.p[3 + k])[0] = (x & 0xFFFF) | (y << 16);
+        ((u32 *)&v.p[3 + k])[1] = z & 0xFFFF;
+        gte_ldv0_mt(((u32 *)&v.p[3 + k])[0], z);
+        gte_rtps();
+        c0 = t->col[ia];
+        c1 = t->col[ib];
+        v.col[3 + k] = ((c0 & 0xFF) + (c1 & 0xFF)) >> 1 | ((((c0 >> 8) & 0xFF) + ((c1 >> 8) & 0xFF)) >> 1) << 8 | (((c0 >> 16) + (c1 >> 16)) >> 1) << 16;
+        c0 = t->uv[ia];
+        c1 = t->uv[ib];
+        v.uv[3 + k] = ((c0 & 0xFF) + (c1 & 0xFF)) >> 1 | ((((c0 & 0xFF00) + (c1 & 0xFF00)) >> 1) & 0xFF00);
+        gte_mfsxy2(sxy);
+        gte_mfsz3(sz);
+        sz >>= 2;
+        sy = (s32)sxy >> 16;
+        sx = (s16)sxy;
+        gte_cfFLAG(gteflg);
+        v.sxy[3 + k] = sxy;
+        fm = sz;
+        if (gteflg & 0x46000) fm |= 0x20000000;
+        if (sy >= 0x300 || sx >= 0x300 || sy < -0x100 || sx < -0x100) fm |= 0x10000000;
+        if (sx < 0) fm |= 0x08000000;
+        if (sx >= 0x21C) fm |= 0x04000000;
+        if (sy < 0) fm |= 0x02000000;
+        if (sy >= 0xF0) fm |= 0x01000000;
+        v.flg[3 + k] = fm;
+    }
+
+    /* jobs 0-2: corner triangles, 3: centre triangle, 4-6: edge gap fillers */
+    for (j = 0; j < 7; j++) {
+        switch (j) {
+        case 0: ia = 0; ib = 3; ic = 5; break;
+        case 1: ia = 1; ib = 4; ic = 3; break;
+        case 2: ia = 2; ib = 5; ic = 4; break;
+        case 3: ia = 3; ib = 4; ic = 5; break;
+        case 4: ia = 0; ib = 1; ic = 3; break;
+        case 5: ia = 1; ib = 2; ic = 4; break;
+        default: ia = 2; ib = 0; ic = 5; break;
+        }
+        if (j == 4 && (*(u32 *)(ctx + 0x50) & 0x2000000)) return;
+        c.p[0] = v.p[ia];
+        c.p[1] = v.p[ib];
+        c.p[2] = v.p[ic];
+        c.sxy[0] = v.sxy[ia];
+        c.sxy[1] = v.sxy[ib];
+        c.sxy[2] = v.sxy[ic];
+        c.flg[0] = v.flg[ia];
+        c.flg[1] = v.flg[ib];
+        c.flg[2] = v.flg[ic];
+        c.col[0] = v.col[ia];
+        c.col[1] = v.col[ib];
+        c.col[2] = v.col[ic];
+        c.uv[0] = v.uv[ia];
+        c.uv[1] = v.uv[ib];
+        c.uv[2] = v.uv[ic];
+        if (j < 4) {
+            f0 = c.flg[0];
+            f1 = c.flg[1];
+            f2 = c.flg[2];
+            if ((f0 & f1 & f2) & 0x3F000000) {
+                cls = 0;
+            } else if ((f0 | f1 | f2) & 0x30000000) {
+                cls = 2;
+            } else {
+                gte_ldsxy3c(c.sxy);
+                gte_nclip();
+                gte_mfMAC0(mac);
+                cls = mac > 0;
+            }
+            if (cls == 0) continue;
+            if (cls != 1 && nd == 0) continue;
+            if (cls == 2) {
+                ((void (*)(u8 *, SubTri *, s32))func_8006B2C4)(ctx, &c, nd);
+                continue;
+            }
+        } else {
+            if (fl[j - 4] == 0) continue;
+            if ((v.flg[ia] | v.flg[ib]) & 0x20000000) continue;
+        }
+        /* emit a POLY_GT3 */
+        prim = *(PolyGT3 **)(ctx + 0x10);
+        if (*(u32 *)(ctx + 0x14) >= (u32)(prim + 1)) {
+            *(PolyGT3 **)(ctx + 0x10) = prim + 1;
+            prim->tag = 0x09000000;
+            prim->xy0 = c.sxy[0];
+            prim->xy1 = c.sxy[1];
+            prim->xy2 = c.sxy[2];
+            c0 = c.col[0];
+            c1 = c.col[1];
+            c2 = c.col[2];
+            if (D_800D3068 == 2) {
+                c0 |= 0xFF;
+                c1 |= 0xFF;
+                c2 |= 0xFF;
+            }
+            prim->rgb2 = c2;
+            prim->rgb1 = c1;
+            prim->rgb0 = c0 | *(u32 *)(ctx + 0x50);
+            uvw = *(u32 *)&c.uv[0];
+            prim->uv0 = (uvw & 0xFFFF) | (*(u32 *)(ctx + 0x7C) & 0xFFFF0000);
+            prim->uv1 = (uvw >> 16) | (*(u32 *)(ctx + 0x7C) << 16);
+            prim->uv2 = c.uv[2];
+            ot = *(u32 **)(ctx + 0x1C);
+            prim->tag = (prim->tag & 0xFF000000) | *ot;
+            *ot = (u32)prim & 0xFFFFFF;
+            if (*(s16 *)(ctx + 0x46) >= 0) {
+                *(PolyGT3 **)(ctx + 0x20) = prim;
+                ((void (*)(u8 *, u8 *))func_8006C8F4)((u8 *)c.col, ctx);
+            }
+        }
+        if (j == 0) { fl[2] = 1; fl[0] = 1; }
+        else if (j == 1) { fl[1] = 1; fl[0] = 1; }
+        else if (j == 2) { fl[2] = 1; fl[1] = 1; }
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006B2C4);
+#endif
 
 void func_8006C494(TerrTri *t) {
     TerrVert *v;
