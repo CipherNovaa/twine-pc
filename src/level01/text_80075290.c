@@ -53,6 +53,9 @@ typedef struct { u16 start; u8 len; u8 flag; } AnimRec;
 typedef struct { u8 pad0[6]; u16 count; u16 unk8; u16 tag; u8 unkC; u8 padD[3]; s16 unk10; u8 pad12[4]; u16 unk16; AnimRec recs[1]; } AnimTrack;
 typedef struct { s32 id; char name[0x64]; } SrcRec;
 typedef struct { s32 idx; char name[0x64]; u8 a; u8 b; u8 pad[2]; } DstRec;
+extern u8 D_800D91E7;
+s32 func_80053BD0(void);
+void RotMatrixYXZ(void *, void *);
 extern SrcRec D_8009EA0C[];
 extern DstRec D_800F10A8[];
 extern char D_800F10AC[];
@@ -312,7 +315,10 @@ void func_800758CC(void) {
     func_8008D2EC(&D_800B0C10);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_800758F0);
+void func_800758F0(u8 *p) {
+    RotMatrixYXZ(p + 0x44, p + 4);
+    *(s32 *)p = 0;
+}
 
 void func_80075920(HmdModel *arg0) {
     GsTYPEUNIT ut;
@@ -433,7 +439,21 @@ void func_80075F0C(void) {
     D_800E2F58 = 0;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80075F20);
+s32 func_80075F20(void) {
+    s32 n = 1;
+    s32 a;
+    u32 t = D_800D91E7;
+    a = 0;
+    t &= 1;
+    if (t != n) {
+        a = func_80053BD0() != 0;
+    }
+    if ((g_Args->flags2 >> 3) & 1) return a;
+    if (a != 0) {
+        return (u32)(g_CutScene - 2) >= 2U;
+    }
+    return 0;
+}
 
 s32 func_80075FA0(void) {
     s32 temp_v0;

@@ -3094,9 +3094,19 @@ void func_80066704(void *arg0) {
     *(u16 *)(obj + 0x7A) += d;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006692C);
+void func_8006692C(void *arg0) {
+    u8 *p = *(u8 **)((u8 *)arg0 + 0xC);
+    *(u16 *)(p + 0x6A) += 0xC8;
+    *(u16 *)(p + 0x56) -= 0xA;
+    func_80066704(arg0);
+}
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_80066968);
+void func_80066968(void *arg0) {
+    u8 *p = *(u8 **)((u8 *)arg0 + 0xC);
+    *(u16 *)(p + 0x6A) += 0xC8;
+    *(u16 *)(p + 0x56) -= 0xA;
+    func_80066704(arg0);
+}
 
 void func_800669A4(SVECTOR *arg0, s32 *arg1, void *arg2) {
     gte_SetRotMatrix((u8 *)arg2 + 0x18);
