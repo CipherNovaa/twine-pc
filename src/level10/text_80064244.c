@@ -2055,6 +2055,8 @@ extern s32 L2_D_800F4458;
 void L2_func_80063A54(void *arg0);
 extern s32 L2_D_800A0CD4;
 extern u8 L2_D_800A0F34;
+void L2_func_8006DEEC(s32 arg0);
+void L2_func_80069A48(void);
 extern char L2_D_800AF004[];
 extern char L2_D_800AF014[];
 void L2_func_80031070(void);
@@ -2113,9 +2115,7 @@ void L2_func_80064C38(u8 *arg0);
 void L2_func_80064F24(void *arg0);
 void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
-void L2_func_80069A48(void);
 void L2_func_80069DD8(void);
-void L2_func_8006DEEC(s32 arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_80033570(M2C_UNK);                     /* extern */
 M2C_UNK func_8005FC10(s32);                         /* extern */

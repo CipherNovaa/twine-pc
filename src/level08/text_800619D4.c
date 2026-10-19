@@ -2052,6 +2052,8 @@ void L2_func_800637D0(void);
 extern s32 L2_D_800F4458;
 void L2_func_80063A54(void *arg0);
 extern s32 L2_D_800A0CD4;
+void L2_func_8006DEEC(s32 arg0);
+void L2_func_80069A48(void);
 extern char L2_D_800AF004[];
 extern char L2_D_800AF014[];
 void L2_func_80031070(void);
@@ -2096,9 +2098,7 @@ void L2_func_80064C38(u8 *arg0);
 void L2_func_80064F24(void *arg0);
 void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
-void L2_func_80069A48(void);
 void L2_func_80069DD8(void);
-void L2_func_8006DEEC(s32 arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_80033448(M2C_UNK);                     /* extern */
 M2C_UNK func_8005D844(s32);                         /* extern */
@@ -2750,42 +2750,7 @@ void L2_func_80063A54(void *arg0) {
     }
 }
 
-s32 L1_func_80063B20(void) {
-    s32 r;
-    s16 i;
-    PE *e;
-    r = L1_D_8009CA9C;
-    if (r == 0) {
-        r = L1_D_8009CDA0;
-        i = 0;
-        if (r == 0) {
-            e = L1_D_800DF684;
-            do {
-                if (e->active != 0 && !(e->flags & 2)) {
-                    e->cnt = e->cnt + 1;
-                    if ((e->limit != -1 && e->limit < e->cnt) || (e->ptr != 0 && e->ptr[4] == 0)) {
-                        L1_func_80063ED4(e);
-                    } else if (e->f24 == 0 || (e->f24(e), e->active != 0)) {
-                        if (e->f20 != 0) {
-                            e->f20(e);
-                        }
-                        if (e->flags & 4) {
-                            if (e->cnt >= 0xB) {
-                                L1_func_80063D40(e);
-                            }
-                        } else if (e->b1D != 0 && e->b1C < e->b1D) {
-                            L1_func_80063D40(e);
-                        }
-                    }
-                }
-                i++;
-                e++;
-                r = i < 0x3C;
-            } while (r);
-        }
-    }
-    return r;
-}
+INCLUDE_ASM("asm/level08/nonmatchings/text_800619D4", func_80063A84);
 
 void *L1_func_80063CAC(void *obj, s16 x, s16 y, s16 z, s16 arg4) {
     s16 i;

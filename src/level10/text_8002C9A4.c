@@ -2926,15 +2926,20 @@ void L2_func_800288B4(s8 arg0);
 s32 L2_func_80083044(char *, ...);
 void func_80085E7C_nr(s32) asm("L2_func_80085E7C") __attribute__((noreturn));
 void L2_func_80029A30(char *text, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 mode);
-M2C_UNK L2_func_80026F5C(s32, M2C_UNK);                /* extern */
+s32 L2_func_80026F5C(u32 id, s32 flags);
 extern void *L2_D_800B6010;
 void L2_func_80085F1C();
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
+void L2_func_8004AF78(void);
+void L2_func_80055698(s32 *arg0);
+void L2_func_800304A4(void);
+void L2_func_8004C13C(void);
+void L2_func_8004BCAC(void);
+void L2_func_80055C8C(void);
 s32 L2_func_80039BA0(void);
 s32 L2_func_80055938(void *arg0);
 void L2_func_8005979C(void *arg0);
 void L2_func_800458C8(void *arg0, s8 arg1, s8 arg2, s8 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
-extern char L2_D_800ADE2C[];
 extern s32 L2_D_800A14A4;
 void L2_func_8007A2A0(void *arg0);
 extern u8 L2_D_800ADD00;
@@ -2942,7 +2947,7 @@ extern u8 L2_D_800D8840[];
 void L2_func_8004C530(s32 dist, u8 *r, u8 *g, u8 *b, s32 *scale);
 void L2_func_8004CEB8(u8 *obj, s32 scale);
 void L2_func_8004D174(u8 *obj, s32 scale);
-void L2_func_8004C604(s32 idx, s32 minX, s32 maxX, s32 minY, s32 maxY, s32 r, s32 g, s32 b);
+void L2_func_8004C604(s32 idx, s32 x0, s32 x1, s32 y0, s32 y1, u8 r, u8 g, u8 b);
 void L2_func_800324E8(s32 arg0);
 s32 L2_func_80059A94(void *arg0, s32 arg1);
 void L2_func_8004CCC4(SVECTOR *pos);
@@ -3285,6 +3290,8 @@ M2C_UNK L2_func_8005BA6C(void *, s32, void *);         /* extern */
 M2C_UNK L2_func_80081390(s32, M2C_UNK);                /* extern */
 void L2_func_8005ECF4(void *arg0, void *arg1);
 void L2_func_80039C5C(void *arg0);
+void *L2_func_8004E300(void *arg0, s32 *arg1);
+void L2_func_8002E38C(void);
 s32 L2_func_80055A20(s32 arg0);
 void L2_func_800334E0(s32 h, s32 v);
 void *L2_func_8004DFDC(u8 *arg0, s32 type, u8 *skip);
@@ -3295,14 +3302,12 @@ void *L2_func_8004E1B0(void *arg0, s32 arg1);
 void L2_func_8002E24C(void);
 void L2_func_8002E2A4(void);
 s32 L2_func_8002E2FC(void);
-void L2_func_8002E38C(void);
 void L2_func_8002E508(void);
 void L2_func_8002E598(void);
 void L2_func_8002E5F4(void);
 void L2_func_8002E69C(s32 arg0);
 void L2_func_8002F214(void);
 void *L2_func_80030454(s32 arg0);
-void L2_func_800304A4(void);
 void L2_func_80030840(void);
 void L2_func_800309B8(void);
 void L2_func_80031000(void);
@@ -3325,7 +3330,6 @@ void L2_func_80043874(void);
 void L2_func_80043C14(void);
 void L2_func_80049C80(void);
 void L2_func_8004AF34(void);
-void L2_func_8004AF78(void);
 void L2_func_8004AF9C(void);
 void L2_func_8004AFD0(void);
 s32 L2_func_8004B008(void);
@@ -3334,21 +3338,16 @@ void L2_func_8004B46C(void);
 void L2_func_8004B4AC(s32 arg0);
 void L2_func_8004B4F8(s8 arg0, s8 arg1, s8 arg2, s16 arg3);
 void L2_func_8004BC78(s8 arg0, s8 arg1, s8 arg2);
-void L2_func_8004BCAC(void);
 s32 L2_func_8004BCBC(void);
 s32 L2_func_8004BCD4(void);
 void L2_func_8004BEC0(s32 arg0, s32 arg1, s32 arg2);
-void L2_func_8004C13C(void);
 void L2_func_8004D48C(s32 arg0);
-void *L2_func_8004E300(void *arg0, s32 *arg1);
 u8 *L2_func_8004EAE8(void *arg0);
 void L2_func_8004F24C(s32 arg0, M2C_UNK arg1);
 void L2_func_8004F9BC(s32 *arg0);
 void L2_func_80050790(void);
 void L2_func_80050D78(void *arg0);
 void L2_func_80051444(s16 arg0, s8 arg1);
-void L2_func_80055698(s32 *arg0);
-void L2_func_80055C8C(void);
 s32 L2_func_80058570(s32 arg0, void *arg1);
 void L2_func_80059B48(void *arg0, s16 arg1, s16 arg2);
 void L2_func_80059C04(void *arg0, s16 arg1, s16 arg2, s16 arg3);
@@ -12692,19 +12691,7 @@ s32 L1_func_8004CB2C(void *obj, Weapon *w) {
     return n;
 }
 
-void L2_func_8004EF74(id, arg1)
-u8 id; u8 arg1; {
-    u8 *p;
-    p = L1_func_8004BE84(L1_g_Player, id);
-    if (p == NULL) {
-        L1_sprintf(L1_g_Args->exePath, L2_D_800ADE2C, id);
-        L1_func_8006B1DC((s32)L1_g_Args->exePath);
-        return;
-    }
-    (*(u8 **)p)[4] = arg1;
-    *(s32 *)(p + 0x34) = 0;
-    L1_func_800391B0(p, arg1);
-}
+INCLUDE_ASM("asm/level10/nonmatchings/text_8002C9A4", func_8004F6F4);
 
 void L1_func_8004CBF4(s32 *arg0, u8 *arg1, s32 arg2) {
     s32 i;

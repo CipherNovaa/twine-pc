@@ -195,8 +195,8 @@ M2C_UNK L2_func_8002B464(s32, M2C_UNK);                /* extern */
 extern s8 L2_D_800B5F49;
 extern s8 L2_D_800B5F4A;
 extern s32 L2_D_800B5F50;
+extern void (*L2_D_800A107C)(s32);
 void L2_func_8002BFAC(void);
-extern void (*L2_D_800A100C)(void);
 extern M2C_UNK (*L2_D_800A1078)(s16);
 void L2_func_8002B22C(s32 arg0);
 u8 L2_func_8002AC8C(void);
@@ -204,7 +204,6 @@ void L2_func_8002AFB8(void);
 s32 L2_func_8002B0D0(void);
 void L2_func_8002C4A0(s32 arg0);
 void L2_func_8002C82C(void);
-// D_8009CDD4 -> L2_D_800A100C (L2 own)
 /* This level's own declarations (kept by tools/port_level.py): */
 
 void L1_func_8002A61C(char *name, s32 *result) {

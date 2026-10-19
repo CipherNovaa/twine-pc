@@ -62,6 +62,15 @@ def _integrate(func, code, level, keep, replace_decls, nonmatching=False):
     if decls is None:
         return f"{func}: could not find the function definition in the code"
     existing = am.top_level_decls(original)
+    if nonmatching and not replace_decls:
+        # Nothing checks a banked function's bytes, so a declaration the file already has with another
+        # type would silently change what the code does (e.g. load a value instead of taking an address).
+        norm = lambda s: " ".join(s.split("/*")[0].split())
+        clash = [d.strip() for d in decls if am.decl_name(d) in existing
+                 and norm(existing[am.decl_name(d)]) != norm(d)]
+        if clash:
+            return (f"{func}: FAILED (NON_MATCHING: the file declares these differently; cast at the use "
+                    f"or pass --replace-decls)\n  " + "\n  ".join(clash[:6]))
     new = [d.strip() for d in decls if am.decl_name(d) not in existing and am.decl_name(d) not in am.header_decl_names()]
     text = original
     if replace_decls:

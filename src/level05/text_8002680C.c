@@ -35,9 +35,8 @@ M2C_UNK L2_func_80083064();                            /* extern */
 M2C_UNK L2_func_800855E0(s32);                         /* extern */
 M2C_UNK L2_func_800855F0();                            /* extern */
 extern s32 L2_D_800B0F58;
-extern void (*L2_D_800A100C)(void);
+extern void (*L2_D_800A107C)(s32);
 extern M2C_UNK (*L2_D_800A1078)(s16);
-// D_8009CDD4 -> L2_D_800A100C (L2 own)
 /* This level's own declarations (kept by tools/port_level.py): */
 
 void func_8002680C(void) {
