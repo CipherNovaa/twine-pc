@@ -2065,7 +2065,7 @@ extern s32 L2_D_800A14B8;
 extern s32 L2_D_800A14BC;
 extern s32 L2_D_800A1628;
 extern s32 L2_D_800A162C;
-M2C_UNK L2_func_8006BC94();                            /* extern */
+void L2_func_8006BC94(void);
 extern s32 L2_D_800A119C;
 void L2_func_80030504();
 extern M2C_UNK L2_D_800AF09C;

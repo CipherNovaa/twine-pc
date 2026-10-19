@@ -1735,7 +1735,7 @@ void L2_func_80060EC4(void *arg0);
 s32 func_80061068(u8 *e);
 void L2_func_80060C40(u8 *obj, s16 dx, s16 dz);
 void L2_func_8005FBBC(u8 *obj);
-void L2_func_800387C4(void *);
+void L2_func_800387C4(void *arg0);
 void L2_func_8005C9C4(void *, void *);
 s32 L2_func_8003815C(void *, void *);
 void L2_func_800616AC(u8 *obj);

@@ -1730,6 +1730,9 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+extern void *L1_g_Player;
+void L1_func_80053DE4(s16 arg0, s16 arg1, s32 arg2, s32 arg3, s32 arg4);
+void func_800619F0(void *arg0);
 extern char D_800AE938[];
 int L1_printf(char *fmt, ...);
 void func_80085E7C_nr(s32) asm("func_80085E7C") __attribute__((noreturn));
@@ -2527,7 +2530,20 @@ void func_80060EE0(u8 *obj, s16 dx, s16 dz) {
     L1_func_80060AC0(obj);
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8005EE38", func_80061084);
+void func_80061084(u8 *obj, void *other) {
+    u8 *pos;
+
+    **(s32 **)(obj + 0x118) |= 0x80000;
+    if (other == L1_g_Player) {
+        **(s32 **)(obj + 0x118) |= 0x200000;
+        if (L1_D_800F11F0 == 0xD) {
+            **(s32 **)(obj + 0x118) |= 0x10000;
+            func_800619F0(obj);
+            pos = *(u8 **)((u8 *)L1_g_Player + 0x90);
+            L1_func_80053DE4(0x17, 0, *(s32 *)(pos + 0x28), *(s32 *)(pos + 0x2C), *(s32 *)(pos + 0x30));
+        }
+    }
+}
 
 #ifdef NON_MATCHING
 s32 L1_func_80061068(u8 *e) {

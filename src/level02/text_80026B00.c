@@ -214,6 +214,8 @@ extern s8 D_8009C1EE;
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+extern char D_800AC528[];
+extern Args *L1_g_Args;
 extern s32 D_800A399C;
 s32 func_80032684(void);
 void func_80027520(s32 arg0, s32 arg1, s32 *arg2, s32 arg3, s32 arg4, s32 arg5);
@@ -234,7 +236,7 @@ s32 func_80083044(char *, ...);
 void func_80085E7C_nr(s32) asm("func_80085E7C") __attribute__((noreturn));
 void func_80026C14(s16 arg0);
 typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
-void func_80029A30(s32, s16, s16, s16, s16, s32);
+void func_80029A30(char *text, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 mode);
 extern S1CBC D_800B1CBC;
 extern s32 D_800A03C0[];
 M2C_UNK func_80085600(s16);                         /* extern */
@@ -295,7 +297,39 @@ void func_80026C90(s32 arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B00", func_80026D34);
+s32 func_80026D34(u32 id, s32 flags) {
+    u8 vol;
+    s16 l;
+    s16 r;
+    s16 note;
+    s32 prog;
+    s32 tone;
+    s32 ret;
+
+    if (id >= 0x7C) {
+        return -1;
+    }
+    if (flags & 2) {
+        vol = (*(u8 *)((u8 *)L1_g_Args + 0x138) * *(s16 *)((u8 *)L1_g_Args + 0x144)) / 127;
+    } else {
+        vol = *(u8 *)((u8 *)L1_g_Args + 0x144);
+    }
+    vol = (vol * (*(SfxEnt **)((u8 *)L1_g_Args + 0x130))[id].vol) / 127;
+    l = vol;
+    r = vol;
+    l = l < 0 ? 0 : l < 0x80 ? l : 0x7F;
+    r = r < 0 ? 0 : r < 0x80 ? r : 0x7F;
+    note = (*(SfxEnt **)((u8 *)L1_g_Args + 0x130))[id].note;
+    prog = (*(SfxEnt **)((u8 *)L1_g_Args + 0x130))[id].prog;
+    tone = (*(SfxEnt **)((u8 *)L1_g_Args + 0x130))[id].tone;
+    note = note < 0 ? 0 : note < 0x80 ? note : 0x7F;
+    if ((*(SfxEnt **)((u8 *)L1_g_Args + 0x130))[id].voice != 0) {
+        ret = ((s32 (*)(s32))func_80026C38)(L1_SsVoKeyOn(prog, (*(SfxEnt **)((u8 *)L1_g_Args + 0x130))[id].note << 8, l, r));
+    } else {
+        ret = L1_func_800815A0(0, prog, tone, note, 0, l, r);
+    }
+    return ret;
+}
 
 s32 L1_func_80026ED0(void) {
     u8 buf[0x18];
@@ -1428,7 +1462,40 @@ void L1_func_80029684(void) {
     }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B00", func_80029A30);
+void func_80029A30(char *text, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 mode) {
+    u8 *msg = (u8 *)&L1_D_800AC284;
+    char *buf;
+
+    if ((M2C_FIELD(msg, u8 *, 0x108) == 0 || mode == 3) && ((L1_g_Args->flags2 >> 1) & 1 || mode != 0)) {
+        L1_D_8009C1EC = 0;
+        if (L1_strlen(text) >= 330) {
+            L1_func_8006B230(0, (s32)D_800AC528);
+        }
+        buf = (char *)msg + 0x109;
+        L1_strcpy(buf, text);
+        M2C_FIELD(msg, u8 *, 0x108) = 1;
+        M2C_FIELD(msg, char **, 0x254) = buf;
+        M2C_FIELD(msg, s32 *, 0x100) = 0;
+        M2C_FIELD(msg, s16 *, 0xF0) = 0;
+        M2C_FIELD(msg, s16 *, 0xF2) = 0;
+        M2C_FIELD(msg, s16 *, 0xF4) = arg3;
+        M2C_FIELD(msg, s16 *, 0xF6) = arg4;
+        M2C_FIELD(msg, s16 *, 0xF8) = arg1;
+        M2C_FIELD(msg, s16 *, 0xFA) = arg2;
+        if (mode == 2) {
+            M2C_FIELD(msg, s32 *, 0x104) = 1;
+            M2C_FIELD(msg, u8 *, 0x258) = 1;
+        } else {
+            M2C_FIELD(msg, s32 *, 0x104) = mode;
+            M2C_FIELD(msg, u8 *, 0x258) = 0;
+        }
+        M2C_FIELD(&L1_D_800AC284, s16 *, 0xFC) = 0x1E;
+        M2C_FIELD(&L1_D_800AC284, u8 *, 0x25E) = 0;
+        M2C_FIELD(&L1_D_800AC284, u16 *, 0x25A) = L1_D_800AC4D8;
+        M2C_FIELD(&L1_D_800AC284, u16 *, 0x25C) = L1_D_800AC4DC;
+        L1_Menu_ResetState();
+    }
+}
 
 void func_80029B94(s32 a0, s16 a1, s16 a2, s16 a3, s16 a4, s32 a5, s32 a6, s32 a7) {
     func_80029A30(a0, a1, a2, a3, a4, a5);

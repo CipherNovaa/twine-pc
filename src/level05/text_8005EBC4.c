@@ -1732,6 +1732,7 @@ void func_80085E7C_nr(s32) asm("L2_func_80085E7C") __attribute__((noreturn));
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
 s32 L2_func_8003BC0C(u8 *o, s32 arg1);
 void L2_func_8005F74C(void);
+void L2_func_800619F0(void *arg0);
 extern char L2_D_800AE8D8[];
 extern char L2_D_800AE8EC[];
 extern char L2_D_800AE914[];
@@ -1740,7 +1741,7 @@ void L2_func_80060EC4(void *arg0);
 s32 func_80061068(u8 *e);
 void L2_func_80060C40(u8 *obj, s16 dx, s16 dz);
 void L2_func_8005FBBC(u8 *obj);
-void L2_func_800387C4(void *);
+void L2_func_800387C4(void *arg0);
 void L2_func_8005C9C4(void *, void *);
 s32 L2_func_8003815C(void *, void *);
 void L2_func_800616AC(u8 *obj);
@@ -1751,7 +1752,6 @@ extern M2C_UNK L2_D_800AE968;
 void L2_func_8005FEC4(void);
 void L2_func_8006004C(s32 *arg0);
 void L2_func_80060EE0(u8 *obj, s16 dx, s16 dz);
-void L2_func_800619F0(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_800398D4();                            /* extern */
 M2C_UNK func_800604E0();                            /* extern */
