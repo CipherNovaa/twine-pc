@@ -2913,6 +2913,7 @@ extern int L1_g_CheatCodes[];
 
 
 
+void L2_func_800268CC(void);
 void L2_func_80085C4C(s32, s32, s32);
 void L2_func_80085AA0(s32, s32, s32);
 void L2_func_80026B00(s32 arg0);
@@ -2920,6 +2921,7 @@ M2C_UNK L2_func_80083064();                            /* extern */
 M2C_UNK L2_func_800855E0(s32);                         /* extern */
 M2C_UNK L2_func_800855F0();                            /* extern */
 extern s32 L2_D_800B0F58;
+void L2_func_80026C14(s16 arg0);
 typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
 void L2_func_80029A30(s32, s16, s16, s16, s16, s32);
 extern S1CBC L2_D_800B1CBC;
@@ -2958,6 +2960,8 @@ M2C_UNK L2_func_8002B464(s32, M2C_UNK);                /* extern */
 extern s8 L2_D_800B5F49;
 extern s8 L2_D_800B5F4A;
 extern s32 L2_D_800B5F50;
+void L2_func_8005D694(void);
+void L2_func_8004BE84(s32 arg0);
 typedef struct { u8 pad0[0x44]; s16 f44; u8 padx[2]; s16 f48; s16 f4a; u8 pad1[4]; u8 f50; u8 pad2[0x67]; } S5CF;
 extern s16 L2_D_800B72B8;
 void L2_func_800900AC();
@@ -3908,7 +3912,58 @@ void func_8002D708(void) {
 
 INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_8002D980);
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_8002DC0C);
+s32 L1_Cheat_CheckCodes(void) {
+    s32 triggered;
+    s32 i;
+    int *progress;
+    volatile int *codes;
+    u32 *p;
+    u32 mask;
+    u8 *args;
+    s32 hit;
+
+    triggered = 0;
+#ifdef MOD_DEVCHEATS
+    if (1) { /* retail skips the developer cheat codes when running from the CD archive */
+#else
+    if (((s8 *)g_Args)[0x1BC] == 0) {
+#endif
+        i = 0;
+        progress = L1_g_CheatCodeProgress;
+        codes = L1_g_CheatCodes;
+        do {
+            p = (u32 *)*progress;
+            mask = *p;
+            if (L1_g_PadPressed & mask) {
+                p++;
+                if (*p == -1) {
+                    L1_D_8009CA9C = 0;
+                    hit = 1;
+                } else {
+                    *progress = (int)p;
+                    hit = 0;
+                }
+            } else {
+                if (L1_g_PadPressed != 0) {
+                    args = g_Args;
+                    *progress = *codes;
+                    if (((s8 *)args)[0x1BC] == 0) {
+                        *progress += 0x10;
+                    }
+                }
+                hit = 0;
+            }
+            if (hit) {
+                L1_Cheat_DoAction(i);
+                triggered = 1;
+            }
+            progress++;
+            i++;
+            codes++;
+        } while (i < 15);
+    }
+    return triggered;
+}
 
 void L1_func_8002DD6C(u8 *obj) {
     s32 i;

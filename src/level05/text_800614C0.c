@@ -2042,6 +2042,7 @@ extern int L1_g_CheatCodes[];
 
 
 
+void L2_func_800268CC(void);
 void L2_func_80085C4C(s32, s32, s32);
 void L2_func_80085AA0(s32, s32, s32);
 void L2_func_80026B00(s32 arg0);
@@ -2049,6 +2050,7 @@ M2C_UNK L2_func_80083064();                            /* extern */
 M2C_UNK L2_func_800855E0(s32);                         /* extern */
 M2C_UNK L2_func_800855F0();                            /* extern */
 extern s32 L2_D_800B0F58;
+void L2_func_80026C14(s16 arg0);
 typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
 void L2_func_80029A30(s32, s16, s16, s16, s16, s32);
 extern S1CBC L2_D_800B1CBC;
@@ -2087,6 +2089,8 @@ M2C_UNK L2_func_8002B464(s32, M2C_UNK);                /* extern */
 extern s8 L2_D_800B5F49;
 extern s8 L2_D_800B5F4A;
 extern s32 L2_D_800B5F50;
+void L2_func_8005D694(void);
+void L2_func_8004BE84(s32 arg0);
 typedef struct { u8 pad0[0x44]; s16 f44; u8 padx[2]; s16 f48; s16 f4a; u8 pad1[4]; u8 f50; u8 pad2[0x67]; } S5CF;
 extern s16 L2_D_800B72B8;
 void L2_func_800900AC();

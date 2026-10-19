@@ -31,6 +31,7 @@ extern s32 L1_D_800AB540;
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+void func_800268CC(void);
 void func_80085C4C(s32, s32, s32);
 void func_80085AA0(s32, s32, s32);
 void func_80026B00(s32 arg0);
@@ -53,7 +54,11 @@ void func_8002680C(void) {
     L1_func_8007EEBC();
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002680C", func_800268CC);
+void func_800268CC(void) {
+    func_800855F0();
+    func_800855E0(D_800B0F58);
+    func_80083064();
+}
 
 s32 func_80026914(void) {
 
@@ -82,14 +87,5 @@ s32 func_80026914(void) {
     return 0;
 }
 
-#ifdef NON_MATCHING
-void func_80026B00(s32 arg0) {
-    u8 t;
-    func_80085C4C(0, 0, 1);
-    t = arg0;
-    func_80085AA0(0, (s32)t, (s32)t);
-}
-#else
 INCLUDE_ASM("asm/level02/nonmatchings/text_8002680C", func_80026B00);
-#endif
 

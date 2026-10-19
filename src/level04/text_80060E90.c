@@ -2042,6 +2042,7 @@ extern int L1_g_CheatCodes[];
 
 
 
+void L2_func_800268CC(void);
 void L2_func_80085C4C(s32, s32, s32);
 void L2_func_80085AA0(s32, s32, s32);
 void L2_func_80026B00(s32 arg0);
@@ -2049,6 +2050,7 @@ M2C_UNK L2_func_80083064();                            /* extern */
 M2C_UNK L2_func_800855E0(s32);                         /* extern */
 M2C_UNK L2_func_800855F0();                            /* extern */
 extern s32 L2_D_800B0F58;
+void L2_func_80026C14(s16 arg0);
 typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
 void L2_func_80029A30(s32, s16, s16, s16, s16, s32);
 extern S1CBC L2_D_800B1CBC;
@@ -2087,6 +2089,8 @@ M2C_UNK L2_func_8002B464(s32, M2C_UNK);                /* extern */
 extern s8 L2_D_800B5F49;
 extern s8 L2_D_800B5F4A;
 extern s32 L2_D_800B5F50;
+void L2_func_8005D694(void);
+void L2_func_8004BE84(s32 arg0);
 typedef struct { u8 pad0[0x44]; s16 f44; u8 padx[2]; s16 f48; s16 f4a; u8 pad1[4]; u8 f50; u8 pad2[0x67]; } S5CF;
 extern s16 L2_D_800B72B8;
 void L2_func_800900AC();
@@ -4654,7 +4658,25 @@ void func_80069F28(void) {
     }
 }
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_80060E90", func_80069F58);
+s32 func_80069F58(void *arg0) {
+    u8 temp_v1;
+
+    temp_v1 = M2C_FIELD(arg0, u8 *, 6);
+    if (temp_v1 == D_8009DD7C) {
+        func_8002D4E4(&D_800AAD6C);
+        return 1;
+    }
+    if ((D_8009D974 == 0) && ((temp_v1 == M2C_FIELD(&D_8009D978, s32 *, 0x10)) || (temp_v1 == M2C_FIELD(&D_8009D978, s32 *, 0x14))) && !(M2C_FIELD(arg0, u8 *, 0xA4) & 0x20)) {
+        func_8002D4E4(&D_800AAD80);
+    }
+    if ((M2C_FIELD(arg0, u8 *, 6) == D_8009DD78) && !(M2C_FIELD(arg0, u8 *, 0xA4) & 0x20)) {
+        func_8002D4E4(&D_800AAD80);
+    }
+    if (M2C_FIELD(arg0, u8 *, 6) == D_8009DD54) {
+        D_8009FB30 = 1;
+    }
+    return 0;
+}
 
 void func_8006A05C(void) {
     if ((func_80077284(0) & 0xFF) && (func_80077284(2) & 0xFF)) {

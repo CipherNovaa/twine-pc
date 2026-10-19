@@ -2913,6 +2913,7 @@ extern int L1_g_CheatCodes[];
 
 
 
+void L2_func_800268CC(void);
 void L2_func_80085C4C(s32, s32, s32);
 void L2_func_80085AA0(s32, s32, s32);
 void L2_func_80026B00(s32 arg0);
@@ -2920,6 +2921,7 @@ M2C_UNK L2_func_80083064();                            /* extern */
 M2C_UNK L2_func_800855E0(s32);                         /* extern */
 M2C_UNK L2_func_800855F0();                            /* extern */
 extern s32 L2_D_800B0F58;
+void L2_func_80026C14(s16 arg0);
 typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
 void L2_func_80029A30(s32, s16, s16, s16, s16, s32);
 extern S1CBC L2_D_800B1CBC;
@@ -2958,6 +2960,8 @@ M2C_UNK L2_func_8002B464(s32, M2C_UNK);                /* extern */
 extern s8 L2_D_800B5F49;
 extern s8 L2_D_800B5F4A;
 extern s32 L2_D_800B5F50;
+void L2_func_8005D694(void);
+void L2_func_8004BE84(s32 arg0);
 typedef struct { u8 pad0[0x44]; s16 f44; u8 padx[2]; s16 f48; s16 f4a; u8 pad1[4]; u8 f50; u8 pad2[0x67]; } S5CF;
 extern s16 L2_D_800B72B8;
 void L2_func_800900AC();
@@ -6649,61 +6653,7 @@ block_8:
 
 INCLUDE_ASM("asm/level06/nonmatchings/text_8002C8E4", func_8003A388);
 
-void L2_func_8003A600(void *arg0) {
-    s32 temp_a0_3;
-    void *temp_a0;
-    void *temp_a0_2;
-    void *temp_a0_4;
-    void *temp_v1;
-
-    if ((arg0 != NULL) && (M2C_FIELD(arg0, u8 *, 4) != 0)) {
-        L2_func_8003A3FC();
-        if (M2C_FIELD(arg0, u8 *, 6) == L2_D_800A14A8) {
-            L2_D_800A0CF7 = 0;
-        }
-        if (arg0 == L2_D_800A0F9C) {
-            L2_D_800A0F9C = 0;
-        }
-        if ((L2_D_800A1242 == 1) && (arg0 == L2_D_800A1244)) {
-            L2_D_800A1242 = 0;
-        }
-        temp_a0 = M2C_FIELD(arg0, void **, 0x8C);
-        M2C_FIELD(arg0, u8 *, 4) = 0U;
-        if ((temp_a0 != NULL) && ((M2C_FIELD(temp_a0, s32 *, 0x68) & 0x380) == 0x80)) {
-            L2_func_8003A600(temp_a0);
-        }
-        temp_v1 = M2C_FIELD(arg0, void **, 0x88);
-        if (temp_v1 != NULL) {
-            if (M2C_FIELD(temp_v1, s32 *, 0x8C) == arg0) {
-                M2C_FIELD(temp_v1, s32 *, 0x8C) = 0;
-            }
-            if (M2C_FIELD(M2C_FIELD(arg0, void **, 0x88), s32 *, 0xB8) == arg0) {
-                M2C_FIELD(M2C_FIELD(arg0, void **, 0x88), s32 *, 0xB8) = 0;
-            }
-        }
-        temp_a0_2 = M2C_FIELD(arg0, void **, 0xB8);
-        if (temp_a0_2 != NULL) {
-            L2_func_8003A600(temp_a0_2);
-        }
-        temp_a0_3 = M2C_FIELD(arg0, s32 *, 0x100);
-        if (temp_a0_3 != 0) {
-            L2_func_80063A54(temp_a0_3);
-            if (M2C_FIELD(arg0, s32 *, 0x100) != 0) {
-                M2C_FIELD(arg0, s32 *, 0x100) = 0;
-            }
-        }
-        temp_a0_4 = M2C_FIELD(arg0, void **, 0x104);
-        if (temp_a0_4 != NULL) {
-            if (M2C_FIELD(M2C_FIELD(temp_a0_4, void **, 0x1C), s32 *, 8) == 0) {
-                M2C_FIELD(temp_a0_4, s32 *, 0x10) = (s32) (M2C_FIELD(temp_a0_4, s32 *, 0x10) & ~1);
-            }
-            M2C_FIELD(arg0, void **, 0x104) = NULL;
-        }
-        if (M2C_FIELD(arg0, s32 *, 0x118) != 0) {
-            L2_func_800560EC(arg0);
-        }
-    }
-}
+INCLUDE_ASM("asm/level06/nonmatchings/text_8002C8E4", func_8003A450);
 
 void L1_func_800397A8(void) {
   int new_var2;

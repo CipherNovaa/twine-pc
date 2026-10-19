@@ -2914,6 +2914,8 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+void func_8005D694(void);
+void func_8004BE84(s32 arg0);
 typedef struct { u8 pad0[0x44]; s16 f44; u8 padx[2]; s16 f48; s16 f4a; u8 pad1[4]; u8 f50; u8 pad2[0x67]; } S5CF;
 extern s16 D_800B72B8;
 void func_800900AC();
@@ -11412,7 +11414,19 @@ void L1_func_8004B194(void) {
     L1_SetDumpFnt(var_a0, g_Args);
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_8004BE84);
+void func_8004BE84(s32 arg0) {
+    s32 temp_v1;
+
+    temp_v1 = D_800A1230 + arg0;
+    D_800A1230 = temp_v1;
+    if (temp_v1 > 0x20000) {
+        D_800A1230 = 0x20000;
+        return;
+    }
+    if (temp_v1 < 0) {
+        D_800A1230 = 0;
+    }
+}
 
 void func_8004BEC0(s32 arg0, s32 arg1, s32 arg2) {
     s32 var_a0;
@@ -17940,7 +17954,15 @@ void L1_func_8005D630(s32 *p) {
     }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_8005D694);
+void func_8005D694(void) {
+    void *temp_v1;
+    void *temp_v1_2;
+
+    temp_v1 = M2C_FIELD(D_800B6FE4, void **, 0x94);
+    M2C_FIELD(temp_v1, s32 *, 0x24) = (s32) (M2C_FIELD(temp_v1, s32 *, 0x24) ^ 0x400);
+    temp_v1_2 = M2C_FIELD(D_800B6FE4, void **, 0x94);
+    M2C_FIELD(temp_v1_2, s32 *, 0x24) = (s32) (M2C_FIELD(temp_v1_2, s32 *, 0x24) ^ 0x200);
+}
 
 void L1_func_8005D694(void) {
   s32 toggle;

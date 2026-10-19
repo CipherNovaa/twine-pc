@@ -214,6 +214,7 @@ extern s8 D_8009C1EE;
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+void func_80026C14(s16 arg0);
 typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
 void func_80029A30(s32, s16, s16, s16, s16, s32);
 extern S1CBC D_800B1CBC;
@@ -246,7 +247,9 @@ s32 func_80026B44(u8 arg0) {
     return 0;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80026C14);
+void func_80026C14(s16 arg0) {
+    func_80085600(arg0);
+}
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80026C38);
 

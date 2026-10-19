@@ -192,9 +192,11 @@ def defined_name(code):
     return m.group(1) if m else None
 
 
-def is_native(name, level01_names):
-    """C a level got on its own (not from LEVEL01 or LEVEL02 sources)."""
-    return bool(name) and name not in level01_names and not name.startswith(("L1_", "L2_"))
+def is_native(name, same_named):
+    """C a level got on its own (not from LEVEL01 or LEVEL02 sources). Ported code is either prefixed
+    (L1_/L2_), or a LEVEL01 function that pairs with the same-named function here (same address); a
+    LEVEL01 name alone proves nothing, since the level can have a different function at that address."""
+    return bool(name) and name not in same_named and not name.startswith(("L1_", "L2_"))
 
 
 def level01_sources():
@@ -287,6 +289,7 @@ def port(level):
     renamed = {n for n, (t, d) in smap.items() if t != n} | set(aliased)
     known = set(smap) | set(aliased) | absolute
     t_name = {pairs[n]: smap[n][0] for n in pairs if n in smap and smap[n][1] == 0}
+    same_named = {n for n, (t, d) in smap.items() if t == n and d == 0}
     inv = {tn: n for n, a in pairs.items() if (tn := t_name.get(a))}
 
     l1 = level01_sources()
@@ -302,7 +305,8 @@ def port(level):
         l2_tname = {l2_pairs[n]: l2_smap[n][0] for n in l2_pairs if n in l2_smap and l2_smap[n][1] == 0}
         l2_inv = {tn: n for n, a in l2_pairs.items() if (tn := l2_tname.get(a))}
         l2_globals = {s for s in elf_symbols(ROOT / "build/level02/level02.elf") if not s.startswith("L1_")}
-        all_l1 = {n for h, f in l1.values() for n in f}
+        _, l2_l1_votes = port_symbols.pairings("level02")
+        l2_same = {n for n, (t2, d2) in port_symbols.symbol_map(l2_l1_votes).items() if t2 == n and d2 == 0}
         for c in sorted((ROOT / "src/level02").glob("*.c")):
             h, f = parse_c(c.read_text())
             if NATIVE_MARK in h:
@@ -314,7 +318,7 @@ def port(level):
                         l2_decl_names.add(key)
                         l2_decls.append(l)
             for n, (k, code) in f.items():
-                if k == "c" and is_native(defined_name(code), all_l1):
+                if k == "c" and is_native(defined_name(code), l2_same):
                     l2_items[n] = code
         # A function brought over gets its prototype from its definition (another LEVEL02 file may
         # declare it differently).
@@ -386,7 +390,7 @@ def port(level):
                 cur_header, cur_funcs = parse_c(current)
                 if NATIVE_MARK in cur_header:
                     native_decls = [l for l in cur_header[cur_header.index(NATIVE_MARK) + 1:] if l.strip()]
-                native_funcs = {n: it for n, it in cur_funcs.items() if is_native(defined_name(it[1]), funcs)}
+                native_funcs = {n: it for n, it in cur_funcs.items() if is_native(defined_name(it[1]), same_named)}
             else:
                 (ROOT / f"build/{level}/port_base").mkdir(parents=True, exist_ok=True)
                 (ROOT / f"build/{level}/port_base/{t_stem}.c").write_text(orig)
