@@ -1,6 +1,9 @@
-/* Native port entry: lays out PS1 memory at its own addresses, loads the level executable's image (its
- * initialised data is used as is), points every game function's PS1 address at the native function, does
- * what the boot stub (SLUS_012.72) does before it starts a level, and calls the game's main. */
+/* Native port entry: lays out PS1 memory at its own addresses and runs the game's executables the way the
+ * console does. The boot stub (SLUS_012.72) is loaded from the disc and its main loop runs; it loads the
+ * movie player, the front end and the levels itself and starts each with BIOS Exec, which switches to that
+ * executable's native code (port_exec). With TWINE_LEVEL=n the runtime does what the stub does before it
+ * starts level n instead, and starts it directly. Executable images (initialised data included) are used as
+ * loaded; every function's PS1 address jumps to its native code. */
 #define _GNU_SOURCE
 #include <stdarg.h>
 #include <stdio.h>
@@ -11,20 +14,10 @@
 #include <ucontext.h>
 #include <unistd.h>
 #include "port.h"
+#include "module.h"
 #include "spu.h"
 
-/* Generated per level (port/gen_native.py): PS1 address -> native function, for code that calls through a
- * function pointer read from PS1 data (callback tables, object update functions). */
-typedef struct {
-    u32 addr;
-    void *fn;
-} PortFunc;
-extern const PortFunc port_funcs[];
-extern const int port_func_count;
-extern const int port_level;                  /* which level this build is */
-extern s32 (*const port_game_main)(s32, void *); /* the level's main (native or recompiled) */
-extern const u32 port_bss_start, port_bss_end;
-
+const PortModule *port_module, *port_boot;
 
 static FILE *log_file;
 
@@ -57,17 +50,31 @@ static void map_fixed(int fd, u32 offset, u32 addr, u32 size, int prot) {
 }
 
 /* Map PS1 memory before anything else allocates. Main RAM is executable: its code area holds the jumps
- * that turn PS1 function addresses into native calls. Like the PS1, the same RAM also appears at
- * 0xA0000000 (KSEG1) and from 0x00010000 (KUSEG; the first 64 KB can't be mapped on Linux), for code that
- * masks or rebases pointers. */
+ * that turn PS1 function addresses into native calls. Like on the console, the 2 MB repeat through the first
+ * 8 MB of each region: KSEG0 (0x80000000), KSEG1 (0xA0000000) and KUSEG (from 0x00010000; the first 64 KB
+ * can't be mapped on Linux), for code that rebases pointers or sizes memory for 8 MB (the boot stub's heap
+ * and stack defaults). */
 __attribute__((constructor(101))) static void map_ps1_memory(void) {
-    int fd = memfd_create("ps1-ram", 0);
+    int fd = memfd_create("ps1-ram", 0), i;
     if (fd < 0 || ftruncate(fd, PS1_RAM_SIZE))
         port_fatal("cannot create PS1 RAM\n");
-    map_fixed(fd, 0, PS1_RAM_BASE, PS1_RAM_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
-    map_fixed(fd, 0, 0xA0000000u, PS1_RAM_SIZE, PROT_READ | PROT_WRITE);
-    map_fixed(fd, 0x10000, 0x00010000u, PS1_RAM_SIZE - 0x10000, PROT_READ | PROT_WRITE);
+    for (i = 0; i < 4; i++) {
+        u32 at = i * PS1_RAM_SIZE;
+        map_fixed(fd, 0, PS1_RAM_BASE + at, PS1_RAM_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
+        map_fixed(fd, 0, 0xA0000000u + at, PS1_RAM_SIZE, PROT_READ | PROT_WRITE);
+        if (i == 0)
+            map_fixed(fd, 0x10000, 0x00010000u, PS1_RAM_SIZE - 0x10000, PROT_READ | PROT_WRITE);
+        else
+            map_fixed(fd, 0, at, PS1_RAM_SIZE, PROT_READ | PROT_WRITE);
+    }
     map_fixed(-1, 0, PS1_SCRATCH_BASE, PS1_SCRATCH_SIZE, PROT_READ | PROT_WRITE);
+}
+
+/* The kernel's function tables, where GetC0Table/GetB0Table (B0:56/57) point: what PsyQ's set-up code reads
+ * from them is the exception handler's address (C0 table entry 6), whose code it then patches. Nothing runs
+ * that code here; the patches land in otherwise unused kernel RAM. */
+static void kernel_tables(void) {
+    *(u32 *)(0x80000674u + 6 * 4) = 0x80000C80u;
 }
 
 /* The PS1 maps RAM at 0x00000000 too (KUSEG); its first 64 KB is kernel workspace, and the game does
@@ -157,33 +164,85 @@ void port_unimplemented(const char *name, u32 addr) {
     }
 }
 
-/* Copy a PS-X EXE's text+data image to its load address. */
-static void load_exe(const char *path) {
-    FILE *f = fopen(path, "rb");
-    u8 head[0x800];
-    u32 addr, size;
-    if (!f)
-        port_fatal("cannot open %s\n", path);
-    if (fread(head, 1, sizeof(head), f) != sizeof(head) || memcmp(head, "PS-X EXE", 8))
-        port_fatal("%s is not a PS-X EXE\n", path);
-    addr = *(u32 *)(head + 0x18);
-    size = *(u32 *)(head + 0x1C);
-    if (addr < PS1_RAM_BASE || addr + size > PS1_RAM_BASE + PS1_RAM_SIZE)
-        port_fatal("%s loads outside RAM (%08X+%X)\n", path, addr, size);
-    if (fread((void *)addr, 1, size, f) != size)
-        port_fatal("%s is truncated\n", path);
-    fclose(f);
-    port_log("loaded %s at %08X (%X bytes)\n", path, addr, size);
+/* Read a file from the disc (libcd, cdrom.c). Returns its size, or 0 if it isn't there. */
+typedef struct {
+    u8 minute, second, sector, track;
+    u32 size;
+    char name[16];
+} DiscFile;
+void *CdSearchFile(DiscFile *fp, char *name);
+s32 CdControl(u8 com, u8 *param, u8 *result);
+s32 CdRead(s32 sectors, u32 *buf, s32 mode);
+
+static u32 read_disc_file(const char *name, u8 **data) {
+    DiscFile f;
+    char path[64];
+    snprintf(path, sizeof(path), "\\%s;1", name);
+    for (char *c = path; *c; c++)
+        if (*c == '/')
+            *c = '\\';
+    if (!CdSearchFile(&f, path))
+        return 0;
+    *data = malloc((f.size + 2047) & ~2047u);
+    CdControl(2, &f.minute, NULL);
+    CdRead((f.size + 2047) / 2048, (u32 *)*data, 0x80);
+    return f.size;
 }
 
-/* A 5-byte `jmp native` at each game function's PS1 address. */
-static void install_trampolines(void) {
+/* Load an executable's text+data image from the disc to its address. */
+static void load_exe(const char *name) {
+    u8 *f;
+    u32 n = read_disc_file(name, &f), addr, size;
+    if (!n || n < 0x800 || memcmp(f, "PS-X EXE", 8))
+        port_fatal("%s is not on the disc, or not an executable\n", name);
+    addr = *(u32 *)(f + 0x18);
+    size = *(u32 *)(f + 0x1C);
+    if (addr < PS1_RAM_BASE || addr + size > PS1_RAM_BASE + PS1_RAM_SIZE || size > n - 0x800)
+        port_fatal("%s loads outside RAM (%08X+%X)\n", name, addr, size);
+    memcpy((void *)addr, f + 0x800, size);
+    free(f);
+    port_log("loaded %s at %08X (%X bytes)\n", name, addr, size);
+}
+
+/* A 5-byte `jmp native` at each of the executable's function addresses. */
+static void install_trampolines(const PortModule *m) {
     int i;
-    for (i = 0; i < port_func_count; i++) {
-        u8 *p = (u8 *)port_funcs[i].addr;
+    for (i = 0; i < m->func_count; i++) {
+        u8 *p = (u8 *)m->funcs[i].addr;
         p[0] = 0xE9;
-        *(s32 *)(p + 1) = (s32)((u8 *)port_funcs[i].fn - (p + 5));
+        *(s32 *)(p + 1) = (s32)((u8 *)m->funcs[i].fn - (p + 5));
     }
+}
+
+static const PortModule *find_module(const char *name) {
+    int i;
+    for (i = 0; i < port_module_count; i++)
+        if (!strcmp(port_modules[i]->name, name))
+            return port_modules[i];
+    port_fatal("this build has no %s\n", name);
+}
+
+/* BIOS Exec(header, argc, argv) (A0:43): the stub has loaded an executable and starts it. Find its native
+ * module by entry point and size, make its functions current, clear its BSS as its entry point would and
+ * run its main. Returns to the stub when main does. */
+u32 port_exec(u32 header, s32 argc, u32 argv) {
+    const PortModule *prev = port_module, *m = NULL;
+    u32 pc0 = *(u32 *)header, t_size = *(u32 *)(header + 0xC);
+    int i;
+    s32 r;
+    for (i = 0; i < port_module_count; i++)
+        if (port_modules[i]->pc0 == pc0 && port_modules[i]->text_size == t_size && port_modules[i]->main)
+            m = port_modules[i];
+    if (!m)
+        port_fatal("Exec: no native module for the executable at %08X (%X bytes)\n", pc0, t_size);
+    port_log("Exec %s\n", m->name);
+    port_module = m;
+    install_trampolines(m);
+    memset((void *)m->bss_start, 0, m->bss_end - m->bss_start);
+    r = m->main(argc, (void *)argv);
+    port_log("%s returned %d\n", m->name, r);
+    port_module = prev;
+    return 1;
 }
 
 #define ARGS_ADDR 0x8001F164u
@@ -248,19 +307,23 @@ static void boot_init_args(s32 level) {
     sprintf((char *)(a + 0x234), "\\L%02d\\LEVEL%02d.EXE;1", level, level);
 }
 
+/* The stub's entry (SLUS_012.72 func_80015900): clear its BSS, give the heap the RAM between the BSS and the
+ * stack (whose top and size are in its data), initialise it and run the main loop. Its recompiled code keeps
+ * its stack where all recompiled code does (recomp_rt.c), so the children's heaps can't reach it. */
+static void boot_start(void) {
+    u32 top = *(u32 *)0x8001D6A4 - 8, stack_size = *(u32 *)0x8001D6A0;
+    u32 heap = port_boot->bss_end & 0x1FFFFFFF, size = top - stack_size - heap;
+    memset((void *)port_boot->bss_start, 0, port_boot->bss_end - port_boot->bss_start);
+    *(u32 *)0x8001D6B0 = size;
+    *(u32 *)0x8001D6AC = heap | 0x80000000;
+    ((void (*)(u32, u32))0x80019B00)((heap | 0x80000000) + 4, size);
+    ((void (*)(void))0x80010154)();
+}
+
 int main(int argc, char **argv) {
-    char exe_default[64];
-    const char *exe, *boot = argc > 2 ? argv[2] : "workbench/extracted/SLUS_012.72";
-    s32 level = port_level, r;
-    snprintf(exe_default, sizeof(exe_default), "build/level%02d/level%02d.exe", level, level);
-    exe = argc > 1 ? argv[1] : exe_default;
+    const char *level_env = getenv("TWINE_LEVEL");
+    s32 level = level_env ? atoi(level_env) : 0, r;
     log_file = fopen("port.log", "w");
-    load_exe(boot); /* resident stub data (g_Args lives in it) */
-    load_exe(exe);
-    install_trampolines();
-    boot_init_args(level);
-    /* start(): clear the level's BSS */
-    memset((void *)port_bss_start, 0, port_bss_end - port_bss_start);
     {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
@@ -268,17 +331,32 @@ int main(int argc, char **argv) {
         sa.sa_flags = SA_SIGINFO | SA_NODEFER;
         sigaction(SIGSEGV, &sa, NULL);
     }
+    kernel_tables();
+    port_boot = port_module = find_module("boot");
+    load_exe("SLUS_012.72"); /* the stub stays resident below the others (g_Args lives in its data) */
+    install_trampolines(port_boot);
     port_video_init();
     port_audio_init();
+    if (level < 1 || level > 11) {
+        port_irq_start();
+        boot_start();
+        port_log("the boot stub's main loop returned\n");
+        return 0;
+    }
+    {
+        char name[32];
+        snprintf(name, sizeof(name), "level%02d", level);
+        port_module = find_module(name);
+    }
+    load_exe(port_module->path);
+    install_trampolines(port_module);
+    boot_init_args(level);
+    /* start(): clear the level's BSS */
+    memset((void *)port_module->bss_start, 0, port_module->bss_end - port_module->bss_start);
     port_irq_start();
-    r = port_game_main(1, (void *)ARGS_ADDR);
+    r = port_module->main(1, (void *)ARGS_ADDR);
     port_log("game main returned %d\n", r);
     return 0;
-}
-
-/* func_80026800 (asm in the PS1 build): returns the stack pointer. */
-u32 func_80026800(void) {
-    return (u32)__builtin_frame_address(0);
 }
 
 /* PsyQ libc rand/srand (the C standard's sample generator; game randomness depends on its sequence). */

@@ -7,26 +7,15 @@
 #include <sys/mman.h>
 #include "recomp.h"
 
-typedef struct {
-    u32 addr;
-    RcFunc fn;
-} RcEntry;
-extern const RcEntry port_rc_funcs[];
-extern const int port_rc_func_count;
-
-typedef struct {
-    u32 addr;
-    void *fn;
-} PortFunc;
-extern const PortFunc port_funcs[];
-extern const int port_func_count;
+#include "module.h"
 
 s32 EnterCriticalSection(void);
 void ExitCriticalSection(void);
 
-/* Recompiled code keeps its stack in PS1-addressable memory; each entry from native code takes a fresh
- * 16 KB slice (calls nest strictly, interrupts included). */
-#define RC_STACK_TOP 0x80500000u
+/* Recompiled code keeps its stack in memory its loads and stores reach directly (not PS1 RAM, which its
+ * mirrors fill up to 8 MB: main.c); each entry from native code takes a fresh 16 KB slice (calls nest
+ * strictly, interrupts included). */
+#define RC_STACK_TOP 0x1E100000u
 #define RC_STACK_SIZE 0x00100000u
 #define RC_SLICE 0x4000u
 static u32 rc_sp = RC_STACK_TOP;
@@ -51,13 +40,15 @@ void port_rc_leave(u32 sp) {
     rc_sp += RC_SLICE;
 }
 
-static RcFunc rc_lookup(u32 addr) {
-    int lo = 0, hi = port_rc_func_count - 1;
+/* Code by PS1 address: the running executable's, else the resident stub's (callbacks it left installed).
+ * KSEG1 addresses (0xA0...) are the same code uncached. */
+static RcFunc rc_lookup_in(const PortModule *m, u32 addr) {
+    int lo = 0, hi = *m->rc_func_count - 1;
     while (lo <= hi) {
         int mid = (lo + hi) / 2;
-        if (port_rc_funcs[mid].addr == addr)
-            return port_rc_funcs[mid].fn;
-        if (port_rc_funcs[mid].addr < addr)
+        if (m->rc_funcs[mid].addr == addr)
+            return (RcFunc)m->rc_funcs[mid].fn;
+        if (m->rc_funcs[mid].addr < addr)
             lo = mid + 1;
         else
             hi = mid - 1;
@@ -65,12 +56,34 @@ static RcFunc rc_lookup(u32 addr) {
     return NULL;
 }
 
-static void *native_lookup(u32 addr) {
-    int i;
-    for (i = 0; i < port_func_count; i++)
-        if (port_funcs[i].addr == addr)
-            return port_funcs[i].fn;
+static void *native_lookup_in(const PortModule *m, u32 addr) {
+    int lo = 0, hi = m->func_count - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        if (m->funcs[mid].addr == addr)
+            return m->funcs[mid].fn;
+        if (m->funcs[mid].addr < addr)
+            lo = mid + 1;
+        else
+            hi = mid - 1;
+    }
     return NULL;
+}
+
+static RcFunc rc_lookup(u32 addr) {
+    RcFunc f;
+    if ((addr & 0xE0000000) == 0xA0000000)
+        addr ^= 0x20000000;
+    f = rc_lookup_in(port_module, addr);
+    return f || port_module == port_boot ? f : rc_lookup_in(port_boot, addr);
+}
+
+static void *native_lookup(u32 addr) {
+    void *f;
+    if ((addr & 0xE0000000) == 0xA0000000)
+        addr ^= 0x20000000;
+    f = native_lookup_in(port_module, addr);
+    return f || port_module == port_boot ? f : native_lookup_in(port_boot, addr);
 }
 
 typedef u32 (*NativeFn)(u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32);
@@ -104,6 +117,12 @@ s32 EnableEvent(u32 h);
 s32 DisableEvent(u32 h);
 s32 TestEvent(u32 h);
 void gpu_gp0(const u32 *words, int n);
+u32 port_exec(u32 header, s32 argc, u32 argv);
+void bios_init_heap(u32 addr, u32 size);
+u32 bios_malloc(u32 size);
+void bios_free(u32 p);
+u32 bios_calloc(u32 n, u32 size);
+u32 bios_realloc(u32 p, u32 size);
 
 #define A(n) c->r[4 + (n)]
 #define STR(n) ((char *)A(n))
@@ -158,13 +177,34 @@ static void bios_call(R3000 *c, u32 table) {
     case 0xA00D:
         *v0 = strtol(STR(0), (char **)A(1), A(2));
         return;
+    case 0xA033:
+        *v0 = bios_malloc(A(0));
+        return;
+    case 0xA034:
+        bios_free(A(0));
+        return;
+    case 0xA037:
+        *v0 = bios_calloc(A(0), A(1));
+        return;
+    case 0xA038:
+        *v0 = bios_realloc(A(0), A(1));
+        return;
+    case 0xA039: /* InitHeap */
+        bios_init_heap(A(0), A(1));
+        return;
     case 0xA03F: /* printf */
     case 0xB03F: /* puts */
         port_log(STR(0), A(1), A(2), A(3), M32(c->r[29] + 16), M32(c->r[29] + 20), M32(c->r[29] + 24));
         if (fn == 0x3F && table == 0xB0)
             port_log("\n");
         return;
+    case 0xA043: /* Exec: start the executable the stub has loaded (main.c) */
+        *v0 = port_exec(A(0), A(1), A(2));
+        return;
     case 0xA044: /* FlushCache */
+    case 0xA070: /* _bu_init: the BIOS memory card driver (no memory cards yet) */
+    case 0xA072: /* CdRemove: the BIOS CD driver (libcd here is native) */
+    case 0xA09F: /* SetMem: RAM size (mirrors are mapped as for 2 MB, main.c) */
         return;
     case 0xA049: /* GPU_cw */
         gpu_gp0(&A(0), 1);
@@ -200,6 +240,18 @@ static void bios_call(R3000 *c, u32 table) {
         return;
     case 0xB038:
         port_fatal("PS1 code called exit(%d)\n", A(0));
+    case 0xB056: /* GetC0Table, B0:57 GetB0Table: the kernel's tables (main.c kernel_tables), which PsyQ's GTE
+                  * and interrupt setup patch into the kernel's exception handler */
+        *v0 = 0x80000674u;
+        return;
+    case 0xB057:
+        *v0 = 0x80000874u;
+        return;
+    case 0xB04A: /* InitCard, StartCard, StopCard: no memory cards yet */
+    case 0xB04B:
+    case 0xB04C:
+        *v0 = 1;
+        return;
     }
     port_log("BIOS %02X:%02X not implemented (a0=%08X)\n", table, fn, A(0));
     *v0 = 0;
@@ -231,6 +283,10 @@ void port_rc_call(R3000 *c, u32 addr) {
             a[k] = M32(sp + 16 + (k - 4) * 4);
         c->r[2] = port_call16((void *)n, a);
     }
+}
+
+/* The boot stub's instruction cache flush (native_names.txt): nothing to do on a PC. */
+void port_flush_cache(void) {
 }
 
 void port_rc_bad(u32 addr, u32 word) {

@@ -21,16 +21,18 @@ typedef void (*RcFunc)(R3000 *c);
 #define M32(a) (*(u32 *)(u32)(a))
 
 /* Loads and stores of recompiled code: hardware registers (0x1F801000-0x1F802FFF, any segment) go to
- * the I/O model (io.c), everything else is memory. */
+ * the I/O model (io.c), everything else is memory. The first 64 KB of KUSEG (kernel RAM, which BIOS patches
+ * and NULL-based pointers reach) can't be mapped on Linux: those addresses use the KSEG0 mirror. */
 u32 port_io_read(u32 addr, int size);
 void port_io_write(u32 addr, u32 value, int size);
 #define IS_IO(a) ((((a) & 0x1FFFFFFFu) - 0x1F801000u) < 0x2000u)
-static inline u32 LD32(u32 a) { return IS_IO(a) ? port_io_read(a, 4) : M32(a); }
-static inline u32 LD16(u32 a) { return IS_IO(a) ? port_io_read(a, 2) : MU16(a); }
-static inline u32 LD8(u32 a) { return IS_IO(a) ? port_io_read(a, 1) : MU8(a); }
-static inline void ST32(u32 a, u32 v) { if (IS_IO(a)) port_io_write(a, v, 4); else M32(a) = v; }
-static inline void ST16(u32 a, u32 v) { if (IS_IO(a)) port_io_write(a, v, 2); else MU16(a) = (u16)v; }
-static inline void ST8(u32 a, u32 v) { if (IS_IO(a)) port_io_write(a, v, 1); else MU8(a) = (u8)v; }
+static inline u32 RA(u32 a) { return a < 0x10000u ? a | 0x80000000u : a; }
+static inline u32 LD32(u32 a) { return IS_IO(a) ? port_io_read(a, 4) : M32(RA(a)); }
+static inline u32 LD16(u32 a) { return IS_IO(a) ? port_io_read(a, 2) : MU16(RA(a)); }
+static inline u32 LD8(u32 a) { return IS_IO(a) ? port_io_read(a, 1) : MU8(RA(a)); }
+static inline void ST32(u32 a, u32 v) { if (IS_IO(a)) port_io_write(a, v, 4); else M32(RA(a)) = v; }
+static inline void ST16(u32 a, u32 v) { if (IS_IO(a)) port_io_write(a, v, 2); else MU16(RA(a)) = (u16)v; }
+static inline void ST8(u32 a, u32 v) { if (IS_IO(a)) port_io_write(a, v, 1); else MU8(RA(a)) = (u8)v; }
 
 /* call a PS1 address (recompiled or native code) from recompiled code */
 void port_rc_call(R3000 *c, u32 addr);
@@ -41,22 +43,22 @@ u32 port_rc_enter(void);
 void port_rc_leave(u32 sp);
 
 static inline u32 rc_lwl(u32 rt, u32 addr) {
-    u32 sh = addr & 3, w = M32(addr & ~3u);
+    u32 sh = addr & 3, w = M32(RA(addr & ~3u));
     return (rt & (0x00FFFFFFu >> (sh * 8))) | (w << (24 - sh * 8));
 }
 
 static inline u32 rc_lwr(u32 rt, u32 addr) {
-    u32 sh = addr & 3, w = M32(addr & ~3u);
+    u32 sh = addr & 3, w = M32(RA(addr & ~3u));
     return (rt & ~(0xFFFFFFFFu >> (sh * 8))) | (w >> (sh * 8));
 }
 
 static inline void rc_swl(u32 rt, u32 addr) {
-    u32 sh = addr & 3, *p = (u32 *)(addr & ~3u);
+    u32 sh = addr & 3, *p = (u32 *)RA(addr & ~3u);
     *p = (*p & ~(0xFFFFFFFFu >> (24 - sh * 8))) | (rt >> (24 - sh * 8));
 }
 
 static inline void rc_swr(u32 rt, u32 addr) {
-    u32 sh = addr & 3, *p = (u32 *)(addr & ~3u);
+    u32 sh = addr & 3, *p = (u32 *)RA(addr & ~3u);
     *p = (*p & ~(0xFFFFFFFFu << (sh * 8))) | (rt << (sh * 8));
 }
 

@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "port"))
-from gen_native import HOST_LIBC, library_layout, nm, ps1_symbols, psyq_names  # noqa: E402
+from gen_native import HOST_LIBC, asm_code_files, library_layout, nm, ps1_symbols, psyq_names  # noqa: E402
 
 # Calls between native and recompiled code carry this many arguments: $a0-$a3 and the rest from the PS1
 # stack (sp+16...). Extra ones are harmless: native callees ignore them, recompiled ones never read them.
@@ -34,32 +34,36 @@ def functions(level):
     """[(name, addr, size)] of the level's code that exists only as assembly."""
     addr = ps1_symbols(level)
     out = []
-    files = [ROOT / f"asm/{level}/psyq_libs.s"] + sorted((ROOT / f"asm/{level}/nonmatchings").glob("*/*.s"))
-    for path in files:
+    for path in asm_code_files(level):
         for m in re.finditer(r"^nonmatching (\w+), (0x[0-9A-Fa-f]+)", path.read_text(), re.M):
             if m.group(1) in addr:
                 out.append((m.group(1), addr[m.group(1)], int(m.group(2), 16)))
-    # hand-written code in .data (dlabel func_... / enddlabel): size from the labels' addresses
-    for path in sorted((ROOT / f"asm/{level}/data").glob("*.s")):
+    # hand-written code in .data, and code the disassembler kept as words (a BIOS call thunk followed by
+    # invalid words): dlabel func_... / enddlabel, size from the labels' addresses
+    for path in sorted((ROOT / f"asm/{level}/data").glob("*.s")) + asm_code_files(level):
         text = path.read_text()
         for m in re.finditer(r"^dlabel (func_\w+)\n(.*?)^enddlabel \1", text, re.M | re.S):
-            words = re.findall(r"/\* \w+ ([0-9A-F]{8}) \*/", m.group(2))
+            words = re.findall(r"/\* \w+ ([0-9A-F]{8})(?: [0-9A-F]{8})? \*/", m.group(2))
             if words and m.group(1) in addr:
                 last = int(words[-1], 16)
                 out.append((m.group(1), addr[m.group(1)], last + 4 - addr[m.group(1)]))
     out = sorted(set(out), key=lambda f: f[1])
     # main can be a label inside another asm function (start jumps there): give it an entry of its own
     main = main_address(level)
-    if all(a != main for _, a, _ in out):
+    if main is not None and all(a != main for _, a, _ in out):
         owner = next(((n, a, s) for n, a, s in out if a < main < a + s), None)
         if owner:
             out.append(("port_recomp_main", main, owner[1] + owner[2] - main))
     out += data_code(level, out, addr)
     out = sorted(set(out), key=lambda f: f[1])
-    # library functions this level's asm has merged into a neighbour get entry points of their own
-    if level != "level01":
+    # entry points inside an assembly function: library functions this module's asm has merged into a
+    # neighbour, and code that only data points to (callbacks: `alabel D_...` in code)
+    entries = [a for a, _, _ in library_layout(level)] if level != "level01" else []
+    for path in asm_code_files(level):
+        entries += [int(a, 16) for a in re.findall(r"^\s+alabel D_([0-9A-F]{8})$", path.read_text(), re.M)]
+    if entries:
         starts = {a for _, a, _ in out}
-        for entry, _, _ in library_layout(level):
+        for entry in sorted(set(entries)):
             k = next((k for k, (_, a, s) in enumerate(out) if a < entry < a + s), None)
             if entry in starts or k is None:
                 continue

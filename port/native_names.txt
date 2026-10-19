@@ -1,0 +1,7 @@
+# Functions of the executables that the runtime implements natively, by address, for code the library
+# mapping (gen_native.library_layout) can't name. One per line: module address name.
+# The boot stub's hand-written instruction cache flush (it isolates the cache and stores zeros, which would
+# clear RAM here): nothing to do on a PC.
+boot 80015AC8 port_flush_cache
+# libetc functions Level 1 doesn't link (its interrupt callback table, slot 0x14)
+shell 80062F4C RestartCallback
