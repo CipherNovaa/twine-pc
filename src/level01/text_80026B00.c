@@ -41,6 +41,22 @@ typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; 
 typedef struct { u32 tag; u8 r0, g0, b0, code; } PrimHdr;
 typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0, x1, y1, x2, y2, x3, y3; u32 pad; } LINE_F4;
 typedef struct { LINE_F4 line[2]; u8 tile[2][0x10]; u8 f4[2][0x18]; POLY_FT4 ft4[2]; DR_MODE dm[2]; u8 pad[0x18]; u8 flag; } Overlay;
+extern s32 D_8009CA9C;
+extern s32 D_8009CDA8;
+extern s32 D_800B8EFC[][5];
+extern s32 D_800B8F24;
+extern s8 D_800AFEB6;
+extern s8 D_800AFFA8;
+extern s8 D_800AFFCC;
+extern s8 D_800B0070;
+extern s8 D_800B07C4;
+s32 func_8002A3C8(u8 centered);
+s32 Pad_Update(void);
+extern s32 D_8009C1F4;
+extern s32 D_8009C1F8;
+extern s32 D_8009CD80;
+extern u32 D_800AC384;
+extern u8 D_800AEB1A;
 M2C_UNK SetLineF4(M2C_UNK *);
 void func_80081B74(void *);
 void func_80081C54(void *);
@@ -906,7 +922,220 @@ void func_800299CC(s32 arg0, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 arg5, s
   *((s16 *) (((s8 *) (&D_800AC284)) + 0x240)) = (s16) arg7;
 }
 
+#ifdef NON_MATCHING
+void func_80029A34(void) {
+    u8 *ov;
+    u32 *ot;
+    s16 v;
+    s16 da;
+    s16 db;
+    s16 a0;
+    u16 v1;
+    u16 tx;
+    u16 ty;
+    s16 fx;
+    s16 fy;
+    s16 fx2;
+    s16 fy2;
+    s16 fy3;
+    LINE_F4 *l;
+    u8 *q;
+    u8 *r;
+
+    ov = (u8 *) &D_800AC284;
+    if (M2C_FIELD(ov, u8 *, 0x108) == 0) {
+        return;
+    }
+    D_8009C1F8 = D_8009C1F4;
+    if (M2C_FIELD(ov, s32 *, 0x104) == 4) {
+        D_8009C1F4 = 0;
+    } else {
+        D_8009C1F4 = Pad_Update();
+    }
+    switch (D_800AC384) {
+    case 0:
+        da = (((s16) M2C_FIELD(ov, u16 *, 0xF4) >> 3) * 0x1E) / g_FrameRate;
+        db = (((s16) M2C_FIELD(ov, u16 *, 0xF6) >> 3) * 0x1E) / g_FrameRate;
+        if (da < 4) {
+            da = 4;
+        }
+        if (db < 4) {
+            db = 4;
+        }
+        a0 = M2C_FIELD(ov, u16 *, 0xF0) + da;
+        M2C_FIELD(ov, u16 *, 0xF2) += db;
+        M2C_FIELD(ov, u16 *, 0xF0) = a0;
+        if (a0 >= 0) {
+            if ((s16) M2C_FIELD(ov, u16 *, 0xF4) < a0) {
+                a0 = (s16) M2C_FIELD(ov, u16 *, 0xF4);
+            }
+        } else {
+            a0 = 0;
+        }
+        M2C_FIELD(ov, u16 *, 0xF0) = a0;
+        v1 = M2C_FIELD(ov, u16 *, 0xF2);
+        if ((s16) M2C_FIELD(ov, u16 *, 0xF2) >= 0) {
+            if ((s16) M2C_FIELD(ov, u16 *, 0xF6) < (s16) M2C_FIELD(ov, u16 *, 0xF2)) {
+                v1 = M2C_FIELD(ov, u16 *, 0xF6);
+            }
+        } else {
+            v1 = 0;
+        }
+        M2C_FIELD(ov, u16 *, 0xF2) = v1;
+        if ((s32) M2C_FIELD(ov, u16 *, 0xF0) == (s32) M2C_FIELD(ov, u16 *, 0xF4)) {
+            if (M2C_FIELD(ov, s32 *, 0x104) == 3) {
+                D_8009CA9C = 1;
+                D_800AC384 = 5;
+            } else {
+                D_800AC384 = 2;
+            }
+        } else if ((*(u8 *) &D_8009C1EC != 0) && (M2C_FIELD(ov, s32 *, 0x104) != 3)) {
+            D_800AC384 = 2;
+            M2C_FIELD(ov, u16 *, 0xF0) = M2C_FIELD(ov, u16 *, 0xF4);
+            M2C_FIELD(ov, u16 *, 0xF2) = M2C_FIELD(ov, u16 *, 0xF6);
+        }
+        break;
+    case 1:
+        da = (((s16) M2C_FIELD(ov, u16 *, 0xF4) >> 3) * 0x1E) / g_FrameRate;
+        db = (((s16) M2C_FIELD(ov, u16 *, 0xF6) >> 3) * 0x1E) / g_FrameRate;
+        if (da < 4) {
+            da = 4;
+        }
+        if (db < 4) {
+            db = 4;
+        }
+        a0 = M2C_FIELD(ov, u16 *, 0xF0) - da;
+        M2C_FIELD(ov, u16 *, 0xF2) -= db;
+        M2C_FIELD(ov, u16 *, 0xF0) = a0;
+        if (a0 >= 0) {
+            if ((s16) M2C_FIELD(ov, u16 *, 0xF4) < a0) {
+                a0 = (s16) M2C_FIELD(ov, u16 *, 0xF4);
+            }
+        } else {
+            a0 = 0;
+        }
+        M2C_FIELD(ov, u16 *, 0xF0) = a0;
+        v1 = M2C_FIELD(ov, u16 *, 0xF2);
+        if ((s16) M2C_FIELD(ov, u16 *, 0xF2) >= 0) {
+            if ((s16) M2C_FIELD(ov, u16 *, 0xF6) < (s16) M2C_FIELD(ov, u16 *, 0xF2)) {
+                v1 = M2C_FIELD(ov, u16 *, 0xF6);
+            }
+        } else {
+            v1 = 0;
+        }
+        M2C_FIELD(ov, u16 *, 0xF2) = v1;
+        if ((s32) M2C_FIELD(ov, u16 *, 0xF0) == 0) {
+            if (M2C_FIELD(ov, s32 *, 0x104) == 3) {
+                D_8009CA9C = 0;
+            }
+            M2C_FIELD(ov, u8 *, 0x108) = 0;
+        }
+        break;
+    case 2:
+        if (!(func_8002A3C8(M2C_FIELD(ov, u8 *, 0x242)) & 0xFF) && ((M2C_FIELD(ov, s32 *, 0x104) == 1) || (M2C_FIELD(ov, s32 *, 0x104) == 4))) {
+            D_800AC384 = 3;
+        } else {
+            D_800AC384 = 4;
+        }
+        break;
+    case 3:
+        a0 = g_Args->buttonMap[0];
+        if (((D_8009C1F4 & (u16) a0) && !(D_8009C1F8 & (u16) a0)) || (*(u8 *) &D_8009C1EC != 0)) {
+            D_8009C1EC = 0;
+            if ((M2C_FIELD(ov, u8 *, 0x23C) == 0) || (*(u8 *) &D_800AFEB6 == 0)) {
+                Menu_ResetState();
+                D_800AC384 = 2;
+            }
+        }
+        break;
+    case 4:
+        if (M2C_FIELD(ov, s32 *, 0x104) == 0) {
+            v1 = M2C_FIELD(ov, u16 *, 0xFC) - 1;
+            M2C_FIELD(ov, u16 *, 0xFC) = v1;
+            if ((v1 << 0x10) <= 0) {
+                D_800AC384 = 1;
+                Menu_ResetState();
+            }
+        }
+        break;
+    case 5:
+        if (D_8009CA9C == 0) {
+            D_800AC384 = 1;
+            M2C_FIELD(ov, s32 *, 0x104) = 0;
+            Menu_ResetState();
+        }
+        break;
+    default:
+        break;
+    }
+    tx = M2C_FIELD(ov, u16 *, 0xF8) + ((s32) ((s16) M2C_FIELD(ov, u16 *, 0xF4) - (s16) M2C_FIELD(ov, u16 *, 0xF0)) >> 1);
+    ty = M2C_FIELD(ov, u16 *, 0xFA) + ((s32) ((s16) M2C_FIELD(ov, u16 *, 0xF6) - (s16) M2C_FIELD(ov, u16 *, 0xF2)) >> 1);
+    v = 0;
+    do {
+        l = &((Overlay *) ov)->line[v];
+        q = ((Overlay *) ov)->tile[v];
+        r = ((Overlay *) ov)->f4[v];
+        M2C_FIELD(l, u16 *, 0xC) = tx + M2C_FIELD(ov, u16 *, 0xF0);
+        M2C_FIELD(l, u16 *, 0x12) = ty + M2C_FIELD(ov, u16 *, 0xF2);
+        M2C_FIELD(l, u16 *, 0xA) = ty;
+        M2C_FIELD(l, u16 *, 8) = tx;
+        M2C_FIELD(l, u16 *, 0x14) = tx;
+        M2C_FIELD(l, u16 *, 0xE) = ty;
+        M2C_FIELD(l, u16 *, 0x10) = M2C_FIELD(l, u16 *, 0xC);
+        M2C_FIELD(l, u16 *, 0x16) = M2C_FIELD(l, u16 *, 0x12);
+        M2C_FIELD(q, u16 *, 8) = M2C_FIELD(l, u16 *, 0x14);
+        M2C_FIELD(q, u16 *, 0xA) = M2C_FIELD(l, u16 *, 0x16);
+        M2C_FIELD(q, u16 *, 0xC) = M2C_FIELD(l, u16 *, 8);
+        M2C_FIELD(q, u16 *, 0xE) = M2C_FIELD(l, u16 *, 0xA);
+        M2C_FIELD(r, u16 *, 8) = M2C_FIELD(l, u16 *, 8);
+        M2C_FIELD(r, u16 *, 0xA) = M2C_FIELD(l, u16 *, 0xA);
+        M2C_FIELD(r, u16 *, 0xC) = M2C_FIELD(l, u16 *, 0xC);
+        M2C_FIELD(r, u16 *, 0xE) = M2C_FIELD(q, u16 *, 0xE);
+        M2C_FIELD(r, u16 *, 0x10) = M2C_FIELD(l, u16 *, 0x14);
+        M2C_FIELD(r, u16 *, 0x12) = M2C_FIELD(l, u16 *, 0x16);
+        M2C_FIELD(r, u16 *, 0x14) = M2C_FIELD(l, u16 *, 0x10);
+        M2C_FIELD(r, u16 *, 0x16) = M2C_FIELD(l, u16 *, 0x12);
+        v++;
+    } while (v < 2);
+    if ((D_800AC384 == 3) && ((M2C_FIELD(ov, u8 *, 0x23C) == 0) || (*(u8 *) &D_800AFEB6 == 0))) {
+        fx = (M2C_FIELD(ov, u16 *, 0xF8) + M2C_FIELD(ov, u16 *, 0xF4)) - 0x1E;
+        fx2 = fx + D_800AEB1A;
+        fy = M2C_FIELD(ov, u16 *, 0xFA) + M2C_FIELD(ov, u16 *, 0xF6);
+        fy2 = fy - 0xE;
+        fy3 = fy - 6;
+        v = 0;
+        do {
+            POLY_FT4 *p = &((Overlay *) ov)->ft4[v];
+            v++;
+            p->x0 = fx;
+            p->y0 = fy2;
+            p->x1 = fx2;
+            p->y1 = fy2;
+            p->x2 = fx;
+            p->y2 = fy3;
+            p->x3 = fx2;
+            p->y3 = fy3;
+        } while (v < 2);
+    }
+    if (((D_800AC384 != 5) || ((*(u8 *) &D_800AFFCC == 0) && (*(u8 *) &D_800B07C4 == 0) && (*(u8 *) &D_800AFFA8 == 0) && (*(u8 *) &D_800B0070 == 0))) && (D_8009CD80 == 0)) {
+        ot = (u32 *) D_800B8EFC[D_800B8F24][1];
+        ((PTag *) &((Overlay *) ov)->line[D_800B8F24])->addr = ((PTag *) ot)->addr;
+        ((PTag *) ot)->addr = (u32) &((Overlay *) ov)->line[D_800B8F24];
+        ((PTag *) ((Overlay *) ov)->tile[D_800B8F24])->addr = ((PTag *) ot)->addr;
+        ((PTag *) ot)->addr = (u32) ((Overlay *) ov)->tile[D_800B8F24];
+        ((PTag *) ((Overlay *) ov)->f4[D_800B8F24])->addr = ((PTag *) (ot + 1))->addr;
+        ((PTag *) (ot + 1))->addr = (u32) ((Overlay *) ov)->f4[D_800B8F24];
+        ((PTag *) &((Overlay *) ov)->dm[D_800B8F24])->addr = ((PTag *) (ot + 1))->addr;
+        ((PTag *) (ot + 1))->addr = (u32) &((Overlay *) ov)->dm[D_800B8F24];
+        if (((M2C_FIELD(ov, s32 *, 0x104) == 1) || (M2C_FIELD(ov, s32 *, 0x104) == 4)) && ((u32) (D_800AC384 - 3) < 2U) && ((u32) (D_8009CDA8 % 12) < 9U) && ((M2C_FIELD(ov, u8 *, 0x23C) == 0) || (*(u8 *) &D_800AFEB6 == 0))) {
+            ((PTag *) &((Overlay *) ov)->ft4[D_800B8F24])->addr = ((PTag *) ot)->addr;
+            ((PTag *) ot)->addr = (u32) &((Overlay *) ov)->ft4[D_800B8F24];
+        }
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80029A34);
+#endif
 
 s32 func_8002A3C8(u8 centered) {
     s16 x;

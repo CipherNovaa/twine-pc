@@ -9,7 +9,7 @@ typedef struct { u32 length; u32 *org; u32 offset; u32 point; u32 *tag; } GsOT;
 extern GsMat32 D_800FC6A0;
 extern GsOT D_800B8F88[];
 void *func_80030610(s32);
-void func_80075D48(HmdModel *);
+void func_80075D48(u8 *obj);
 void GsMapUnit(u32 *);
 s32 GsScanUnit(u32 *, GsTYPEUNIT *, GsOT *, u32 *);
 GsCOORDUNIT *GsMapCoordUnit(u32 *, void **);
@@ -422,7 +422,54 @@ void func_80075920(HmdModel *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_80075D48);
+void func_80075D48(u8 *obj) {
+    u8 *s0;
+    s32 *s1;
+    s32 *a1;
+    register u32 i REG("a0");
+    u8 *p;
+    s32 first;
+    s32 *v1;
+    s0 = *(u8 **)obj;
+    s0 += 0xC;
+    *(u32 *)(obj + 0xC) = *(u32 *)s0;
+    s0 += 4;
+    s1 = *(s32 **)(obj + 4);
+    if (*(s32 *)s0 != 0) {
+        GsLinkAnim(*(void **)(obj + 0x70), (void **)(*(s32 *)s0 + 0xC));
+        *(s32 *)(obj + 0x6C) = *(u16 *)(*(u8 **)s0 + 0x12);
+    }
+    i = 0;
+    if (*(u32 *)(obj + 0xC) != 0) {
+        a1 = s1 + 1;
+        do {
+            *a1 = *(s32 *)s0;
+            *s1 = 0;
+            s0 += 4;
+            if (*a1 != 0) {
+                *(u8 **)(obj + 0x10) = *(u8 **)obj + (*(u32 *)(obj + 0xC) * 4 + 0x14);
+            }
+            i++;
+            a1 += 2;
+            s1 += 2;
+        } while (i < *(u32 *)(obj + 0xC));
+    }
+    if (*(u8 **)(obj + 0x10) != 0) {
+        p = *(u8 **)(obj + 0x10);
+        i = 0;
+        s1 = *(s32 **)(obj + 4) + 2;
+        first = *(s32 *)(p + 0x4C);
+        for (; i < *(u32 *)(obj + 0xC) - 2;) {
+            *s1 = (s32)p;
+            if (*(s32 *)(p + 0x4C) == first) {
+                *(s32 *)(p + 0x4C) = (s32)(obj + 0x14);
+            }
+            i++;
+            s1 += 2;
+            p += 0x50;
+        }
+    }
+}
 
 void func_80075E9C(void *arg0) {
     s32 i;
