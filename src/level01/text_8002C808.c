@@ -783,7 +783,7 @@ void func_80052B2C(s32 *out, u8 *obj);
 s32 func_80037B6C(u8 *obj);
 void func_8004B270(s32 arg0, s32 arg1, s32 arg2);
 void func_8005E228(void *arg0);
-M2C_UNK func_8004009C(s32);
+void func_8004009C(u8 *arg0);
 
 
 extern s32 D_800DDE30;
@@ -1130,6 +1130,19 @@ typedef struct { s32 m[8]; } GsMat32;
 typedef struct { s16 v[4]; } V4S;
 typedef struct { u8 b[8]; } PairC368;
 typedef struct { void * p0; u8 b4; u8 pad5[1]; u8 b6; u8 pad7[2]; u8 b9; u8 padA[6]; s32 w10; s16 h14; u8 pad16[2]; s32 w18; u8 pad1C[16]; s32 w2C; s32 w30; u8 pad34[6]; u8 b3A; u8 pad3B[1]; PairC368 c3C; u8 pad44[24]; s32 w5C; s32 w60; s16 h64; u8 b66; u8 b67; s16 h68; s16 h6A; s32 w6C; s32 w70; s32 w74; u8 pad78[8]; s32 w80; s32 w84; s32 w88; s32 w8C; u8 pad90[32]; s16 hB0; u8 padB2[26]; u8 bCC; u8 bCD; u8 bCE; u8 padCF[1]; s32 wD0; s32 wD4; s32 wD8; u8 padDC[4]; s32 wE0; s32 wE4; s32 wE8; u8 padEC[4]; s32 wF0; s32 wF4; s32 wF8; u8 padFC[4]; s32 w100; s32 w104; s32 w108; s32 w10C; u8 pad110[4]; s32 w114; } ObjC368;
+typedef struct { u8 on; u8 type; u8 p2[2]; u16 a[6]; s32 x; s32 y; s32 z; u8 p1C[6]; s16 ang; u8 p24[4]; void (*cb)(s32 *); u8 p2C[4]; s16 a30; u16 a32; u8 p34[16]; } Trig;
+extern u8 D_8009CF79;
+extern s8 D_8009CF82;
+extern s8 D_8009D8DC;
+extern u8 D_800D4128[];
+extern s8 D_800D424C;
+extern s8 D_800D4260;
+extern u8 D_800A8144[];
+extern s32 D_800D4390;
+extern s32 D_800D4080;
+void TransposeMatrix(void *, void *);
+s32 func_8003C9C4(u8 *a, u8 *b);
+s32 func_8003F768(VECTOR *p, VECTOR *q, SVECTOR *min, SVECTOR *max);
 extern char D_800A80B0[];
 extern char D_800A80BC[];
 extern char D_800A80C8[];
@@ -1209,7 +1222,7 @@ extern GsMat32 D_800FC6A0;
 extern u8 D_8009D8DD;
 #define OUT(k) { u8 *q = p + (k) * 8; *(u16 *)(q + 0x184) = pos.vx + r.vx; *(u16 *)(q + 0x186) = pos.vy + r.vy; *(u16 *)(q + 0x188) = pos.vz + r.vz; }
 #define XFORM() { gte_SetRotMatrix(&mat); gte_ldv0(&vv); gte_rtv0(); gte_stsv(&r); }
-u8 *func_80050A70(s32 *, s32 *, u8 *, s32);
+u8 *func_80050A70(s32 *arg0, s32 *arg1, u8 *arg2, s32 arg3);
 extern u8 D_800A85F8[];
 extern s32 D_800D4250[];
 #define gte_ldDiag(r0) __asm__ volatile("lw $12, 0(%0); lw $13, 4(%0); ctc2 $12, $0; lw $14, 8(%0); ctc2 $13, $2; ctc2 $14, $4" : : "r"(r0) : "$12", "$13", "$14")
@@ -9290,7 +9303,119 @@ void func_8003FF9C(void) {
     }
 }
 
+#ifdef NON_MATCHING
+void func_8004009C(u8 *arg0) {
+    s16 d[3];
+    u16 mn[3];
+    u16 mx[3];
+    VECTOR v0;
+    VECTOR v1;
+    GsMat32 m;
+    s32 cbarg[2];
+    Trig *t;
+    u8 *pl;
+    u8 *o;
+    s32 isp;
+    s32 ang;
+
+    if (D_8009CF7C == 0 || D_8009CF79 != 0) return;
+    isp = arg0 == (u8 *)g_Player;
+    if (isp) {
+        D_800D424C = 0;
+        D_800D4390 = 0;
+    }
+    t = D_8009CF7C;
+    pl = *(u8 **)(arg0 + 0x90);
+    for (; t < D_8009CF7C + D_8009CF80; t++) {
+        if (t->on == 0) continue;
+        if (t->type == 0) {
+            o = D_800D4128;
+            if (isp) {
+                *(u16 *)(o + 0x1C) = t->a[0];
+                *(u16 *)(o + 0x1E) = t->a[1];
+                *(u16 *)(o + 0x20) = t->a[2];
+                *(u16 *)(o + 0x22) = t->a[3];
+                *(u16 *)(o + 0x24) = t->a[4];
+                *(u16 *)(o + 0x26) = t->a[5];
+                *(u16 *)(o + 0x28) = t->a32;
+                *(s32 *)(*(u8 **)(o + 0x90) + 0x28) = t->x;
+                *(s32 *)(*(u8 **)(o + 0x90) + 0x2C) = t->y;
+                *(s32 *)(*(u8 **)(o + 0x90) + 0x30) = t->z;
+                func_8003BC98((u8 *)t + 0x20, *(u8 **)(o + 0x90) + 0x10, (s32)*(u8 **)(o + 0x90));
+                if (func_8003C9C4(o, arg0) != 0) {
+                    D_800D4260 = 0;
+                    D_8009CF82 = 1;
+                } else {
+                    D_800D4260 = 1;
+                }
+            }
+        } else if ((u8)(t->type - 1) < 2) {
+            s32 dx = *(s32 *)(pl + 0x28) - t->x;
+            s32 dz = *(s32 *)(pl + 0x30) - t->z;
+            if (abs(dx) < 0x1F41 && abs(dz) < 0x1F41) {
+                m = D_800FC6A0;
+                RotMatrixY(t->ang, &m);
+                TransposeMatrix(&m, &m);
+                gte_SetRotMatrix(&m);
+                mn[0] = t->a[0];
+                mn[1] = t->a[2];
+                mn[2] = t->a[4];
+                mx[0] = t->a[1];
+                mx[1] = t->a[3];
+                mx[2] = t->a[5];
+                d[0] = dx;
+                d[2] = dz;
+                d[1] = *(u16 *)(pl + 0x2C) - (u16)t->y;
+                if (arg0[5] == 6) d[1] += *(s16 *)(arg0 + 0x20) >> 1;
+                gte_ldv0(d);
+                gte_rtv0();
+                d[0] = dx + *(u16 *)(arg0 + 0x98);
+                gte_stlvnl(&v0);
+                d[1] += *(u16 *)(arg0 + 0x9A);
+                d[2] += *(u16 *)(arg0 + 0x9C);
+                gte_ldv0(d);
+                gte_rtv0();
+                gte_stlvnl(&v1);
+                if (func_8003F768(&v0, &v1, (SVECTOR *)mn, (SVECTOR *)mx) != 0) {
+                    if (t - D_8009CF7C == D_8009CDC4) D_8009D8DC = 1;
+                    if (!isp || t->type == 2) {
+                        ang = 0;
+                    } else {
+                        if (D_8009CD4C != 0) ang = D_800B0C5C;
+                        else ang = *(u16 *)(*(u8 **)(arg0 + 0x90) + 0x62);
+                        ang = (s16)ang;
+                        ang = (t->a30 - ang) & 0xFFF;
+                        if (ang > 0x800) ang -= 0x1000;
+                        ang = abs(ang);
+                    }
+                    if (ang < 0x2CE) {
+                        if (t - D_8009CF7C == D_8009CDC4) D_8009D8DC = 2;
+                        if (isp) D_800D4390 = (s32)t;
+                        if (t->cb != 0) {
+                            cbarg[1] = (s32)t;
+                            cbarg[0] = (s32)arg0;
+                            t->cb(cbarg);
+                        }
+                    }
+                } else {
+                    if (t - D_8009CF7C == D_8009CDC4) D_8009D8DC = 0;
+                }
+            } else {
+                if (t - D_8009CF7C == D_8009CDC4) D_8009D8DC = 0;
+            }
+        } else {
+            func_8006B230(0, D_800A8144);
+        }
+    }
+    if (g_CutScene != 0 && D_800D4390 == 0 && D_800D4080 != 0 && *(void **)((u8 *)D_800D4080 + 0x28)) {
+        cbarg[1] = D_800D4080;
+        cbarg[0] = (s32)g_Player;
+        (*(void (**)(s32 *))((u8 *)D_800D4080 + 0x28))(cbarg);
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8004009C);
+#endif
 
 void func_800406A0(void) {
     if (D_8009CF7C != 0) {
@@ -14782,7 +14907,211 @@ s32 func_80050A10(VECTOR *arg0, VECTOR *arg1, u8 *arg2, void *arg3) {
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80050A10);
 #endif
 
+#ifdef NON_MATCHING
+u8 *func_80050A70(s32 *arg0, s32 *arg1, u8 *arg2, s32 arg3) {
+    VECTOR v[5];
+    s32 dx, dz, len, ang, t, cs, sn;
+    s32 pass;
+    u8 *obj, *lo, *hi, *base, *P;
+    s32 rx, rz, cx, cz, py, R;
+    s32 h0, h1, h2, h3, h4, h5, scale;
+    s32 c2, s2;
+    s32 *tbl;
+    s32 i, e, a;
+    s32 neg, pos, far, in;
+    s32 ylo, yhi, dy;
+    s32 w0, w1, x0, x1, d, zc, hy;
+    VECTOR *A, *B;
+
+    if (abs(arg0[0] - arg1[0]) + abs(arg0[1] - arg1[1]) + abs(arg0[2] - arg1[2]) < 0x1F4) {
+        return 0;
+    }
+    dx = arg1[0] - arg0[0];
+    dz = arg1[2] - arg0[2];
+    ang = ratan2((s16)dx, dz) & 0xFFF;
+    t = D_800A0370[ang];
+    cs = t >> 16;
+    sn = (s16)t;
+    /* length of the ray projected on the rotated z axis */
+    len = (dz * cs + dx * sn) >> 12;
+    if (len < 0) {
+        len = -len;
+    }
+    base = (u8 *)D_800AFFC8;
+    lo = base;
+    hi = base;
+    for (pass = 0; pass < 2; pass++) {
+        if (pass == 1) {
+            lo = base + D_800B0DC0 * 0x124;
+            hi = base + D_800B07A8 * 0x124;
+        }
+        for (obj = lo; (u32)obj <= (u32)hi; obj += 0x124) {
+            if (obj[4] == 0 || !(*(s32 *)(obj + 0x48) & 0x400) || obj == arg2 || (s32)obj == arg3) {
+                continue;
+            }
+            P = *(u8 **)(obj + 0x90);
+            rx = *(s32 *)(P + 0x28) - arg0[0];
+            rz = *(s32 *)(P + 0x30) - arg0[2];
+            t = D_800A0370[ang];
+            cs = t >> 16;
+            sn = (s16)t;
+            cx = (rx * cs - rz * sn) >> 12;
+            cz = (rz * cs + rx * sn) >> 12;
+            py = *(s32 *)(P + 0x2C);
+            R = *(u16 *)(obj + 0x2A);
+            if (!(cx >= -R && R >= cx && cz >= -R && R + len >= cz)) {
+                continue;
+            }
+            h0 = *(s16 *)(obj + 0x1C);
+            h1 = *(s16 *)(obj + 0x1E);
+            h2 = *(s16 *)(obj + 0x20);
+            h3 = *(s16 *)(obj + 0x22);
+            h4 = *(s16 *)(obj + 0x24);
+            h5 = *(s16 *)(obj + 0x26);
+            tbl = &D_800A0370[(ang - *(s16 *)(P + 0x62)) & 0xFFF];
+            s2 = *(s16 *)tbl;
+            scale = *(s16 *)(obj + 0x6A);
+            c2 = *((s16 *)tbl + 1);
+            if (scale != 0) {
+                h0 = (h0 * scale) >> 12;
+                h1 = (h1 * scale) >> 12;
+                h2 = (h2 * scale) >> 12;
+                h3 = (h3 * scale) >> 12;
+                h4 = (h4 * scale) >> 12;
+                h5 = (h5 * scale) >> 12;
+            }
+            /* v[0] = box centre, v[1..4] = footprint corners, all relative to the ray (x across, z along) */
+            v[0].vx = cx;
+            v[0].vy = py;
+            v[0].vz = cz;
+            v[1].vx = cx + ((h0 * c2 - h4 * s2) >> 12);
+            v[1].vz = cz + ((h4 * c2 + h0 * s2) >> 12);
+            v[1].vy = h2;
+            v[2].vx = cx + ((h1 * c2 - h4 * s2) >> 12);
+            v[2].vz = cz + ((h4 * c2 + h1 * s2) >> 12);
+            v[2].vy = h3;
+            v[3].vx = cx + ((h1 * c2 - h5 * s2) >> 12);
+            v[3].vz = cz + ((h5 * c2 + h1 * s2) >> 12);
+            v[4].vx = cx + ((h0 * c2 - h5 * s2) >> 12);
+            v[4].vz = cz + ((h5 * c2 + h0 * s2) >> 12);
+            /* corners must lie on both sides of the ray (x = 0) */
+            neg = 0;
+            pos = 0;
+            for (i = 1; i < 5; i++) {
+                if (v[i].vx < 0) {
+                    neg = 1;
+                } else {
+                    pos = 1;
+                }
+            }
+            if (neg == 0 || pos == 0) {
+                continue;
+            }
+            /* ... and not all of them before / beyond the ray ends (0 .. len) */
+            neg = 0;
+            far = 0;
+            in = 0;
+            for (i = 1; i < 5; i++) {
+                if (v[i].vz < 0) {
+                    neg = 1;
+                } else if (len < v[i].vz) {
+                    far = 1;
+                } else {
+                    in++;
+                }
+            }
+            if (neg + in + far < 2) {
+                continue;
+            }
+            dy = arg1[1] - arg0[1];
+            ylo = py + v[1].vy;
+            yhi = py + v[2].vy;
+            for (e = 1; e < 5; e++) {
+                A = &v[e];
+                B = &v[(e & 3) + 1];
+                /* edge A-B has to cross the ray line x = 0 */
+                neg = 0;
+                pos = 0;
+                if (A->vx < 0) neg = 1; else pos = 1;
+                if (B->vx < 0) neg = 1; else pos = 1;
+                if (neg == 0 || pos == 0) {
+                    continue;
+                }
+                neg = 0;
+                far = 0;
+                in = 0;
+                if (A->vz < 0) neg = 1; else if (len < A->vz) far = 1; else in++;
+                if (B->vz < 0) neg = 1; else if (len < B->vz) far = 1; else in++;
+                if (neg + in + far < 2) {
+                    continue;
+                }
+                if (in < 2) {
+                    /* the edge sticks out of the ray's z range: check the crossing lies inside it */
+                    if (neg != 0) {
+                        if (A->vz < 0) {
+                            w0 = abs(A->vz);
+                            w1 = abs(B->vz);
+                            x0 = abs(A->vx);
+                            x1 = abs(B->vx);
+                        } else {
+                            w1 = abs(A->vz);
+                            w0 = abs(B->vz);
+                            x1 = abs(A->vx);
+                            x0 = abs(B->vx);
+                        }
+                    } else {
+                        if (len < A->vz) {
+                            w0 = abs(A->vz - len);
+                            w1 = abs(B->vz - len);
+                            x0 = abs(A->vx);
+                            x1 = abs(B->vx);
+                        } else {
+                            w1 = abs(A->vz - len);
+                            w0 = abs(B->vz - len);
+                            x1 = abs(A->vx);
+                            x0 = abs(B->vx);
+                        }
+                    }
+                    if (x0 * w1 < x1 * w0) {
+                        continue;
+                    }
+                    if ((x0 + x1) * (w0 + len) < x0 * (w0 + w1)) {
+                        continue;
+                    }
+                }
+                /* vertical test: ray end points against the box's y range */
+                neg = 0;
+                far = 0;
+                in = 0;
+                if (arg0[1] < ylo) neg = 1; else if (yhi < arg0[1]) far = 1; else in = 1;
+                if (arg1[1] < ylo) neg = 1; else if (yhi < arg1[1]) far = 1; else in++;
+                if (neg + in + far < 2) {
+                    continue;
+                }
+                if (in >= 2) {
+                    return obj;
+                }
+                d = A->vx - B->vx;
+                if (d == 0) {
+                    continue;
+                }
+                zc = A->vx * (B->vz - A->vz) / d + A->vz;
+                if (zc < 0 || len < zc) {
+                    continue;
+                }
+                hy = zc * dy / len + arg0[1];
+                if (hy < ylo || yhi < hy) {
+                    continue;
+                }
+                return obj;
+            }
+        }
+    }
+    return 0;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80050A70);
+#endif
 
 s32 func_80051728(u8 *obj, u8 *tgt) {
     VECTOR a;
