@@ -585,7 +585,39 @@ s32 func_80071638(void *arg0, s32 arg1, s32 arg2, s32 arg3, void *arg4, s32 arg5
     return 0;
 }
 
+#ifdef NON_MATCHING
+s32 func_80072190(PlaneSet *arg0, SVECTOR *arg1, s32 arg2, s32 arg3, PlaneEnt *arg4) {
+    s32 sp10;
+    s32 sp14;
+    s32 sp18;
+    SVECTOR sp20;
+    SVECTOR *sp28;
+    register s32 s0;
+    register s32 s1;
+    sp28 = arg0->verts + arg4->idx;
+    sp10 = (Vec_Dot((s32 *)arg1, sp28) >> 15) + arg4->d;
+    sp14 = sp10 + ((sp28->vy * arg3) >> 15);
+    if ((sp10 ^ sp14) < 0) {
+        return 1;
+    }
+    if (sp10 < 0) {
+        return 0;
+    }
+    s0 = arg1->vx;
+    sp20.vx = sp28->vx > 0 ? s0 - arg2 : s0 + arg2;
+    sp20.vy = arg1->vy;
+    s1 = arg1->vz;
+    sp20.vz = sp28->vz > 0 ? s1 - arg2 : s1 + arg2;
+    sp18 = (Vec_Dot((s32 *)&sp20, sp28) >> 15) + arg4->d;
+    sp14 = sp18 + ((sp28->vy * arg3) >> 15);
+    if ((sp18 ^ sp14) < 0 || (sp18 ^ sp10) < 0) {
+        return 1;
+    }
+    return 0;
+}
+#else
 INCLUDE_ASM("asm/level05/nonmatchings/text_80073998", func_800760D4);
+#endif
 
 s32 func_8007240C(void *arg0, s32 arg1, s32 arg2, s32 arg3, s32 (*arg4)[3], s16 *arg5, s16 arg6, s32 *arg7, s32 arg8, s32 *arg9, s32 arg10, s32 arg11) {
     s32 i;
@@ -615,7 +647,92 @@ s32 func_8007240C(void *arg0, s32 arg1, s32 arg2, s32 arg3, s32 (*arg4)[3], s16 
     return arg11 - start;
 }
 
+#ifdef NON_MATCHING
+s32 func_800726D0(s32 arg0, SVECTOR *arg1, s32 arg2, s32 arg3, SVECTOR *arg4, s32 *arg5, s32 arg6, s32 arg7) {
+    s32 sp30, sp34, sp38, sp3C, sp40, sp44, sp48;
+    u32 sp4C;
+    KdNode *base;
+    KdNode *cur;
+    s32 sp58;
+    u8 *e;
+    s32 sp60, sp64, sp68;
+
+    sp60 = 0;
+    sp64 = 0;
+    sp30 = arg1->vx;
+    sp34 = arg1->vz;
+    sp38 = ((KdBox *)arg0)->xmin;
+    sp3C = ((KdBox *)arg0)->xmax;
+    sp40 = ((KdBox *)arg0)->zmin;
+    sp44 = ((KdBox *)arg0)->zmax;
+    base = ((KdBox *)arg0)->nodes;
+    cur = base;
+    sp58 = ((KdBox *)arg0)->data;
+    sp4C = (u32)cur->b >> 31;
+    for (;;) {
+        if (cur->a < 0) {
+            sp68 = func_8007240C((void *)arg0, (s32)arg1, arg2, arg3, (void *)sp58, ((KdBox *)arg0)->leaf + cur->b, (s16)(((u16)cur->a + 1) * -1), (s32 *)arg4, arg7, arg5, arg6, sp64);
+            if (sp68 > 0) {
+                sp64 = sp64 + sp68;
+                if (sp64 >= arg6) return sp64;
+            }
+            if (sp60 > 0) {
+                sp60 = sp60 - 1;
+                e = D_800E2E4C + sp60 * 0x1C;
+                sp38 = *(s16 *)(e + 4);
+                sp3C = *(s16 *)(e + 6);
+                sp40 = *(s16 *)(e + 8);
+                sp44 = *(s16 *)(e + 0xA);
+                cur = base + *(s16 *)(e + 2);
+            } else {
+                return sp64;
+            }
+
+        } else {
+            sp4C = (u32)cur->b >> 31;
+            if (sp4C == 0) {
+                sp48 = sp38 + (u16)cur->c;
+                if (sp30 - arg2 < sp48) {
+                    if (sp48 < sp30 + arg2 && sp60 < 8) {
+                        e = D_800E2E4C + sp60 * 0x1C;
+                        sp60 = sp60 + 1;
+                        *(u16 *)(e + 4) = sp48;
+                        *(u16 *)(e + 6) = sp3C;
+                        *(u16 *)(e + 8) = sp40;
+                        *(u16 *)(e + 0xA) = sp44;
+                        *(s16 *)(e + 2) = (u16)cur->b;
+                    }
+                    sp3C = sp48 - 1;
+                    cur = base + cur->a;
+                } else {
+                    sp38 = sp48;
+                    cur = base + cur->b;
+                }
+            } else {
+                sp48 = sp40 + (u16)cur->c;
+                if (sp34 - arg2 < sp48) {
+                    if (sp48 < sp34 + arg2 && sp60 < 8) {
+                        e = D_800E2E4C + sp60 * 0x1C;
+                        sp60 = sp60 + 1;
+                        *(u16 *)(e + 4) = sp38;
+                        *(u16 *)(e + 6) = sp3C;
+                        *(u16 *)(e + 8) = sp48;
+                        *(u16 *)(e + 0xA) = sp44;
+                        *(s16 *)(e + 2) = -((u16)cur->b + 1);
+                    }
+                    sp44 = sp48 - 1;
+                    cur = base + cur->a;
+                } else {
+                    sp40 = sp48;
+                    cur = base - (cur->b + 1);
+                }
+            }
+        }
+    }
+}
+#else
 INCLUDE_ASM("asm/level05/nonmatchings/text_80073998", func_80076614);
+#endif
 
 void func_80072D48(register void *arg0, register void *arg1, register void *arg2, register s32 *arg3, register s32 *arg4) {
     s32 sp0;
@@ -694,7 +811,171 @@ s32 func_80072E28(HMesh *m, HitCtx *h) {
     return h->hit;
 }
 
+#ifdef NON_MATCHING
+s32 func_8007369C(s32 a0, u16 *arg1, u16 *arg2, s32 arg3, s32 arg4, s32 arg5) {
+    s32 sx0, sx1, sy0, sy1;
+    s32 bx0, bx1, by0, by1;
+    s32 split;
+    u32 sign;
+    u8 *base;
+    ClipNode *n;
+    ClipEnt *e;
+    ClipHdr *arg0 = (ClipHdr *)a0;
+    s32 cnt;
+    s32 ret;
+    s32 result;
+    Scr *sp;
+    s32 w54;
+    s32 w58;
+    s32 prod;
+
+    cnt = 0;
+    sp = (Scr *)0x1F800000;
+    *(ClipV2 *)sp = *(ClipV2 *)arg1;
+    ((ClipV2 *)sp)[1] = *(ClipV2 *)arg2;
+    sp->w38 = arg0->w24;
+    sp->w44 = arg3;
+    sp->w48 = arg4;
+    sp->w70 = arg5;
+    sp->w4c = 0x7FFF;
+    sx0 = sp->sx0;
+    sx1 = sp->sx1;
+    sy0 = sp->sy0;
+    sy1 = sp->sy1;
+    bx0 = arg0->bx0;
+    bx1 = arg0->bx1;
+    by0 = arg0->by0;
+    by1 = arg0->by1;
+    base = arg0->nodes;
+    n = (ClipNode *)base;
+    result = -1;
+    while (1) {
+        if (n->a < 0) {
+            sp->w3c = arg0->leaf + n->b * 2;
+            sp->w40 = -(n->a + 1);
+            ret = func_80072E28(arg0, (s16 *)sp);
+            if (ret >= 0) result = ret;
+            if (cnt > 0) {
+                cnt = cnt - 1;
+                e = (ClipEnt *)(D_800E2E4C + cnt * 0x1C);
+                bx0 = e->bx0;
+                bx1 = e->bx1;
+                by0 = e->by0;
+                by1 = e->by1;
+                sx0 = e->x0;
+                sx1 = e->x1;
+                sy0 = e->y0;
+                sy1 = e->y1;
+                n = (ClipNode *)(base + e->ref * 6);
+            } else {
+                break;
+            }
+        } else {
+            sign = (u32)n->b >> 31;
+            if (sign == 0) {
+                split = bx0 + (u16)n->c;
+                if (sx0 < split) {
+                    if (split < sx1 && cnt < 8) {
+                        w58 = sx1 - sx0;
+                        if (w58 != 0) w58 = ((split - sx0) << 16) / w58; else w58 = 0;
+                        prod = (sy1 - sy0) * w58;
+                        w54 = sy0 + (prod >> 16);
+                        e = (ClipEnt *)(D_800E2E4C + cnt++ * 0x1C);
+                        e->bx0 = split;
+                        e->bx1 = bx1;
+                        e->by0 = by0;
+                        e->by1 = by1;
+                        e->ref = n->b;
+                        e->x0 = split;
+                        e->x1 = sx1;
+                        e->y0 = w54;
+                        e->y1 = sy1;
+                        bx1 = split - 1;
+                        sx1 = split;
+                        sy1 = w54;
+                    } else {
+                        bx1 = split - 1;
+                    }
+                    n = (ClipNode *)(base + n->a * 6);
+                } else if (sx1 < split && cnt < 8) {
+                    w54 = sx1 - sx0;
+                    if (w54 != 0) w54 = ((split - sx0) << 16) / w54; else w54 = 0;
+                    prod = (sy1 - sy0) * w54;
+                        w58 = sy0 + (prod >> 16);
+                    e = (ClipEnt *)(D_800E2E4C + cnt++ * 0x1C);
+                    e->bx0 = bx0;
+                    e->bx1 = split - 1;
+                    e->by0 = by0;
+                    e->by1 = by1;
+                    e->ref = n->a;
+                    e->x0 = split;
+                    e->x1 = sx1;
+                    e->y0 = w58;
+                    e->y1 = sy1;
+                    bx0 = split;
+                    sx1 = split;
+                    sy1 = w58;
+                    n = (ClipNode *)(base + n->b * 6);
+                } else {
+                    bx0 = split;
+                    n = (ClipNode *)(base + n->b * 6);
+                }
+            } else {
+                split = by0 + (u16)n->c;
+                if (sy0 < split) {
+                    if (split < sy1 && cnt < 8) {
+                        w54 = sy1 - sy0;
+                        if (w54 != 0) w54 = ((split - sy0) << 16) / w54; else w54 = 0;
+                        prod = (sx1 - sx0) * w54;
+                        w58 = sx0 + (prod >> 16);
+                        e = (ClipEnt *)(D_800E2E4C + cnt++ * 0x1C);
+                        e->bx0 = bx0;
+                        e->bx1 = bx1;
+                        e->by0 = split;
+                        e->by1 = by1;
+                        e->ref = -((u16)n->b + 1);
+                        e->x0 = w58;
+                        e->x1 = sx1;
+                        e->y0 = split;
+                        e->y1 = sy1;
+                        by1 = split - 1;
+                        sx1 = w58;
+                        sy1 = split;
+                    } else {
+                        by1 = split - 1;
+                    }
+                    n = (ClipNode *)(base + n->a * 6);
+                } else if (sy1 < split && cnt < 8) {
+                    w54 = sy1 - sy0;
+                    if (w54 != 0) w54 = ((split - sy0) << 16) / w54; else w54 = 0;
+                    prod = (sx1 - sx0) * w54;
+                        w58 = sx0 + (prod >> 16);
+                    e = (ClipEnt *)(D_800E2E4C + cnt++ * 0x1C);
+                    e->bx0 = bx0;
+                    e->bx1 = bx1;
+                    e->by0 = by0;
+                    e->by1 = split - 1;
+                    e->ref = n->a;
+                    e->x0 = w58;
+                    e->x1 = sx1;
+                    e->y0 = split;
+                    e->y1 = sy1;
+                    by0 = split;
+                    sx1 = w58;
+                    sy1 = split;
+                    n = (ClipNode *)(base + (n->b + 1) * -6);
+                } else {
+                    by0 = split;
+                    n = (ClipNode *)(base + (n->b + 1) * -6);
+                }
+            }
+        }
+    }
+    return result;
+}
+#else
 INCLUDE_ASM("asm/level05/nonmatchings/text_80073998", func_800775E0);
+#endif
 
 s32 func_800743E8(s32 arg0, s32 *arg1, s32 arg2, s32 arg3, SVECTOR *arg4, s32 arg5, s32 arg6) {
     SVECTOR sv;
@@ -737,7 +1018,82 @@ s32 func_800743E8(s32 arg0, s32 *arg1, s32 arg2, s32 arg3, SVECTOR *arg4, s32 ar
     return n > 0;
 }
 
+#ifdef NON_MATCHING
+s32 func_800746D0(s32 arg0, s32 *arg1, s32 *arg2, s16 *arg3, s16 *arg4, s32 *arg5) {
+    s32 sp18;
+    u16 sp20, sp22, sp24;
+    u16 sp28, sp2A, sp2C;
+    s32 sp30, sp34, sp38, sp3C, sp40, sp44, sp48, sp50;
+
+    if (arg0 == 0) return 0;
+    if (((VECTOR *)arg1)->vx >= -0x7FFF && ((VECTOR *)arg1)->vx <= 0x7FFF && ((VECTOR *)arg1)->vy >= -0x7FFF && ((VECTOR *)arg1)->vy <= 0x7FFF && ((VECTOR *)arg1)->vz >= -0x7FFF && ((VECTOR *)arg1)->vz <= 0x7FFF) {
+        sp20 = ((VECTOR *)arg1)->vx;
+        sp22 = ((VECTOR *)arg1)->vy;
+        sp24 = ((VECTOR *)arg1)->vz;
+        sp30 = 0x7FFF0000;
+        sp34 = 0x7FFF0000;
+        sp38 = 0x7FFF0000;
+        sp48 = 0;
+        sp3C = ((VECTOR *)arg2)->vx - (s16)sp20;
+        if (((VECTOR *)arg2)->vx < -0x7FFF) sp30 = -0x8000;
+        else if (((VECTOR *)arg2)->vx > 0x7FFF) sp30 = 0x7FFF;
+        if (sp30 & 0xFFFF) {
+            sp30 -= (s16)sp20;
+            sp30 = (sp30 << 12) / sp3C;
+            sp48 = 1;
+        }
+        sp40 = ((VECTOR *)arg2)->vy - (s16)sp22;
+        if (((VECTOR *)arg2)->vy < -0x7FFF) sp34 = -0x8000;
+        else if (((VECTOR *)arg2)->vy > 0x7FFF) sp34 = 0x7FFF;
+        if (sp34 & 0xFFFF) {
+            sp34 -= (s16)sp22;
+            sp34 = (sp34 << 12) / sp40;
+            sp48 = 1;
+        }
+        if (((VECTOR *)arg2)->vz < -0x7FFF) sp38 = -0x8000;
+        else if (((VECTOR *)arg2)->vz > 0x7FFF) sp38 = 0x7FFF;
+        sp44 = ((VECTOR *)arg2)->vz - (s16)sp24;
+        if (sp38 & 0xFFFF) {
+            sp38 -= (s16)sp24;
+            sp38 = (sp38 << 12) / sp44;
+            sp48 = 1;
+        }
+        if (sp48 != 0) {
+            if (sp34 >= sp30) {
+                if (sp30 >= sp38) {
+                    sp50 = sp3C * sp38; sp3C = sp50;
+                    sp50 = sp40 * sp38; sp40 = sp50;
+                    sp50 = sp44 * sp38; sp44 = sp50;
+                } else {
+                    sp50 = sp3C * sp30; sp3C = sp50;
+                    sp50 = sp40 * sp30; sp40 = sp50;
+                    sp50 = sp44 * sp30; sp44 = sp50;
+                }
+            } else if (sp34 >= sp38) {
+                sp50 = sp3C * sp38; sp3C = sp50;
+                sp50 = sp40 * sp38; sp40 = sp50;
+                sp50 = sp44 * sp38; sp44 = sp50;
+            } else {
+                sp50 = sp3C * sp34; sp3C = sp50;
+                sp50 = sp40 * sp34; sp40 = sp50;
+                sp50 = sp44 * sp34; sp44 = sp50;
+            }
+            sp28 = sp20 + (sp3C >> 12);
+            sp2A = sp22 + (sp40 >> 12);
+            sp2C = sp24 + (sp44 >> 12);
+        } else {
+            sp28 = ((VECTOR *)arg2)->vx;
+            sp2A = ((VECTOR *)arg2)->vy;
+            sp2C = ((VECTOR *)arg2)->vz;
+        }
+        sp18 = func_8007369C(arg0, &sp20, &sp28, (s32)arg3, (s32)arg4, (s32)arg5);
+        return (u32)~sp18 >> 31;
+    }
+    return 0;
+}
+#else
 INCLUDE_ASM("asm/level05/nonmatchings/text_80073998", func_80078614);
+#endif
 
 INCLUDE_ASM("asm/level05/nonmatchings/text_80073998", func_80078D2C);
 

@@ -877,6 +877,7 @@
 #define func_8006692C L1_func_8006692C
 #define func_80066968 L1_func_80066968
 #define func_800669A4 L1_func_800669A4
+#define func_80066A60 L1_func_80066A60
 #define func_80066B14 L1_func_80066B14
 #define func_80067F18 L1_func_80067F18
 #define func_800689F0 L1_func_800689F0
@@ -955,6 +956,7 @@
 #define func_8008C5D8 L1_func_8008C5D8
 #define g_Args L1_g_Args
 #define g_CamPosX L1_g_CamPosX
+#define g_Camera L1_g_Camera
 #define g_CheatCodeProgress L1_g_CheatCodeProgress
 #define g_CheatCodes L1_g_CheatCodes
 #define g_DevMenu L1_g_DevMenu
@@ -3235,7 +3237,51 @@ void func_80062F38(u8 *a, u8 *b) {
     }
 }
 
+#ifdef NON_MATCHING
+void func_80062FAC(s32 arg0, s16 arg1, u8 *arg2, u8 *arg3) {
+    s32 r;
+    s32 a;
+    s16 *p;
+    s16 mat[16];
+    SVECTOR rot;
+    u8 *o;
+    r = rand();
+    o = func_80058B6C(0x50);
+    if (o != NULL) {
+        o[0x59] = arg2[0];
+        o[0x5A] = arg2[1];
+        o[0x5B] = arg2[2];
+        o[0x5C] = arg3[0];
+        o[0x5D] = arg3[1];
+        o[0x5E] = arg3[2];
+        *(u16 *)(o + 0x44) = *(u16 *)0x1F8003D8;
+        a = r % 15;
+        *(u16 *)(o + 0x48) = a * 57 + 0x80;
+        arg0 = arg0 + (r % 3) * (arg0 >> 1);
+        *(s16 *)(o + 0x68) = arg1;
+        *(s16 *)(o + 0x60) = a * 250;
+        *(s16 *)(o + 0x46) = -((arg0 * ((s16 *)D_800A0370)[(*(u16 *)(o + 0x48) & 0xFFF) * 2]) >> 12);
+        func_80058D5C(o, *(s16 *)(o + 0x60), *(s16 *)(o + 0x48), arg0);
+        *(s16 *)(o + 0x62) = SquareRoot0(*(s16 *)(o + 0x3E) * *(s16 *)(o + 0x3E) + *(s16 *)(o + 0x42) * *(s16 *)(o + 0x42));
+        rot.vx = ratan2(-*(s16 *)(o + 0x40), *(s16 *)(o + 0x62));
+        rot.vz = 0;
+        rot.vy = *(u16 *)(o + 0x60);
+        RotMatrixYXZ_gte(&rot, mat);
+        rot.vx = 0;
+        rot.vy = 0;
+        rot.vz = *(u16 *)(o + 0x68);
+        gte_SetRotMatrix(mat);
+        gte_ldv0(&rot);
+        gte_rtv0();
+        gte_stsv(o + 0x34);
+        *(u16 *)(o + 0x34) = *(u16 *)(o + 0x2C) - *(u16 *)(o + 0x34);
+        *(u16 *)(o + 0x36) = *(u16 *)(o + 0x2E) - *(u16 *)(o + 0x36);
+        *(u16 *)(o + 0x38) = *(u16 *)(o + 0x30) - *(u16 *)(o + 0x38);
+    }
+}
+#else
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_80062F8C);
+#endif
 
 void func_800632AC(u8 *arg0, s32 arg1) {
     FxObj *o;
@@ -3959,7 +4005,84 @@ s32 func_80065928(s32 *pos, s16 arg1, s32 type) {
     return 1;
 }
 
+#ifdef NON_MATCHING
+s32 func_80065A20(void *arg0, SVECTOR *arg1, s32 arg2) {
+    s32 sp18[4];
+    SVECTOR p;
+    s16 c0, c1, c2;
+    s32 sp38, sp3C, sp40;
+    s16 stepX, stepY, stepZ;
+    s32 n, i; s16 nn, nx, nz, k, j, m, cnt;
+    s16 half;
+    s16 len;
+
+    len = arg2;
+    if (arg0 == 0) {
+        func_8006B230(0, (s32)&D_800A9498);
+    }
+    if (((*(u32 *)arg0 >> 6) & 7) == 5) {
+        n = ((FA65(18) - FA65(16)) >> 11) + (((FA65(14) - FA65(12)) >> 11) + 1) + ((FA65(10) - FA65(8)) >> 11);
+        if (n >= 0xB) n = 10;
+        nn = n;
+        for (i = 0; i < nn; i++) {
+            func_800658B4(arg0, (i << 12) / nn, &sp38, &sp3C, &sp40);
+            p.vx = sp38 + ((FA65(10) + FA65(8)) >> 1);
+            p.vy = sp3C + ((FA65(14) + FA65(12)) >> 1);
+            p.vz = sp40 + ((FA65(18) + FA65(16)) >> 1);
+            func_800669A4(&p, sp18, arg0);
+            if (func_80065928(sp18, (s16)(len / 2), (*(u32 *)arg0 >> 6) & 7) == 0) return i;
+        }
+    } else if (((*(u32 *)arg0 >> 6) & 7) == 6) {
+        n = (s16)(((FA65(18) - FA65(16)) / 2000) + (((FA65(14) - FA65(12)) / 2000) + 1) + ((FA65(10) - FA65(8)) / 2000));
+        if (n >= 0xB) n = 10;
+        nn = n;
+        for (i = 0; i < nn; i++) {
+            func_800658B4(arg0, (i << 12) / nn, &sp38, &sp3C, &sp40);
+            p.vx = sp38 + ((FA65(10) + FA65(8)) >> 1);
+            p.vy = sp3C + ((FA65(14) + FA65(12)) >> 1);
+            p.vz = sp40 + ((FA65(18) + FA65(16)) >> 1);
+            func_800669A4(&p, sp18, arg0);
+            if (func_80065928(sp18, (s16)(len / 2), (*(u32 *)arg0 >> 6) & 7) == 0) return i;
+        }
+    } else {
+        func_80066A60(arg0, &stepX, &stepY, &stepZ);
+        nx = (FA65(10) - FA65(8)) / stepX;
+        nz = (FA65(18) - FA65(16)) / stepZ;
+        if ((s16)nx == 0) nx = 1;
+        if ((s16)nz == 0) nz = 1;
+        cnt = 0;
+        p.vz = arg1->vz + (FA65(16) + (stepZ >> 1));
+        for (k = 0; k < nz; k++) {
+            p.vy = arg1->vy + (FA65(12) / 3);
+            for (j = 0; j < 1; j++) {
+                p.vx = arg1->vx + (FA65(8) + (stepX >> 1));
+                for (m = 0; m < nx; m++) {
+                    func_800669A4(&p, sp18, arg0);
+                    if (func_80065928(sp18, len, (*(u32 *)arg0 >> 6) & 7) == 0) return cnt;
+                    cnt++;
+                    p.vx += stepX;
+                }
+                p.vy += stepY;
+            }
+            p.vz += stepZ;
+        }
+    }
+    if (D_8009CABD != 0) {
+        c0 = 0;
+        c1 = 0xC8;
+        c2 = 0;
+    } else {
+        c0 = 0xD2;
+        c1 = 0x8C;
+        c2 = 0x46;
+    }
+    func_8004B334(1);
+    func_8004A8A8((s8)c0, (s8)c1, (s8)c2, 3);
+    return 1;
+}
+#else
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_800653A8);
+#endif
 
 s32 func_80066098(s16 *arg0, SVECTOR *arg1) {
     s32 out[4];
@@ -4297,7 +4420,173 @@ s16 func_8006B274(int arg0) {
   return ratan2(arg0, SquareRoot12(0x1000 - ((*(new_var = &arg0)) * (((s32) (arg0 << 0x10)) >> 0x1C))));
 }
 
+#ifdef NON_MATCHING
+void func_8006B2C4(u8 *ctx, SubTri *t, s32 depth, s32 unused) {
+    SubTri c;
+    SubTri6 v;
+    u8 fl[3];
+    s32 nd;
+    s32 j;
+    s32 k;
+    s32 ia;
+    s32 ib;
+    s32 ic;
+    s32 cls;
+    s32 mac;
+    u32 f0;
+    u32 f1;
+    u32 f2;
+    u32 c0;
+    u32 c1;
+    u32 c2;
+    u32 uvw;
+    u32 gteflg;
+    u32 sxy;
+    s32 sz;
+    s32 sx;
+    s32 sy;
+    s32 x;
+    s32 y;
+    s32 z;
+    u32 fm;
+    PolyGT3 *prim;
+    u32 *ot;
+
+    memset(fl, 0, 3);
+    nd = depth - 1;
+    if (depth <= 0) return;
+
+    /* vertices 0-2 are the triangle's own, 3-5 are the edge midpoints (01, 12, 02) */
+    for (k = 0; k < 3; k++) {
+        v.p[k] = t->p[k];
+        v.sxy[k] = t->sxy[k];
+        v.flg[k] = t->flg[k];
+        v.col[k] = t->col[k];
+        v.uv[k] = t->uv[k];
+    }
+    for (k = 0; k < 3; k++) {
+        ia = (k == 2) ? 0 : k;
+        ib = (k == 0) ? 1 : 2;
+        x = (t->p[ia].vx + t->p[ib].vx) >> 1;
+        y = (t->p[ia].vy + t->p[ib].vy) >> 1;
+        z = (t->p[ia].vz + t->p[ib].vz) >> 1;
+        ((u32 *)&v.p[3 + k])[0] = (x & 0xFFFF) | (y << 16);
+        ((u32 *)&v.p[3 + k])[1] = z & 0xFFFF;
+        gte_ldv0_mt(((u32 *)&v.p[3 + k])[0], z);
+        gte_rtps();
+        c0 = t->col[ia];
+        c1 = t->col[ib];
+        v.col[3 + k] = ((c0 & 0xFF) + (c1 & 0xFF)) >> 1 | ((((c0 >> 8) & 0xFF) + ((c1 >> 8) & 0xFF)) >> 1) << 8 | (((c0 >> 16) + (c1 >> 16)) >> 1) << 16;
+        c0 = t->uv[ia];
+        c1 = t->uv[ib];
+        v.uv[3 + k] = ((c0 & 0xFF) + (c1 & 0xFF)) >> 1 | ((((c0 & 0xFF00) + (c1 & 0xFF00)) >> 1) & 0xFF00);
+        gte_mfsxy2(sxy);
+        gte_mfsz3(sz);
+        sz >>= 2;
+        sy = (s32)sxy >> 16;
+        sx = (s16)sxy;
+        gte_cfFLAG(gteflg);
+        v.sxy[3 + k] = sxy;
+        fm = sz;
+        if (gteflg & 0x46000) fm |= 0x20000000;
+        if (sy >= 0x300 || sx >= 0x300 || sy < -0x100 || sx < -0x100) fm |= 0x10000000;
+        if (sx < 0) fm |= 0x08000000;
+        if (sx >= 0x21C) fm |= 0x04000000;
+        if (sy < 0) fm |= 0x02000000;
+        if (sy >= 0xF0) fm |= 0x01000000;
+        v.flg[3 + k] = fm;
+    }
+
+    /* jobs 0-2: corner triangles, 3: centre triangle, 4-6: edge gap fillers */
+    for (j = 0; j < 7; j++) {
+        switch (j) {
+        case 0: ia = 0; ib = 3; ic = 5; break;
+        case 1: ia = 1; ib = 4; ic = 3; break;
+        case 2: ia = 2; ib = 5; ic = 4; break;
+        case 3: ia = 3; ib = 4; ic = 5; break;
+        case 4: ia = 0; ib = 1; ic = 3; break;
+        case 5: ia = 1; ib = 2; ic = 4; break;
+        default: ia = 2; ib = 0; ic = 5; break;
+        }
+        if (j == 4 && (*(u32 *)(ctx + 0x50) & 0x2000000)) return;
+        c.p[0] = v.p[ia];
+        c.p[1] = v.p[ib];
+        c.p[2] = v.p[ic];
+        c.sxy[0] = v.sxy[ia];
+        c.sxy[1] = v.sxy[ib];
+        c.sxy[2] = v.sxy[ic];
+        c.flg[0] = v.flg[ia];
+        c.flg[1] = v.flg[ib];
+        c.flg[2] = v.flg[ic];
+        c.col[0] = v.col[ia];
+        c.col[1] = v.col[ib];
+        c.col[2] = v.col[ic];
+        c.uv[0] = v.uv[ia];
+        c.uv[1] = v.uv[ib];
+        c.uv[2] = v.uv[ic];
+        if (j < 4) {
+            f0 = c.flg[0];
+            f1 = c.flg[1];
+            f2 = c.flg[2];
+            if ((f0 & f1 & f2) & 0x3F000000) {
+                cls = 0;
+            } else if ((f0 | f1 | f2) & 0x30000000) {
+                cls = 2;
+            } else {
+                gte_ldsxy3c(c.sxy);
+                gte_nclip();
+                gte_mfMAC0(mac);
+                cls = mac > 0;
+            }
+            if (cls == 0) continue;
+            if (cls != 1 && nd == 0) continue;
+            if (cls == 2) {
+                ((void (*)(u8 *, SubTri *, s32))func_8006B2C4)(ctx, &c, nd);
+                continue;
+            }
+        } else {
+            if (fl[j - 4] == 0) continue;
+            if ((v.flg[ia] | v.flg[ib]) & 0x20000000) continue;
+        }
+        /* emit a POLY_GT3 */
+        prim = *(PolyGT3 **)(ctx + 0x10);
+        if (*(u32 *)(ctx + 0x14) >= (u32)(prim + 1)) {
+            *(PolyGT3 **)(ctx + 0x10) = prim + 1;
+            prim->tag = 0x09000000;
+            prim->xy0 = c.sxy[0];
+            prim->xy1 = c.sxy[1];
+            prim->xy2 = c.sxy[2];
+            c0 = c.col[0];
+            c1 = c.col[1];
+            c2 = c.col[2];
+            if (D_800D3068 == 2) {
+                c0 |= 0xFF;
+                c1 |= 0xFF;
+                c2 |= 0xFF;
+            }
+            prim->rgb2 = c2;
+            prim->rgb1 = c1;
+            prim->rgb0 = c0 | *(u32 *)(ctx + 0x50);
+            uvw = *(u32 *)&c.uv[0];
+            prim->uv0 = (uvw & 0xFFFF) | (*(u32 *)(ctx + 0x7C) & 0xFFFF0000);
+            prim->uv1 = (uvw >> 16) | (*(u32 *)(ctx + 0x7C) << 16);
+            prim->uv2 = c.uv[2];
+            ot = *(u32 **)(ctx + 0x1C);
+            prim->tag = (prim->tag & 0xFF000000) | *ot;
+            *ot = (u32)prim & 0xFFFFFF;
+            if (*(s16 *)(ctx + 0x46) >= 0) {
+                *(PolyGT3 **)(ctx + 0x20) = prim;
+                ((void (*)(u8 *, u8 *))func_8006C8F4)((u8 *)c.col, ctx);
+            }
+        }
+        if (j == 0) { fl[2] = 1; fl[0] = 1; }
+        else if (j == 1) { fl[1] = 1; fl[0] = 1; }
+        else if (j == 2) { fl[2] = 1; fl[1] = 1; }
+    }
+}
+#else
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_8006C0B0);
+#endif
 
 void func_8006C494(TerrTri *t) {
     TerrVert *v;
@@ -4596,9 +4885,306 @@ void func_8006C8F4(u8 *arg0, u8 *arg1, s32 arg2) {
     *(s16 *)((u8 *)prim + 0x24) = u2;
 }
 
-INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_8006D974);
+#ifdef NON_MATCHING
+s32 func_8006CB88(u8 *t) {
+    u8 c0[4];
+    u8 c1[4];
+    u8 c2[4];
+    u8 c3[4];
+    u8 c4[4];
+    u8 c5[4];
+    s32 f0;
+    s32 f1;
+    s32 f2;
+    s32 all;
+    s32 any;
+    s32 clip;
+    s32 any40;
+    s32 z0;
+    s32 z1;
+    s32 z2;
+    s32 mn;
+    s32 mx;
+    s32 z;
+    s32 idx;
+    u32 semi;
+    u16 flags;
+    s32 bit;
+    s32 grey;
+    s32 dim;
+    u8 *c;
+    s32 opz;
 
+    f0 = *(s32 *)(t + 0x64);
+    f1 = *(s32 *)(t + 0x68);
+    f2 = *(s32 *)(t + 0x6C);
+    all = f0 & f1 & f2 & 0x3F000000;
+    any = f0 | f1 | f2;
+    clip = any & 0x30000000;
+    any40 = any & 0x40000000;
+    z0 = (s16)f0;
+    z1 = (s16)f1;
+    z2 = (s16)f2;
+    if (all) {
+        goto ret0;
+    }
+    if (!clip) {
+        gte_ldsxy3c(t + 0x58);
+        gte_nclip();
+        gte_mfMAC0(opz);
+        if (opz <= 0) {
+            goto ret0;
+        }
+    }
+    if (z0 < z1) {
+        mn = (z0 < z2) ? z0 : z2;
+        mx = (z1 < z2) ? z2 : z1;
+    } else {
+        mn = (z1 < z2) ? z1 : z2;
+        mx = (z0 < z2) ? z2 : z0;
+    }
+    z = (mx * 3 + mn) >> 2;
+    *(s32 *)(t + 0x48) = z;
+    idx = (u32)z >> 2;
+    semi = *(u16 *)(t + 0x44) >> 15;
+    if (idx > 0xFFF) {
+        idx = 0xFFF;
+    }
+    if (idx < 0) {
+        idx = 0;
+    }
+    *(u32 *)(t + 0x50) = (semi << 25) | 0x34000000;
+    *(u32 **)(t + 0x1C) = *(u32 **)(t + 0x18) + idx;
+    flags = *(u16 *)(t + 0x44);
+    bit = 0x2000 << D_800B8F24;
+    if (flags & bit) {
+        dim = D_8009CABD;
+        grey = D_8009CABE;
+        if (*(s32 *)(t + 0x70) < 0) {
+            c = *(u8 **)(t + 0x8) + *(u16 *)(t + 0x3E) * 4;
+            if (dim) {
+                c0[1] = ((c[0] + c[1] + c[2]) >> 3) + 0x30;
+                c0[0] = 0;
+                c0[2] = 0;
+                c0[3] = c[3];
+                c = c0;
+            } else if (grey) {
+                c1[0] = 0x18;
+                c1[1] = 0x18;
+                c1[2] = 0x18;
+                c1[3] = c[3];
+                c = c1;
+            }
+            *(u32 *)(*(u8 **)(t + 0x20) + 4) = *(u32 *)c | *(u32 *)(t + 0x50);
+        }
+        if (*(s32 *)(t + 0x74) < 0) {
+            c = *(u8 **)(t + 0x8) + *(u16 *)(t + 0x40) * 4;
+            if (dim) {
+                c2[1] = ((c[0] + c[1] + c[2]) >> 3) + 0x30;
+                c2[0] = 0;
+                c2[2] = 0;
+                c = c2;
+            } else if (grey) {
+                c3[0] = 0x18;
+                c3[1] = 0x18;
+                c3[2] = 0x18;
+                c = c3;
+            }
+            *(u32 *)(*(u8 **)(t + 0x20) + 0x10) = *(u32 *)c;
+        }
+        if (*(s32 *)(t + 0x78) < 0) {
+            c = *(u8 **)(t + 0x8) + *(u16 *)(t + 0x42) * 4;
+            if (dim) {
+                c4[1] = ((c[0] + c[1] + c[2]) >> 3) + 0x30;
+                c4[0] = 0;
+                c4[2] = 0;
+                c = c4;
+            } else if (grey) {
+                c5[0] = 0x18;
+                c5[1] = 0x18;
+                c5[2] = 0x18;
+                c = c5;
+            }
+            *(u32 *)(*(u8 **)(t + 0x20) + 0x1C) = *(u32 *)c;
+        }
+        if (!any40) {
+            flags &= ~bit;
+        }
+    }
+    *(u16 *)(t + 0x44) = flags;
+    if (clip || (*(u32 *)(t + 0x48) < *(u32 *)(t + 0x4C) && !semi)) {
+        return 2;
+    }
+    return 1;
+ret0:
+    return 0;
+}
+#else
+INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_8006D974);
+#endif
+
+#ifdef NON_MATCHING
+void func_8006CEA4(s32 arg0) {
+    s16 pos[3];
+    s32 buf[17];
+    s32 res;
+    s32 *p;
+    u8 *it;
+    u8 *obj;
+    u8 *poly;
+    u8 *vt;
+    u32 i;
+    u32 s6;
+    u32 nObj;
+    s32 n;
+    s32 r;
+    s32 v0;
+    s32 v1;
+    s32 a3;
+    u32 w;
+    u16 s5;
+    u32 cnt;
+    u16 hw;
+    s16 sh;
+    u8 *spad = (u8 *)0x1F800000;
+    u8 *m = D_800E2DA8;
+
+    SP(0x00) = *(s32 *)(m + 0x18);
+    SP(0x04) = *(s32 *)(m + 0x24);
+    SP(0x08) = *(s32 *)(m + 0x1C);
+    SP(0x0C) = *(s32 *)(*(s32 *)(D_800D2FC0 + 4) + 8);
+    SP(0x24) = *(s32 *)(*(s32 *)(D_800D2FC0 + 4) + 0x10);
+    SP(0x10) = *(s32 *)(m + D_800B8F24 * 4 + 0x28);
+    SP(0x14) = *(s32 *)(m + D_800B8F24 * 4 + 0x28) + *(s32 *)(m + 8) * 0x28;
+    SP(0x38) = D_8009CAC0;
+    SP(0x18) = (s32)D_800B8F88[D_800B8F24].org;
+    *(B4 *)(spad + 0x2C) = *(B4 *)&D_800AFF64;
+    *(B8 *)(spad + 0x30) = *(B8 *)&D_800AFF68;
+    nObj = D_800E2438;
+    if (D_800D3068 == 0) {
+        SP(0x4C) = 0;
+        SP(0x54) = 0;
+    } else {
+        SP(0x4C) = D_8009E9B8;
+        SP(0x54) = D_8009E9B4;
+    }
+    if (*(s32 *)(m + 0xC) != 0) {
+        pos[1] = *(u16 *)(&g_CamPosX + 4);
+        pos[0] = *(u16 *)&g_CamPosX;
+        pos[2] = *(u16 *)(&g_CamPosX + 8);
+        func_800705A8(D_800E2F54, pos, 0, (s32)&res);
+        SP(0x28) = *(s32 *)(m + 0x10) + (((res & 0x3F) - 1) << *(s32 *)(m + 0xC));
+    } else {
+        SP(0x28) = 0;
+    }
+    i = 0;
+    cnt = *(u16 *)D_800E2DA8;
+    if (cnt != 0) {
+        p = (s32 *)(SP(0x04) + 4);
+        do {
+            i += 1;
+            *p &= 0xFF0000;
+            p = (s32 *)((u8 *)p + 0xC);
+        } while (i < cnt);
+    }
+    s6 = 0;
+    if (nObj != 0) {
+        do {
+            obj = D_800E2448[s6];
+            n = *(s32 *)(obj + 0x1C);
+            it = *(u8 **)(obj + 0x18);
+            if (n != 0) {
+                do {
+                    *(B12 *)(spad + 0x3C) = *(B12 *)it;
+                    s5 = SPH(0x44);
+                    SP(0x20) = arg0 + *(u16 *)it * 0x28;
+                    if (SP(0x28) == 0 || ((u8 *)SP(0x28))[s5 & 0x3F] != 0) {
+                        if (SP(0x38) != 0) {
+                            func_8006D470(spad);
+                        } else {
+                            func_8006C494(spad);
+                        }
+                        r = func_8006CB88(spad);
+                        if (r != 0) {
+                            if (r == 2) {
+                                w = SP(0x40);
+                                poly = (u8 *)SP(0x20);
+                                vt = (u8 *)SP(0x00) + SPH(0x3E) * 8;
+                                SP(0x7C) = *(u16 *)(poly + 0x1A) | (*(u16 *)(poly + 0xE) << 16);
+                                buf[16] = *(u16 *)(it + 0x10);
+                                buf[15] = *(s32 *)(it + 0xC);
+                                buf[1] = *(u16 *)(vt + 4);
+                                buf[0] = *(s32 *)vt;
+                                vt = (u8 *)SP(0x00) + (w & 0xFFFF) * 8;
+                                buf[2] = *(s32 *)vt;
+                                buf[3] = *(u16 *)(vt + 4);
+                                vt = (u8 *)SP(0x00) + ((s32)w >> 16) * 8;
+                                buf[6] = SP(0x58);
+                                buf[9] = SP(0x64);
+                                buf[7] = SP(0x5C);
+                                buf[10] = SP(0x68);
+                                buf[4] = *(s32 *)vt;
+                                buf[5] = *(u16 *)(vt + 4);
+                                buf[8] = SP(0x60);
+                                v0 = SP(0x70);
+                                v1 = SP(0x74);
+                                a3 = SP(0x78);
+                                buf[11] = SP(0x6C);
+                                if (v0 < 0) {
+                                    v0 = *(s32 *)(poly + 4);
+                                }
+                                if (v1 < 0) {
+                                    v1 = *(s32 *)(poly + 0x10);
+                                }
+                                if (a3 < 0) {
+                                    a3 = *(s32 *)(poly + 0x1C);
+                                }
+                                a3 &= 0xFFFFFF;
+                                buf[12] = v0 & 0xFFFFFF;
+                                buf[13] = v1 & 0xFFFFFF;
+                                buf[14] = a3;
+                                func_8006B2C4(spad, buf, SP(0x54), a3);
+                            } else {
+                                poly = (u8 *)SP(0x20);
+                                *(s32 *)(poly + 8) = SP(0x58);
+                                *(s32 *)(poly + 0x14) = SP(0x5C);
+                                *(s32 *)(poly + 0x20) = SP(0x60);
+                                v1 = SP(0x70);
+                                if (v1 >= 0) {
+                                    *(s32 *)(poly + 4) = v1 | SP(0x50);
+                                }
+                                v1 = SP(0x74);
+                                if (v1 >= 0) {
+                                    *(s32 *)(poly + 0x10) = v1;
+                                }
+                                v1 = SP(0x78);
+                                if (v1 >= 0) {
+                                    *(s32 *)(poly + 0x1C) = v1;
+                                }
+                                p = (s32 *)SP(0x1C);
+                                *(s32 *)poly = (*(s32 *)poly & 0xFF000000) | *p;
+                                *p = (s32)poly & 0xFFFFFF;
+                                sh = SPH(0x46);
+                                if (sh >= 0) {
+                                    func_8006C8F4(it, spad, sh);
+                                }
+                            }
+                        }
+                        hw = SPH(0x44);
+                        if (hw != s5) {
+                            *(u16 *)(it + 8) = hw;
+                        }
+                    }
+                    it += 0x14;
+                } while (--n != 0);
+            }
+            s6 += 1;
+        } while (s6 < nObj);
+    }
+}
+#else
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_8006DC90);
+#endif
 
 u32 func_8006D3C0(SVECTOR *a, SVECTOR *b) {
     u32 dx;
@@ -4638,7 +5224,32 @@ u32 func_8006D3C0(SVECTOR *a, SVECTOR *b) {
     return dx + dy + dz;
 }
 
+#ifdef NON_MATCHING
+void func_8006D470(u8 *arg0) {
+    s32 a0, a1, a2;
+    s32 idx;
+    u32 *v;
+    s32 f;
+    s32 col;
+    s32 d;
+    s32 lim;
+    s32 t;
+    s32 r, g, b;
+    s32 sxy, sz, flag;
+    s32 sx, sy;
+    u8 *p;
+
+    a0 = 0;
+    a1 = 0;
+    a2 = 0;
+    VERT(0x3E, 0x58, 0x64, 0x70, a0);
+    VERT(0x40, 0x5C, 0x68, 0x74, a1);
+    VERT(0x42, 0x60, 0x6C, 0x78, a2);
+    if ((a0 | a1 | a2) != 0) *(u16 *)(arg0 + 0x44) |= 0x2000 << D_800B8F24;
+}
+#else
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_8006E25C);
+#endif
 
 void func_8006DD20(s32 *a, s32 *b, s32 *c, s32 *out) {
   s32 d[4];
@@ -4717,7 +5328,112 @@ void func_8006DD20(s32 *a, s32 *b, s32 *c, s32 *out) {
   out[2] = ((n1[0] >> 8) * (n2[1] >> 8)) - ((n1[1] >> 8) * (n2[0] >> 8));
 }
 
+#ifdef NON_MATCHING
+void func_8006E054(void) {
+    VECTOR f;
+    VECTOR r;
+    VECTOR u;
+    VECTOR apex;
+    SVECTOR fwd;
+    VECTOR t1;
+    VECTOR t2;
+    VECTOR p1;
+    VECTOR p2;
+    VECTOR p3;
+    VECTOR p4;
+    s32 h;
+    s32 *pl;
+    s32 fx;
+    fwd.vx = 0;
+    fwd.vy = 0;
+    fwd.vz = 0x1000;
+    fwd.pad = 0;
+    apex.vx = g_Camera.posX << 16;
+    apex.vy = g_Camera.posY << 16;
+    apex.vz = g_Camera.posZ << 16;
+    gte_ldv0(&fwd);
+    gte_rtv0();
+    gte_stlvnl(&t1);
+    NORM(&t1, &t2, &p1);
+    f.vx = p1.vx << 4;
+    f.vy = p1.vy << 4;
+    f.vz = p1.vz << 4;
+    {
+        s32 nx;
+        s32 z = t1.vz;
+        nx = -t1.vx;
+        t1.vy = nx;
+        t1.vx = z;
+        t1.vz = nx;
+        t1.vy = 0;
+    }
+    NORM(&t1, &t2, &p1);
+    {
+        s32 rz = p1.vz << 4;
+        s32 rx = p1.vx << 4;
+        s32 a, b, c, d;
+        a = (rz >> 8) * (f.vy >> 8);
+        b = (rz >> 8) * (f.vx >> 8);
+        c = (rx >> 8) * (f.vz >> 8);
+        d = (rx >> 8) * (f.vy >> 8);
+        r.vz = rz;
+        r.vx = rx;
+        t1.vx = -a;
+        r.vy = p1.vy << 4;
+        t1.vy = b - c;
+        t1.vz = d;
+    }
+    NORM(&t1, &t2, &p1);
+    u.vx = p1.vx << 4;
+    u.vy = p1.vy << 4;
+    u.vz = p1.vz << 4;
+    {
+        s32 k = (s16)g_Args->displayW >> 1;
+        r.vx = r.vx * k;
+        r.vz = r.vz * k;
+        k = (s16)g_Args->displayW * 3 / 4 >> 1;
+        u.vx = u.vx * k;
+        u.vy = u.vy * k;
+        u.vz = u.vz * k;
+    }
+    gte_ReadGeomScreen(&h);
+    {
+        s32 cx = apex.vx + h * f.vx;
+        s32 cy = apex.vy + h * f.vy;
+        s32 cz = apex.vz + h * f.vz;
+        t2.vx = cx;
+        p1.vx = cx + u.vx - r.vx;
+        t2.vy = cy;
+        p1.vy = cy + u.vy - r.vy;
+        p1.vz = cz + u.vz - r.vz;
+        p2.vx = cx + u.vx + r.vx;
+        p2.vy = cy + u.vy + r.vy;
+        t2.vz = cz;
+        p2.vz = cz + u.vz + r.vz;
+        p3.vx = cx - u.vx - r.vx;
+        p3.vy = cy - u.vy - r.vy;
+        p3.vz = cz - u.vz - r.vz;
+        p4.vx = cx - u.vx + r.vx;
+        p4.vy = cy - u.vy + r.vy;
+        p4.vz = cz - u.vz + r.vz;
+    }
+    pl = &D_800E2DF4;
+    func_8006DD20((s32 *)&apex, (s32 *)&p1, (s32 *)&p3, pl);
+    func_8006DD20((s32 *)&apex, (s32 *)&p4, (s32 *)&p2, pl + 4);
+    func_8006DD20((s32 *)&apex, (s32 *)&p2, (s32 *)&p1, pl + 8);
+    func_8006DD20((s32 *)&apex, (s32 *)&p3, (s32 *)&p4, pl + 12);
+    fx = f.vx;
+    pl[-4] = fx;
+    pl -= 4;
+    pl[0x14] = -fx;
+    pl[1] = f.vy;
+    pl[2] = f.vz;
+    pl[0x15] = -f.vy;
+    pl[0x16] = -f.vz;
+}
+#else
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_8006EE40);
+#endif
 
 s32 func_8006E620(void *fr, V3s lo, V3s hi) {
     u16 v[4];
@@ -5017,7 +5733,105 @@ void func_8006F034(void) {
     }
 }
 
+#ifdef NON_MATCHING
+void func_8006F168(void *arg0, s32 arg1) {
+    u16 sp[10];
+    s32 count;
+    u32 n;
+    u32 i;
+    s32 j;
+    s32 v;
+    s32 k;
+    u8 *node;
+    u8 *s0;
+    u8 *it;
+    u8 *q;
+    u8 *a3;
+    u8 *a0;
+    u8 *vt;
+    count = A(s32, 8);
+    n = A(u32, 0x10);
+    M(u8 *, 0x14) = (u8 *)arg0 + A(s32, 0xC);
+    M(u16, 0) = A(u16, 0x18);
+    M(u8 *, 0x18) = (u8 *)arg0 + A(s32, 0x1C);
+    M(u8 *, 0x1C) = (u8 *)arg0 + A(s32, 0x20);
+    v = A(s32, 4);
+    M(u32, 4) = n;
+    s0 = (u8 *)arg0 + A(s32, 0x14);
+    M(u8 *, 0x20) = s0;
+    M(s32, 0x24) = arg1;
+    M(s32, 0x28) = arg1 + M(u16, 0) * 0xC;
+    M(s32, 0x2C) = M(s32, 0x28) + v * 0x28;
+    M(s32, 0x30) = M(s32, 0x2C) + v * 0x28;
+    M(s32, 8) = v;
+    M(s32, 0x34) = M(s32, 0x30) + n * 0x28;
+    M(s32, 0xC) = A(s32, 0x24);
+    D_800E2DE0 = A(s32, 0);
+    if (A(s32, 0x24) != 0) {
+        M(u8 *, 0x10) = (u8 *)arg0 + A(s32, 0x28);
+    } else {
+        M(u8 *, 0x10) = 0;
+    }
+    if ((u32)D_800D2FAC < (u32)(M(s32, 0x34) + n * 0x28 - D_800D2FC0)) {
+        func_8006B230(0, (s32)D_800A9794);
+    }
+    for (j = 0; j < count; j++) {
+        node = M(u8 *, 0x14) + (j << 5);
+        for (k = 0xC; k <= 0x14; k += 4) {
+            v = *(s32 *)(node + k);
+            if (v >= 0) {
+                *(s32 *)(node + k) = (s32)(M(u8 *, 0x14) + (v << 5));
+            } else {
+                *(s32 *)(node + k) = 0;
+            }
+        }
+        *(s32 *)(node + 0x18) = (s32)s0 + *(s32 *)(node + 0x18);
+    }
+    it = s0;
+    for (i = 0; i < n; i++) {
+        *(B20 *)sp = *(B20 *)it;
+        q = M(u8 *, 0x30) + sp[1] * 0x28;
+        *(u16 *)(q + 0xC) = sp[5];
+        *(u16 *)(q + 0x18) = sp[7];
+        *(u16 *)(q + 0x24) = sp[9];
+        *(u16 *)(q + 0x1A) = sp[8];
+        *(u16 *)(q + 0xE) = sp[6];
+        *(s16 *)(it + 0xA) = -1;
+        a3 = M(u8 *, 0x34) + sp[1] * 0x28;
+        for (k = 0; k < 3; k++) {
+            a0 = M(u8 *, 0x1C) + sp[2 + k] * 4;
+            vt = M(u8 *, 0x24) + sp[2 + k] * 0xC;
+            *(s32 *)(vt + 4) = 0xFF0000;
+            *(s32 *)(q + 4 + k * 0xC) = *(s32 *)a0;
+            if (a0[3] != 0) {
+                if (a0[0] < 0x64) {
+                    *(s16 *)(vt + 6) = a0[0];
+                }
+                if (a0[1] < 0x64) {
+                    *(s16 *)(it + 0xA) = a0[1];
+                }
+            }
+        }
+        q[3] = 9;
+        q[7] = 0x34;
+        if (sp[0] & 0x8000) {
+            q[7] = 0x36;
+        }
+        *(s16 *)(it + 8) = sp[0] & 0x803F;
+        *(W40 *)a3 = *(W40 *)q;
+        *(u16 *)it = sp[1];
+        *(u16 *)(it + 2) = sp[2];
+        *(u16 *)(it + 4) = sp[3];
+        *(u16 *)(it + 6) = sp[4];
+        *(u16 *)(it + 0xC) = sp[5];
+        *(u16 *)(it + 0xE) = sp[7];
+        *(u16 *)(it + 0x10) = sp[9];
+        it += 0x14;
+    }
+}
+#else
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_8006FF54);
+#endif
 
 void func_8006F6AC(void) {
     D_800E2438 = 0;
@@ -5029,7 +5843,98 @@ void func_8006F6AC(void) {
     func_8006E9E0(D_800E2DBC);
 }
 
+#ifdef NON_MATCHING
+void func_8006F784(void) {
+    s32 db;
+    s32 *tile;
+    s32 rows;
+    s32 cols;
+    s32 x0;
+    s32 x;
+    s32 x2;
+    s32 y;
+    s32 y2;
+    s32 r;
+    s32 c;
+    s32 a;
+    u32 *ot;
+    u8 *prim;
+
+    tile = ((SkyGrid *)D_800E2E44)->tiles;
+    rows = ((SkyGrid *)D_800E2E44)->rows;
+    cols = ((SkyGrid *)D_800E2E44)->cols;
+    x0 = 0x100 - (((M2C_FIELD(&g_Camera, u16 *, 0x82) & 0xFFF) * D_800E2E48) >> 12);
+    x = x0 + D_800E2E48;
+    db = D_800B8F24;
+    ot = D_800B8F88[db].tag;
+    if (x < 0x200) {
+        x0 = x;
+    }
+    a = M2C_FIELD(&g_Camera, u16 *, 0x80) & 0xFFF;
+    if (a > 0x800) {
+        a -= 0x1000;
+    }
+    y = (a * D_8009E9BC) >> 12;
+    for (r = 0; r < rows; r++) {
+        y2 = y + ((SkyGrid *)D_800E2E44)->h;
+        if (y2 < 0) {
+            tile += cols * 2;
+        } else {
+            if (y >= 0xF0) {
+                break;
+            }
+            x = x0;
+            for (c = 0; c < cols; c++) {
+                x2 = x + ((SkyGrid *)D_800E2E44)->w;
+                if (x2 >= 0) {
+                    if (x >= 0x200) {
+                        x -= D_800E2E48;
+                        x2 = x + ((SkyGrid *)D_800E2E44)->w;
+                        if (x2 < 0) {
+                            goto next;
+                        }
+                    }
+                    if (tile[0] == 0) {
+                        prim = (u8 *)tile[1];
+                        if (db != 0) {
+                            prim += 0x34;
+                        }
+                        ((POLY_GT4 *)prim)->x0 = x;
+                        ((POLY_GT4 *)prim)->y0 = y;
+                        ((POLY_GT4 *)prim)->x1 = x2;
+                        ((POLY_GT4 *)prim)->y1 = y;
+                        ((POLY_GT4 *)prim)->x2 = x;
+                        ((POLY_GT4 *)prim)->y2 = y2;
+                        ((POLY_GT4 *)prim)->x3 = x2;
+                        ((POLY_GT4 *)prim)->y3 = y2;
+                    } else {
+                        prim = (u8 *)tile[1];
+                        if (db != 0) {
+                            prim += 0x24;
+                        }
+                        ((POLY_G4 *)prim)->x0 = x;
+                        ((POLY_G4 *)prim)->y0 = y;
+                        ((POLY_G4 *)prim)->x1 = x2;
+                        ((POLY_G4 *)prim)->y1 = y;
+                        ((POLY_G4 *)prim)->x2 = x;
+                        ((POLY_G4 *)prim)->y2 = y2;
+                        ((POLY_G4 *)prim)->x3 = x2;
+                        ((POLY_G4 *)prim)->y3 = y2;
+                    }
+                    ((PTag *)prim)->addr = ((PTag *)ot)->addr;
+                    ((PTag *)ot)->addr = (u32)prim;
+                }
+            next:
+                x = x2;
+                tile += 2;
+            }
+        }
+        y = y2;
+    }
+}
+#else
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_80070570);
+#endif
 
 void func_8006F9A4(s32 arg0) {
     struct { u8 c[4]; } *col;

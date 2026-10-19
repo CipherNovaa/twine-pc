@@ -16836,7 +16836,6 @@ void func_800530F4(void) {
     M2C_FIELD(&D_800D9234, u16 *, 4) = (u16) D_800D31B4;
 }
 
-#ifdef NON_MATCHING
 void func_80053114(u8 *obj) {
     u8 *tgt;
     u8 *sub;
@@ -16921,8 +16920,10 @@ body:
                             m = (g_Args->pad118[0x12] == 1) ? 0x17 : 0x11;
                             t = (0xA - sp18) * m;
                             half = t >> 1;
-                            *(u16 *)(s2 + 0x62) = *(u16 *)&D_800B0084 + (half - rand() % t);
-                            *(u16 *)(s2 + 0x60) = *(u16 *)&D_800B0D50 + (half - rand() % t);
+                            rv = half - rand() % t;
+                            *(u16 *)(s2 + 0x62) = *(u16 *)&D_800B0084 + rv;
+                            rv = half - rand() % t;
+                            *(u16 *)(s2 + 0x60) = *(u16 *)&D_800B0D50 + rv;
                         }
                     } else {
                         func_8003BE68(sub + 0x34, s2 + 0x60);
@@ -16966,9 +16967,6 @@ body:
         }
     }
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80053114);
-#endif
 
 void func_80053650(s32 *arg0) {
     s32 temp_v1;

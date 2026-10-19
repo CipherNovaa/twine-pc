@@ -61,6 +61,7 @@
 #define func_8006B230 L1_func_8006B230
 #define func_800705A8 L1_func_800705A8
 #define func_800752C0 L1_func_800752C0
+#define func_800752E8 L1_func_800752E8
 #define func_800753F0 L1_func_800753F0
 #define func_8007545C L1_func_8007545C
 #define func_800755BC L1_func_800755BC
@@ -295,7 +296,37 @@ s32 func_800752C0(void) {
   return (s32) var_v0;
 }
 
+#ifdef NON_MATCHING
+u8 *func_800752E8(u8 arg0) {
+    u8 *s1;
+    Slot94 *p;
+    s32 i;
+    s32 s0;
+    u8 *e;
+    i = 0;
+    p = D_800F0F80;
+    do {
+        s1 = (u8 *)p;
+        i += 1;
+        if (s1[0x92] == 0) {
+            s0 = arg0;
+            s1[0x92] = 1;
+            *(void **)s1 = func_800753F0(s0);
+            e = D_8009D0FC + s0 * 0x70;
+            *(u16 *)(s1 + 0x90) = *(u16 *)(e + 0x6C);
+            *(s32 *)(s1 + 0x74) = *(s32 *)(e + 0x68);
+            func_80075920(s1);
+            func_80075E9C(s1);
+            return s1;
+        }
+        p++;
+    } while (i < 2);
+    func_8006B1DC(D_800A97BC);
+    return NULL;
+}
+#else
 INCLUDE_ASM("asm/level09/nonmatchings/text_80077F78", func_80077FA0);
+#endif
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80077F78", func_8007805C);
 

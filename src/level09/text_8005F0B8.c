@@ -2947,7 +2947,145 @@ INCLUDE_ASM("asm/level09/nonmatchings/text_8005F0B8", func_80060FDC);
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_8005F0B8", func_80061180);
 
+#ifdef NON_MATCHING
+s32 func_80061068(u8 *e) {
+    u16 vx0, vz0;
+    s32 isPlayer, moved, pass, nA, nB, hit, ok, grp, i;
+    s16 ax, az;
+    u8 *p, *end, *o;
+    moved = 0;
+    isPlayer = e == (u8 *)g_Player;
+    if (D_8009CD6C == 0 && isPlayer) {
+        return 0;
+    }
+    vx0 = *(u16 *)(e + 0x98);
+    vz0 = *(u16 *)(e + 0x9C);
+    pass = 2;
+    nA = 0;
+    nB = 0;
+    hit = 0;
+    ok = 1;
+    while (ok != 0) {
+        if (pass == 1) {
+            ax = vx0;
+            if (ax < 0) ax = -ax;
+            az = vz0;
+            if (az < 0) az = -az;
+            if (ax >= az) {
+                *(u16 *)(e + 0x98) = vx0;
+                *(u16 *)(e + 0x9C) = 0;
+                moved = 1;
+            } else {
+                *(u16 *)(e + 0x98) = 0;
+                *(u16 *)(e + 0x9C) = vz0;
+            }
+        } else if (pass == 0) {
+            if (moved != 0) {
+                *(u16 *)(e + 0x98) = 0;
+                *(u16 *)(e + 0x9C) = vz0;
+            } else {
+                *(u16 *)(e + 0x98) = vx0;
+                *(u16 *)(e + 0x9C) = 0;
+            }
+        }
+        pass -= 1;
+        if (!(*(s32 *)(e + 0x4C) & 0x02000000)) {
+            grp = 0;
+            if (nA == 0) {
+                end = (u8 *)(D_800B07A8 * 0x124 + D_800AFFC8);
+                p = (u8 *)(D_800B0DC0 * 0x124 + D_800AFFC8);
+                for (; end >= p; p += 0x124) {
+                    if (p[4] != 0 && !(*(s32 *)(p + 0x4C) & 0x02000000)) {
+                        *(u8 **)(nA * 4 + D_800DF0E8) = p;
+                        nA += 1;
+                        if ((func_8005E424(p, e, 4) << 16) != 0) {
+                            grp = 1;
+                            hit = 1;
+                        }
+                    }
+                }
+            } else {
+                for (i = nA - 1; i >= 0; i--) {
+                    if ((func_8005E424(*(u8 **)(i * 4 + D_800DF0E8), e, 4) << 16) != 0) {
+                        grp = 1;
+                        hit = 1;
+                    }
+                }
+            }
+            ok = 1;
+            if (grp == 0) {
+                if (isPlayer != 0) {
+                    grp = 0;
+                    if (nB == 0) {
+                        end = (u8 *)(D_800B07B0 * 0x124 + D_800AFFC8);
+                        p = (u8 *)(D_800B0DA0 * 0x124 + D_800AFFC8);
+                        for (; end >= p; p += 0x124) {
+                            if (p[4] != 0 && p != e && !(p[0xA4] & 0xA)) {
+                                if (*(s32 *)(p + 0x4C) & 0x02000000) {
+                                    if (p[0xA] == 1 && (func_8005E424(p, e, 4) << 16) != 0) {
+                                        func_80061018(e, (s32)g_Player);
+                                    }
+                                } else {
+                                    *(u8 **)(nB * 4 + D_800DF0EC) = p;
+                                    nB += 1;
+                                    if ((func_8005E424(p, e, 4) << 16) != 0) {
+                                        grp = 1;
+                                        if (*(s32 *)(p + 0x118) != 0) {
+                                            func_80061018(p, (s32)e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        for (i = nB - 1; i >= 0; i--) {
+                            o = *(u8 **)(i * 4 + D_800DF0EC);
+                            if ((func_8005E424(o, e, 4) << 16) != 0) {
+                                grp = 1;
+                                if (*(s32 *)(o + 0x118) != 0) {
+                                    func_80061018(o, (s32)e);
+                                }
+                            }
+                        }
+                    }
+                    ok = 1;
+                    if (grp == 0) {
+                        ok = func_8005EE6C(e, *(s16 *)(e + 0x98), *(s16 *)(e + 0x9C), 1);
+                        if (ok != 0) hit = 1;
+                    }
+                } else if (!(e[0xA4] & 8) && (func_8005E424((u8 *)g_Player, e, 4) << 16) != 0) {
+                    if (*(s32 *)(e + 0x118) != 0) {
+                        func_80061018(e, (s32)g_Player);
+                    }
+                    ok = 1;
+                } else {
+                    ok = func_8005EE6C(e, *(s16 *)(e + 0x98), *(s16 *)(e + 0x9C), 1);
+                    if (ok != 0) hit = 1;
+                }
+            }
+        } else {
+            ok = func_8005EE6C(e, *(s16 *)(e + 0x98), *(s16 *)(e + 0x9C), 1);
+            if (ok != 0) hit = 1;
+        }
+        if (pass < 0) {
+            break;
+        }
+    }
+    if (isPlayer == 0) {
+        if (hit != 0) {
+            o = *(u8 **)(e + 0x118);
+            if (*(s32 *)(o + 0x88) < 0x3E8) {
+                *(s32 *)(o + 0x88) += 1;
+            }
+        } else {
+            *(s32 *)(*(u8 **)(e + 0x118) + 0x88) = 0;
+        }
+    }
+    return (s16)ok;
+}
+#else
 INCLUDE_ASM("asm/level09/nonmatchings/text_8005F0B8", func_80061214);
+#endif
 
 void func_800615C8(u8 *obj) {
     u8 *m;

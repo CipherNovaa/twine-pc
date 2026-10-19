@@ -242,6 +242,28 @@ def object_mismatches(level, obj, wanted, pairs_by_l1, exe, load):
     return bad
 
 
+def nonmatching_errors(level, t_stem, renamed):
+    """LEVEL01 names of banked functions in a generated file that fail to compile with -DNON_MATCHING."""
+    gcc = ROOT / "tools/old-gcc/2.8.1-psx"
+    c = ROOT / f"src/{level}/{t_stem}.c"
+    pre = subprocess.run([str(gcc / "cpp"), "-P", "-undef", "-D__GNUC__=2", "-D_LANGUAGE_C", "-DNON_MATCHING",
+                          f"-I{ROOT}/include", f"-I{ROOT}/src", str(c)], capture_output=True, text=True)
+    opt = opt_files(level).get(t_stem, "-O2")
+    r = subprocess.run([str(gcc / "cc1"), "-quiet", "-G0", opt, "-o", "/dev/null"], input=pre.stdout,
+                       capture_output=True, text=True)
+    bad, current = set(), None
+    for line in r.stderr.splitlines():
+        m = re.search(r"In function `(\w+)'", line)
+        if m or "At top level" in line:
+            current = m.group(1) if m else None
+            continue
+        if re.search(r":\d+: (?!warning)", line):
+            name = current or (re.search(r"`(\w+)'", line) or [None, None])[1]
+            if name:
+                bad.add(name[3:] if name.startswith("L1_") else name)
+    return bad
+
+
 def port(level):
     pairs, votes = port_symbols.pairings(level)
     smap = port_symbols.symbol_map(votes)
@@ -264,11 +286,20 @@ def port(level):
         """Every LEVEL01 global the code names must have a counterpart in this level."""
         return all(i in known for i in set(IDENT.findall(text)) if i in l1_globals)
 
+    # Local labels other asm jumps to (cross-function branches): a function defining one must stay asm in
+    # every build, so it can't be banked here.
+    defined, referenced = {}, set()
+    for s in (ROOT / f"asm/{level}").rglob("*.s"):
+        txt = s.read_text()
+        own = set(re.findall(r"^\s*(\.L[0-9A-F]{8}):", txt, re.M))
+        defined[s.stem] = own
+        referenced |= set(re.findall(r"(?<![\w.])(\.L[0-9A-F]{8})\b", txt)) - own
     exclude = set()  # LEVEL01 names that failed to compile or match
+    nm_exclude = set()  # banked LEVEL01 names whose C doesn't compile here
     asm_dir = ROOT / f"asm/{level}/nonmatchings"
     exe, load = target_exe(level)
     for attempt in range(20):
-        ported, jtbl_lines = {}, []
+        ported, banked, jtbl_lines = {}, {}, []
         for l1_stem, t_stem in zip(l1_stems, t_stems):
             header, funcs = l1[l1_stem]
             c_path = ROOT / f"src/{level}/{t_stem}.c"
@@ -295,6 +326,14 @@ def port(level):
                     jt = re.findall(r"%hi\((jtbl_\w+)\)", (asm_dir / m.group(1).split("/")[-1] / f"{m.group(2)}.s").read_text())
                     if jt:  # keyed by the name the C defines (no L1_ when both levels use the same name)
                         jtbl_lines.append(f"{'L1_' + n if n in renamed else n} {' '.join(dict.fromkeys(jt))}")
+                elif item and item[0] == "banked" and n not in nm_exclude and portable(item[1]) \
+                        and not defined.get(m.group(2), set()) & referenced:
+                    # LEVEL01's near-miss C, for NON_MATCHING builds; the matching build keeps this level's asm.
+                    banked[n] = t_stem
+                    body.append(f"#ifdef NON_MATCHING\n{item[1]}\n#else\n{line}\n#endif")
+                    jt = re.findall(r"%hi\((jtbl_\w+)\)", (asm_dir / m.group(1).split("/")[-1] / f"{m.group(2)}.s").read_text())
+                    if jt:
+                        jtbl_lines.append(f"{'L1_' + n if n in renamed else n} {' '.join(dict.fromkeys(jt))}")
                 else:
                     body.append(line)
             text = "\n".join(header) + "\n" + "\n".join(body) + "\n"
@@ -312,6 +351,10 @@ def port(level):
                 continue
             if n in ported and d == 0:
                 ld.append(f"{t} = L1_{n};")
+            elif n in banked and d == 0:
+                # whichever exists: the asm (matching build) or the C (NON_MATCHING build)
+                ld.append(f"PROVIDE(L1_{n} = {t});")
+                ld.append(f"PROVIDE({t} = L1_{n});")
             elif n not in ported:
                 ld.append(f"L1_{n} = {t}{f' + 0x{d:X}' if d > 0 else f' - 0x{-d:X}' if d < 0 else ''};")
         for n, e in ld_entries:
@@ -323,6 +366,13 @@ def port(level):
         (ROOT / f"config/{level}_jtbl.txt").write_text(
             "# Switch jump tables each function uses, in order of first use (tools/jtbl_fix.py).\n" + "\n".join(jtbl_lines) + "\n")
 
+        nm_failed = set()
+        for t_stem in sorted(set(banked.values())):
+            nm_failed |= nonmatching_errors(level, t_stem, renamed)
+        if nm_failed:
+            print(f"pass {attempt}: {len(nm_failed)} banked functions don't compile: {' '.join(sorted(nm_failed))}")
+            nm_exclude |= nm_failed
+            continue
         r = subprocess.run(["make", f"LEVEL={level}", "-j8", "-k"], cwd=ROOT, capture_output=True, text=True)
         failed, unattributed, current = {}, [], None
         for line in r.stderr.splitlines():
