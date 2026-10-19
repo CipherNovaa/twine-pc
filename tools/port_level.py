@@ -60,13 +60,28 @@ def split(level):
     bounds = [a for a, _ in l1_c] + [lib]
     opts = opt_files("level01")
 
+    l1_addr, l1_words = port_symbols.shared_code.load(port_symbols.shared_code.EXTRACTED / "L01/LEVEL01.EXE")
+    n = int(level[-2:])
+    t_addr, t_words = port_symbols.shared_code.load(port_symbols.shared_code.EXTRACTED / f"L{n:02d}/LEVEL{n:02d}.EXE")
+
     def region_start(lo, hi, prev_end):
         """LEVEL address where the LEVEL01 region [lo, hi) starts: its first function's copy if that is
-        shared, else the first LEVEL function after the previous region's last shared one."""
-        first = next((a for a, s, n in l1_funcs if lo <= a < hi), None)
-        name = next((n for a, s, n in l1_funcs if a == first), None)
-        if name in pairs:
-            return pairs[name]
+        shared; else the function most like it (masked instructions) among this level's functions between
+        the previous region's last shared one and this region's first shared one; else the first of those."""
+        first = next(((a, s, n) for a, s, n in l1_funcs if lo <= a < hi), None)
+        if first and first[2] in pairs:
+            return pairs[first[2]]
+        gap_end = min((pairs[n] for a, s, n in l1_funcs if lo <= a < hi and n in pairs), default=None)
+        gap = [a for a in t_starts if a > prev_end and (gap_end is None or a < gap_end)]
+        if first and gap:
+            import difflib
+            ref = l1_words[(first[0] - l1_addr) // 4:(first[0] + first[1] - l1_addr) // 4]
+            def body(a):
+                end = next((b for b in t_starts if b > a), a + 4 * len(ref))
+                return t_words[(a - t_addr) // 4:(end - t_addr) // 4]
+            score, best = max((difflib.SequenceMatcher(None, ref, body(a), autojunk=False).ratio(), a) for a in gap)
+            if score >= 0.6:
+                return best
         return next(a for a in t_starts if a > prev_end)
 
     starts, prev_end = [], 0
@@ -489,7 +504,10 @@ def port(level):
             if l2 and l2_bodies:
                 # only what this file's LEVEL02 functions use (with the typedefs those declarations need):
                 # the declarations' types come from LEVEL02 files' headers, which other files here lack
-                cand = [(l2_decl_name(d), d) for d in map(l2_rename, l2_decls) if d not in l1_header]
+                # skip what the LEVEL01 header here already declares (by name), and LEVEL01 names (L1_X)
+                have = {l2_decl_name(l) for l in l1_header} - {None}
+                cand = [(l2_decl_name(d), d) for d in map(l2_rename, l2_decls)
+                        if l2_decl_name(d) not in have and not (l2_decl_name(d) or "").startswith("L1_")]
                 need, changed = set(IDENT.findall("\n".join(l2_bodies))), True
                 while changed:
                     changed = False

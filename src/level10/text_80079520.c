@@ -184,6 +184,8 @@ extern s32 L1_D_800F0F5C;
 extern void *L2_D_800B6010;
 void L2_func_8006E97C(s32 arg0);
 void L2_func_80085F1C();
+void L2_func_80079B2C(void);
+extern void (*L2_D_800A100C)(void);
 void L2_func_80086FAC();
 extern M2C_UNK (*L2_D_800A1078)(s16);
 void L2_func_8006E9D0(s32 arg0, s32 arg1);
@@ -191,6 +193,7 @@ extern void *L2_D_800B6FE4;
 extern s32 L2_D_800A0FE0;
 void L2_func_8007906C(void);
 void L2_func_800796AC(void);
+void L2_func_8007A354(u8 *obj, s16 *vel);
 extern s8 L2_D_800A40AC;
 extern u8 L2_D_800F430C;
 M2C_UNK L2_func_800307C0(s32);                         /* extern */
@@ -205,16 +208,16 @@ M2C_UNK L2_func_80086EA8(M2C_UNK, M2C_UNK);            /* extern */
 extern M2C_UNK L2_D_800AF188;
 void L2_func_8003A600(void *arg0);
 M2C_UNK L2_func_80064FB0(void *, M2C_UNK, M2C_UNK);    /* extern */
-M2C_UNK L2_func_8007A190(void *);                      /* extern */
-M2C_UNK L2_func_8007A4D4(void *);                      /* extern */
+s32 L2_func_8007A190(void *arg0);
+void L2_func_8007A4D4(u8 *obj);
 void L2_func_8007A678(void *arg0);
 void L2_func_80078B44(void *arg0);
 M2C_UNK *L2_func_80078B90(s32 arg0);
 s32 L2_func_80079040(void *arg0, s32 arg1);
 s32 L2_func_80079740(void);
 void L2_func_80079854(s32 arg0);
-void L2_func_80079B2C(void);
 void L2_func_8007A2A0(void *arg0);
+// D_8009CDD4 -> L2_D_800A100C (L2 own)
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_8006F4C0(M2C_UNK, M2C_UNK *);          /* extern */
 extern u8 D_800AE7C8;
@@ -704,7 +707,23 @@ void L2_func_80079B2C(void) {
 
 INCLUDE_ASM("asm/level10/nonmatchings/text_80079520", func_8007A6D8);
 
-INCLUDE_ASM("asm/level10/nonmatchings/text_80079520", func_8007A888);
+s32 L2_func_8007A190(void *arg0) {
+    s32 i;
+    u8 *p;
+    s32 pos;
+    i = L1_D_800B0DA0;
+    p = L1_D_800AFFC8 + i * 0x124;
+    pos = *(s32 *)((u8 *)arg0 + 0x90) + 0x28;
+    if (i <= L1_D_800B07B0) {
+        do {
+            if (p[4] != 0 && L1_func_8005397C(pos, *(s32 *)(p + 0x90) + 0x28) < (u32)(*(u16 *)(p + 0x2A) + 0xFA0) && *(s32 *)(p + 0x118) != 0 && (L1_func_80051728((s32)p, *(s32 *)(p + 0x5C)) & 0x40)) {
+                **(u32 **)(p + 0x118) |= 0x02000000;
+            }
+            i++;
+            p += 0x124;
+        } while (i <= L1_D_800B07B0);
+    }
+}
 
 void L2_func_8007A2A0(void *arg0) {
     s32 temp_v1;
@@ -726,7 +745,32 @@ void L2_func_8007A2A0(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level10/nonmatchings/text_80079520", func_8007AA4C);
+void L2_func_8007A354(u8 *obj, s16 *vel) {
+    u8 *m;
+    s32 t;
+    s16 r[3];
+    VECTOR ang;
+    s16 *d;
+
+    m = *(u8 **)(obj + 0x90);
+    t = L1_D_800A0370[*(u16 *)(m + 0x62) & 0xFFF];
+    r[0] = (-vel[0] * (t >> 16) + vel[2] * (s16)t) >> 12;
+    r[1] = -vel[1];
+    r[2] = (-vel[2] * (t >> 16) - vel[0] * (s16)t) >> 12;
+    ang.vx = L1_ratan2(r[2], r[1]);
+    ang.vz = L1_ratan2(-r[0], L1_SquareRoot0(r[2] * r[2] + r[1] * r[1]));
+    *(s32 *)(*(u8 **)(obj + 0x90) + 0x10) = 2;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x60) = ang.vx;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x62) = ang.vy;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x64) = ang.vz;
+    d = *(s16 **)(obj + 0x108);
+    obj = m + 0x28;
+    if (d != NULL) {
+        ((s32 *)obj)[0] = d[0];
+        ((s32 *)obj)[1] = d[1];
+        ((s32 *)obj)[2] = d[2];
+    }
+}
 
 INCLUDE_ASM("asm/level10/nonmatchings/text_80079520", func_8007ABCC);
 

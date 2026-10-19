@@ -1735,7 +1735,11 @@ void L2_func_800387C4(void *);
 void L2_func_8005C9C4(void *, void *);
 s32 L2_func_8003815C(void *, void *);
 void L2_func_800616AC(u8 *obj);
+M2C_UNK L2_func_8002D6AC(M2C_UNK *);                   /* extern */
+extern M2C_UNK L2_D_800AE968;
+void L2_func_8005FEC4(void);
 void L2_func_80060EC4(void *arg0);
+void L2_func_800619F0(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_80039CA8();                            /* extern */
 M2C_UNK func_80060970();                            /* extern */
@@ -1868,7 +1872,33 @@ void L1_func_8005FAA8(u8 *obj) {
 
 INCLUDE_ASM("asm/level08/nonmatchings/text_8005F0B0", func_8005FE34);
 
-INCLUDE_ASM("asm/level08/nonmatchings/text_8005F0B0", func_8006013C);
+void L2_func_8005FEC4(void) {
+    u8 *obj;
+    u8 *e;
+    s32 i;
+
+    obj = (u8 *)L1_D_800AFFC8 + 0x124;
+    for (i = 1; i < L1_D_800B0AA8; i++) {
+        if (obj[4] != 0 && obj != L1_D_8009CD98) {
+            L1_func_8005FAA8(obj);
+        }
+        obj += 0x124;
+    }
+    e = (u8 *)L1_D_8009CF7C;
+    for (i = 0; i < L1_D_8009CF80; i++) {
+        if (e[0] != 0) {
+            e[0] = 0;
+            if (*(s32 **)(e + 0x1C) != NULL) {
+                **(s32 **)(e + 0x1C) &= ~0x100;
+            }
+            *(s32 *)(e + 0x28) = 0;
+            *(s32 *)(e + 0x2C) = 0;
+        }
+        e += 0x44;
+    }
+    L1_func_80033348();
+    L1_func_800483D8();
+}
 
 void func_8006026C(void *arg0) {
     if (M2C_FIELD(arg0, s32 *, 0x4C) & 8) {
@@ -2244,5 +2274,11 @@ void L1_func_80061708(s32 arg0) {
     }
     sprintf(buf, L1_D_800A9390, arg0);
     L1_func_8006B1DC((s32)buf);
+}
+
+void L2_func_800619F0(void *arg0) {
+    if (M2C_FIELD(arg0, u8 *, 0xA) == 1) {
+        L2_func_8002D6AC(&L2_D_800AE968);
+    }
 }
 

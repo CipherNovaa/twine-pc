@@ -184,6 +184,8 @@ extern s32 L1_D_800F0F5C;
 extern void *L2_D_800B6010;
 void L2_func_8006E97C(s32 arg0);
 void L2_func_80085F1C();
+void L2_func_80079B2C(void);
+extern void (*L2_D_800A100C)(void);
 void L2_func_80086FAC();
 extern M2C_UNK (*L2_D_800A1078)(s16);
 void L2_func_8006E9D0(s32 arg0, s32 arg1);
@@ -208,7 +210,7 @@ M2C_UNK L2_func_80086EA8(M2C_UNK, M2C_UNK);            /* extern */
 extern M2C_UNK L2_D_800AF188;
 void L2_func_8003A600(void *arg0);
 M2C_UNK L2_func_80064FB0(void *, M2C_UNK, M2C_UNK);    /* extern */
-M2C_UNK L2_func_8007A190(void *);                      /* extern */
+s32 L2_func_8007A190(void *arg0);
 M2C_UNK L2_func_8007A4D4(void *);                      /* extern */
 void L2_func_8007A678(void *arg0);
 void L2_func_80078B44(void *arg0);
@@ -216,8 +218,8 @@ M2C_UNK *L2_func_80078B90(s32 arg0);
 s32 L2_func_80079040(void *arg0, s32 arg1);
 s32 L2_func_80079740(void);
 void L2_func_80079854(s32 arg0);
-void L2_func_80079B2C(void);
 void L2_func_8007A2A0(void *arg0);
+// D_8009CDD4 -> L2_D_800A100C (L2 own)
 /* This level's own declarations (kept by tools/port_level.py): */
 
 INCLUDE_ASM("asm/level05/nonmatchings/text_800791D4", func_800791D4);
@@ -702,7 +704,23 @@ INCLUDE_ASM("asm/level05/nonmatchings/text_800791D4", func_8007A6C0);
 
 INCLUDE_ASM("asm/level05/nonmatchings/text_800791D4", func_8007A784);
 
-INCLUDE_ASM("asm/level05/nonmatchings/text_800791D4", func_8007A934);
+s32 L2_func_8007A190(void *arg0) {
+    s32 i;
+    u8 *p;
+    s32 pos;
+    i = L1_D_800B0DA0;
+    p = L1_D_800AFFC8 + i * 0x124;
+    pos = *(s32 *)((u8 *)arg0 + 0x90) + 0x28;
+    if (i <= L1_D_800B07B0) {
+        do {
+            if (p[4] != 0 && L1_func_8005397C(pos, *(s32 *)(p + 0x90) + 0x28) < (u32)(*(u16 *)(p + 0x2A) + 0xFA0) && *(s32 *)(p + 0x118) != 0 && (L1_func_80051728((s32)p, *(s32 *)(p + 0x5C)) & 0x40)) {
+                **(u32 **)(p + 0x118) |= 0x02000000;
+            }
+            i++;
+            p += 0x124;
+        } while (i <= L1_D_800B07B0);
+    }
+}
 
 void L2_func_8007A2A0(void *arg0) {
     s32 temp_v1;

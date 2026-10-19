@@ -44,7 +44,7 @@ segments:
       - [0x46F8, c, text_8002A6F8]  # O0, LEVEL01 text_8002A61C
       - [0x68E4, c, text_8002C8E4]  # O2, LEVEL01 text_8002C808
       - [0x38E64, c, text_8005EE64]  # O1, LEVEL01 text_8005EDF8
-      - [0x3B7A4, c, text_800617A4]  # O2, LEVEL01 text_800617AC
+      - [0x3B920, c, text_80061920]  # O2, LEVEL01 text_800617AC
       - [0x4A648, c, text_80070648]  # O0, LEVEL01 text_8006FA54
       - [0x4FE84, c, text_80075E84]  # O2, LEVEL01 text_80075290
       - [0x528A0, asm, psyq_libs]  # PsyQ libraries

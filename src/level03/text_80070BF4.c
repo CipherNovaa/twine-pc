@@ -103,12 +103,14 @@ extern M2C_UNK D_800A97B0;
 
 
 
+extern void (*L2_D_800A100C)(void);
 void L2_func_800785D8(void);
 M2C_UNK L2_func_8008C0C0(M2C_UNK *);                   /* extern */
 extern s16 L2_D_800A125C;
 extern s16 L2_D_800A125E;
 extern M2C_UNK L2_D_800AF140;
 void L2_func_80078588(void);
+// D_8009CDD4 -> L2_D_800A100C (L2 own)
 extern M2C_UNK (*L2_D_800A1078)(s16);
 /* This level's own declarations (kept by tools/port_level.py): */
 
