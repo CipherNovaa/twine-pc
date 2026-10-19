@@ -16,11 +16,13 @@
 #define func_80070070 L1_func_80070070
 #define func_800702CC L1_func_800702CC
 #define func_800705A8 L1_func_800705A8
+#define func_800706F0 L1_func_800706F0
 #define func_80071638 L1_func_80071638
 #define func_80072190 L1_func_80072190
 #define func_8007240C L1_func_8007240C
 #define func_800726D0 L1_func_800726D0
 #define func_80072D48 L1_func_80072D48
+#define func_80072E28 L1_func_80072E28
 #define func_8007369C L1_func_8007369C
 #define func_800743E8 L1_func_800743E8
 #define func_800746D0 L1_func_800746D0
@@ -43,6 +45,39 @@ typedef struct { s16 a; s16 b; u16 c; } KdNode;
 typedef struct { u8 a[6]; u16 n; u16 d; u16 flags; } Face12;
 typedef struct { u8 pad[0x20]; SVECTOR *nrm; Face12 *faces; } FaceMesh;
 typedef struct KdBox { s16 xmin, zmin, xmax, zmax; u8 pad8[0xC]; KdNode *nodes; s16 *leaf; u8 pad1C[8]; s32 data; } KdBox;
+typedef struct { u8 pad[6]; u16 idx; s16 d; } PlaneEnt;
+typedef struct { u8 pad[0x20]; SVECTOR *verts; } PlaneSet;
+typedef struct { u16 i0, i1, i2, n; s16 d; u16 f; } HPoly;
+typedef struct { u8 pad[0x1C]; SVECTOR *vtx; SVECTOR *nrm; } HMesh;
+typedef struct HitCtx { SVECTOR a; SVECTOR b; SVECTOR c; SVECTOR d; SVECTOR e; SVECTOR f; SVECTOR g; HPoly *polys; s16 *idx; s32 count; SVECTOR *outN; SVECTOR *outP; s32 best; s32 cur; s32 hit; s32 lo; s32 hi; SVECTOR *n; SVECTOR *v0; SVECTOR *v1; SVECTOR *v2; s32 *outF; } HitCtx;
+typedef struct { s16 pad; s16 ref; s16 bx0; s16 bx1; s16 by0; s16 by1; s32 x0; s32 x1; s32 y0; s32 y1; } ClipEnt;
+typedef struct { s16 a; s16 b; u16 c; } ClipNode;
+typedef struct { s32 x; s32 y; } __attribute__((packed)) ClipV2;
+typedef struct { s16 bx0; s16 by0; s16 bx1; s16 by1; s32 p1[3]; u8 *nodes; s32 leaf; s32 p2[2]; s32 w24; } ClipHdr;
+typedef struct { s16 sx0; s16 pa; s16 sy0; s16 pb; s16 sx1; s16 pc; s16 sy1; s16 pd; s32 pad1[10]; s32 w38; s32 w3c; s32 w40; s32 w44; s32 w48; s32 w4c; s32 pad2[8]; s32 w70; } Scr;
+typedef struct { u16 i0, i1, i2, i3; } Q4;
+#define gte_ldsxy3(r0, r1, r2) __asm__ volatile("lwc2 $12, 0(%0); lwc2 $13, 0(%1); lwc2 $14, 0(%2)" : : "r"(r0), "r"(r1), "r"(r2))
+#define gte_ldsxy3(r0, r1, r2) __asm__ volatile("lwc2 $12, 0(%0); lwc2 $13, 0(%1); lwc2 $14, 0(%2)" : : "r"(r0), "r"(r1), "r"(r2))
+s32 Math_Abs(register s32 x);
+s32 func_800706F0(void *arg0, s32 arg1, s32 arg2, s32 arg3, void *arg4);
+s32 func_80071638(void *arg0, s32 arg1, s32 arg2, s32 arg3, void *arg4, s32 arg5);
+extern u8 D_800E2E4C[];
+s32 func_80072E28(HMesh *m, HitCtx *h);
+void func_80074FE8(register s32 *a, register s32 *b, register s32 *c);
+void func_80072D48(register void *arg0, register void *arg1, register void *arg2, register s32 *arg3, register s32 *arg4);
+void Vec_ProjectXZ(register SVECTOR *v, register s32 *rowA, register s32 *rowC, register s32 *out1, register s32 *out3);
+void Vec_Scale(register s32 scale, register SVECTOR *in, register SVECTOR *out);
+#define gte_ldopv1(r0) __asm__ volatile("lh $12, 0(%0); lh $13, 2(%0); ctc2 $12, $0; lh $14, 4(%0); ctc2 $13, $2; ctc2 $14, $4" : : "r"(r0) : "$12", "$13", "$14")
+#define gte_ldopv2(r0) __asm__ volatile("lh $12, 0(%0); lh $13, 2(%0); lh $14, 4(%0); mtc2 $12, $9; mtc2 $13, $10; mtc2 $14, $11" : : "r"(r0) : "$12", "$13", "$14")
+#define gte_op1() __asm__ volatile("nop; nop; .word 0x4B78000C")
+#define EDGE(p, q, r) \
+func_80074FE8((s32 *)&h->c, (s32 *)h->p, (s32 *)&h->e); \
+func_80074FE8((s32 *)h->q, (s32 *)h->p, (s32 *)&h->f); \
+gte_ldopv1(&h->e); \
+gte_ldopv2(&h->f); \
+gte_op1(); \
+gte_stsv(&h->g); \
+if (Vec_Dot((s32 *)h->n, &h->g) >= 0) {
 s32 func_8007369C(s32 a, u16 *b, u16 *c, s32 d, s32 e, s32 f);
 s32 func_800746D0(s32 arg0, s32 *arg1, s32 *arg2, s16 *arg3, s16 *arg4, s32 *arg5);
 extern u8 D_800E2E4C[];
@@ -57,7 +92,7 @@ s32 func_800702CC(void *arg0, s32 arg1, s32 *arg2);
 s32 func_800705A8(ZoneObj *arg0, s32 arg1, SVECTOR *arg2, s32 *arg3);
 
 s32 func_80071638(void *, s32, s32, s32, void *, s32);
-s32 func_80072190(void *, s32, s32, s32, void *);
+s32 func_80072190(PlaneSet *arg0, SVECTOR *arg1, s32 arg2, s32 arg3, PlaneEnt *arg4);
 s32 Vec_Dot(register s32 *row, register SVECTOR *v);
 
 
@@ -265,9 +300,290 @@ s32 func_800705A8(ZoneObj *arg0, s32 arg1, SVECTOR *arg2, s32 *arg3) {
     return r;
 }
 
-INCLUDE_ASM("asm/level06/nonmatchings/text_80070648", func_800712E4);
+s32 func_800706F0(void *arg0, s32 arg1, s32 arg2, s32 arg3, void *arg4) {
+    s32 nx;
+    s32 nz;
+    SVECTOR c;
+    SVECTOR a;
+    SVECTOR b;
+    SVECTOR d;
+    s32 cy;
+    SVECTOR *p0;
+    SVECTOR *p1;
+    SVECTOR *p2;
+    SVECTOR *n;
+    s32 l4C;
+    s32 l50;
+    s32 l54;
+    s32 l58;
+    s32 l5C;
+    s32 l60;
+    s32 l64;
+    s32 l68;
 
-INCLUDE_ASM("asm/level06/nonmatchings/text_80070648", func_8007222C);
+    p0 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i0;
+    p1 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i1;
+    p2 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i2;
+    n = M2C_FIELD(arg0, SVECTOR **, 0x20) + ((Q4 *)arg4)->i3;
+    arg3 = arg3 >> 1;
+    cy = ((SVECTOR *)arg1)->vy + arg3;
+    nx = n->vx;
+    nz = n->vz;
+    if (Math_Abs(nx) < Math_Abs(nz)) {
+        l5C = ((SVECTOR *)arg1)->vx;
+        l4C = p0->vx;
+        l50 = p0->vy;
+        l54 = p1->vx;
+        l58 = p1->vy;
+        a.vx = l4C;
+        a.vy = l50;
+        b.vx = l54;
+        b.vy = l58;
+        if (nz < 0) {
+            c.vx = p1->vy > p0->vy ? l5C - arg2 : l5C + arg2;
+            c.vy = p1->vx > p0->vx ? cy - (-arg3) : cy - arg3;
+            gte_ldsxy3(&a, &b, &c);
+            gte_nclip();
+            l4C = p2->vx;
+            l50 = p2->vy;
+            d.vx = l4C;
+            d.vy = l50;
+            gte_mfMAC0(l60);
+            if (l60 >= 0) {
+                c.vx = p2->vy > p1->vy ? l5C - arg2 : l5C + arg2;
+                c.vy = p2->vx > p1->vx ? cy - (-arg3) : cy - arg3;
+                gte_ldsxy3(&b, &d, &c);
+                gte_nclip();
+                c.vx = p0->vy > p2->vy ? l5C - arg2 : l5C + arg2;
+                c.vy = p0->vx > p2->vx ? cy - (-arg3) : cy - arg3;
+                gte_mfMAC0(l64);
+                if (l64 >= 0) {
+                    gte_ldsxy3(&d, &a, &c);
+                    gte_nclip();
+                    gte_mfMAC0(l68);
+                    if (l68 >= 0) {
+                        return 1;
+                    }
+                }
+            }
+        } else {
+            c.vx = p1->vy > p0->vy ? l5C - (-arg2) : l5C - arg2;
+            c.vy = p1->vx > p0->vx ? cy - arg3 : cy + arg3;
+            gte_ldsxy3(&a, &b, &c);
+            gte_nclip();
+            l4C = p2->vx;
+            l50 = p2->vy;
+            d.vx = l4C;
+            d.vy = l50;
+            gte_mfMAC0(l68);
+            if (l68 <= 0) {
+                c.vx = p2->vy > p1->vy ? l5C - (-arg2) : l5C - arg2;
+                c.vy = p2->vx > p1->vx ? cy - arg3 : cy + arg3;
+                gte_ldsxy3(&b, &d, &c);
+                gte_nclip();
+                c.vx = p0->vy > p2->vy ? l5C - (-arg2) : l5C - arg2;
+                c.vy = p0->vx > p2->vx ? cy - arg3 : cy + arg3;
+                gte_mfMAC0(l64);
+                if (l64 <= 0) {
+                    gte_ldsxy3(&d, &a, &c);
+                    gte_nclip();
+                    gte_mfMAC0(l60);
+                    if (l60 <= 0) {
+                        return 1;
+                    }
+                }
+            }
+        }
+    } else {
+        l58 = ((SVECTOR *)arg1)->vz;
+        l68 = p0->vz;
+        l64 = p0->vy;
+        l60 = p1->vz;
+        l5C = p1->vy;
+        a.vx = l68;
+        a.vy = l64;
+        b.vx = l60;
+        b.vy = l5C;
+        if (nx > 0) {
+            c.vx = p1->vy > p0->vy ? l58 - arg2 : l58 + arg2;
+            c.vy = p1->vz > p0->vz ? cy - (-arg3) : cy - arg3;
+            gte_ldsxy3(&a, &b, &c);
+            gte_nclip();
+            l68 = p2->vz;
+            l64 = p2->vy;
+            d.vx = l68;
+            d.vy = l64;
+            gte_mfMAC0(l54);
+            if (l54 >= 0) {
+                c.vx = p2->vy > p1->vy ? l58 - arg2 : l58 + arg2;
+                c.vy = p2->vz > p1->vz ? cy - (-arg3) : cy - arg3;
+                gte_ldsxy3(&b, &d, &c);
+                gte_nclip();
+                c.vx = p0->vy > p2->vy ? l58 - arg2 : l58 + arg2;
+                c.vy = p0->vz > p2->vz ? cy - (-arg3) : cy - arg3;
+                gte_mfMAC0(l50);
+                if (l50 >= 0) {
+                    gte_ldsxy3(&d, &a, &c);
+                    gte_nclip();
+                    gte_mfMAC0(l4C);
+                    if (l4C >= 0) {
+                        return 1;
+                    }
+                }
+            }
+        } else {
+            c.vx = p1->vy > p0->vy ? l58 - (-arg2) : l58 - arg2;
+            c.vy = p1->vz > p0->vz ? cy - arg3 : cy + arg3;
+            gte_ldsxy3(&a, &b, &c);
+            gte_nclip();
+            l68 = p2->vz;
+            l64 = p2->vy;
+            d.vx = l68;
+            d.vy = l64;
+            gte_mfMAC0(l54);
+            if (l54 <= 0) {
+                c.vx = p2->vy > p1->vy ? l58 - (-arg2) : l58 - arg2;
+                c.vy = p2->vz > p1->vz ? cy - arg3 : cy + arg3;
+                gte_ldsxy3(&b, &d, &c);
+                gte_nclip();
+                c.vx = p0->vy > p2->vy ? l58 - (-arg2) : l58 - arg2;
+                c.vy = p0->vz > p2->vz ? cy - arg3 : cy + arg3;
+                gte_mfMAC0(l50);
+                if (l50 <= 0) {
+                    gte_ldsxy3(&d, &a, &c);
+                    gte_nclip();
+                    gte_mfMAC0(l4C);
+                    if (l4C <= 0) {
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+s32 func_80071638(void *arg0, s32 arg1, s32 arg2, s32 arg3, void *arg4, s32 arg5) {
+    s32 x;
+    s32 y;
+    s32 z;
+    s32 ymin;
+    s32 ymax;
+    s32 u;
+    s32 v;
+    s32 w;
+    s32 t;
+    SVECTOR c;
+    SVECTOR a;
+    SVECTOR b;
+    SVECTOR d;
+    SVECTOR *p0;
+    SVECTOR *p1;
+    SVECTOR *p2;
+    SVECTOR *n;
+    s32 r0;
+    s32 r1;
+    s32 r2;
+
+    p0 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i0;
+    p1 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i1;
+    p2 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i2;
+    n = M2C_FIELD(arg0, SVECTOR **, 0x20) + ((Q4 *)arg4)->i3;
+    x = ((SVECTOR *)arg1)->vx;
+    z = ((SVECTOR *)arg1)->vz;
+    if (x + arg2 < p0->vx || x - arg2 > Math_Max(p1->vx, p2->vx) || z + arg2 < Math_Min3(p0->vz, p1->vz, p2->vz) || z - arg2 > Math_Max3(p0->vz, p1->vz, p2->vz)) {
+        return 0;
+    }
+    y = ((SVECTOR *)arg1)->vy;
+    if (p0->vy < p1->vy) {
+        ymin = p0->vy;
+        ymax = p1->vy;
+    } else {
+        ymin = p1->vy;
+        ymax = p0->vy;
+    }
+    if (p2->vy < ymin) {
+        ymin = p2->vy;
+    } else if (ymax < p2->vy) {
+        ymax = p2->vy;
+    }
+    if (y > ymax || y + arg3 < ymin) {
+        return 0;
+    }
+    {
+        register s32 ay = Math_Abs(n->vy);
+        register s32 ax = Math_Abs(n->vx);
+        if (ay < Math_Max(ax, Math_Abs(n->vz))) {
+            return func_800706F0(arg0, arg1, arg2, arg3, arg4);
+        } else if (arg5 != 0 && n->vy < 0) {
+            return 0;
+        }
+    }
+    u = p0->vx;
+    v = p0->vz;
+    w = p1->vx;
+    t = p1->vz;
+    a.vx = u;
+    a.vy = v;
+    b.vx = w;
+    b.vy = t;
+    if (n->vy < 0) {
+        c.vx = p1->vz < p0->vz ? x - arg2 : x + arg2;
+        c.vy = p1->vx < p0->vx ? z - (-arg2) : z - arg2;
+        gte_ldsxy3(&a, &b, &c);
+        gte_nclip();
+        u = p2->vx;
+        v = p2->vz;
+        d.vx = u;
+        d.vy = v;
+        gte_mfMAC0(r0);
+        if (r0 <= 0) {
+            c.vx = p2->vz < p1->vz ? x - arg2 : x + arg2;
+            c.vy = p2->vx < p1->vx ? z - (-arg2) : z - arg2;
+            gte_ldsxy3(&b, &d, &c);
+            gte_nclip();
+            c.vx = p0->vz < p2->vz ? x - arg2 : x + arg2;
+            c.vy = p0->vx < p2->vx ? z - (-arg2) : z - arg2;
+            gte_mfMAC0(r1);
+            if (r1 <= 0) {
+                gte_ldsxy3(&d, &a, &c);
+                gte_nclip();
+                gte_mfMAC0(r2);
+                if (r2 <= 0) {
+                    return 1;
+                }
+            }
+        }
+    } else {
+    c.vx = p1->vz < p0->vz ? x - (-arg2) : x - arg2;
+    c.vy = p1->vx < p0->vx ? z - arg2 : z + arg2;
+    gte_ldsxy3(&a, &b, &c);
+    gte_nclip();
+    u = p2->vx;
+    v = p2->vz;
+    d.vx = u;
+    d.vy = v;
+    gte_mfMAC0(r2);
+    if (r2 >= 0) {
+        c.vx = p2->vz < p1->vz ? x - (-arg2) : x - arg2;
+        c.vy = p2->vx < p1->vx ? z - arg2 : z + arg2;
+        gte_ldsxy3(&b, &d, &c);
+        gte_nclip();
+        c.vx = p0->vz < p2->vz ? x - (-arg2) : x - arg2;
+        c.vy = p0->vx < p2->vx ? z - arg2 : z + arg2;
+        gte_mfMAC0(r1);
+        if (r1 >= 0) {
+            gte_ldsxy3(&d, &a, &c);
+            gte_nclip();
+            gte_mfMAC0(r0);
+            if (r0 >= 0) {
+                return 1;
+            }
+        }
+    }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/level06/nonmatchings/text_80070648", func_80072D84);
 
@@ -321,7 +637,62 @@ void func_80072D48(register void *arg0, register void *arg1, register void *arg2
     *arg4 = sp4;
 }
 
-INCLUDE_ASM("asm/level06/nonmatchings/text_80070648", func_80073A1C);
+s32 func_80072E28(HMesh *m, HitCtx *h) {
+    HPoly *pe;
+    s32 i;
+    s32 lo, hi;
+    s32 sx, sz;
+    s32 aa, bb;
+
+    if (h->a.vy < h->b.vy) {
+        h->lo = h->a.vy;
+        h->hi = h->b.vy;
+    } else {
+        h->lo = h->b.vy;
+        h->hi = h->a.vy;
+    }
+    func_80074FE8((s32 *)&h->b, (s32 *)h, (s32 *)&h->d);
+    h->hit = -1;
+    h->cur = h->best;
+    for (i = 0; i < h->count; i++) {
+        pe = (HPoly *)((u8 *)h->polys + h->idx[i] * 12);
+        h->n = m->nrm + pe->n;
+        h->v0 = m->vtx + pe->i0;
+        h->v1 = m->vtx + pe->i1;
+        h->v2 = m->vtx + pe->i2;
+        func_80072D48(h->v0, h->v1, h->v2, &lo, &hi);
+        if (!(h->lo > hi) && !(h->hi < lo)) {
+            Vec_ProjectXZ(h->n, (s32 *)h, (s32 *)&h->b, &sx, &sz);
+            sx = (sx >> 15) + pe->d;
+            sz = (sz >> 15) + pe->d;
+            if ((sx ^ sz) < 0) {
+                aa = Math_Abs(sx);
+                bb = Math_Abs(sz);
+                aa = (aa << 12) / (aa + bb);
+                if (aa >= h->cur) {
+                } else {
+                    Vec_Scale(aa, &h->d, &h->c);
+                    h->c.vx += h->a.vx;
+                    h->c.vy += h->a.vy;
+                    h->c.vz += h->a.vz;
+                    EDGE(v0, v1, v2)
+                    EDGE(v1, v2, v0)
+                    EDGE(v2, v0, v1)
+                    h->best = h->cur = aa;
+                    h->hit = h->idx[i];
+                    *h->outP = h->c;
+                    *h->outN = *h->n;
+                    if (h->outF != 0) *h->outF = pe->f;
+                    h->outN->pad = pe->d;
+                    }
+                    }
+                    }
+                }
+            }
+        }
+    }
+    return h->hit;
+}
 
 INCLUDE_ASM("asm/level06/nonmatchings/text_80070648", func_80074290);
 

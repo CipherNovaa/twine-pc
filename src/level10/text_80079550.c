@@ -5,8 +5,10 @@
 #define D_8009CD98 L1_D_8009CD98
 #define D_8009CDA8 L1_D_8009CDA8
 #define D_8009CF48 L1_D_8009CF48
+#define D_8009D0FC L1_D_8009D0FC
 #define D_8009DB50 L1_D_8009DB50
 #define D_800A0370 L1_D_800A0370
+#define D_800A97BC L1_D_800A97BC
 #define D_800AFFC8 L1_D_800AFFC8
 #define D_800B0018 L1_D_800B0018
 #define D_800B07B0 L1_D_800B07B0
@@ -56,6 +58,7 @@
 #define func_8006B230 L1_func_8006B230
 #define func_800705A8 L1_func_800705A8
 #define func_800752C0 L1_func_800752C0
+#define func_800753F0 L1_func_800753F0
 #define func_8007545C L1_func_8007545C
 #define func_800755BC L1_func_800755BC
 #define func_8007567C L1_func_8007567C
@@ -99,7 +102,7 @@ typedef struct { u32 length; u32 *org; u32 offset; u32 point; u32 *tag; } GsOT;
 extern GsMat32 D_800FC6A0;
 extern GsOT D_800B8F88[];
 void *func_80030610(s32);
-void func_80075D48(HmdModel *);
+void func_80075D48(u8 *obj);
 void GsMapUnit(u32 *);
 s32 GsScanUnit(u32 *, GsTYPEUNIT *, GsOT *, u32 *);
 GsCOORDUNIT *GsMapCoordUnit(u32 *, void **);
@@ -143,6 +146,12 @@ typedef struct { u16 start; u8 len; u8 flag; } AnimRec;
 typedef struct { u8 pad0[6]; u16 count; u16 unk8; u16 tag; u8 unkC; u8 padD[3]; s16 unk10; u8 pad12[4]; u16 unk16; AnimRec recs[1]; } AnimTrack;
 typedef struct { s32 id; char name[0x64]; } SrcRec;
 typedef struct { s32 idx; char name[0x64]; u8 a; u8 b; u8 pad[2]; } DstRec;
+typedef struct { u8 pad[0x92]; u8 used; u8 pad2[1]; } Slot94;
+extern char D_800A97BC[];
+extern u8 *D_8009D0FC;
+M2C_UNK *func_800753F0(s32 arg0);
+void func_80075920(HmdModel *arg0);
+void func_80075E9C(void *arg0);
 extern s32 D_800E2F54;
 extern s32 D_800A0370[];
 void func_8003EA24(SVECTOR *arg0, s32 *arg1, SVECTOR *arg2);
@@ -516,7 +525,54 @@ void func_80075920(HmdModel *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level10/nonmatchings/text_80079550", func_80079FD8);
+void func_80075D48(u8 *obj) {
+    u8 *s0;
+    s32 *s1;
+    s32 *a1;
+    register u32 i REG("a0");
+    u8 *p;
+    s32 first;
+    s32 *v1;
+    s0 = *(u8 **)obj;
+    s0 += 0xC;
+    *(u32 *)(obj + 0xC) = *(u32 *)s0;
+    s0 += 4;
+    s1 = *(s32 **)(obj + 4);
+    if (*(s32 *)s0 != 0) {
+        GsLinkAnim(*(void **)(obj + 0x70), (void **)(*(s32 *)s0 + 0xC));
+        *(s32 *)(obj + 0x6C) = *(u16 *)(*(u8 **)s0 + 0x12);
+    }
+    i = 0;
+    if (*(u32 *)(obj + 0xC) != 0) {
+        a1 = s1 + 1;
+        do {
+            *a1 = *(s32 *)s0;
+            *s1 = 0;
+            s0 += 4;
+            if (*a1 != 0) {
+                *(u8 **)(obj + 0x10) = *(u8 **)obj + (*(u32 *)(obj + 0xC) * 4 + 0x14);
+            }
+            i++;
+            a1 += 2;
+            s1 += 2;
+        } while (i < *(u32 *)(obj + 0xC));
+    }
+    if (*(u8 **)(obj + 0x10) != 0) {
+        p = *(u8 **)(obj + 0x10);
+        i = 0;
+        s1 = *(s32 **)(obj + 4) + 2;
+        first = *(s32 *)(p + 0x4C);
+        for (; i < *(u32 *)(obj + 0xC) - 2;) {
+            *s1 = (s32)p;
+            if (*(s32 *)(p + 0x4C) == first) {
+                *(s32 *)(p + 0x4C) = (s32)(obj + 0x14);
+            }
+            i++;
+            s1 += 2;
+            p += 0x50;
+        }
+    }
+}
 
 void func_80075E9C(void *arg0) {
     s32 i;

@@ -16,6 +16,10 @@
 #define func_8007EE34 L1_func_8007EE34
 #define func_8007EEBC L1_func_8007EEBC
 #define func_80081448 L1_func_80081448
+#define g_Args L1_g_Args
+#define g_CutScene L1_g_CutScene
+#define g_FrameRate L1_g_FrameRate
+#define printf L1_printf
 
 #include "twine.h"
 s32 EnableEvent(s32);
@@ -44,11 +48,48 @@ extern s32 D_800AB540;
 
 
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_8002680C", func_8002680C);
+void func_8002680C(void) {
+    s32 r;
+    g_Args->unk2DC = 0;
+    D_8009C180 = 0;
+    func_80081448();
+    D_800AB540 = OpenEvent(0xF2000003, 2, 0x1000, &func_80026914);
+    if (D_800AB540 == -1) {
+        printf(&D_800A6EB0);
+    }
+    r = EnableEvent(D_800AB540);
+    func_8007EE34(0xF2000003);
+    func_8007EEBC();
+}
 
 INCLUDE_ASM("asm/level04/nonmatchings/text_8002680C", func_800268CC);
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_8002680C", func_80026914);
+s32 func_80026914(void) {
+
+    g_Args->unk2DC++;
+    if (*(u8 *)&D_8009CDE7 != 0) {
+        func_80030118();
+    }
+    if (D_8009C184 == 1) {
+        if (M2C_FIELD(g_Args, u8 *, 0x12B) != 0) {
+            D_800AFF88 = g_Args->unk2DC - D_800B0B64;
+            D_800B0B64 = g_Args->unk2DC;
+            if (D_800AFF88 >= 0x3D) {
+                g_FrameRate = 0xF;
+            } else {
+                g_FrameRate = 0x3C / D_800AFF88;
+            }
+            M2C_FIELD(g_Args, u8 *, 0x12B) = 0;
+        }
+        if (D_8009CF48 < 0x2710) {
+            D_8009CF48 = (u16) D_8009CF48 + 1;
+        }
+        if ((D_8009CAA4 == 0) && (g_CutScene == 0) && (func_800324C0() != 0)) {
+            D_8009C180 += 1;
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/level04/nonmatchings/text_8002680C", func_80026B00);
 

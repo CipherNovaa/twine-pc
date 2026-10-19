@@ -13,6 +13,8 @@
 #define func_8007EE34 L1_func_8007EE34
 #define func_8007EEBC L1_func_8007EEBC
 #define func_80081448 L1_func_80081448
+#define g_Args L1_g_Args
+#define printf L1_printf
 
 #include "twine.h"
 s32 EnableEvent(s32);
@@ -41,7 +43,19 @@ extern s32 D_800AB540;
 
 
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8002680C", func_8002680C);
+void func_8002680C(void) {
+    s32 r;
+    g_Args->unk2DC = 0;
+    D_8009C180 = 0;
+    func_80081448();
+    D_800AB540 = OpenEvent(0xF2000003, 2, 0x1000, &func_80026914);
+    if (D_800AB540 == -1) {
+        printf(&D_800A6EB0);
+    }
+    r = EnableEvent(D_800AB540);
+    func_8007EE34(0xF2000003);
+    func_8007EEBC();
+}
 
 INCLUDE_ASM("asm/level11/nonmatchings/text_8002680C", func_800268CC);
 

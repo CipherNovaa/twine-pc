@@ -137,10 +137,28 @@ def parse_c(text):
         if line.startswith("INCLUDE_ASM("):
             i += 1
             continue
+        if line.startswith("#") and line.endswith("\\"):  # a multi-line #define
+            j = i
+            while lines[j].endswith("\\"):
+                j += 1
+            header += lines[i:j + 1]
+            i = j + 1
+            continue
         if line == "#ifdef NON_MATCHING":
-            j = lines.index("#endif", i)
+            # the matching #else/#endif (banked bodies can hold conditionals of their own)
+            depth, j, k = 0, i + 1, None
+            while True:
+                s = lines[j].strip()
+                if s.startswith("#if"):
+                    depth += 1
+                elif s == "#endif":
+                    if depth == 0:
+                        break
+                    depth -= 1
+                elif s == "#else" and depth == 0:
+                    k = j - i - 1
+                j += 1
             block = lines[i + 1:j]
-            k = block.index("#else")
             m = re.match(r'INCLUDE_ASM\("[^"]+", (\w+)\);', block[k + 1])
             funcs[m.group(1)] = ("banked", "\n".join(block[:k]))
             i = j + 1
@@ -149,7 +167,8 @@ def parse_c(text):
         is_func = (line[:1].isalpha() or line[:1] == "_") and "(" in code and not code.endswith(";") \
             and not code.startswith(("typedef", "struct", "union", "enum", "extern", "static const", "#"))
         if is_func:
-            j = take_block(i)
+            # A function ends at the first `}` in column 0 (counting braces fails when a macro opens a block).
+            j = next(k for k in range(i + 1, len(lines)) if lines[k] == "}") + 1
             body = "\n".join(lines[i:j])
             name = re.search(r"(\w+)\s*\(", code).group(1)
             funcs[name] = ("c", body)
@@ -191,7 +210,8 @@ def target_exe(level):
 
 
 def object_mismatches(level, obj, wanted, pairs_by_l1, exe, load):
-    """Names of L1_ functions in the object whose bytes differ from the EXE (relocations masked)."""
+    """LEVEL01 names of ported functions whose bytes differ from the EXE (relocations masked).
+    wanted: {name the object defines: LEVEL01 name}."""
     text = subprocess.run(["mips-elf-objcopy", "-O", "binary", "-j", ".text", str(obj), "/dev/stdout"],
                           capture_output=True, check=True).stdout
     syms = {}
@@ -205,16 +225,16 @@ def object_mismatches(level, obj, wanted, pairs_by_l1, exe, load):
         if len(p) >= 3 and p[2] in RELOC_MASKS and re.fullmatch(r"[0-9a-f]{8}", p[0]):
             rel[int(p[0], 16)] = RELOC_MASKS[p[2]]
     bad = set()
-    for name in wanted:
+    for name, l1 in wanted.items():
         if name not in syms:
-            bad.add(name)
+            bad.add(l1)
             continue
         off, size = syms[name]
-        o = 0x800 + pairs_by_l1[name[3:]] - load
+        o = 0x800 + pairs_by_l1[l1] - load
         for k in range(0, size, 4):
             mask = ~rel.get(off + k, 0) & 0xFFFFFFFF
             if (struct.unpack_from("<I", exe, o + k)[0] ^ struct.unpack_from("<I", text, off + k)[0]) & mask:
-                bad.add(name)
+                bad.add(l1)
                 if "-v" in sys.argv:
                     print(f"  {name} +0x{k:X}: {level} {struct.unpack_from('<I', exe, o + k)[0]:08X}, "
                           f"ours {struct.unpack_from('<I', text, off + k)[0]:08X} ({obj.name} +0x{off + k:X})")
@@ -273,8 +293,8 @@ def port(level):
                     ported[n] = t_stem
                     body.append(item[1])
                     jt = re.findall(r"%hi\((jtbl_\w+)\)", (asm_dir / m.group(1).split("/")[-1] / f"{m.group(2)}.s").read_text())
-                    if jt:
-                        jtbl_lines.append(f"L1_{n} {' '.join(dict.fromkeys(jt))}")
+                    if jt:  # keyed by the name the C defines (no L1_ when both levels use the same name)
+                        jtbl_lines.append(f"{'L1_' + n if n in renamed else n} {' '.join(dict.fromkeys(jt))}")
                 else:
                     body.append(line)
             text = "\n".join(header) + "\n" + "\n".join(body) + "\n"
@@ -332,9 +352,9 @@ def port(level):
         bad = set()
         for t_stem in t_stems:
             obj = ROOT / f"build/{level}/src/{level}/{t_stem}.o"
-            wanted = {f"L1_{n}" for n, s in ported.items() if s == t_stem}
+            wanted = {("L1_" + n if n in renamed else n): n for n, s in ported.items() if s == t_stem}
             if wanted and obj.exists():
-                bad |= {w[3:] for w in object_mismatches(level, obj, wanted, pairs, exe, load)}
+                bad |= object_mismatches(level, obj, wanted, pairs, exe, load)
         if bad:
             print(f"pass {attempt}: {len(bad)} functions differ: {' '.join(sorted(bad))}")
             exclude |= bad

@@ -525,6 +525,7 @@
 #define D_800E2DBC L1_D_800E2DBC
 #define D_800E2DE0 L1_D_800E2DE0
 #define D_800E2DE4 L1_D_800E2DE4
+#define D_800E2DF4 L1_D_800E2DF4
 #define D_800E2E44 L1_D_800E2E44
 #define D_800E2E48 L1_D_800E2E48
 #define D_800E2F2C L1_D_800E2F2C
@@ -803,7 +804,9 @@
 #define func_8005885C L1_func_8005885C
 #define func_80058A58 L1_func_80058A58
 #define func_80058B10 L1_func_80058B10
+#define func_80058B6C L1_func_80058B6C
 #define func_80058D00 L1_func_80058D00
+#define func_80058D5C L1_func_80058D5C
 #define func_8005AD6C L1_func_8005AD6C
 #define func_8005ADD4 L1_func_8005ADD4
 #define func_8005AEF8 L1_func_8005AEF8
@@ -874,6 +877,8 @@
 #define func_8006692C L1_func_8006692C
 #define func_80066968 L1_func_80066968
 #define func_800669A4 L1_func_800669A4
+#define func_80066B14 L1_func_80066B14
+#define func_80067F18 L1_func_80067F18
 #define func_800689F0 L1_func_800689F0
 #define func_80069318 L1_func_80069318
 #define func_800693DC L1_func_800693DC
@@ -903,6 +908,7 @@
 #define func_8006F9A4 L1_func_8006F9A4
 #define func_8006FA54 L1_func_8006FA54
 #define func_800705A8 L1_func_800705A8
+#define func_800743E8 L1_func_800743E8
 #define func_800746D0 L1_func_800746D0
 #define func_800753A4 L1_func_800753A4
 #define func_8007545C L1_func_8007545C
@@ -962,6 +968,7 @@
 #define gteMIMefunc L1_gteMIMefunc
 #define malloc3 L1_malloc3
 #define memchr L1_memchr
+#define memset L1_memset
 #define rand L1_rand
 #define ratan2 L1_ratan2
 #define start L1_start
@@ -2019,6 +2026,125 @@ typedef struct { s32 w[10]; } W40;
 typedef struct { u8 b[20]; } B20;
 typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; u8 r1, g1, b1, p1; s16 x1, y1; u8 u1, v1; u16 tpage; u8 r2, g2, b2, p2; s16 x2, y2; u8 u2, v2; u16 pad2; u8 r3, g3, b3, p3; s16 x3, y3; u8 u3, v3; u16 pad3; } POLY_GT4;
 typedef struct { s32 pad0; s32 rows; s32 cols; s32 w; s32 h; s32 *tiles; } SkyGrid;
+typedef struct { u8 p0[0x90]; u8 *sub; u8 p1[0x88]; u16 f11C; s16 f11E; u16 f120; s16 f122; } Obj6A;
+typedef struct { SVECTOR p[3]; u32 sxy[3]; u32 flg[3]; u32 col[3]; u16 uv[3]; } SubTri;
+typedef struct { SVECTOR p[6]; u32 sxy[6]; u32 flg[6]; u32 col[6]; u16 uv[6]; } SubTri6;
+typedef struct { u32 tag; u32 rgb0; u32 xy0; u32 uv0; u32 rgb1; u32 xy1; u32 uv1; u32 rgb2; u32 xy2; u32 uv2; } PolyGT3;
+typedef struct { u8 pad[0x5C]; s16 x; s16 y; s16 z; s16 w; s32 a; s32 b; u8 pad2[8]; u8 *src; } FxObj;
+#define gte_ldv0_mt(r0, r1) __asm__ volatile("mtc2 %0, $0; mtc2 %1, $1" : : "r"(r0), "r"(r1))
+#define gte_mfsxy2(r) __asm__ volatile("mfc2 %0, $14" : "=r"(r))
+#define gte_mfsz3(r) __asm__ volatile("mfc2 %0, $19; nop" : "=r"(r))
+void *memset(void *, int, unsigned int);
+#define PTF(k) { a = ((s32 *)fr)[k]; b = ((s32 *)fr)[k + 1]; c = ((s32 *)fr)[k + 2]; if (a < 0) v[0] = lo.x; else v[0] = hi.x; if (b < 0) v[1] = lo.y; else v[1] = hi.y; if (c < 0) v[2] = lo.z; else v[2] = hi.z; }
+void func_800679AC(void);
+void func_80032424(void *arg0);
+void func_8006AA20(u8 **arg0);
+extern u8 D_8009D2C8;
+void func_80066B14(void);
+#define gte_ldv0_mt(r0, r1) __asm__ volatile("mtc2 %0, $0; mtc2 %1, $1" : : "r"(r0), "r"(r1))
+#define gte_mfsxy2(r) __asm__ volatile("mfc2 %0, $14" : "=r"(r))
+#define gte_mfsz3(r) __asm__ volatile("mfc2 %0, $19; nop" : "=r"(r))
+#define VERT(OI, OP, OF, OC, AN) do { \
+idx = *(u16 *)(arg0 + OI); \
+v = (u32 *)(*(u8 **)(arg0 + 4) + idx * 0xC); \
+f = v[1]; \
+if (f < 0) { \
+*(s32 *)(arg0 + OF) = f; \
+col = (f << 8) >> 24; \
+if (col >= 0) col = v[2]; \
+*(s32 *)(arg0 + OP) = v[0]; \
+if (f & 0x40000000) { \
+col = v[2]; \
+AN = 1; \
+} \
+*(s32 *)(arg0 + OC) = col; \
+} else { \
+p = *(u8 **)arg0 + idx * 8; \
+gte_ldv0_mt(*(u32 *)p, *(u16 *)(p + 4)); \
+gte_rtps(); \
+col = (f << 8) >> 24; \
+if (col >= 0) { \
+col = *(s32 *)(*(u8 **)(arg0 + 0xC) + col * 0x14 + 0xC); \
+v[2] = col; \
+} \
+d = func_8006D3C0((SVECTOR *)(*(u8 **)arg0 + idx * 8), (SVECTOR *)(arg0 + 0x30)); \
+lim = *(s32 *)(arg0 + 0x38); \
+if (lim >= d) { \
+if (col < 0) col = (*(s32 **)(arg0 + 8))[*(u16 *)(arg0 + OI)]; \
+t = 0x10000 - (d << 16) / lim; \
+r = (col & 0xFF) + ((t * arg0[0x2C]) >> 16); \
+g = ((col >> 8) & 0xFF) + ((t * arg0[0x2D]) >> 16); \
+b = ((col >> 16) & 0xFF) + ((t * arg0[0x2E]) >> 16); \
+if (r >= 0x100) r = 0xFF; \
+if (g >= 0x100) g = 0xFF; \
+if (b >= 0x100) b = 0xFF; \
+col = g << 8; \
+if (D_8009CABD == 0) col = r | (g << 8) | (b << 16); \
+v[2] = col; \
+f |= 0x40000000; \
+AN = 1; \
+} \
+*(s32 *)(arg0 + OC) = col; \
+gte_mfsxy2(sxy); \
+gte_mfsz3(sz); \
+f |= sz >> 2; \
+sy = sxy >> 16; \
+v[0] = sxy; \
+*(s32 *)(arg0 + OP) = sxy; \
+sx = (s16)sxy; \
+gte_cfFLAG(flag); \
+if (flag & 0x46000) f |= 0x20000000; \
+if (!(sy < 0x300 && sx < 0x300 && sy >= -0x100 && sx >= -0x100)) f |= 0x10000000; \
+if (sx < 0) f |= 0x08000000; \
+if (!(sx < 0x21C)) f |= 0x04000000; \
+if (sy < 0) f |= 0x02000000; \
+if (!(sy < 0xF0)) f |= 0x01000000; \
+f |= 0x80000000; \
+v[1] = f; \
+*(s32 *)(arg0 + OF) = f; \
+} \
+} while (0)
+void func_8006A41C(u8 *obj);
+extern u16 D_8009E4D4;
+extern u16 D_8009E4D8;
+extern u16 D_8009E4DC;
+extern u16 D_8009E4E0;
+extern s32 D_8009E494;
+extern char D_800A94A4[];
+extern char D_800A94CC[];
+#define E(g) (tbl + (g) * 0x70)
+void func_80067F18(void);
+#define gte_ldsxy3c(r0) __asm__ volatile("lwc2 $12, 0(%0); lwc2 $13, 4(%0); lwc2 $14, 8(%0)" : : "r"(r0))
+#define gte_nclip() __asm__ volatile("nop; nop; .word 0x4B400006")
+#define gte_mfMAC0(r) __asm__ volatile("mfc2 %0, $24; nop" : "=r"(r))
+extern s32 D_800E2DF4;
+void func_8006DD20(s32 *a, s32 *b, s32 *c, s32 *out);
+#define NORM(i, o, w) { s32 ax, az, ay, k, sh; u32 m; ax = abs((i)->vx); az = abs((i)->vz); ay = abs((i)->vy); m = 0x40000000; k = 30; do { if ((ax & m) || (ay & m) || (az & m)) break; k--; m >>= 1; } while (k >= 0xE); sh = k - 13; if (sh > 0) { (o)->vx = (i)->vx >> sh; (o)->vz = (i)->vz >> sh; (o)->vy = (i)->vy >> sh; } else { (o)->vx = (i)->vx; (o)->vy = (i)->vy; (o)->vz = (i)->vz; } func_8008C5D8((s32 *)(o), (s32 *)(w)); }
+extern s32 D_800A93C0;
+extern s32 D_800A93D4;
+extern s32 D_800A93E8;
+extern s32 D_800A93F8;
+extern s32 D_800A9410;
+extern s32 D_800A9428;
+extern s32 D_800A943C;
+void func_80061FB4(void);
+#define PT(k) { a = f[k]; b = f[k + 1]; c = f[k + 2]; if (a < 0) v[0] = lo.x; else v[0] = hi.x; if (b < 0) v[1] = lo.y; else v[1] = hi.y; if (c < 0) v[2] = lo.z; else v[2] = hi.z; }
+u8 *func_80058B6C(u8 type);
+void func_80058D5C(u8 *arg0, s32 arg1, s32 arg2, s32 arg3);
+s32 func_800743E8(s32, s32 *, s32, s32, SVECTOR *, s32, s32);
+void *func_8006421C(void *obj, s16 *pos, s16 arg2, s16 arg3, s16 arg4);
+void func_800699B8(void *arg0);
+void func_8006A700(void *a);
+void func_8006A75C(u8 *arg0);
+void func_8006A7C4(u8 *arg0);
+void func_8006A828(void *arg0);
+void func_8006A850(void *arg0);
+void func_8006A87C(void *arg0);
+void func_8006A8A8(void *arg0);
+#define RAT(a, b) ((s32 (*)())ratan2)(a, b)
+extern s32 D_8009E498;
+extern s32 D_8009E49C;
+extern s32 D_8009E4D0;
 extern s32 D_8009E9BC;
 #define FA65(o) (*(s16 *)((u8 *)arg0 + (o)))
 void func_8004B334(s32 arg0);
@@ -2035,9 +2161,9 @@ extern s32 D_800D3068;
 extern C3 D_800AFF64;
 extern H3 D_800AFF68;
 void func_8006C8F4(u8 *arg0, u8 *arg1, s32 arg2);
-void func_8006B2C4();
-s32 func_8006CB88();
-void func_8006D470();
+void func_8006B2C4(u8 *ctx, SubTri *t, s32 depth, s32 unused);
+s32 func_8006CB88(u8 *t);
+void func_8006D470(u8 *arg0);
 #define SP(o) (*(s32 *)((u8 *)spad + (o)))
 #define SPH(o) (*(u16 *)((u8 *)spad + (o)))
 void Pad_StickToSpeed(s32 axis, s32 maxSpeed, s32 *out);
@@ -2091,7 +2217,7 @@ s32 func_80069920(void);
 void func_80069928(s32 arg0);
 extern Fr6E D_800E2DE4;
 extern u8 *D_800E2448[];
-s32 func_8006E620(void *, V3s, V3s);
+s32 func_8006E620(void *fr, V3s lo, V3s hi);
 extern V4050 D_800D4050;
 extern V4058 D_800D4058;
 extern s32 D_800A9488;
@@ -2109,7 +2235,7 @@ void func_8002E1B0(void);
 s32 func_8002D4E4(u8 *);
 extern u8 *D_800E23D0;
 u8 *func_8006A0D8(void);
-void func_8006A174(u8 *);
+void func_8006A174(Obj6A *arg0);
 void func_80026C14(s16 arg0);
 extern s32 D_8009DB44;
 extern u16 D_8009E4A0;
@@ -2134,7 +2260,7 @@ void func_80065100(void *arg0);
 void func_800652F0(void *arg0);
 void func_80064A10(u8 *arg0);
 void func_80064C28(u8 *arg0);
-void func_80062FAC(s32, s16, u8 *, u8 *);
+void func_80062FAC(s32 arg0, s16 arg1, u8 *arg2, u8 *arg3);
 Ent34 *func_800637B0(s16 x, s16 y, s16 z);
 s32 *func_8006412C(void);
 void func_8006461C(void *arg0, s8 arg1, s32 arg2, s16 arg3);
@@ -3111,7 +3237,26 @@ void func_80062F38(u8 *a, u8 *b) {
 
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_80062F8C);
 
-INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_80063210);
+void func_800632AC(u8 *arg0, s32 arg1) {
+    FxObj *o;
+    u8 t = arg1;
+    s16 w;
+    o = func_80058694(t);
+    if (o != NULL || (D_800DA5C0 != 0 && (o = func_80058A58(t)) != NULL)) {
+        *(s32 *)&o->x = D_800D4050.a;
+        o->src = arg0;
+        o->z = D_800D4050.b;
+        w = *(u16 *)(arg0 + 0x66) & 0x1F;
+        o->x += (o->x * 0x41) >> 12;
+        o->y += (o->y * 0x41) >> 12;
+        o->w = w;
+        o->a = *(s32 *)&D_800D4058;
+        o->b = D_800D4058.b;
+        o->z += (o->z * 0x41) >> 12;
+        *((s16 *)&o->b + 1) = -1;
+        func_800634C0((u8 *)o);
+    }
+}
 
 void func_800633B0(u8 type, VECTOR v) {
     SVECTOR ang;
@@ -3290,7 +3435,68 @@ void *func_80063CAC(void *obj, s16 x, s16 y, s16 z, s16 arg4) {
     return NULL;
 }
 
-INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_80063CA4);
+void func_80063D40(u8 *e) {
+    u8 *o;
+    u8 *k;
+    u8 t, c, s;
+    s32 d;
+    o = M2C_FIELD(e, u8 **, 0xC);
+    k = e + (e[0x1C] * 4 + 0x28);
+    t = k[0];
+    c = o[0x98];
+    d = t - c;
+    s = k[3];
+    if (d > 0) {
+        if (((volatile u8 *)o)[0x98] + s > ((volatile u8 *)k)[0]) {
+            o[0x98] = t;
+        } else {
+            o[0x98] = c + s;
+        }
+    } else if (d < 0) {
+        if (((volatile u8 *)o)[0x98] - s < ((volatile u8 *)k)[0]) {
+            o[0x98] = t;
+        } else {
+            o[0x98] = c - s;
+        }
+    }
+    t = k[1];
+    c = o[0x99];
+    d = t - c;
+    s = k[3];
+    if (d > 0) {
+        if (((volatile u8 *)o)[0x99] + s > ((volatile u8 *)k)[1]) {
+            o[0x99] = t;
+        } else {
+            o[0x99] = c + s;
+        }
+    } else if (d < 0) {
+        if (((volatile u8 *)o)[0x99] - s < ((volatile u8 *)k)[1]) {
+            o[0x99] = t;
+        } else {
+            o[0x99] = c - s;
+        }
+    }
+    t = k[2];
+    c = o[0x9a];
+    d = t - c;
+    s = k[3];
+    if (d > 0) {
+        if (((volatile u8 *)o)[0x9a] + s > ((volatile u8 *)k)[2]) {
+            o[0x9a] = t;
+        } else {
+            o[0x9a] = c + s;
+        }
+    } else if (d < 0) {
+        if (((volatile u8 *)o)[0x9a] - s < ((volatile u8 *)k)[2]) {
+            o[0x9a] = t;
+        } else {
+            o[0x9a] = c - s;
+        }
+    }
+    if (o[0x98] == k[0] && o[0x99] == k[1] && o[0x9A] == k[2]) {
+        e[0x1C]++;
+    }
+}
 
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_80063E38);
 
@@ -4513,7 +4719,46 @@ void func_8006DD20(s32 *a, s32 *b, s32 *c, s32 *out) {
 
 INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_8006EE40);
 
-INCLUDE_ASM("asm/level08/nonmatchings/text_800619A0", func_8006F40C);
+s32 func_8006E620(void *fr, V3s lo, V3s hi) {
+    u16 v[4];
+    s16 r[2];
+    u32 z;
+    u32 flag;
+    s32 a, b, c;
+    PTF(0);
+    gte_ldv0(v);
+    gte_rtps();
+    PTF(4);
+    gte_cfFLAG(flag);
+    if (flag & 0x20000) goto ret0;
+    gte_ldv0(v);
+    gte_rtps();
+    PTF(8);
+    gte_stsxy(r);
+    if (r[0] < 0) goto ret0;
+    gte_ldv0(v);
+    gte_rtps();
+    PTF(12);
+    gte_stsxy(r);
+    if (r[0] >= 0x21D) goto ret0;
+    gte_ldv0(v);
+    gte_rtps();
+    PTF(16);
+    gte_stsxy(r);
+    if (r[1] < 0) goto ret0;
+    gte_ldv0(v);
+    gte_rtps();
+    PTF(20);
+    gte_stsxy(r);
+    if (r[1] >= 0xF1) goto ret0;
+    gte_ldv0(v);
+    gte_rtps();
+    gte_stsz(&z);
+    if (z > ((s32 *)fr)[0x18]) goto ret0;
+    return 1;
+ret0:
+    return 0;
+}
 
 void func_8006E9E0(s32 arg0) {
     Stk6E stk[32];

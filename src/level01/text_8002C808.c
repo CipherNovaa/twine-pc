@@ -1132,6 +1132,7 @@ typedef struct { u8 b[8]; } PairC368;
 typedef struct { void * p0; u8 b4; u8 pad5[1]; u8 b6; u8 pad7[2]; u8 b9; u8 padA[6]; s32 w10; s16 h14; u8 pad16[2]; s32 w18; u8 pad1C[16]; s32 w2C; s32 w30; u8 pad34[6]; u8 b3A; u8 pad3B[1]; PairC368 c3C; u8 pad44[24]; s32 w5C; s32 w60; s16 h64; u8 b66; u8 b67; s16 h68; s16 h6A; s32 w6C; s32 w70; s32 w74; u8 pad78[8]; s32 w80; s32 w84; s32 w88; s32 w8C; u8 pad90[32]; s16 hB0; u8 padB2[26]; u8 bCC; u8 bCD; u8 bCE; u8 padCF[1]; s32 wD0; s32 wD4; s32 wD8; u8 padDC[4]; s32 wE0; s32 wE4; s32 wE8; u8 padEC[4]; s32 wF0; s32 wF4; s32 wF8; u8 padFC[4]; s32 w100; s32 w104; s32 w108; s32 w10C; u8 pad110[4]; s32 w114; } ObjC368;
 typedef struct { u8 on; u8 type; u8 p2[2]; u16 a[6]; s32 x; s32 y; s32 z; u8 p1C[6]; s16 ang; u8 p24[4]; void (*cb)(s32 *); u8 p2C[4]; s16 a30; u16 a32; u8 p34[16]; } Trig;
 typedef struct { u8 b[8]; } B8;
+typedef struct { u8 p0[0x64]; u32 lo : 23; u32 b23 : 1; u32 hi : 8; } ObjFlags64;
 #define ADD(ot, p) do { u32 *_o = (u32 *)(ot); u32 *_p = (u32 *)(p); *_p = (*_p & 0xFF000000) | (*_o & 0xFFFFFF); *_o = (*_o & 0xFF000000) | ((u32)_p & 0xFFFFFF); } while (0)
 #define BUF D_800B8F24
 void func_80029A34();
@@ -3847,28 +3848,20 @@ void func_800306F0(void) {
   }
 }
 
-#ifdef NON_MATCHING
 void func_80030798(u8 **arg0) {
     u8 *o;
     u32 v;
     s32 i;
     func_8006B230(*(s32 *)((u8 *)g_Args + 0x214) < 0x51, (M2C_UNK)D_800A75D0);
-    i = 0;
-    if (*(s32 *)((u8 *)g_Args + 0x214) + 1 > 0) {
-        do {
-            o = arg0[i];
+    for (i = 0; i < *(s32 *)((u8 *)g_Args + 0x214) + 1; i++) {
+            o = *arg0++;
             GsMapModelingData(o + 4);
             v = *(u32 *)(o + 8);
             o += 0xC;
             D_800D2D30[i] = (s32)o;
             D_800D2BF0[i] = v;
-            i++;
-        } while (i < *(s32 *)((u8 *)g_Args + 0x214) + 1);
     }
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80030798);
-#endif
 
 void func_80030868(void) {
     s16 temp_v0;
@@ -5118,24 +5111,22 @@ u8 *func_800333D4(void) {
     return 0;
 }
 
-#ifdef NON_MATCHING
 u8 *func_80033420(s16 *arg0, s32 arg1, s32 arg2) {
-    s32 i = 0;
-    u8 *r = 0;
-    s32 *e = 0;
+    s32 i;
+    u8 *r;
+    s32 *e;
     s32 *p;
-    s32 n = D_8009CF14[2];
-    if (n > 0) {
-        p = (s32 *)D_8009CF14[3];
-        do {
-            if (p[3] == 0) {
-                e = p;
-                break;
-            }
-            i++;
-            p += 6;
-        } while (i < n);
+    r = 0;
+    p = (s32 *)D_8009CF14[3];
+    for (i = 0; i < D_8009CF14[2]; i++) {
+        if (p[3] == 0) {
+            e = p;
+            goto found;
+        }
+        p += 6;
     }
+    e = 0;
+found:
     if (e != 0) {
         e[0] = arg0[0] - D_800D2FB0.x;
         e[1] = arg0[1] - D_800D2FB0.y;
@@ -5147,9 +5138,6 @@ u8 *func_80033420(s16 *arg0, s32 arg1, s32 arg2) {
     }
     return r;
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80033420);
-#endif
 
 void func_800334F4(s32 *arg0) {
   int new_var2;
@@ -7143,32 +7131,26 @@ void func_80038954(void) {
     }
 }
 
-#ifdef NON_MATCHING
 void func_80038984(u8 *arg0, ObjHH *arg1, ArgHH *arg2) {
     u8 *s0;
-    s32 t;
-    s0 = arg1->s90;
-    t = arg1->w64 & 0xFF7FFFFF;
     *(u16 *)(arg0 + 0x38) = arg2->hB2;
     arg1->w58 = arg2->wB4;
     arg1->w34 = arg2->hAC;
-    arg1->w64 = t | ((arg2->b3B & 1) << 23);
+    ((ObjFlags64 *)arg1)->b23 = arg2->b3B & 1;
     arg1->w68 |= 0x2000;
     arg1->h0E |= 0x100;
+    s0 = arg1->s90;
     *(s32 *)(s0 + 0x28) = g_Camera.posX + D_800B0C10[0];
-    *(s32 *)(s0 + 0x30) = g_Camera.posZ + D_800B0C10[2];
     *(s32 *)(s0 + 0x2C) = g_Camera.posY + D_800B0C10[1];
+    *(s32 *)(s0 + 0x30) = g_Camera.posZ + D_800B0C10[2];
+    *(u16 *)(s0 + 0x60) = *(u16 *)((u8 *)&g_Camera + 0x80);
     *(u16 *)(s0 + 0x62) = *(u16 *)((u8 *)&g_Camera + 0x82);
     *(u16 *)(s0 + 0x64) = *(u16 *)((u8 *)&g_Camera + 0x84);
-    *(u16 *)(s0 + 0x60) = *(u16 *)((u8 *)&g_Camera + 0x80);
     arg1->hAC = *(u16 *)(s0 + 0x2C);
     func_8003BC98(s0 + 0x60, s0 + 0x10, (s32)s0);
     func_8003B53C((u8 *)arg1, *(s16 *)(s0 + 0x62), *(s16 *)(s0 + 0x60), *(s16 *)(arg0 + 0x38));
     D_8009CF48 = 0;
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80038984);
-#endif
 
 void func_80038AA4(void) {
     Weapon *temp_s0;
@@ -13507,37 +13489,23 @@ void func_8004A8A8(s8 arg0, s8 arg1, s8 arg2, s16 arg3) {
     D_800D79D0 = D_8009CDA8;
 }
 
-#ifdef NON_MATCHING
 void func_8004A8E4(void) {
     s16 a;
     s16 b;
-    s16 c;
-    s32 t;
     u8 *p;
     D_8009D002 = 0;
-    a = 0;
-    do {
-        b = 0;
-        do {
+    for (a = 0; a < 3; a++) {
+        for (b = 0; b < 2; b++) {
             p = (u8 *)(a * 0x50) + (b * 0x28 + (s32)D_800D7D08);
             func_80081C84(p);
-            c = b + 1;
-            b = c;
-            do { } while (0);
             p[4] = 0x80;
             p[5] = 0x80;
             p[6] = 0x80;
-            t = c < 2;
-            *(u16 *)(p + 0xE) = (D_800AC4DC << 6) | ((D_800AC4D8 >> 4) & 0x3F);
+            M2C_FIELD(p, u16 *, 0xE) = (D_800AC4DC << 6) | ((D_800AC4D8 >> 4) & 0x3F);
             *(u16 *)(p + 0x16) = D_800AC4E8;
-        } while (t);
-        c = a + 1;
-        a = c;
-    } while (c < 3);
+        }
+    }
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8004A8E4);
-#endif
 
 #ifdef NON_MATCHING
 void func_8004A9E4(u8 *arg0, u8 *arg1) {
@@ -14887,50 +14855,30 @@ void func_8004D844(void *arg0, s32 i, s32 j) {
     M2C_FIELD(arg0, s32 *, 0x14) = b[o + 0x36] - t;
 }
 
-#ifdef NON_MATCHING
 void func_8004D88C(void) {
     u8 *e = (u8 *)D_800D8FF8;
-    s32 i = 0;
-    register s32 n REG("a2") = D_8009D368;
-    register s32 found REG("a1") = i;
-    register s32 want REG("a3");
+    s32 i;
+    s32 found;
     u32 j;
     s32 *cnt;
-    s32 t;
-    if (n > 0) {
-        want = D_8009CA78;
-loop:
-        if (*e == 0 || (t = *(s32 *)(e + 0x30)) == 0 || t != want) {
-            i++;
-            e += 0x48;
-            if (i < n) goto loop;
-        } else {
-            goto hit;
+    found = 0;
+    for (i = 0; i < D_8009D368; i++) {
+        found = 0;
+        if (*e != 0 && *(s32 *)(e + 0x30) != 0 && *(s32 *)(e + 0x30) == D_8009CA78) {
+            found = 1;
+            break;
         }
+        e += 0x48;
     }
-test:
-    if (found == 0) {
+    if (!found) {
         func_8006B1DC((M2C_UNK *)D_800A8884);
         return;
     }
-    goto main;
-hit:
-    found = 1;
-    goto test;
-main:
     cnt = (s32 *)((u8 *)D_800D8C7C + *(s32 *)(e + 8) * 0x18);
-    j = 0;
-    if (*cnt != 0) {
-        do {
-            j++;
-            *(s32 *)(e + 0x10) -= 1;
-            e += 4;
-        } while (j < *(u32 *)cnt);
+    for (j = 0; j < *(u32 *)cnt; j++) {
+        ((s32 *)(e + 0x10))[j]--;
     }
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8004D88C);
-#endif
 
 void func_8004D978(void) {
     switch (D_800B0A94) {
@@ -21608,27 +21556,6 @@ void func_8005D654(void) {
     M2C_FIELD(temp_v1_2, s32 *, 0x24) = (s32) (M2C_FIELD(temp_v1_2, s32 *, 0x24) ^ 0x200);
 }
 
-#ifdef NON_MATCHING
-void func_8005D694(void) {
-    s32 toggle;
-    s32 crouched;
-    u16 button;
-
-    button = g_Args->buttonMap[4];
-    toggle = (g_Args->flags2 >> 5) & 1;
-    crouched = *(s32 *)(*(u8 **)((u8 *)g_Player + 0x94) + 0x24) & 0x400;
-    if ((g_PadPressed & button) || (toggle && crouched && !(g_PadHeld & button))) {
-        if (D_8009CA94 != 0 && crouched) {
-            if (!toggle) {
-                func_80026F30(0xE, 0);
-                func_80048B4C((M2C_UNK *)D_800A8F94, 0x80, 0);
-            }
-        } else {
-            func_8005D654();
-        }
-    }
-}
-#else
 void func_8005D694(void) {
   s32 toggle;
   int new_var;
@@ -21655,7 +21582,6 @@ void func_8005D694(void) {
     }
   }
 }
-#endif
 
 void func_8005D760(void) {
     u8 *msg;
@@ -21900,16 +21826,12 @@ void func_8005DF40(void *arg0) {
     }
 }
 
-#ifdef NON_MATCHING
 void func_8005DF7C(u8 *obj) {
     s32 s = 0;
-    s32 a, b;
     if (obj[8] != 0) {
-        D_1F8003D4 = *(s32 *)(*(u8 **)(obj + 0x90) + 0x28);
-        a = *(s32 *)(*(u8 **)(obj + 0x90) + 0x2C) - 0x32;
-        b = *(s32 *)(*(u8 **)(obj + 0x90) + 0x30);
-        D_1F8003D8 = a;
-        D_1F8003DC = b;
+        D_1F8003D4 = M2C_FIELD(M2C_FIELD(obj, u8 **, 0x90), s32 *, 0x28);
+        D_1F8003D8 = M2C_FIELD(M2C_FIELD(obj, u8 **, 0x90), s32 *, 0x2C) - 0x32;
+        D_1F8003DC = M2C_FIELD(M2C_FIELD(obj, u8 **, 0x90), s32 *, 0x30);
         s = func_80039A9C(0, obj[8], 4);
         func_800393AC((void *)s);
     }
@@ -21917,9 +21839,6 @@ void func_8005DF7C(u8 *obj) {
     func_8005DC40(obj);
     func_8005DB7C(obj, (void *)s);
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8005DF7C);
-#endif
 
 void func_8005E020(arg0) {
     void *s1;

@@ -25,8 +25,9 @@ BAD_C = re.compile(r"M2C_ERROR|MULT_HI|MULTU_HI|M2C_TRAP_IF|GLUE_F64|M2C_CARRY|M
 def level_info(level):
     data = (ROOT / f"workbench/extracted/L{level[-2:]}/{level.upper()}.EXE").read_bytes()
     load_addr = struct.unpack_from("<I", data, 0x18)[0]
-    mk = (ROOT / "Makefile").read_text()
-    o0 = set(re.search(r"O0_FILES := (.*)", mk).group(1).split())
+    mk = ROOT / f"config/{level}_opt.mk"
+    m = re.search(r"O0_FILES := (.*)", mk.read_text()) if mk.exists() else None
+    o0 = set(m.group(1).split()) if m else set()
     return data, load_addr, o0
 
 

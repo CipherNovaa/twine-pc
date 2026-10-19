@@ -3,6 +3,12 @@
 #define D_8009C1ED L1_D_8009C1ED
 #define D_8009C1EE L1_D_8009C1EE
 #define D_8009C1F0 L1_D_8009C1F0
+#define D_8009C1F4 L1_D_8009C1F4
+#define D_8009C1F8 L1_D_8009C1F8
+#define D_8009CA9C L1_D_8009CA9C
+#define D_8009CD80 L1_D_8009CD80
+#define D_8009CDA8 L1_D_8009CDA8
+#define D_8009CE48 L1_D_8009CE48
 #define D_8009CFB4 L1_D_8009CFB4
 #define D_800A6ED0 L1_D_800A6ED0
 #define D_800A6EF8 L1_D_800A6EF8
@@ -28,6 +34,7 @@
 #define D_800AB744 L1_D_800AB744
 #define D_800AB754 L1_D_800AB754
 #define D_800AC284 L1_D_800AC284
+#define D_800AC384 L1_D_800AC384
 #define D_800AC4C8 L1_D_800AC4C8
 #define D_800AC4D0 L1_D_800AC4D0
 #define D_800AC4D8 L1_D_800AC4D8
@@ -39,6 +46,7 @@
 #define D_800AC54C L1_D_800AC54C
 #define D_800AC550 L1_D_800AC550
 #define D_800AE940 L1_D_800AE940
+#define D_800AEB1A L1_D_800AEB1A
 #define D_800AEDA0 L1_D_800AEDA0
 #define D_800AEDA4 L1_D_800AEDA4
 #define D_800AEDA8 L1_D_800AEDA8
@@ -48,9 +56,17 @@
 #define D_800AEDB8 L1_D_800AEDB8
 #define D_800AEDBC L1_D_800AEDBC
 #define D_800AEDD4 L1_D_800AEDD4
+#define D_800AFEB6 L1_D_800AFEB6
+#define D_800AFFA8 L1_D_800AFFA8
+#define D_800AFFCC L1_D_800AFFCC
+#define D_800B0070 L1_D_800B0070
+#define D_800B07C4 L1_D_800B07C4
+#define D_800B8EFC L1_D_800B8EFC
+#define D_800B8F24 L1_D_800B8F24
 #define GetClut L1_GetClut
 #define GetTPage L1_GetTPage
 #define Menu_ResetState L1_Menu_ResetState
+#define Pad_Update L1_Pad_Update
 #define SetDrawMode L1_SetDrawMode
 #define SetLineF4 L1_SetLineF4
 #define SsSetSerialAttr L1_SsSetSerialAttr
@@ -138,6 +154,25 @@ typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; 
 typedef struct { u32 tag; u8 r0, g0, b0, code; } PrimHdr;
 typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0, x1, y1, x2, y2, x3, y3; u32 pad; } LINE_F4;
 typedef struct { LINE_F4 line[2]; u8 tile[2][0x10]; u8 f4[2][0x18]; POLY_FT4 ft4[2]; DR_MODE dm[2]; u8 pad[0x18]; u8 flag; } Overlay;
+#define E(T, o) (*(T *)(D_800AE940 + (o)))
+extern s32 (*D_8009CE48)(s32);
+extern void (*D_8009CDD4)(void);
+extern s32 D_8009CA9C;
+extern s32 D_8009CDA8;
+extern s32 D_800B8EFC[][5];
+extern s32 D_800B8F24;
+extern s8 D_800AFEB6;
+extern s8 D_800AFFA8;
+extern s8 D_800AFFCC;
+extern s8 D_800B0070;
+extern s8 D_800B07C4;
+s32 func_8002A3C8(u8 centered);
+s32 Pad_Update(void);
+extern s32 D_8009C1F4;
+extern s32 D_8009C1F8;
+extern s32 D_8009CD80;
+extern u32 D_800AC384;
+extern u8 D_800AEB1A;
 M2C_UNK SetLineF4(M2C_UNK *);
 void func_80081B74(void *);
 void func_80081C54(void *);
@@ -159,7 +194,7 @@ extern s16 D_800AC4E0;
 extern s16 D_800AC4E4;
 extern u16 D_800AC4E8;
 void func_80028370(void);
-void func_800274F4();
+void func_800274F4(void);
 void func_80081D14(void *);
 s16 GetClut(s32, s32);
 s32 GetTPage(M2C_UNK, s32, M2C_UNK, M2C_UNK);
@@ -288,25 +323,135 @@ extern s8 D_8009C1EE;
 
 
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80026B44);
+s32 func_80026B44(u8 arg0) {
+    switch (arg0) {
+    case 1:
+        return (rand() & 3) - 2;
+    case 2:
+        return ((rand() & 0xFFF) % 6) - 3;
+    case 3:
+        return (rand() & 7) - 4;
+    case 4:
+        return rand() & 0;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80026C14);
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80026C38);
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80026C90);
+void func_80026C90(s32 arg0) {
+    s16 i;
+    for (i = 0; i < 24; i++) {
+        if (i != arg0) {
+            func_800814CC(i, 0, 0);
+            func_80081458(i);
+        }
+    }
+}
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80026D08);
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80026ED0);
+s32 func_80026ED0(void) {
+    u8 buf[0x18];
+    s32 n = 0;
+    s32 i;
+    func_80081A08(buf);
+    for (i = 0; i < 0x18; i++) {
+        if (buf[i] == 1) n++;
+    }
+    return n;
+}
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80026F30);
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80027248);
+unsigned long func_80027248(u8 id, s32 pos, s32 flags) {
+    u8 f;
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_800272A4);
+    f = flags & 2;
+    if (flags & 4) {
+        f |= 4;
+    }
+    if (pos != 0) {
+        func_8003B808(pos);
+        f |= 8;
+    }
+    return func_80026F30(id, f);
+}
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80027394);
+void func_800272A4(s16 arg0, s32 arg1, s32 arg2) {
+    s32 vol;
+    s32 v;
+    s16 a, b;
+    if (arg2 & 2) {
+        vol = (g_Args->pad12E[0xA] * M2C_FIELD(g_Args, s16 *, 0x144)) / 80;
+    } else {
+        vol = M2C_FIELD(g_Args, s16 *, 0x144);
+    }
+    v = (vol * M2C_FIELD(((arg1 * 8) + M2C_FIELD(g_Args, s32 *, 0x130)), u8 *, 4)) >> 7;
+    if (v >= 0) { a = 0x7F; if (v < 0x80) a = v; } else a = 0;
+    if (v >= 0) { b = 0x7F; if (v < 0x80) b = v; } else b = 0;
+    func_800814CC(arg0, a, b);
+}
+
+void func_80027394(s32 pos, s16 voice, s32 id, s32 flags) {
+  s32 vol;
+  s32 l;
+  s32 r;
+  u8 f;
+  f = flags;
+  if (pos != 0)
+  {
+    func_8003B808(pos);
+    f = flags | 8;
+  }
+  if (f & 2)
+  {
+    vol = (((struct 
+    {
+      char pad[(0x138 > 0) ? (0x138) : (0)];
+      typeof(*((u8 *) 0)) f;
+    } *) (((char *) g_Args) + ((0x138 < 0) ? (0x138) : (0))))->f * ((struct 
+    {
+      char pad[(0x13A > 0) ? (0x13A) : (0)];
+      typeof(*((s16 *) 0)) f;
+    } *) (((char *) g_Args) + ((0x13A < 0) ? (0x13A) : (0))))->f) / 80;
+  }
+  else
+  {
+    vol = ((struct 
+    {
+      char pad[(0x13A > 0) ? (0x13A) : (0)];
+      typeof(*((s16 *) 0)) f;
+    } *) (((char *) g_Args) + ((0x13A < 0) ? (0x13A) : (0))))->f;
+  }
+  vol = (vol * ((struct 
+  {
+    char pad[(0x130 > 0) ? (0x130) : (0)];
+    typeof(*((SfxDef **) 0)) f;
+  } *) (((char *) g_Args) + ((0x130 < 0) ? (0x130) : (0))))->f[id].vol) >> 7;
+  if (f & 8)
+  {
+    r = (vol * ((struct 
+    {
+      char pad[(0x136 > 0) ? (0x136) : (0)];
+      typeof(*((u8 *) 0)) f;
+    } *) (((char *) g_Args) + ((0x136 < 0) ? (0x136) : (0))))->f) >> 7;
+    l = (vol * ((struct 
+    {
+      char pad[(0x137 > 0) ? (0x137) : (0)];
+      typeof(*((u8 *) 0)) f;
+    } *) (((char *) g_Args) + ((0x137 < 0) ? (0x137) : (0))))->f) >> 7;
+  }
+  else
+  {
+    r = (l = vol);
+  }
+  l = (l < 0) ? (0) : ((l >= 0x80) ? (0x7F) : (l));
+  r = (r < 0) ? (0) : ((r >= 0x80) ? (0x7F) : (r));
+  func_800814CC(voice, (s16) l, (s16) r);
+}
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_800274F4);
 
@@ -318,7 +463,28 @@ INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80027648);
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80027690);
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_8002850C);
+void func_80028370(void) {
+    TP8 *p;
+    s32 i = 0;
+    p = D_800AC4EC;
+    D_800AB5F0 = 0x33E;
+    D_800AB5F4 = 0x180;
+    D_800AB5F8 = 0x2C0;
+    D_800AB5FC = 0x1E0;
+    D_800AB5E8 = 0xF8;
+    D_800AB5EC = 0x80;
+    D_800AB60C = 6;
+    D_800AB610 = 7;
+    do {
+        s32 t = GetTPage(0, 0, D_800AB5F0, D_800AB5F4);
+        D_800AC4EC[i].a = D_800AB5E8;
+        D_800AC4EC[i].e = t;
+        D_800AC4EC[i].f = 0;
+        D_800AC4EC[i].b = (u8)D_800AB5EC + D_800AB610 * i;
+        D_800AC4EC[i].c = D_800AB60C;
+        i++;
+    } while (i < 12);
+}
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80026B44", func_80028618);
 
@@ -445,7 +611,6 @@ void func_80028DBC(u32 *ot, s32 db) {
     s32 i;
     s32 j;
     s32 k;
-    s32 c;
 
     if (D_8009C1F0 == 0) {
         Menu_ResetState();
@@ -463,9 +628,8 @@ void func_80028DBC(u32 *ot, s32 db) {
             for (j = ((TwLine *)D_800AB744)[i].first, k = 0; j <= ((TwLine *)D_800AB744)[i].last; j++, k++) {
                 if (((TwLine *)D_800AB744)[i].flag != 0) {
                     if (((TwLine *)D_800AB744)[i].cnt < k) {
-                        c = ++((TwLine *)D_800AB744)[i].cnt;
-                        KEEP(c);
-                        if (!(c & 1)) {
+                        ((TwLine *)D_800AB744)[i].cnt++;
+                        if (((TwLine *)D_800AB744)[i].cnt % 2 == 0) {
                             g_Args->pad12E[0xA] = 0xF;
                             func_80026F30(1, 2);
                         }

@@ -2,6 +2,12 @@
 #define D_8009C1EC L1_D_8009C1EC
 #define D_8009C1ED L1_D_8009C1ED
 #define D_8009C1F0 L1_D_8009C1F0
+#define D_8009C1F4 L1_D_8009C1F4
+#define D_8009C1F8 L1_D_8009C1F8
+#define D_8009CA9C L1_D_8009CA9C
+#define D_8009CD80 L1_D_8009CD80
+#define D_8009CDA8 L1_D_8009CDA8
+#define D_8009CDD4 L1_D_8009CDD4
 #define D_8009CFB4 L1_D_8009CFB4
 #define D_800A6ED0 L1_D_800A6ED0
 #define D_800A6EF8 L1_D_800A6EF8
@@ -25,6 +31,7 @@
 #define D_800AB744 L1_D_800AB744
 #define D_800AB754 L1_D_800AB754
 #define D_800AC284 L1_D_800AC284
+#define D_800AC384 L1_D_800AC384
 #define D_800AC4C8 L1_D_800AC4C8
 #define D_800AC4D0 L1_D_800AC4D0
 #define D_800AC4D8 L1_D_800AC4D8
@@ -36,6 +43,7 @@
 #define D_800AC54C L1_D_800AC54C
 #define D_800AC550 L1_D_800AC550
 #define D_800AE940 L1_D_800AE940
+#define D_800AEB1A L1_D_800AEB1A
 #define D_800AEDA0 L1_D_800AEDA0
 #define D_800AEDA4 L1_D_800AEDA4
 #define D_800AEDA8 L1_D_800AEDA8
@@ -45,9 +53,17 @@
 #define D_800AEDB8 L1_D_800AEDB8
 #define D_800AEDBC L1_D_800AEDBC
 #define D_800AEDD4 L1_D_800AEDD4
+#define D_800AFEB6 L1_D_800AFEB6
+#define D_800AFFA8 L1_D_800AFFA8
+#define D_800AFFCC L1_D_800AFFCC
+#define D_800B0070 L1_D_800B0070
+#define D_800B07C4 L1_D_800B07C4
+#define D_800B8EFC L1_D_800B8EFC
+#define D_800B8F24 L1_D_800B8F24
 #define GetClut L1_GetClut
 #define GetTPage L1_GetTPage
 #define Menu_ResetState L1_Menu_ResetState
+#define Pad_Update L1_Pad_Update
 #define SetDrawMode L1_SetDrawMode
 #define SetLineF4 L1_SetLineF4
 #define SsSetSerialAttr L1_SsSetSerialAttr
@@ -81,6 +97,7 @@
 #define func_80029504 L1_func_80029504
 #define func_80029684 L1_func_80029684
 #define func_80029868 L1_func_80029868
+#define func_8002A3C8 L1_func_8002A3C8
 #define func_8003B808 L1_func_8003B808
 #define func_8006B1DC L1_func_8006B1DC
 #define func_8006B230 L1_func_8006B230
@@ -142,6 +159,25 @@ typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; 
 typedef struct { u32 tag; u8 r0, g0, b0, code; } PrimHdr;
 typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0, x1, y1, x2, y2, x3, y3; u32 pad; } LINE_F4;
 typedef struct { LINE_F4 line[2]; u8 tile[2][0x10]; u8 f4[2][0x18]; POLY_FT4 ft4[2]; DR_MODE dm[2]; u8 pad[0x18]; u8 flag; } Overlay;
+#define E(T, o) (*(T *)(D_800AE940 + (o)))
+extern s32 (*D_8009CE48)(s32);
+extern void (*D_8009CDD4)(void);
+extern s32 D_8009CA9C;
+extern s32 D_8009CDA8;
+extern s32 D_800B8EFC[][5];
+extern s32 D_800B8F24;
+extern s8 D_800AFEB6;
+extern s8 D_800AFFA8;
+extern s8 D_800AFFCC;
+extern s8 D_800B0070;
+extern s8 D_800B07C4;
+s32 func_8002A3C8(u8 centered);
+s32 Pad_Update(void);
+extern s32 D_8009C1F4;
+extern s32 D_8009C1F8;
+extern s32 D_8009CD80;
+extern u32 D_800AC384;
+extern u8 D_800AEB1A;
 M2C_UNK SetLineF4(M2C_UNK *);
 void func_80081B74(void *);
 void func_80081C54(void *);
@@ -163,7 +199,7 @@ extern s16 D_800AC4E0;
 extern s16 D_800AC4E4;
 extern u16 D_800AC4E8;
 void func_80028370(void);
-void func_800274F4();
+void func_800274F4(void);
 void func_80081D14(void *);
 s16 GetClut(s32, s32);
 s32 GetTPage(M2C_UNK, s32, M2C_UNK, M2C_UNK);
@@ -432,7 +468,28 @@ INCLUDE_ASM("asm/level11/nonmatchings/text_80026B60", func_80027664);
 
 INCLUDE_ASM("asm/level11/nonmatchings/text_80026B60", func_800276AC);
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_80026B60", func_80028528);
+void func_80028370(void) {
+    TP8 *p;
+    s32 i = 0;
+    p = D_800AC4EC;
+    D_800AB5F0 = 0x33E;
+    D_800AB5F4 = 0x180;
+    D_800AB5F8 = 0x2C0;
+    D_800AB5FC = 0x1E0;
+    D_800AB5E8 = 0xF8;
+    D_800AB5EC = 0x80;
+    D_800AB60C = 6;
+    D_800AB610 = 7;
+    do {
+        s32 t = GetTPage(0, 0, D_800AB5F0, D_800AB5F4);
+        D_800AC4EC[i].a = D_800AB5E8;
+        D_800AC4EC[i].e = t;
+        D_800AC4EC[i].f = 0;
+        D_800AC4EC[i].b = (u8)D_800AB5EC + D_800AB610 * i;
+        D_800AC4EC[i].c = D_800AB60C;
+        i++;
+    } while (i < 12);
+}
 
 INCLUDE_ASM("asm/level11/nonmatchings/text_80026B60", func_80028634);
 
@@ -559,7 +616,6 @@ void func_80028DBC(u32 *ot, s32 db) {
     s32 i;
     s32 j;
     s32 k;
-    s32 c;
 
     if (D_8009C1F0 == 0) {
         Menu_ResetState();
@@ -577,9 +633,8 @@ void func_80028DBC(u32 *ot, s32 db) {
             for (j = ((TwLine *)D_800AB744)[i].first, k = 0; j <= ((TwLine *)D_800AB744)[i].last; j++, k++) {
                 if (((TwLine *)D_800AB744)[i].flag != 0) {
                     if (((TwLine *)D_800AB744)[i].cnt < k) {
-                        c = ++((TwLine *)D_800AB744)[i].cnt;
-                        KEEP(c);
-                        if (!(c & 1)) {
+                        ((TwLine *)D_800AB744)[i].cnt++;
+                        if (((TwLine *)D_800AB744)[i].cnt % 2 == 0) {
                             g_Args->pad12E[0xA] = 0xF;
                             func_80026F30(1, 2);
                         }
