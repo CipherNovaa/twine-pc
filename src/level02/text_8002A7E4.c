@@ -167,6 +167,13 @@ extern s32 L1_D_800AFEBC;
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+void func_8002A7E4();
+void func_8002A8E8();
+void func_80085F1C();
+extern u8 D_800AC80C[];
+extern u8 D_800AC820[];
+extern s32 D_800B4E6C;
+extern u8 *D_800B6010;
 void func_8002BCFC(void);
 s32 func_800870CC(M2C_UNK, M2C_UNK);                /* extern */
 M2C_UNK func_80087134(M2C_UNK, s8 *, M2C_UNK);      /* extern */
@@ -678,7 +685,15 @@ void L1_CdBin_Enable(void) {
     L1_func_8002AA94(1);
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002A7E4", func_8002C4A0);
+void func_8002C4A0(s32 arg0) {
+    if (arg0 == 0x63) {
+        func_80085F1C(D_800B6010 + 0x234, D_800AC80C);
+    } else {
+        func_80085F1C(D_800B6010 + 0x234, D_800AC820, arg0, arg0);
+    }
+    func_8002A7E4(D_800B6010 + 0x234, &D_800B4E6C);
+    func_8002A8E8(D_800B4E6C);
+}
 
 void L1_CdBin_SetLevel(s32 arg0, s32 arg1) {
     if (arg0 != 0x63) {

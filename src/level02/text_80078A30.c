@@ -182,6 +182,13 @@ extern s32 L1_D_800F0F5C;
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+void func_80078A60(void);
+void func_8007906C(void);
+void func_800796AC(void);
+M2C_UNK func_8008C0C0(M2C_UNK *);                   /* extern */
+extern s16 D_800A125C;
+extern s16 D_800A125E;
+extern M2C_UNK D_800AF140;
 extern u8 D_800AF1E0;
 extern u8 D_800F415C;
 extern s8 D_800A40AC;
@@ -208,6 +215,16 @@ M2C_UNK func_8007A4D4(void *);                      /* extern */
 void func_8007A678(void *arg0);
 extern s32 D_800A0FE0;
 extern s32 D_800B6FE4;
+
+#ifdef NON_MATCHING
+void func_80078A30(void) {
+    func_80078A60();
+    func_8007906C();
+    func_800796AC();
+}
+#else
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_80078A30);
+#endif
 
 s32 L1_func_800752C0(void) {
   s32 var_v1;
@@ -258,7 +275,7 @@ u8 *L1_func_800752E8(u8 arg0) {
     return NULL;
 }
 #else
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_80078A88);
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_80078A88);
 #endif
 
 void func_80078B44(void *arg0) {
@@ -655,7 +672,7 @@ void L1_func_80076184(s32 idx, u32 val) {
     }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_8007997C);
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_8007997C);
 
 void func_80079ACC(s32 arg0) {
     if (arg0 >= 4) {
@@ -681,15 +698,15 @@ void func_80079B2C(void) {
     D_800A40AC = 1;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_80079B8C);
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_80079B8C);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_80079E1C);
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_80079E1C);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_80079F1C);
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_80079F1C);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_80079FE0);
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_80079FE0);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_8007A190);
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_8007A190);
 
 void func_8007A2A0(void *arg0) {
     s32 temp_v1;
@@ -711,9 +728,9 @@ void func_8007A2A0(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_8007A354);
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_8007A354);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_8007A4D4);
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_8007A4D4);
 
 void func_8007A678(void *arg0) {
     void *temp_v0;
@@ -724,5 +741,5 @@ void func_8007A678(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_8007A694);
+INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_8007A694);
 

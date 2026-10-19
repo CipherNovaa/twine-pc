@@ -87,5 +87,3 @@ s32 func_80026914(void) {
     return 0;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002680C", func_80026B00);
-

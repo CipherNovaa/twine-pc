@@ -1158,13 +1158,3 @@ s32 L1_Math_Max3(register s32 a, register s32 b, register s32 c) {
     return MAX(m, c);
 }
 
-#ifdef NON_MATCHING
-void func_80078A30(void) {
-    func_80078A60();
-    func_8007906C();
-    func_800796AC();
-}
-#else
-INCLUDE_ASM("asm/level02/nonmatchings/text_800731F4", func_80078A30);
-#endif
-

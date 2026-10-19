@@ -104,7 +104,8 @@ def _integrate(func, code, level, keep, replace_decls, nonmatching=False):
         subprocess.run(["make", f"LEVEL={level}", "-j8"], cwd=ROOT, capture_output=True, text=True)
     if ok:
         return f"{func}: OK, build still matches" + ("" if keep else " (not kept)")
-    errs = [l for l in r.stderr.splitlines() if "warning" not in l and not l.startswith("make")]
+    errs = [l for l in r.stderr.splitlines()
+            if "warning" not in l and not l.startswith("make") and "In function" not in l and "At top level" not in l]
     if not errs and "FAILED" in r.stdout:
         errs = ["checksum mismatch: compiles, but the build no longer matches"]
     return f"{func}: FAILED\n  " + "\n  ".join(errs[:6])
