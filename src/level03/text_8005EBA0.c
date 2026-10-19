@@ -2378,6 +2378,11 @@ void L2_func_80079854(s32 arg0);
 void L2_func_80079B2C(void);
 void L2_func_8007A2A0(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
+M2C_UNK func_800394C4();                            /* extern */
+M2C_UNK func_80060460();                            /* extern */
+extern void *D_8009E688;
+extern s16 D_800B3914;
+extern s32 D_800F4720;
 
 s32 L1_func_8005EE6C(u8 *obj, s32 dx, s32 dz, s32 arg3) {
     SVECTOR d;
@@ -2475,7 +2480,15 @@ INCLUDE_ASM("asm/level03/nonmatchings/text_8005EBA0", func_8005F924);
 
 INCLUDE_ASM("asm/level03/nonmatchings/text_8005EBA0", func_8005FC2C);
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_8005EBA0", func_8005FD5C);
+void func_8005FD5C(void *arg0) {
+    if (M2C_FIELD(arg0, s32 *, 0x4C) & 8) {
+        func_800394C4();
+        return;
+    }
+    if (M2C_FIELD(arg0, s32 *, 0x48) & 0x800) {
+        func_80060460();
+    }
+}
 
 INCLUDE_ASM("asm/level03/nonmatchings/text_8005EBA0", func_8005FDB4);
 
@@ -2515,7 +2528,17 @@ void L1_func_800604B0(s32 first, s32 last) {
     }
 }
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_8005EBA0", func_80060250);
+void func_80060250(void *arg0) {
+    if ((D_8009E688 != NULL) && ((D_800B3914 != 8) || (D_800F4720 != 0x1F))) {
+        M2C_FIELD(arg0, u8 *, 0xDC) = (u8) M2C_FIELD(D_8009E688, u8 *, 0);
+        M2C_FIELD(arg0, u8 *, 0xDD) = (u8) M2C_FIELD(D_8009E688, u8 *, 1);
+        M2C_FIELD(arg0, u8 *, 0xDE) = (u8) M2C_FIELD(D_8009E688, u8 *, 2);
+        return;
+    }
+    M2C_FIELD(arg0, u8 *, 0xDC) = 0U;
+    M2C_FIELD(arg0, u8 *, 0xDD) = 0U;
+    M2C_FIELD(arg0, u8 *, 0xDE) = 0U;
+}
 
 void func_800602D4(void) {
 }

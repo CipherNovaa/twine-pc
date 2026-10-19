@@ -2043,6 +2043,8 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+typedef struct { u8 pad0[0x56]; u16 a; u8 pad1[0x12]; u16 b; } S662;
+void func_800660A0(void *);
 M2C_UNK func_80033568(M2C_UNK);                     /* extern */
 M2C_UNK func_8005D5CC(s32);                         /* extern */
 s32 func_8005D604(M2C_UNK *, void *);               /* extern */
@@ -3587,9 +3589,19 @@ void L1_func_80066704(void *arg0) {
     *(u16 *)(obj + 0x7A) += d;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_800662C8);
+void func_800662C8(void **arg0) {
+    S662 *p = (S662 *)arg0[3];
+    p->b += 0xC8;
+    p->a -= 0xA;
+    func_800660A0(arg0);
+}
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_80066304);
+void func_80066304(void **arg0) {
+    S662 *p = (S662 *)arg0[3];
+    p->b += 0xC8;
+    p->a -= 0xA;
+    func_800660A0(arg0);
+}
 
 void L1_func_800669A4(SVECTOR *arg0, s32 *arg1, void *arg2) {
     gte_SetRotMatrix((u8 *)arg2 + 0x18);

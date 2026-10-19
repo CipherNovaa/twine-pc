@@ -188,7 +188,7 @@ extern s8 D_800A40AC;
 extern u8 D_800F430C;
 M2C_UNK func_800307C0(s32);                         /* extern */
 M2C_UNK func_8006E9D0(M2C_UNK, s32);                /* extern */
-s32 func_80079784(s32);                             /* extern */
+s32 func_80079784(s32 arg0);
 M2C_UNK func_80085F1C(s32, M2C_UNK *, s32);         /* extern */
 extern M2C_UNK D_800AF160;
 extern s32 D_800B6010;
@@ -614,7 +614,9 @@ s32 func_80079740(void) {
     return temp_v0;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A60", func_80079784);
+s32 func_80079784(s32 arg0) {
+ s32 r; r = 0; if (D_800F4010 == 0) { r = *(u8 *)&D_800E680C == (u8)arg0; } return r;
+}
 
 void L1_func_80076014(s32 idx) {
     if (g_Args->cdArchive == 0) {

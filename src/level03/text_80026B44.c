@@ -863,6 +863,7 @@ void L2_func_80079854(s32 arg0);
 void L2_func_80079B2C(void);
 void L2_func_8007A2A0(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
+M2C_UNK func_8008302C(s16);                         /* extern */
 
 s32 func_80026B44(u8 arg0) {
     switch (arg0) {

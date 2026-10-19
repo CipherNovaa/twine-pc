@@ -680,6 +680,10 @@ void L2_func_80079854(s32 arg0);
 void L2_func_80079B2C(void);
 void L2_func_8007A2A0(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
+M2C_UNK func_80080A90();                            /* extern */
+M2C_UNK func_8008300C(s32);                         /* extern */
+M2C_UNK func_8008301C();                            /* extern */
+extern s32 D_800ADE58;
 
 void func_8002680C(void) {
     s32 r;

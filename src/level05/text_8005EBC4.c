@@ -1766,6 +1766,9 @@ M2C_UNK L2_func_8002B464(s32, M2C_UNK);                /* extern */
 extern s8 L2_D_800B5F49;
 extern s8 L2_D_800B5F4A;
 extern s32 L2_D_800B5F50;
+extern u8 L2_D_800A19A0;
+extern u8 L2_D_800C625C[];
+extern u8 L2_D_800CD020[];
 M2C_UNK L2_func_8008A0C4(M2C_UNK *, void *);           /* extern */
 M2C_UNK L2_func_8008A724();                            /* extern */
 M2C_UNK L2_func_8008AAD0(M2C_UNK);                     /* extern */
@@ -2002,7 +2005,7 @@ extern s16 L2_D_800A1240;
 extern s32 L2_D_800A1250;
 extern u8 L2_D_800A0CC0;
 extern s32 L2_D_800A1230;
-s32 L2_func_80055738(u32);                             /* extern */
+s32 L2_func_80055738(void *arg0);
 extern s16 L2_D_800B6C94;
 extern s16 L2_D_800B7284;
 M2C_UNK L2_func_8004F288();                            /* extern */
@@ -2060,7 +2063,7 @@ extern M2C_UNK L2_D_800E0D10;
 extern void *L2_D_800A0CEC;
 extern s16 L2_D_800B72B8;
 void L2_func_80033568(s32 arg0);
-M2C_UNK L2_func_8005D5CC(s32);                         /* extern */
+void L2_func_8005D5CC(u8 *p);
 s32 L2_func_8005D604(M2C_UNK *, void *);               /* extern */
 extern u8 L2_D_800A3AAC;
 extern u8 L2_D_800A3BF8;
@@ -2221,6 +2224,7 @@ void L2_func_8002F364(void);
 void L2_func_8002F68C(void);
 void L2_func_8002FF60(void);
 void L2_func_80030390(void);
+void *L2_func_80030454(s32 arg0);
 void L2_func_80030474(void);
 void L2_func_800307F8(void);
 s32 L2_func_800320B8(void);
@@ -2299,6 +2303,11 @@ M2C_UNK *L2_func_80055F78(s32 arg0);
 void L2_func_80055FFC(s32 arg0);
 s32 L2_func_800570C0(void);
 s32 L2_func_800570C8(void);
+s32 L2_func_80057504(u8 *a, u8 *b);
+s32 L2_func_8005752C(u8 *a, u8 *b);
+s32 L2_func_80057558(u8 *a, u8 *b);
+s32 L2_func_800575B4(u8 *a, u8 *b);
+s32 L2_func_800575DC(u8 *a, u8 *b);
 s32 L2_func_800578E0(void);
 s32 L2_func_80057E7C(s32 arg0, void *arg1);
 s32 L2_func_8005849C(s32 arg0, void *arg1);
@@ -2378,6 +2387,11 @@ void L2_func_80079854(s32 arg0);
 void L2_func_80079B2C(void);
 void L2_func_8007A2A0(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
+M2C_UNK func_800398D4();                            /* extern */
+M2C_UNK func_800604E0();                            /* extern */
+extern void *D_800A10E0;
+extern s16 D_800B627C;
+extern s32 D_800FF714;
 
 s32 L1_func_8005EE6C(u8 *obj, s32 dx, s32 dz, s32 arg3) {
     SVECTOR d;
@@ -2475,7 +2489,15 @@ INCLUDE_ASM("asm/level05/nonmatchings/text_8005EBC4", func_8005F948);
 
 INCLUDE_ASM("asm/level05/nonmatchings/text_8005EBC4", func_8005FC50);
 
-INCLUDE_ASM("asm/level05/nonmatchings/text_8005EBC4", func_8005FD80);
+void func_8005FD80(void *arg0) {
+    if (M2C_FIELD(arg0, s32 *, 0x4C) & 8) {
+        func_800398D4();
+        return;
+    }
+    if (M2C_FIELD(arg0, s32 *, 0x48) & 0x800) {
+        func_800604E0();
+    }
+}
 
 INCLUDE_ASM("asm/level05/nonmatchings/text_8005EBC4", func_8005FDD8);
 
@@ -2517,7 +2539,17 @@ void L1_func_800604B0(s32 first, s32 last) {
     }
 }
 
-INCLUDE_ASM("asm/level05/nonmatchings/text_8005EBC4", func_800602D0);
+void func_800602D0(void *arg0) {
+    if ((D_800A10E0 != NULL) && ((D_800B627C != 9) || (D_800FF714 != 0x1F))) {
+        M2C_FIELD(arg0, u8 *, 0xDC) = (u8) M2C_FIELD(D_800A10E0, u8 *, 0);
+        M2C_FIELD(arg0, u8 *, 0xDD) = (u8) M2C_FIELD(D_800A10E0, u8 *, 1);
+        M2C_FIELD(arg0, u8 *, 0xDE) = (u8) M2C_FIELD(D_800A10E0, u8 *, 2);
+        return;
+    }
+    M2C_FIELD(arg0, u8 *, 0xDC) = 0U;
+    M2C_FIELD(arg0, u8 *, 0xDD) = 0U;
+    M2C_FIELD(arg0, u8 *, 0xDE) = 0U;
+}
 
 void func_80060354(void) {
 }

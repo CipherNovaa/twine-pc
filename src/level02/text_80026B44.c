@@ -13,7 +13,7 @@ s32 L1_func_80026D08(u32 id, s32 flags);
 
 
 s32 func_80026B44(u8 arg0);
-s16 func_80026C38(int mask);
+s32 func_80026C38(s32 arg0);
 s32 L1_func_80026ED0(void);
 s32 L1_SsVoKeyOn(s32, s32, u16, u16);
 s16 L1_func_800815A0(s16, s16, s16, s16, s16, s16, s16);
@@ -214,6 +214,10 @@ extern s8 D_8009C1EE;
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
+void func_80029A30(s32, s16, s16, s16, s16, s32);
+extern S1CBC D_800B1CBC;
+extern s32 D_800A03C0[];
 M2C_UNK func_80085600(s16);                         /* extern */
 M2C_UNK func_80026F5C(s32, M2C_UNK);                /* extern */
 M2C_UNK func_80027274(s32, s32, M2C_UNK);           /* extern */
@@ -244,7 +248,13 @@ s32 func_80026B44(u8 arg0) {
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80026C14);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80026C38);
+s32 func_80026C38(s32 arg0) {
+    s16 i;
+    for (i = 0; i < 24; i++) {
+        if (arg0 & D_800A03C0[i]) return i;
+    }
+    return -1;
+}
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80026C90);
 
@@ -1326,7 +1336,11 @@ void L1_func_80029684(void) {
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80029A30);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80029B94);
+void func_80029B94(s32 a0, s16 a1, s16 a2, s16 a3, s16 a4, s32 a5, s32 a6, s32 a7) {
+    func_80029A30(a0, a1, a2, a3, a4, a5);
+    D_800B1CBC.a = a6;
+    D_800B1CBC.b = a7;
+}
 
 #ifdef NON_MATCHING
 void L1_func_80029A34(void) {

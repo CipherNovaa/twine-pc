@@ -219,6 +219,8 @@ M2C_UNK L2_func_8002B464(s32, M2C_UNK);                /* extern */
 extern s8 L2_D_800B5F49;
 extern s8 L2_D_800B5F4A;
 extern s32 L2_D_800B5F50;
+extern u8 L2_D_800C625C[];
+extern u8 L2_D_800CD020[];
 M2C_UNK L2_func_8008A0C4(M2C_UNK *, void *);           /* extern */
 M2C_UNK L2_func_8008A724();                            /* extern */
 M2C_UNK L2_func_8008AAD0(M2C_UNK);                     /* extern */
@@ -455,7 +457,7 @@ extern s16 L2_D_800A1240;
 extern s32 L2_D_800A1250;
 extern u8 L2_D_800A0CC0;
 extern s32 L2_D_800A1230;
-s32 L2_func_80055738(u32);                             /* extern */
+s32 L2_func_80055738(void *arg0);
 extern s16 L2_D_800B6C94;
 extern s16 L2_D_800B7284;
 M2C_UNK L2_func_8004F288();                            /* extern */
@@ -674,6 +676,7 @@ void L2_func_8002F364(void);
 void L2_func_8002F68C(void);
 void L2_func_8002FF60(void);
 void L2_func_80030390(void);
+void *L2_func_80030454(s32 arg0);
 void L2_func_80030474(void);
 void L2_func_800307F8(void);
 s32 L2_func_800320B8(void);
@@ -752,6 +755,8 @@ M2C_UNK *L2_func_80055F78(s32 arg0);
 void L2_func_80055FFC(s32 arg0);
 s32 L2_func_800570C0(void);
 s32 L2_func_800570C8(void);
+s32 L2_func_80057504(u8 *a, u8 *b);
+s32 L2_func_80057558(u8 *a, u8 *b);
 s32 L2_func_800578E0(void);
 s32 L2_func_80057E7C(s32 arg0, void *arg1);
 s32 L2_func_8005849C(s32 arg0, void *arg1);
@@ -831,6 +836,9 @@ void L2_func_80079854(s32 arg0);
 void L2_func_80079B2C(void);
 void L2_func_8007A2A0(void *arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
+M2C_UNK func_8006C128(M2C_UNK, M2C_UNK *);          /* extern */
+extern u8 D_800AB338;
+extern u8 D_800F4C80;
 
 s32 L1_func_800752C0(void) {
   s32 var_v1;
@@ -1028,9 +1036,13 @@ s32 L2_func_80079040(void *arg0, s32 arg1) {
     return M2C_FIELD(arg0, s32 *, 0x78) == arg1;
 }
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_800761B8", func_800767AC);
+s32 func_800767AC(void *arg0) {
+    return M2C_FIELD(arg0, s32 *, 0x80) < 2;
+}
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_800761B8", func_800767B8);
+void func_800767B8(void *arg0) {
+    M2C_FIELD(arg0, s32 *, 0x78) = -1;
+}
 
 void L2_func_8007906C(void) {
     L2_func_800912A4(&L2_D_800B70F4);
@@ -1281,5 +1293,10 @@ void L2_func_80079ACC(s32 arg0) {
     M2C_FIELD(((arg0 * 0x6C) + &L2_D_800F415C), s8 *, 0x68) = 1;
 }
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_800761B8", func_80077284);
+u8 func_80077284(s32 arg0) {
+    if (arg0 >= 4) {
+        func_8006C128(0, &D_800AB338);
+    }
+    return M2C_FIELD(((arg0 * 0x6C) + &D_800F4C80), u8 *, 0x68);
+}
 

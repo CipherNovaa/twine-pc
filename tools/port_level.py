@@ -334,6 +334,7 @@ def port(level):
         return all(i in l2_smap for i in set(IDENT.findall(code)) if i in l2_globals)
 
     exclude2 = set()  # LEVEL02 names that failed to compile or match here
+    native_drop = set()  # this level's own C that no longer compiles next to the regenerated code
 
     # LEVEL01's text gets its names renamed to L1_ when it's put in. Only names the shared headers declare
     # (g_Args, ...) use #defines instead, since the headers can't be rewritten; those mean the same engine
@@ -372,7 +373,7 @@ def port(level):
     asm_dir = ROOT / f"asm/{level}/nonmatchings"
     exe, load = target_exe(level)
     for attempt in range(20):
-        ported, banked, ported2, jtbl_lines, used2 = {}, {}, {}, [], set()
+        ported, banked, ported2, jtbl_lines, used2, native_names = {}, {}, {}, [], set(), set()
         for l1_stem, t_stem in zip(l1_stems, t_stems):
             header, funcs = l1[l1_stem]
             c_path = ROOT / f"src/{level}/{t_stem}.c"
@@ -397,7 +398,8 @@ def port(level):
                     if not line.startswith("#include"):
                         body.append(line)
                     continue
-                if m.group(2) in native_funcs:  # matched or banked on this level itself
+                if m.group(2) in native_funcs and m.group(2) not in native_drop:  # done on this level itself
+                    native_names.add(m.group(2))
                     kind, code = native_funcs[m.group(2)]
                     body.append(code if kind == "c" else f"#ifdef NON_MATCHING\n{code}\n#else\n{line}\n#endif")
                     continue
@@ -471,10 +473,13 @@ def port(level):
             print(f"pass {attempt}: {len(nm_failed)} banked functions don't compile: {' '.join(sorted(nm_failed))}")
             l2_failed = {n[3:] for n in nm_failed if n.startswith("L2_")}  # LEVEL02 code, wrong here too
             nm_failed -= {"L2_" + n for n in l2_failed}
-            if nm_failed <= nm_exclude and not l2_failed - exclude2:
+            n_failed = nm_failed & native_names
+            nm_failed -= n_failed
+            if nm_failed <= nm_exclude and not l2_failed - exclude2 and not n_failed - native_drop:
                 sys.exit("the NON_MATCHING errors are outside the banked functions (declarations?)")
             nm_exclude |= nm_failed
             exclude2 |= l2_failed
+            native_drop |= n_failed
             continue
         r = subprocess.run(["make", f"LEVEL={level}", "-j8", "-k"], cwd=ROOT, capture_output=True, text=True)
         def owner(name):
@@ -482,6 +487,8 @@ def port(level):
                 return ("L2", name[3:])
             if name and name.startswith("L1_"):
                 return ("L1", name[3:])
+            if name in native_names:
+                return ("N", name)
             return ("L1", name) if name in ported else None
 
         failed, unattributed, current = {}, [], None
@@ -506,6 +513,9 @@ def port(level):
                     print(f"  {n}: {e}")
             exclude |= {n for s, n in failed if s == "L1"}
             exclude2 |= {n for s, n in failed if s == "L2"}
+            native_drop |= {n for s, n in failed if s == "N"}
+            if native_drop:
+                print(f"  dropped back to asm (this level's own C no longer compiles): {' '.join(sorted(native_drop))}")
             continue
         if "Error" in r.stderr and not (ROOT / f"build/{level}/{level}.elf").exists():
             print(r.stderr[-3000:])
