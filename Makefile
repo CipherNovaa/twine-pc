@@ -52,7 +52,8 @@ $(BUILD)/%.o: %.c $$(wildcard asm/$(LEVEL)/nonmatchings/$$(notdir $$*)/*.s) $$(w
 	@mkdir -p $(dir $@)
 	$(CPP) $(CPPFLAGS) $< > $(BUILD)/$*.i
 	$(CC1) $(CFLAGS) $(OPTFLAGS) -o $(BUILD)/$*.cc1.s $(BUILD)/$*.i
-	$(MASPSX) < $(BUILD)/$*.cc1.s > $(BUILD)/$*.s
+	$(PYTHON) tools/jtbl_fix.py $(LEVEL) < $(BUILD)/$*.cc1.s > $(BUILD)/$*.jt.s
+	$(MASPSX) < $(BUILD)/$*.jt.s > $(BUILD)/$*.s
 	$(AS) $(ASFLAGS) -o $@ $(BUILD)/$*.s
 
 $(BUILD)/$(LEVEL).elf: $(O_FILES) linkers/$(LEVEL).ld

@@ -330,7 +330,11 @@ def sync_prototypes(text):
     for line in text.splitlines():
         m = DEF_RE.match(line)
         if m and not line.startswith((" ", "\t")):
-            defs[m.group(2)] = m.group(1).strip() + ";"
+            proto = m.group(1).strip()
+            params = proto[proto.index("(") + 1:proto.rindex(")")].split(",")
+            if all(re.fullmatch(r"\s*\w+\s*", p) for p in params) and params[0].strip() != "void":
+                proto = proto[:proto.index("(")] + "()"  # K&R definition: the identifier list isn't a prototype
+            defs[m.group(2)] = proto + ";"
     out, depth = [], 0
     for line in text.splitlines():
         stripped = line.split("/*")[0].strip()

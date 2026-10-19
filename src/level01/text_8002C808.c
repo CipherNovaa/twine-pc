@@ -764,7 +764,7 @@ void func_8004F134(s16 arg0, s8 arg1);
 void func_80069318(void);
 void func_8006B1DC(s32 arg0);
 void func_800509E4(void *);
-void func_8005E020(arg0);
+void func_8005E020();
 
 
 void func_8006ECBC(void);
@@ -11931,7 +11931,52 @@ s32 func_80056614(u32 *cmd, ScriptObj *obj) {
     return 3;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_800566F8);
+s32 func_800566F8(u32 *cmd, ScriptObj *obj) {
+    s32 t;
+    u32 w;
+    s32 a;
+    s32 b;
+    u32 op;
+    u32 flags;
+    s32 one;
+    s32 four;
+    s32 n;
+
+    t = 0;
+    one = 1;
+    four = 4;
+    n = 3;
+    a = cmd[1];
+    w = cmd[0];
+    b = cmd[2];
+    op = w >> 8;
+    flags = w >> 24;
+    if (obj != NULL) {
+        if ((flags & n) == one) {
+            a = obj->vars[a];
+        }
+        if ((flags & 0xC) == four) {
+            b = obj->vars[b];
+        }
+        switch (op & 0xFF) {
+        case 0: if (a == b) t = 1; break;
+        case 1: if (a != b) t = 1; break;
+        case 2: if (a > b) t = 1; break;
+        case 3: if (a >= b) t = 1; break;
+        case 4: if (a < b) t = 1; break;
+        case 5: if (a <= b) t = 1; break;
+        case 6: if ((a & b) == b) t = 1; break;
+        case 7: if ((a & b) == 0) t = 1; break;
+        }
+        obj->wait = 0;
+        if (t == 1) {
+            obj->pc = cmd + n + 1;
+        } else {
+            obj->pc = cmd + n;
+        }
+    }
+    return n;
+}
 
 s32 func_8005683C(u32 *cmd, ScriptObj *obj) {
     /* op 0x22: set the first word of every entry in the list at +0xA8 to 1 (list[1] = count); 1 word */
