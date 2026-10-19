@@ -2043,6 +2043,11 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+void func_80063630();
+s32 func_80085C3C();
+extern u8 *D_800A1C74;
+extern u8 D_800DCD68[];
+extern s32 D_800E1554[];
 typedef struct { u8 pad0[0x56]; u16 a; u8 pad1[0x12]; u16 b; } S662;
 void func_800660A0(void *);
 M2C_UNK func_80033568(M2C_UNK);                     /* extern */
@@ -2226,7 +2231,14 @@ void L1_func_80061EC4(void) {
     M2C_FIELD(m, s32 *, 0x10) = 2;
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_80061F64);
+void func_80061F64(void) {
+    s16 i;
+    D_800A1C74 = D_800DCD68;
+    for (i = 0; i < 50; i++) {
+        D_800E1554[i] = func_80085C3C();
+    }
+    func_80063630();
+}
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80061890", func_80061FE0);
 

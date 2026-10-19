@@ -13,7 +13,7 @@ s32 L1_func_80026D08(u32 id, s32 flags);
 
 
 s32 func_80026B44(u8 arg0);
-s32 func_80026C38(s32 arg0);
+s16 func_80026C38(int mask);
 s32 L1_func_80026ED0(void);
 s32 L1_SsVoKeyOn(s32, s32, u16, u16);
 s16 L1_func_800815A0(s16, s16, s16, s16, s16, s16, s16);
@@ -248,13 +248,7 @@ s32 func_80026B44(u8 arg0) {
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80026C14);
 
-s32 func_80026C38(s32 arg0) {
-    s16 i;
-    for (i = 0; i < 24; i++) {
-        if (arg0 & D_800A03C0[i]) return i;
-    }
-    return -1;
-}
+INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80026C38);
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B44", func_80026C90);
 

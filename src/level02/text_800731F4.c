@@ -104,6 +104,9 @@ extern M2C_UNK D_800A97B0;
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+void func_80078A60(void);
+void func_8007906C(void);
+void func_800796AC(void);
 M2C_UNK func_8008C0C0(M2C_UNK *);                   /* extern */
 extern s16 D_800A125C;
 extern s16 D_800A125E;
@@ -1155,5 +1158,13 @@ s32 L1_Math_Max3(register s32 a, register s32 b, register s32 c) {
     return MAX(m, c);
 }
 
+#ifdef NON_MATCHING
+void func_80078A30(void) {
+    func_80078A60();
+    func_8007906C();
+    func_800796AC();
+}
+#else
 INCLUDE_ASM("asm/level02/nonmatchings/text_800731F4", func_80078A30);
+#endif
 

@@ -2914,6 +2914,8 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+typedef struct { u8 pad0[0x44]; s16 f44; u8 padx[2]; s16 f48; s16 f4a; u8 pad1[4]; u8 f50; u8 pad2[0x67]; } S5CF;
+extern s16 D_800B72B8;
 void func_800900AC();
 extern u8 D_800ACFCC[];
 extern s16 D_800B6014;
@@ -3099,7 +3101,7 @@ M2C_UNK func_800727D4();                            /* extern */
 extern s32 D_800A1148;
 extern s32 D_800A1164;
 M2C_UNK func_8007E33C(M2C_UNK);                     /* extern */
-extern M2C_UNK D_800B6138;
+extern S5CF D_800B6138[];
 extern s32 D_800F4458;
 extern s16 D_800A11A0;
 void func_8003A3C4(void *arg0);
@@ -17814,7 +17816,18 @@ void L1_func_8005CED0(void *arg0) {
   }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_8005CF80);
+void func_8005CF80(void) {
+    S5CF *p = &D_800B6138[D_800B72B8];
+    s32 d = p->f50 - p->f48;
+    if (p->f4a >= d) {
+        p->f48 = p->f50;
+        p->f4a = p->f4a - d;
+    } else {
+        p->f48 = p->f48 + p->f4a;
+        p->f4a = 0;
+    }
+    p->f44 = p->f48 + p->f4a;
+}
 
 #ifdef NON_MATCHING
 void L1_func_8005CFC8(s16 *q, s16 *rx, s16 *ry, s16 *rz) {
