@@ -186,6 +186,17 @@ def parse_c(text):
     return header, funcs
 
 
+def defined_name(code):
+    """Name of the function a definition defines (banked blocks are keyed by their INCLUDE_ASM name)."""
+    m = re.search(r"(\w+)\s*\(", re.sub(r"/\*.*?\*/", "", code, flags=re.S))
+    return m.group(1) if m else None
+
+
+def is_native(name, level01_names):
+    """C a level got on its own (not from LEVEL01 or LEVEL02 sources)."""
+    return bool(name) and name not in level01_names and not name.startswith(("L1_", "L2_"))
+
+
 def level01_sources():
     """{LEVEL01 C file stem: (header lines, funcs)} in address order."""
     out = {}
@@ -211,9 +222,9 @@ def target_exe(level):
     return data, load
 
 
-def object_mismatches(level, obj, wanted, pairs_by_l1, exe, load):
-    """LEVEL01 names of ported functions whose bytes differ from the EXE (relocations masked).
-    wanted: {name the object defines: LEVEL01 name}."""
+def object_mismatches(level, obj, wanted, exe, load):
+    """Keys of ported functions whose bytes differ from the EXE (relocations masked).
+    wanted: {name the object defines: (key, address in this level)}."""
     text = subprocess.run(["mips-elf-objcopy", "-O", "binary", "-j", ".text", str(obj), "/dev/stdout"],
                           capture_output=True, check=True).stdout
     syms = {}
@@ -227,12 +238,12 @@ def object_mismatches(level, obj, wanted, pairs_by_l1, exe, load):
         if len(p) >= 3 and p[2] in RELOC_MASKS and re.fullmatch(r"[0-9a-f]{8}", p[0]):
             rel[int(p[0], 16)] = RELOC_MASKS[p[2]]
     bad = set()
-    for name, l1 in wanted.items():
+    for name, (l1, addr) in wanted.items():
         if name not in syms:
             bad.add(l1)
             continue
         off, size = syms[name]
-        o = 0x800 + pairs_by_l1[l1] - load
+        o = 0x800 + addr - load
         for k in range(0, size, 4):
             mask = ~rel.get(off + k, 0) & 0xFFFFFFFF
             if (struct.unpack_from("<I", exe, o + k)[0] ^ struct.unpack_from("<I", text, off + k)[0]) & mask:
@@ -279,6 +290,66 @@ def port(level):
     inv = {tn: n for n, a in pairs.items() if (tn := t_name.get(a))}
 
     l1 = level01_sources()
+
+    # Second source, for levels 3-11: functions written for LEVEL02 itself (not from LEVEL01). Their code
+    # names LEVEL02's symbols; those get an L2_ prefix here, bound to this level's symbols like L1_ names.
+    l2 = level not in ("level01", "level02") and (ROOT / "src/level02").exists()
+    l2_items, l2_decls, l2_inv, l2_smap, l2_pairs, l2_globals = {}, [], {}, {}, {}, set()
+    l2_decl_names = set()
+    if l2:
+        l2_pairs, l2_votes = port_symbols.pairings(level, src="level02")
+        l2_smap = port_symbols.symbol_map(l2_votes)
+        l2_tname = {l2_pairs[n]: l2_smap[n][0] for n in l2_pairs if n in l2_smap and l2_smap[n][1] == 0}
+        l2_inv = {tn: n for n, a in l2_pairs.items() if (tn := l2_tname.get(a))}
+        l2_globals = {s for s in elf_symbols(ROOT / "build/level02/level02.elf") if not s.startswith("L1_")}
+        all_l1 = {n for h, f in l1.values() for n in f}
+        for c in sorted((ROOT / "src/level02").glob("*.c")):
+            h, f = parse_c(c.read_text())
+            if NATIVE_MARK in h:
+                for l in h[h.index(NATIVE_MARK) + 1:]:
+                    # one declaration per name: LEVEL02's files can declare a symbol with different types
+                    d = re.match(r"(?:typedef\b.*?|[^(]*?)(\w+)\s*(?:\(|\[|;|$)", l.split("/*")[0].strip())
+                    key = d.group(1) if d else l
+                    if l.strip() and key not in l2_decl_names:
+                        l2_decl_names.add(key)
+                        l2_decls.append(l)
+            for n, (k, code) in f.items():
+                if k == "c" and is_native(defined_name(code), all_l1):
+                    l2_items[n] = code
+        # A function brought over gets its prototype from its definition (another LEVEL02 file may
+        # declare it differently).
+        protos = {}
+        for n, code in l2_items.items():
+            first = code.split("{")[0].strip()
+            if ";" not in first:  # not K&R
+                protos[n] = re.sub(r"\s+", " ", first) + ";"
+        l2_decls = [protos.get(next(iter(re.findall(r"(\w+)\s*\(", l)), None), l) if "(" in l else l
+                    for l in l2_decls]
+        l2_decls += [p for n, p in protos.items() if n not in l2_decl_names]
+
+    def l2_rename(text):
+        return IDENT.sub(lambda m: "L2_" + m.group(0) if m.group(0) in l2_globals else m.group(0), text)
+
+    def l2_portable(code):
+        return all(i in l2_smap for i in set(IDENT.findall(code)) if i in l2_globals)
+
+    exclude2 = set()  # LEVEL02 names that failed to compile or match here
+
+    # LEVEL01's text gets its names renamed to L1_ when it's put in. Only names the shared headers declare
+    # (g_Args, ...) use #defines instead, since the headers can't be rewritten; those mean the same engine
+    # variable in every level, so this level's own C wants them too. A file-wide #define of an address
+    # name (D_800F415C) would also hit this level's own C, where the same name is a different variable.
+    hdr_names = set()
+    for h in (ROOT / "include").glob("*.h"):
+        hdr_names |= set(IDENT.findall(h.read_text()))
+    hdr_names &= renamed
+
+    def l1_rename(s):
+        s = IDENT.sub(lambda m: "L1_" + m.group(0) if m.group(0) in renamed and m.group(0) not in hdr_names
+                      else m.group(0), s)
+        # asm("name") labels bypass the preprocessor
+        return re.sub(r'(asm|__asm__)\("(\w+)"\)', lambda m: f'{m.group(1)}("L1_{m.group(2)}")'
+                      if m.group(2) in renamed else m.group(0), s)
     l1_stems = [name for off, kind, name in subsegments("level01") if kind == "c"]
     t_stems = [name for off, kind, name in subsegments(level) if kind == "c"]
     if len(l1_stems) != len(t_stems):
@@ -301,7 +372,7 @@ def port(level):
     asm_dir = ROOT / f"asm/{level}/nonmatchings"
     exe, load = target_exe(level)
     for attempt in range(20):
-        ported, banked, jtbl_lines = {}, {}, []
+        ported, banked, ported2, jtbl_lines, used2 = {}, {}, {}, [], set()
         for l1_stem, t_stem in zip(l1_stems, t_stems):
             header, funcs = l1[l1_stem]
             c_path = ROOT / f"src/{level}/{t_stem}.c"
@@ -314,7 +385,7 @@ def port(level):
                 cur_header, cur_funcs = parse_c(current)
                 if NATIVE_MARK in cur_header:
                     native_decls = [l for l in cur_header[cur_header.index(NATIVE_MARK) + 1:] if l.strip()]
-                native_funcs = {n: it for n, it in cur_funcs.items() if n not in funcs}
+                native_funcs = {n: it for n, it in cur_funcs.items() if is_native(defined_name(it[1]), funcs)}
             else:
                 (ROOT / f"build/{level}/port_base").mkdir(parents=True, exist_ok=True)
                 (ROOT / f"build/{level}/port_base/{t_stem}.c").write_text(orig)
@@ -335,7 +406,7 @@ def port(level):
                 # Banked (NON_MATCHING) LEVEL01 functions stay asm here: the matching build uses the asm.
                 if item and item[0] == "c" and portable(item[1]):
                     ported[n] = t_stem
-                    body.append(item[1])
+                    body.append(l1_rename(item[1]))
                     jt = re.findall(r"%hi\((jtbl_\w+)\)", (asm_dir / m.group(1).split("/")[-1] / f"{m.group(2)}.s").read_text())
                     if jt:  # keyed by the name the C defines (no L1_ when both levels use the same name)
                         jtbl_lines.append(f"{'L1_' + n if n in renamed else n} {' '.join(dict.fromkeys(jt))}")
@@ -343,17 +414,24 @@ def port(level):
                         and not defined.get(m.group(2), set()) & referenced:
                     # LEVEL01's near-miss C, for NON_MATCHING builds; the matching build keeps this level's asm.
                     banked[n] = t_stem
-                    body.append(f"#ifdef NON_MATCHING\n{item[1]}\n#else\n{line}\n#endif")
+                    body.append(f"#ifdef NON_MATCHING\n{l1_rename(item[1])}\n#else\n{line}\n#endif")
                     jt = re.findall(r"%hi\((jtbl_\w+)\)", (asm_dir / m.group(1).split("/")[-1] / f"{m.group(2)}.s").read_text())
                     if jt:
                         jtbl_lines.append(f"{'L1_' + n if n in renamed else n} {' '.join(dict.fromkeys(jt))}")
+                elif l2 and (n2 := l2_inv.get(m.group(2))) in l2_items and n2 not in exclude2 \
+                        and l2_portable(l2_items[n2]):
+                    ported2[n2] = t_stem
+                    body.append(l2_rename(l2_items[n2]))
+                    jt = re.findall(r"%hi\((jtbl_\w+)\)", (asm_dir / m.group(1).split("/")[-1] / f"{m.group(2)}.s").read_text())
+                    if jt:
+                        jtbl_lines.append(f"L2_{n2} {' '.join(dict.fromkeys(jt))}")
                 else:
                     body.append(line)
-            text = "\n".join(header + [NATIVE_MARK] + native_decls) + "\n" + "\n".join(body) + "\n"
-            used = set(IDENT.findall(text)) & renamed
-            # asm("name") labels bypass the preprocessor: point them at the L1_ name too.
-            text = re.sub(r'(asm|__asm__)\("(\w+)"\)', lambda m: f'{m.group(1)}("L1_{m.group(2)}")'
-                          if m.group(2) in renamed else m.group(0), text)
+            l1_header = [l1_rename(l) for l in header]
+            l2_header = [d for d in map(l2_rename, l2_decls) if d not in l1_header] if l2 else []
+            text = "\n".join(l1_header + l2_header + [NATIVE_MARK] + native_decls) + "\n" + "\n".join(body) + "\n"
+            used2 |= {i[3:] for i in IDENT.findall(text) if i.startswith("L2_")}
+            used = set(IDENT.findall(text)) & hdr_names
             defines = "".join(f"#define {n} L1_{n}\n" for n in sorted(used))
             c_path.write_text(f"/* Generated by tools/port_level.py from src/level01/{l1_stem}.c: shared functions in C, "
                               f"the rest asm. Edit LEVEL01 and rerun. */\n{defines}\n{text}")
@@ -370,6 +448,13 @@ def port(level):
                 ld.append(f"PROVIDE({t} = L1_{n});")
             elif n not in ported:
                 ld.append(f"L1_{n} = {t}{f' + 0x{d:X}' if d > 0 else f' - 0x{-d:X}' if d < 0 else ''};")
+        for n2, (t2, d2) in sorted(l2_smap.items()):
+            if n2 not in used2:
+                continue
+            if n2 in ported2 and d2 == 0:
+                ld.append(f"{t2} = L2_{n2};")
+            elif n2 not in ported2:
+                ld.append(f"L2_{n2} = {t2}{f' + 0x{d2:X}' if d2 > 0 else f' - 0x{-d2:X}' if d2 < 0 else ''};")
         for n, e in ld_entries:
             if n in absolute:
                 ld.append(f"{n} = {e.strip()};")
@@ -384,30 +469,43 @@ def port(level):
             nm_failed |= nonmatching_errors(level, t_stem, renamed)
         if nm_failed:
             print(f"pass {attempt}: {len(nm_failed)} banked functions don't compile: {' '.join(sorted(nm_failed))}")
+            l2_failed = {n[3:] for n in nm_failed if n.startswith("L2_")}  # LEVEL02 code, wrong here too
+            nm_failed -= {"L2_" + n for n in l2_failed}
+            if nm_failed <= nm_exclude and not l2_failed - exclude2:
+                sys.exit("the NON_MATCHING errors are outside the banked functions (declarations?)")
             nm_exclude |= nm_failed
+            exclude2 |= l2_failed
             continue
         r = subprocess.run(["make", f"LEVEL={level}", "-j8", "-k"], cwd=ROOT, capture_output=True, text=True)
+        def owner(name):
+            if name and name.startswith("L2_"):
+                return ("L2", name[3:])
+            if name and name.startswith("L1_"):
+                return ("L1", name[3:])
+            return ("L1", name) if name in ported else None
+
         failed, unattributed, current = {}, [], None
         for line in r.stderr.splitlines():
-            m = re.search(r"In function `L1_(\w+)'", line)
-            if m or "At top level" in line or "In function" in line:
-                current = m.group(1) if m else None
+            m = re.search(r"In function `(\w+)'", line)
+            if m or "At top level" in line:
+                current = owner(m.group(1)) if m else None
                 continue
             if re.search(r"\.i:\d+: (?!warning)", line):  # an error (cc1 prints warnings with "warning:")
-                n = current or (re.search(r"`L1_(\w+)'", line) or [None, None])[1]
-                if n:
-                    failed.setdefault(n, line.split(": ", 1)[-1])
+                key = current or owner((re.search(r"`(L[12]_\w+)'", line) or [None, None])[1])
+                if key:
+                    failed.setdefault(key, line.split(": ", 1)[-1])
                 else:
                     unattributed.append(line)
         if unattributed and not failed:
             print("\n".join(unattributed[:10]))
             sys.exit("compile errors outside ported functions")
         if failed:
-            print(f"pass {attempt}: {len(failed)} functions don't compile: {' '.join(sorted(failed))}")
+            print(f"pass {attempt}: {len(failed)} functions don't compile: {' '.join(sorted(s + ':' + n for s, n in failed))}")
             if "-v" in sys.argv:
                 for n, e in sorted(failed.items()):
                     print(f"  {n}: {e}")
-            exclude |= set(failed)
+            exclude |= {n for s, n in failed if s == "L1"}
+            exclude2 |= {n for s, n in failed if s == "L2"}
             continue
         if "Error" in r.stderr and not (ROOT / f"build/{level}/{level}.elf").exists():
             print(r.stderr[-3000:])
@@ -415,15 +513,18 @@ def port(level):
         bad = set()
         for t_stem in t_stems:
             obj = ROOT / f"build/{level}/src/{level}/{t_stem}.o"
-            wanted = {("L1_" + n if n in renamed else n): n for n, s in ported.items() if s == t_stem}
+            wanted = {("L1_" + n if n in renamed else n): (("L1", n), pairs[n]) for n, s in ported.items() if s == t_stem}
+            wanted.update({"L2_" + n: (("L2", n), l2_pairs[n]) for n, s in ported2.items() if s == t_stem})
             if wanted and obj.exists():
-                bad |= object_mismatches(level, obj, wanted, pairs, exe, load)
+                bad |= object_mismatches(level, obj, wanted, exe, load)
         if bad:
-            print(f"pass {attempt}: {len(bad)} functions differ: {' '.join(sorted(bad))}")
-            exclude |= bad
+            print(f"pass {attempt}: {len(bad)} functions differ: {' '.join(sorted(s + ':' + n for s, n in bad))}")
+            exclude |= {n for s, n in bad if s == "L1"}
+            exclude2 |= {n for s, n in bad if s == "L2"}
             continue
         ok = r.returncode == 0 and ": OK" in r.stdout
-        print(f"{level}: {len(ported)} functions from LEVEL01's C; EXE {'matches' if ok else 'DOES NOT MATCH'}")
+        print(f"{level}: {len(ported)} functions from LEVEL01's C, {len(ported2)} from LEVEL02's; "
+              f"EXE {'matches' if ok else 'DOES NOT MATCH'}")
         if not ok:
             print((r.stdout + r.stderr)[-2000:])
         return ok

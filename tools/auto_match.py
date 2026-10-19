@@ -86,8 +86,17 @@ def compile_unit(c_text, opt, td):
 CONTEXT = ROOT / "build/m2c_context.c"
 
 
+def context_paths(level):
+    """(declarations source, preprocessed m2c context) for a level; LEVEL01's are the shared ones."""
+    if level == "level01":
+        return ROOT / "build/m2c_context_src.c", CONTEXT
+    return ROOT / f"build/m2c_context_src_{level}.c", ROOT / f"build/m2c_context_{level}.c"
+
+
 def build_context(level):
-    """Preprocessed C with our headers plus every file-scope declaration and definition prototype."""
+    """Preprocessed C with our headers plus every file-scope declaration and definition prototype.
+    Other levels get only the headers and one-line typedefs: their generated files declare LEVEL01's
+    names, which would clash with m2c's declarations of the level's own symbols."""
     seen, lines = set(header_decl_names()), []
     for c_file in sorted((ROOT / "src" / level).glob("*.c")):
         # One-line typedefs first, in file order: declarations below may use them.
@@ -96,7 +105,7 @@ def build_context(level):
             if m and m.group(1) not in seen:
                 seen.add(m.group(1))
                 lines.append(line)
-    for c_file in sorted((ROOT / "src" / level).glob("*.c")):
+    for c_file in sorted((ROOT / "src" / level).glob("*.c")) if level == "level01" else ():
         text = c_file.read_text()
         for name, decl in top_level_decls(text).items():
             if name and name not in seen:
@@ -107,19 +116,20 @@ def build_context(level):
             if m and not line.startswith((" ", "\t")) and m.group(2) not in seen:
                 seen.add(m.group(2))
                 lines.append(m.group(1).strip() + ";")
-    src = ROOT / "build/m2c_context_src.c"
+    src, ctx = context_paths(level)
     src.write_text('#include "twine.h"\n' + "\n".join(lines) + "\n")
     subprocess.run([str(GCC / "cpp"), "-P", "-undef", "-D__GNUC__=2", "-D_LANGUAGE_C", "-DM2CTX",
-                    f"-I{ROOT}/include", str(src), str(CONTEXT)], check=True)
+                    f"-I{ROOT}/include", str(src), str(ctx)], check=True)
     return len(lines)
 
 
 def try_function(job):
-    func, s_path, opt, orig = job
+    func, s_path, opt, orig, level = job
     asm = Path(s_path).read_text()
     if SKIP_ASM.search(asm):
         return func, "skip-asm", None
-    ctx = ["--context", str(CONTEXT)] if CONTEXT.exists() else []
+    ctx_src, context = context_paths(level)
+    ctx = ["--context", str(context)] if context.exists() else []
     r = subprocess.run([PY, str(ROOT / "tools/m2c/m2c.py"), "-t", "mipsel-gcc-c", "--globals=used",
                         "--valid-syntax", "--no-cache", *ctx, s_path], capture_output=True, text=True, timeout=120)
     code = r.stdout
@@ -127,8 +137,7 @@ def try_function(job):
         return func, "m2c-fail", None
     if BAD_C.search(code):
         return func, "m2c-unclean", code
-    ctx_src = ROOT / "build/m2c_context_src.c"
-    unit = (ctx_src.read_text() if CONTEXT.exists() else '#include "common.h"\n') + code
+    unit = (ctx_src.read_text() if context.exists() else '#include "common.h"\n') + code
     with tempfile.TemporaryDirectory() as td:
         res, err = compile_unit(unit, opt, td)
     if not res:
@@ -257,7 +266,7 @@ def phase_try(level, max_size, workers, out):
             if size > max_size:
                 continue
             off = 0x800 + vram - load_addr
-            jobs.append((func, str(s_path), opt, data[off:off + size]))
+            jobs.append((func, str(s_path), opt, data[off:off + size], level))
     jobs.sort(key=lambda j: len(j[3]))
     print(f"context: {build_context(level)} declarations", flush=True)
     print(f"trying {len(jobs)} functions with {workers} workers", flush=True)
@@ -358,8 +367,8 @@ def header_decl_names():
 IDENT_RE = re.compile(r"\b((?:func|D|jtbl)_[0-9A-F]{8}|g_\w+|[A-Z][A-Za-z]+_[A-Za-z]\w*)\b")
 
 
-def context_decls():
-    src = ROOT / "build/m2c_context_src.c"
+def context_decls(level="level01"):
+    src = context_paths(level)[0]
     return top_level_decls(src.read_text()) if src.exists() else {}
 
 
@@ -383,7 +392,8 @@ def phase_integrate(level, results_path):
     results = json.loads(Path(results_path).read_text())
     matched = {f: v["code"] for f, v in results.items() if v["status"] == "match"}
     always_skip = {"g_Args"} | header_decl_names()
-    ctx = context_decls()
+    import integrate_one  # here: integrate_one imports this module
+    ctx = context_decls(level)
     total_kept = 0
     for c_file in sorted((ROOT / "src" / level).glob("*.c")):
         original = c_file.read_text()
@@ -403,10 +413,16 @@ def phase_integrate(level, results_path):
                         new_decls[n] = d.strip()
                 for d in missing_context_decls(original + "\n".join(new_decls.values()), body, ctx):
                     new_decls.setdefault(decl_name(d), d)
-                text = text.replace(f'INCLUDE_ASM("{folder}", {f});', body.strip())
+                # the INCLUDE_ASM line, or the whole NON_MATCHING block that banks a near miss for it
+                text = text.replace(integrate_one.asm_block(text, folder, f), body.strip())
             if new_decls:
-                head, sep, rest = text.partition("\n\n")
-                text = head + "\n\n" + "\n".join(new_decls.values()) + "\n" + sep + rest
+                mark = text.find("kept by tools/port_level.py")
+                if mark >= 0:  # a generated file (other levels): below the marker, where port_level keeps them
+                    at = text.index("\n", mark) + 1
+                    text = text[:at] + "\n".join(new_decls.values()) + "\n" + text[at:]
+                else:
+                    head, sep, rest = text.partition("\n\n")
+                    text = head + "\n\n" + "\n".join(new_decls.values()) + "\n" + sep + rest
             return sync_prototypes(text)
 
         def usable(folder, f):

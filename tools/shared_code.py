@@ -30,8 +30,13 @@ def load(path):
 
 
 def level01_functions():
+    return functions("level01")
+
+
+def functions(level):
+    """(address, size, name) of every function in the level's asm."""
     funcs = []
-    for s in sorted((ROOT / "asm/level01").rglob("*.s")):
+    for s in sorted((ROOT / "asm" / level).rglob("*.s")):
         txt = s.read_text()
         for name, size, body in re.findall(r"nonmatching (\w+), 0x([0-9A-F]+)\n\n\w+ \1\n(.*?)endlabel", txt, re.S):
             m = re.search(r"/\* [0-9A-F]+ ([0-9A-F]{8}) ", body)

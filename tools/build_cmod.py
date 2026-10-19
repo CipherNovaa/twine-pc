@@ -58,13 +58,13 @@ def main():
             m = re.match(r"(\w+) = (\w+)( [+-] 0x[0-9A-F]+)?;", line)
             if m:
                 mapping[m.group(1)] = (m.group(2), m.group(3) or "")
-        # Functions this level builds from LEVEL01's C (tools/port_level.py) are defined as L1_<name>, and
-        # the level's own name is an alias of that; replace the L1_ definition.
+        # Functions this level builds from LEVEL01's or LEVEL02's C (tools/port_level.py) are defined as
+        # L1_<name> / L2_<name>, and the level's own name is an alias of that; replace that definition.
         syms = ROOT / f"config/{level}_syms.ld"
-        ported = set(re.findall(r"^\w+ = L1_(\w+);$", syms.read_text(), re.M)) if syms.exists() else set()
-        for name in mapping:
-            if name in ported:
-                mapping[name] = (f"L1_{name}", "")
+        alias = dict(re.findall(r"^(\w+) = (L[12]_\w+);$", syms.read_text(), re.M)) if syms.exists() else {}
+        for name, (target, off) in list(mapping.items()):
+            if not off and target in alias:
+                mapping[name] = (alias[target], "")
         for f in replaces:
             if f not in mapping or mapping[f][1]:
                 sys.exit(f"{level}: no clean match for replaced function {f}")

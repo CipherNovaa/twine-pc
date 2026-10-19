@@ -54,18 +54,18 @@ def refs(line):
     return out
 
 
-def pairings(level):
-    """LEVEL01 function name -> LEVEL address of its only copy (a function start there), and for every
-    LEVEL01 symbol the pairings seen across all shared functions, {(LEVEL symbol, offset delta): count}."""
-    n = int(level[-2:])
-    l1_addr, l1_words = shared_code.load(shared_code.EXTRACTED / "L01/LEVEL01.EXE")
+def pairings(level, src="level01"):
+    """SRC function name -> LEVEL address of its only copy (a function start there), and for every
+    SRC symbol the pairings seen across all shared functions, {(LEVEL symbol, offset delta): count}."""
+    n, s = int(level[-2:]), int(src[-2:])
+    l1_addr, l1_words = shared_code.load(shared_code.EXTRACTED / f"L{s:02d}/LEVEL{s:02d}.EXE")
     t_addr, t_words = shared_code.load(shared_code.EXTRACTED / f"L{n:02d}/LEVEL{n:02d}.EXE")
-    funcs = [f for f in shared_code.level01_functions() if f[1] >= 16]
+    funcs = [f for f in shared_code.functions(src) if f[1] >= 16]
     index = defaultdict(list)
     for i in range(len(t_words) - 4):
         index[tuple(t_words[i:i + 4])].append(i)
 
-    l1_ops, _ = asm_lines("level01")
+    l1_ops, _ = asm_lines(src)
     t_ops, t_starts = asm_lines(level)
     pairs, votes = {}, defaultdict(Counter)
     for addr, size, name in funcs:
