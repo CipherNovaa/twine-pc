@@ -33,6 +33,25 @@ typedef struct { u16 first; u8 p0[2]; u16 last; u8 p1[0x5A]; } Rec60;
 typedef struct { u8 p0[0xE]; s16 a; u8 p1[0x12]; s16 b; u8 p2[4]; } Rec28;
 typedef struct { u8 a, b, c, d; s16 e, f; } TP8;
 typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; s16 w, h; } SPRT;
+typedef struct { u32 addr : 24; u32 len : 8; } PTag;
+typedef struct { u16 first; u8 p0[2]; u16 last; u8 p1[4]; u8 flag; u8 p2[0x55]; } Ent60;
+typedef struct { u32 tag; u32 code[2]; } DR_MODE;
+typedef struct { u16 first; u8 p0[2]; u16 last; u16 cnt; u8 p1[2]; u8 flag; u8 p2[0x55]; } TwLine;
+typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; s16 x1, y1; u8 u1, v1; u16 tpage; s16 x2, y2; u8 u2, v2; u16 pad1; s16 x3, y3; u8 u3, v3; u16 pad2; } POLY_FT4;
+typedef struct { u32 tag; u8 r0, g0, b0, code; } PrimHdr;
+typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0, x1, y1, x2, y2, x3, y3; u32 pad; } LINE_F4;
+typedef struct { LINE_F4 line[2]; u8 tile[2][0x10]; u8 f4[2][0x18]; POLY_FT4 ft4[2]; DR_MODE dm[2]; u8 pad[0x18]; u8 flag; } Overlay;
+M2C_UNK SetLineF4(M2C_UNK *);
+void func_80081B74(void *);
+void func_80081C54(void *);
+void func_80081C84(void *);
+void func_80081CE4(void *, s32);
+void func_80029684(void);
+extern s32 D_8009C1F0;
+void func_80028DBC(u32 *ot, s32 db);
+extern DR_MODE D_800AEDBC[];
+M2C_UNK SetDrawMode(M2C_UNK *, M2C_UNK, M2C_UNK, s32, s32);
+void func_80028C08(u32 *ot, s32 db);
 extern char D_800A6F34[];
 void func_80029504(s16 *c);
 void func_8002967C(void);
@@ -611,9 +630,67 @@ void func_80028B58(s32 arg0, s32 arg1, s32 arg2) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80028C08);
+void func_80028C08(u32 *ot, s32 db) {
+    s32 i;
+    s32 j;
+    SPRT *prim;
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80028DBC);
+    SetDrawMode((M2C_UNK *)&D_800AEDBC[db], 0, 0, (u16)GetTPage(0, 0, D_800AC4E0, D_800AC4E4), 0);
+    for (i = 0; i < D_800AC54C; i++) {
+        if (((Ent60 *)D_800AB744)[i].flag != 0) {
+            for (j = ((Ent60 *)D_800AB744)[i].first; j <= ((Ent60 *)D_800AB744)[i].last; j++) {
+                ((PTag *)&((SPRT (*)[2])D_800AC550)[j][db])->addr = ((PTag *)ot)->addr;
+                ((PTag *)ot)->addr = (u32)&((SPRT (*)[2])D_800AC550)[j][db];
+            }
+        }
+    }
+    ((PTag *)&D_800AEDBC[db])->addr = ((PTag *)ot)->addr;
+    ((PTag *)ot)->addr = (u32)&D_800AEDBC[db];
+}
+
+void func_80028DBC(u32 *ot, s32 db) {
+    s32 i;
+    s32 j;
+    s32 k;
+    s32 c;
+
+    if (D_8009C1F0 == 0) {
+        Menu_ResetState();
+        return;
+    }
+    if (D_800AC54C > 0) {
+        if (D_800AB614 == D_800AC54C) {
+            D_800AB600 = 1;
+        }
+        SetDrawMode((M2C_UNK *)&D_800AEDBC[db], 0, 0, (u16)GetTPage(0, 0, D_800AC4E0, D_800AC4E4), 0);
+        for (i = 0; i < D_800AC54C; i++) {
+            if (D_800AB614 < i) {
+                break;
+            }
+            for (j = ((TwLine *)D_800AB744)[i].first, k = 0; j <= ((TwLine *)D_800AB744)[i].last; j++, k++) {
+                if (((TwLine *)D_800AB744)[i].flag != 0) {
+                    if (((TwLine *)D_800AB744)[i].cnt < k) {
+                        c = ++((TwLine *)D_800AB744)[i].cnt;
+                        KEEP(c);
+                        if (!(c & 1)) {
+                            g_Args->pad12E[0xA] = 0xF;
+                            func_80026F30(1, 2);
+                        }
+                        if (((TwLine *)D_800AB744)[i].cnt >= ((TwLine *)D_800AB744)[i].last - ((TwLine *)D_800AB744)[i].first) {
+                            D_800AB614++;
+                        }
+                        goto end;
+                    }
+                    ((PTag *)&((SPRT (*)[2])D_800AC550)[j][db])->addr = ((PTag *)ot)->addr;
+                    ((PTag *)ot)->addr = (u32)&((SPRT (*)[2])D_800AC550)[j][db];
+                }
+            }
+        }
+end:
+        ((PTag *)&D_800AEDBC[db])->addr = ((PTag *)ot)->addr;
+        ((PTag *)ot)->addr = (u32)&D_800AEDBC[db];
+    }
+}
 
 void Menu_ResetState(void) {
     D_800AEDA8 = 0;
@@ -745,7 +822,48 @@ void func_80029504(s16 *c) {
 void func_8002967C(void) {
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80029684);
+void func_80029684(void) {
+    s32 i;
+    u8 u;
+    u8 v;
+    u8 w;
+    POLY_FT4 *p;
+    PrimHdr *f;
+    s32 uw;
+    s32 vh;
+    PrimHdr *t;
+    LINE_F4 *l;
+
+    ((Overlay *)&D_800AC284)->flag = 0;
+    u = D_800AE940[0x1D8];
+    v = D_800AE940[0x1D9];
+    w = D_800AE940[0x1DA];
+    uw = u + w;
+    vh = v + 8;
+    for (i = 0; i < 2; i++) {
+        l = &((Overlay *)&D_800AC284)->line[i];
+        SetLineF4(l);
+        l->r0 = 0; l->g0 = 0; l->b0 = 0;
+        t = (PrimHdr *)((Overlay *)&D_800AC284)->tile[i];
+        func_80081B74(t);
+        t->r0 = 0; t->g0 = 0; t->b0 = 0;
+        f = (PrimHdr *)((Overlay *)&D_800AC284)->f4[i];
+        func_80081C54(f);
+        f->r0 = 0x14; f->g0 = 0xA; f->b0 = 0x78;
+        func_80081CE4(f, 1);
+        SetDrawMode((M2C_UNK *)&((Overlay *)&D_800AC284)->dm[i], 0, 0, (u16)GetTPage(0, 0, 0, 0), 0);
+        p = &((Overlay *)&D_800AC284)->ft4[i];
+        func_80081C84(p);
+        p->r0 = 0x80; p->g0 = 0x80; p->b0 = 0x80;
+        func_80081CE4(p, 0);
+        p->clut = GetClut((s16)D_800AC4D8, (s16)D_800AC4DC);
+        p->tpage = D_800AC4E8;
+        p->u0 = u; p->v0 = v;
+        p->u1 = uw; p->v1 = v;
+        p->u2 = u; p->v2 = vh;
+        p->u3 = uw; p->v3 = vh;
+    }
+}
 
 void func_80029868(char *text, s16 arg1, s16 arg2, s16 arg3, s16 arg4, s32 mode) {
     u8 *msg = (u8 *)&D_800AC284;

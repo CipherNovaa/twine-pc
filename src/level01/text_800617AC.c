@@ -1048,6 +1048,9 @@ typedef struct { u8 b[8]; } B8;
 typedef struct { u8 b[12]; } B12;
 typedef struct { s32 w[10]; } W40;
 typedef struct { u8 b[20]; } B20;
+#define FA65(o) (*(s16 *)((u8 *)arg0 + (o)))
+void func_8004B334(s32 arg0);
+void func_8004A8A8(s8 arg0, s8 arg1, s8 arg2, s16 arg3);
 void func_80069CD4(s32 *arg0);
 void func_80051AE0(s32 *arg0);
 void func_800334F4(s32 *arg0);
@@ -3389,7 +3392,84 @@ s32 func_80065928(s32 *pos, s16 arg1, s32 type) {
     return 1;
 }
 
+#ifdef NON_MATCHING
+s32 func_80065A20(void *arg0, SVECTOR *arg1, s32 arg2) {
+    s32 sp18[4];
+    SVECTOR p;
+    s16 c0, c1, c2;
+    s32 sp38, sp3C, sp40;
+    s16 stepX, stepY, stepZ;
+    s32 n, i; s16 nn, nx, nz, k, j, m, cnt;
+    s16 half;
+    s16 len;
+
+    len = arg2;
+    if (arg0 == 0) {
+        func_8006B230(0, (s32)&D_800A9498);
+    }
+    if (((*(u32 *)arg0 >> 6) & 7) == 5) {
+        n = ((FA65(18) - FA65(16)) >> 11) + (((FA65(14) - FA65(12)) >> 11) + 1) + ((FA65(10) - FA65(8)) >> 11);
+        if (n >= 0xB) n = 10;
+        nn = n;
+        for (i = 0; i < nn; i++) {
+            func_800658B4(arg0, (i << 12) / nn, &sp38, &sp3C, &sp40);
+            p.vx = sp38 + ((FA65(10) + FA65(8)) >> 1);
+            p.vy = sp3C + ((FA65(14) + FA65(12)) >> 1);
+            p.vz = sp40 + ((FA65(18) + FA65(16)) >> 1);
+            func_800669A4(&p, sp18, arg0);
+            if (func_80065928(sp18, (s16)(len / 2), (*(u32 *)arg0 >> 6) & 7) == 0) return i;
+        }
+    } else if (((*(u32 *)arg0 >> 6) & 7) == 6) {
+        n = (s16)(((FA65(18) - FA65(16)) / 2000) + (((FA65(14) - FA65(12)) / 2000) + 1) + ((FA65(10) - FA65(8)) / 2000));
+        if (n >= 0xB) n = 10;
+        nn = n;
+        for (i = 0; i < nn; i++) {
+            func_800658B4(arg0, (i << 12) / nn, &sp38, &sp3C, &sp40);
+            p.vx = sp38 + ((FA65(10) + FA65(8)) >> 1);
+            p.vy = sp3C + ((FA65(14) + FA65(12)) >> 1);
+            p.vz = sp40 + ((FA65(18) + FA65(16)) >> 1);
+            func_800669A4(&p, sp18, arg0);
+            if (func_80065928(sp18, (s16)(len / 2), (*(u32 *)arg0 >> 6) & 7) == 0) return i;
+        }
+    } else {
+        func_80066A60(arg0, &stepX, &stepY, &stepZ);
+        nx = (FA65(10) - FA65(8)) / stepX;
+        nz = (FA65(18) - FA65(16)) / stepZ;
+        if ((s16)nx == 0) nx = 1;
+        if ((s16)nz == 0) nz = 1;
+        cnt = 0;
+        p.vz = arg1->vz + (FA65(16) + (stepZ >> 1));
+        for (k = 0; k < nz; k++) {
+            p.vy = arg1->vy + (FA65(12) / 3);
+            for (j = 0; j < 1; j++) {
+                p.vx = arg1->vx + (FA65(8) + (stepX >> 1));
+                for (m = 0; m < nx; m++) {
+                    func_800669A4(&p, sp18, arg0);
+                    if (func_80065928(sp18, len, (*(u32 *)arg0 >> 6) & 7) == 0) return cnt;
+                    cnt++;
+                    p.vx += stepX;
+                }
+                p.vy += stepY;
+            }
+            p.vz += stepZ;
+        }
+    }
+    if (D_8009CABD != 0) {
+        c0 = 0;
+        c1 = 0xC8;
+        c2 = 0;
+    } else {
+        c0 = 0xD2;
+        c1 = 0x8C;
+        c2 = 0x46;
+    }
+    func_8004B334(1);
+    func_8004A8A8((s8)c0, (s8)c1, (s8)c2, 3);
+    return 1;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_80065A20);
+#endif
 
 s32 func_80066098(s16 *arg0, SVECTOR *arg1) {
     s32 out[4];

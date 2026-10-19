@@ -13,9 +13,13 @@ typedef struct { u8 pad[0x1C]; FE *tab1; FA *tab2; } FD;
 typedef struct { s16 a; s16 b; u16 c; } KdNode;
 typedef struct { u8 a[6]; u16 n; u16 d; u16 flags; } Face12;
 typedef struct { u8 pad[0x20]; SVECTOR *nrm; Face12 *faces; } FaceMesh;
+typedef struct KdBox { s16 xmin, zmin, xmax, zmax; u8 pad8[0xC]; KdNode *nodes; s16 *leaf; u8 pad1C[8]; s32 data; } KdBox;
+s32 func_8007369C(s32 a, u16 *b, u16 *c, s32 d, s32 e, s32 f);
+s32 func_800746D0(s32 arg0, s32 *arg1, s32 *arg2, s16 *arg3, s16 *arg4, s32 *arg5);
+extern u8 D_800E2E4C[];
 extern s32 D_800E2F3C[];
 extern s32 D_8009E9C0;
-s32 func_800726D0(s32, SVECTOR *, s32, s32, SVECTOR *, s32 *, s32, s32);
+s32 func_800726D0(s32 arg0, SVECTOR *arg1, s32 arg2, s32 arg3, SVECTOR *arg4, s32 *arg5, s32 arg6, s32 arg7);
 s32 func_800743E8(s32 arg0, s32 *arg1, s32 arg2, s32 arg3, SVECTOR *arg4, s32 arg5, s32 arg6);
 s32 func_80070070(void *arg0, SVECTOR *arg1, u8 *arg2, s16 *arg3, s16 arg4, s32 *arg5);
 s32 Math_Abs(register s32 x);
@@ -239,7 +243,92 @@ s32 func_8007240C(void *arg0, s32 arg1, s32 arg2, s32 arg3, s32 (*arg4)[3], s16 
     return arg11 - start;
 }
 
+#ifdef NON_MATCHING
+s32 func_800726D0(s32 arg0, SVECTOR *arg1, s32 arg2, s32 arg3, SVECTOR *arg4, s32 *arg5, s32 arg6, s32 arg7) {
+    s32 sp30, sp34, sp38, sp3C, sp40, sp44, sp48;
+    u32 sp4C;
+    KdNode *base;
+    KdNode *cur;
+    s32 sp58;
+    u8 *e;
+    s32 sp60, sp64, sp68;
+
+    sp60 = 0;
+    sp64 = 0;
+    sp30 = arg1->vx;
+    sp34 = arg1->vz;
+    sp38 = ((KdBox *)arg0)->xmin;
+    sp3C = ((KdBox *)arg0)->xmax;
+    sp40 = ((KdBox *)arg0)->zmin;
+    sp44 = ((KdBox *)arg0)->zmax;
+    base = ((KdBox *)arg0)->nodes;
+    cur = base;
+    sp58 = ((KdBox *)arg0)->data;
+    sp4C = (u32)cur->b >> 31;
+    for (;;) {
+        if (cur->a < 0) {
+            sp68 = func_8007240C((void *)arg0, (s32)arg1, arg2, arg3, (void *)sp58, ((KdBox *)arg0)->leaf + cur->b, (s16)(((u16)cur->a + 1) * -1), (s32 *)arg4, arg7, arg5, arg6, sp64);
+            if (sp68 > 0) {
+                sp64 = sp64 + sp68;
+                if (sp64 >= arg6) return sp64;
+            }
+            if (sp60 > 0) {
+                sp60 = sp60 - 1;
+                e = D_800E2E4C + sp60 * 0x1C;
+                sp38 = *(s16 *)(e + 4);
+                sp3C = *(s16 *)(e + 6);
+                sp40 = *(s16 *)(e + 8);
+                sp44 = *(s16 *)(e + 0xA);
+                cur = base + *(s16 *)(e + 2);
+            } else {
+                return sp64;
+            }
+
+        } else {
+            sp4C = (u32)cur->b >> 31;
+            if (sp4C == 0) {
+                sp48 = sp38 + (u16)cur->c;
+                if (sp30 - arg2 < sp48) {
+                    if (sp48 < sp30 + arg2 && sp60 < 8) {
+                        e = D_800E2E4C + sp60 * 0x1C;
+                        sp60 = sp60 + 1;
+                        *(u16 *)(e + 4) = sp48;
+                        *(u16 *)(e + 6) = sp3C;
+                        *(u16 *)(e + 8) = sp40;
+                        *(u16 *)(e + 0xA) = sp44;
+                        *(s16 *)(e + 2) = (u16)cur->b;
+                    }
+                    sp3C = sp48 - 1;
+                    cur = base + cur->a;
+                } else {
+                    sp38 = sp48;
+                    cur = base + cur->b;
+                }
+            } else {
+                sp48 = sp40 + (u16)cur->c;
+                if (sp34 - arg2 < sp48) {
+                    if (sp48 < sp34 + arg2 && sp60 < 8) {
+                        e = D_800E2E4C + sp60 * 0x1C;
+                        sp60 = sp60 + 1;
+                        *(u16 *)(e + 4) = sp38;
+                        *(u16 *)(e + 6) = sp3C;
+                        *(u16 *)(e + 8) = sp48;
+                        *(u16 *)(e + 0xA) = sp44;
+                        *(s16 *)(e + 2) = -((u16)cur->b + 1);
+                    }
+                    sp44 = sp48 - 1;
+                    cur = base + cur->a;
+                } else {
+                    sp40 = sp48;
+                    cur = base - (cur->b + 1);
+                }
+            }
+        }
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_800726D0);
+#endif
 
 void func_80072D48(register void *arg0, register void *arg1, register void *arg2, register s32 *arg3, register s32 *arg4) {
     s32 sp0;
@@ -306,7 +395,82 @@ s32 func_800743E8(s32 arg0, s32 *arg1, s32 arg2, s32 arg3, SVECTOR *arg4, s32 ar
     return n > 0;
 }
 
+#ifdef NON_MATCHING
+s32 func_800746D0(s32 arg0, s32 *arg1, s32 *arg2, s16 *arg3, s16 *arg4, s32 *arg5) {
+    s32 sp18;
+    u16 sp20, sp22, sp24;
+    u16 sp28, sp2A, sp2C;
+    s32 sp30, sp34, sp38, sp3C, sp40, sp44, sp48, sp50;
+
+    if (arg0 == 0) return 0;
+    if (((VECTOR *)arg1)->vx >= -0x7FFF && ((VECTOR *)arg1)->vx <= 0x7FFF && ((VECTOR *)arg1)->vy >= -0x7FFF && ((VECTOR *)arg1)->vy <= 0x7FFF && ((VECTOR *)arg1)->vz >= -0x7FFF && ((VECTOR *)arg1)->vz <= 0x7FFF) {
+        sp20 = ((VECTOR *)arg1)->vx;
+        sp22 = ((VECTOR *)arg1)->vy;
+        sp24 = ((VECTOR *)arg1)->vz;
+        sp30 = 0x7FFF0000;
+        sp34 = 0x7FFF0000;
+        sp38 = 0x7FFF0000;
+        sp48 = 0;
+        sp3C = ((VECTOR *)arg2)->vx - (s16)sp20;
+        if (((VECTOR *)arg2)->vx < -0x7FFF) sp30 = -0x8000;
+        else if (((VECTOR *)arg2)->vx > 0x7FFF) sp30 = 0x7FFF;
+        if (sp30 & 0xFFFF) {
+            sp30 -= (s16)sp20;
+            sp30 = (sp30 << 12) / sp3C;
+            sp48 = 1;
+        }
+        sp40 = ((VECTOR *)arg2)->vy - (s16)sp22;
+        if (((VECTOR *)arg2)->vy < -0x7FFF) sp34 = -0x8000;
+        else if (((VECTOR *)arg2)->vy > 0x7FFF) sp34 = 0x7FFF;
+        if (sp34 & 0xFFFF) {
+            sp34 -= (s16)sp22;
+            sp34 = (sp34 << 12) / sp40;
+            sp48 = 1;
+        }
+        if (((VECTOR *)arg2)->vz < -0x7FFF) sp38 = -0x8000;
+        else if (((VECTOR *)arg2)->vz > 0x7FFF) sp38 = 0x7FFF;
+        sp44 = ((VECTOR *)arg2)->vz - (s16)sp24;
+        if (sp38 & 0xFFFF) {
+            sp38 -= (s16)sp24;
+            sp38 = (sp38 << 12) / sp44;
+            sp48 = 1;
+        }
+        if (sp48 != 0) {
+            if (sp34 >= sp30) {
+                if (sp30 >= sp38) {
+                    sp50 = sp3C * sp38; sp3C = sp50;
+                    sp50 = sp40 * sp38; sp40 = sp50;
+                    sp50 = sp44 * sp38; sp44 = sp50;
+                } else {
+                    sp50 = sp3C * sp30; sp3C = sp50;
+                    sp50 = sp40 * sp30; sp40 = sp50;
+                    sp50 = sp44 * sp30; sp44 = sp50;
+                }
+            } else if (sp34 >= sp38) {
+                sp50 = sp3C * sp38; sp3C = sp50;
+                sp50 = sp40 * sp38; sp40 = sp50;
+                sp50 = sp44 * sp38; sp44 = sp50;
+            } else {
+                sp50 = sp3C * sp34; sp3C = sp50;
+                sp50 = sp40 * sp34; sp40 = sp50;
+                sp50 = sp44 * sp34; sp44 = sp50;
+            }
+            sp28 = sp20 + (sp3C >> 12);
+            sp2A = sp22 + (sp40 >> 12);
+            sp2C = sp24 + (sp44 >> 12);
+        } else {
+            sp28 = ((VECTOR *)arg2)->vx;
+            sp2A = ((VECTOR *)arg2)->vy;
+            sp2C = ((VECTOR *)arg2)->vz;
+        }
+        sp18 = func_8007369C(arg0, &sp20, &sp28, (s32)arg3, (s32)arg4, (s32)arg5);
+        return (u32)~sp18 >> 31;
+    }
+    return 0;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_800746D0);
+#endif
 
 void DebugPage_ContourMask(void) {
     g_DebugTextX = 0xE;

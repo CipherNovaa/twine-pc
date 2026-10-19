@@ -53,6 +53,12 @@ typedef struct { u16 start; u8 len; u8 flag; } AnimRec;
 typedef struct { u8 pad0[6]; u16 count; u16 unk8; u16 tag; u8 unkC; u8 padD[3]; s16 unk10; u8 pad12[4]; u16 unk16; AnimRec recs[1]; } AnimTrack;
 typedef struct { s32 id; char name[0x64]; } SrcRec;
 typedef struct { s32 idx; char name[0x64]; u8 a; u8 b; u8 pad[2]; } DstRec;
+extern s32 D_800E2F54;
+extern s32 D_800A0370[];
+void func_8003EA24(SVECTOR *arg0, s32 *arg1, SVECTOR *arg2);
+s32 func_800705A8(s32, s16 *, s32, s32);
+s32 SquareRoot0(s32 a);
+#define W(p, T, o) (*(T *)((u8 *)(p) + (o)))
 extern u8 D_800D91E7;
 s32 func_80053BD0(void);
 void RotMatrixYXZ(void *, void *);
@@ -542,7 +548,101 @@ void func_800761DC(void) {
     }
 }
 
+#ifdef NON_MATCHING
+void func_8007632C(u8 *arg0, s32 arg1) {
+    SVECTOR dir;
+    SVECTOR pt;
+    SVECTOR out;
+    s32 yaw, dist, len, t, sx, dx, dz, dot, vlen;
+    s16 gy, vx, vy, vz;
+    u8 *ent, *tgt, *tp, *ap;
+
+    ent = W(arg0, u8 *, 0x10C);
+    yaw = 0;
+    if (ent == 0) return;
+    ent = ent + arg1 * 0x14;
+    W(W(arg0, u8 *, 0x10C), s8, 0x64) = 0;
+    pt.vx = W(ent, u16, 0);
+    pt.vy = W(ent, u16, 2);
+    pt.vz = W(ent, u16, 4);
+    tgt = W(ent, u8 *, 0xC);
+    if (tgt != 0) {
+        tp = W(tgt, u8 *, 0x90);
+        if (W(tgt, u8, 5) == 6) {
+            ap = W(arg0, u8 *, 0x90);
+            dir.vy = 0;
+            dir.vx = W(ap, u16, 0x28) - W(tp, u16, 0x28);
+            dir.vz = W(ap, u16, 0x30) - W(tp, u16, 0x30);
+        } else {
+            dir.vx = W(ent, u16, 6);
+            dir.vy = W(ent, u16, 8);
+            dir.vz = W(ent, u16, 0xA);
+            pt.vx = W(ent, u16, 0) + W(tp, u16, 0x28);
+            pt.vy = W(ent, u16, 2) + W(tp, u16, 0x2C);
+            pt.vz = W(ent, u16, 4) + W(tp, u16, 0x30);
+            func_8003EA24(&dir, (s32 *)(W(W(ent, u8 *, 0xC), u8 *, 0x90) + 0x34), &out);
+            yaw = (u16)out.vy & 0xFFF;
+        }
+    }
+    ap = W(arg0, u8 *, 0x90);
+    dx = (s32)W(ap, u16, 0x28) - W(arg0, s16, 0x50);
+    dz = (s32)W(ap, u16, 0x30) - W(arg0, s16, 0x56);
+    if (dx < 0) dx = -dx;
+    if (dz < 0) dz = -dz;
+    dist = SquareRoot0(dx * dx + dz * dz);
+    gy = func_800705A8(D_800E2F54, &pt.vx, 0, 0);
+    if (gy == -0x7FFF) gy = pt.vy;
+    if (dist < 6 || (gy - pt.vy) < 0xF) {
+        W(arg0, s16, 0x9E) = 0;
+        W(arg0, s16, 0xA0) = 0;
+        W(arg0, s16, 0xA2) = 0;
+        W(arg0, s16, 0x98) = 0;
+        W(arg0, s16, 0x9C) = 0;
+        W(arg0, s16, 0x9A) = 0;
+        func_80065614(arg0, 1, 5);
+        func_800697C8(arg0);
+        func_800395E8(arg0);
+    } else {
+        if (tgt != 0 && W(tgt, u8, 5) != 6) {
+            if (yaw < 0) yaw += 0x1000;
+            t = D_800A0370[yaw];
+            if (yaw == 0 || yaw == 0x800) dir.vx = 0; else dir.vx = t;
+            if (yaw == 0x400 || yaw == 0xC00) dir.vz = 0; else dir.vz = t >> 16;
+        }
+        len = SquareRoot0(dir.vx * dir.vx + dir.vy * dir.vy + dir.vz * dir.vz);
+        if (len != 0) {
+            dir.vx = (dir.vx * 100) / len;
+            dir.vy = (dir.vy * 100) / len;
+            dir.vz = (dir.vz * 100) / len;
+        }
+        vx = W(arg0, s16, 0x98);
+        vy = W(arg0, s16, 0x9A);
+        vz = W(arg0, s16, 0x9C);
+        len = SquareRoot0(vx * vx + vy * vy + vz * vz);
+        if (len != 0) {
+            vx = (vx * 100) / len;
+            vy = (vy * 100) / len;
+            vz = (vz * 100) / len;
+        }
+        dot = (dir.vx * vx + dir.vy * vy + dir.vz * vz);
+        vlen = SquareRoot0(W(arg0, s16, 0x98) * W(arg0, s16, 0x98) + W(arg0, s16, 0x9A) * W(arg0, s16, 0x9A) + W(arg0, s16, 0x9C) * W(arg0, s16, 0x9C));
+        dot = dot * 2;
+        W(arg0, s16, 0x98) = vx - (dir.vx * dot) / 10000;
+        W(arg0, s16, 0x9A) = vy - (dir.vy * dot) / 10000;
+        W(arg0, s16, 0x9C) = vz - (dir.vz * dot) / 10000;
+        W(arg0, s16, 0x98) = (W(arg0, s16, 0x98) * vlen) / 100;
+        W(arg0, s16, 0x98) = W(arg0, s16, 0x98) / 2;
+        W(arg0, s16, 0x9A) = (W(arg0, s16, 0x9A) * vlen) / 100;
+        W(arg0, s16, 0x9C) = (W(arg0, s16, 0x9C) * vlen) / 100;
+        W(arg0, s16, 0x9A) = W(arg0, s16, 0x9A) / 2;
+        W(arg0, s16, 0x9C) = W(arg0, s16, 0x9C) / 2;
+    }
+    W(arg0, s16, 0x50) = W(W(arg0, u8 *, 0x90), u16, 0x28);
+    W(arg0, s16, 0x56) = W(W(arg0, u8 *, 0x90), u16, 0x30);
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_80075290", func_8007632C);
+#endif
 
 s32 func_80076A0C(u8 *arg0) {
     s32 v;
