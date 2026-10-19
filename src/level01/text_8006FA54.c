@@ -19,6 +19,19 @@ typedef struct { u8 pad[0x20]; SVECTOR *verts; } PlaneSet;
 typedef struct { u16 i0, i1, i2, n; s16 d; u16 f; } HPoly;
 typedef struct { u8 pad[0x1C]; SVECTOR *vtx; SVECTOR *nrm; } HMesh;
 typedef struct HitCtx { SVECTOR a; SVECTOR b; SVECTOR c; SVECTOR d; SVECTOR e; SVECTOR f; SVECTOR g; HPoly *polys; s16 *idx; s32 count; SVECTOR *outN; SVECTOR *outP; s32 best; s32 cur; s32 hit; s32 lo; s32 hi; SVECTOR *n; SVECTOR *v0; SVECTOR *v1; SVECTOR *v2; s32 *outF; } HitCtx;
+typedef struct { s16 pad; s16 ref; s16 bx0; s16 bx1; s16 by0; s16 by1; s32 x0; s32 x1; s32 y0; s32 y1; } ClipEnt;
+typedef struct { s16 a; s16 b; u16 c; } ClipNode;
+typedef struct { s32 x; s32 y; } __attribute__((packed)) ClipV2;
+typedef struct { s16 bx0; s16 by0; s16 bx1; s16 by1; s32 p1[3]; u8 *nodes; s32 leaf; s32 p2[2]; s32 w24; } ClipHdr;
+typedef struct { s16 sx0; s16 pa; s16 sy0; s16 pb; s16 sx1; s16 pc; s16 sy1; s16 pd; s32 pad1[10]; s32 w38; s32 w3c; s32 w40; s32 w44; s32 w48; s32 w4c; s32 pad2[8]; s32 w70; } Scr;
+typedef struct { u16 i0, i1, i2, i3; } Q4;
+#define gte_ldsxy3(r0, r1, r2) __asm__ volatile("lwc2 $12, 0(%0); lwc2 $13, 0(%1); lwc2 $14, 0(%2)" : : "r"(r0), "r"(r1), "r"(r2))
+#define gte_ldsxy3(r0, r1, r2) __asm__ volatile("lwc2 $12, 0(%0); lwc2 $13, 0(%1); lwc2 $14, 0(%2)" : : "r"(r0), "r"(r1), "r"(r2))
+s32 Math_Abs(register s32 x);
+s32 func_800706F0(void *arg0, s32 arg1, s32 arg2, s32 arg3, void *arg4);
+s32 func_80071638(void *arg0, s32 arg1, s32 arg2, s32 arg3, void *arg4, s32 arg5);
+extern u8 D_800E2E4C[];
+s32 func_80072E28(HMesh *m, HitCtx *h);
 void func_80074FE8(register s32 *a, register s32 *b, register s32 *c);
 void func_80072D48(register void *arg0, register void *arg1, register void *arg2, register s32 *arg3, register s32 *arg4);
 void Vec_ProjectXZ(register SVECTOR *v, register s32 *rowA, register s32 *rowC, register s32 *out1, register s32 *out3);
@@ -229,9 +242,290 @@ s32 func_800705A8(ZoneObj *arg0, s32 arg1, SVECTOR *arg2, s32 *arg3) {
     return r;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_800706F0);
+s32 func_800706F0(void *arg0, s32 arg1, s32 arg2, s32 arg3, void *arg4) {
+    s32 nx;
+    s32 nz;
+    SVECTOR c;
+    SVECTOR a;
+    SVECTOR b;
+    SVECTOR d;
+    s32 cy;
+    SVECTOR *p0;
+    SVECTOR *p1;
+    SVECTOR *p2;
+    SVECTOR *n;
+    s32 l4C;
+    s32 l50;
+    s32 l54;
+    s32 l58;
+    s32 l5C;
+    s32 l60;
+    s32 l64;
+    s32 l68;
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_80071638);
+    p0 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i0;
+    p1 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i1;
+    p2 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i2;
+    n = M2C_FIELD(arg0, SVECTOR **, 0x20) + ((Q4 *)arg4)->i3;
+    arg3 = arg3 >> 1;
+    cy = ((SVECTOR *)arg1)->vy + arg3;
+    nx = n->vx;
+    nz = n->vz;
+    if (Math_Abs(nx) < Math_Abs(nz)) {
+        l5C = ((SVECTOR *)arg1)->vx;
+        l4C = p0->vx;
+        l50 = p0->vy;
+        l54 = p1->vx;
+        l58 = p1->vy;
+        a.vx = l4C;
+        a.vy = l50;
+        b.vx = l54;
+        b.vy = l58;
+        if (nz < 0) {
+            c.vx = p1->vy > p0->vy ? l5C - arg2 : l5C + arg2;
+            c.vy = p1->vx > p0->vx ? cy - (-arg3) : cy - arg3;
+            gte_ldsxy3(&a, &b, &c);
+            gte_nclip();
+            l4C = p2->vx;
+            l50 = p2->vy;
+            d.vx = l4C;
+            d.vy = l50;
+            gte_mfMAC0(l60);
+            if (l60 >= 0) {
+                c.vx = p2->vy > p1->vy ? l5C - arg2 : l5C + arg2;
+                c.vy = p2->vx > p1->vx ? cy - (-arg3) : cy - arg3;
+                gte_ldsxy3(&b, &d, &c);
+                gte_nclip();
+                c.vx = p0->vy > p2->vy ? l5C - arg2 : l5C + arg2;
+                c.vy = p0->vx > p2->vx ? cy - (-arg3) : cy - arg3;
+                gte_mfMAC0(l64);
+                if (l64 >= 0) {
+                    gte_ldsxy3(&d, &a, &c);
+                    gte_nclip();
+                    gte_mfMAC0(l68);
+                    if (l68 >= 0) {
+                        return 1;
+                    }
+                }
+            }
+        } else {
+            c.vx = p1->vy > p0->vy ? l5C - (-arg2) : l5C - arg2;
+            c.vy = p1->vx > p0->vx ? cy - arg3 : cy + arg3;
+            gte_ldsxy3(&a, &b, &c);
+            gte_nclip();
+            l4C = p2->vx;
+            l50 = p2->vy;
+            d.vx = l4C;
+            d.vy = l50;
+            gte_mfMAC0(l68);
+            if (l68 <= 0) {
+                c.vx = p2->vy > p1->vy ? l5C - (-arg2) : l5C - arg2;
+                c.vy = p2->vx > p1->vx ? cy - arg3 : cy + arg3;
+                gte_ldsxy3(&b, &d, &c);
+                gte_nclip();
+                c.vx = p0->vy > p2->vy ? l5C - (-arg2) : l5C - arg2;
+                c.vy = p0->vx > p2->vx ? cy - arg3 : cy + arg3;
+                gte_mfMAC0(l64);
+                if (l64 <= 0) {
+                    gte_ldsxy3(&d, &a, &c);
+                    gte_nclip();
+                    gte_mfMAC0(l60);
+                    if (l60 <= 0) {
+                        return 1;
+                    }
+                }
+            }
+        }
+    } else {
+        l58 = ((SVECTOR *)arg1)->vz;
+        l68 = p0->vz;
+        l64 = p0->vy;
+        l60 = p1->vz;
+        l5C = p1->vy;
+        a.vx = l68;
+        a.vy = l64;
+        b.vx = l60;
+        b.vy = l5C;
+        if (nx > 0) {
+            c.vx = p1->vy > p0->vy ? l58 - arg2 : l58 + arg2;
+            c.vy = p1->vz > p0->vz ? cy - (-arg3) : cy - arg3;
+            gte_ldsxy3(&a, &b, &c);
+            gte_nclip();
+            l68 = p2->vz;
+            l64 = p2->vy;
+            d.vx = l68;
+            d.vy = l64;
+            gte_mfMAC0(l54);
+            if (l54 >= 0) {
+                c.vx = p2->vy > p1->vy ? l58 - arg2 : l58 + arg2;
+                c.vy = p2->vz > p1->vz ? cy - (-arg3) : cy - arg3;
+                gte_ldsxy3(&b, &d, &c);
+                gte_nclip();
+                c.vx = p0->vy > p2->vy ? l58 - arg2 : l58 + arg2;
+                c.vy = p0->vz > p2->vz ? cy - (-arg3) : cy - arg3;
+                gte_mfMAC0(l50);
+                if (l50 >= 0) {
+                    gte_ldsxy3(&d, &a, &c);
+                    gte_nclip();
+                    gte_mfMAC0(l4C);
+                    if (l4C >= 0) {
+                        return 1;
+                    }
+                }
+            }
+        } else {
+            c.vx = p1->vy > p0->vy ? l58 - (-arg2) : l58 - arg2;
+            c.vy = p1->vz > p0->vz ? cy - arg3 : cy + arg3;
+            gte_ldsxy3(&a, &b, &c);
+            gte_nclip();
+            l68 = p2->vz;
+            l64 = p2->vy;
+            d.vx = l68;
+            d.vy = l64;
+            gte_mfMAC0(l54);
+            if (l54 <= 0) {
+                c.vx = p2->vy > p1->vy ? l58 - (-arg2) : l58 - arg2;
+                c.vy = p2->vz > p1->vz ? cy - arg3 : cy + arg3;
+                gte_ldsxy3(&b, &d, &c);
+                gte_nclip();
+                c.vx = p0->vy > p2->vy ? l58 - (-arg2) : l58 - arg2;
+                c.vy = p0->vz > p2->vz ? cy - arg3 : cy + arg3;
+                gte_mfMAC0(l50);
+                if (l50 <= 0) {
+                    gte_ldsxy3(&d, &a, &c);
+                    gte_nclip();
+                    gte_mfMAC0(l4C);
+                    if (l4C <= 0) {
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+s32 func_80071638(void *arg0, s32 arg1, s32 arg2, s32 arg3, void *arg4, s32 arg5) {
+    s32 x;
+    s32 y;
+    s32 z;
+    s32 ymin;
+    s32 ymax;
+    s32 u;
+    s32 v;
+    s32 w;
+    s32 t;
+    SVECTOR c;
+    SVECTOR a;
+    SVECTOR b;
+    SVECTOR d;
+    SVECTOR *p0;
+    SVECTOR *p1;
+    SVECTOR *p2;
+    SVECTOR *n;
+    s32 r0;
+    s32 r1;
+    s32 r2;
+
+    p0 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i0;
+    p1 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i1;
+    p2 = M2C_FIELD(arg0, SVECTOR **, 0x1C) + ((Q4 *)arg4)->i2;
+    n = M2C_FIELD(arg0, SVECTOR **, 0x20) + ((Q4 *)arg4)->i3;
+    x = ((SVECTOR *)arg1)->vx;
+    z = ((SVECTOR *)arg1)->vz;
+    if (x + arg2 < p0->vx || x - arg2 > Math_Max(p1->vx, p2->vx) || z + arg2 < Math_Min3(p0->vz, p1->vz, p2->vz) || z - arg2 > Math_Max3(p0->vz, p1->vz, p2->vz)) {
+        return 0;
+    }
+    y = ((SVECTOR *)arg1)->vy;
+    if (p0->vy < p1->vy) {
+        ymin = p0->vy;
+        ymax = p1->vy;
+    } else {
+        ymin = p1->vy;
+        ymax = p0->vy;
+    }
+    if (p2->vy < ymin) {
+        ymin = p2->vy;
+    } else if (ymax < p2->vy) {
+        ymax = p2->vy;
+    }
+    if (y > ymax || y + arg3 < ymin) {
+        return 0;
+    }
+    {
+        register s32 ay = Math_Abs(n->vy);
+        register s32 ax = Math_Abs(n->vx);
+        if (ay < Math_Max(ax, Math_Abs(n->vz))) {
+            return func_800706F0(arg0, arg1, arg2, arg3, arg4);
+        } else if (arg5 != 0 && n->vy < 0) {
+            return 0;
+        }
+    }
+    u = p0->vx;
+    v = p0->vz;
+    w = p1->vx;
+    t = p1->vz;
+    a.vx = u;
+    a.vy = v;
+    b.vx = w;
+    b.vy = t;
+    if (n->vy < 0) {
+        c.vx = p1->vz < p0->vz ? x - arg2 : x + arg2;
+        c.vy = p1->vx < p0->vx ? z - (-arg2) : z - arg2;
+        gte_ldsxy3(&a, &b, &c);
+        gte_nclip();
+        u = p2->vx;
+        v = p2->vz;
+        d.vx = u;
+        d.vy = v;
+        gte_mfMAC0(r0);
+        if (r0 <= 0) {
+            c.vx = p2->vz < p1->vz ? x - arg2 : x + arg2;
+            c.vy = p2->vx < p1->vx ? z - (-arg2) : z - arg2;
+            gte_ldsxy3(&b, &d, &c);
+            gte_nclip();
+            c.vx = p0->vz < p2->vz ? x - arg2 : x + arg2;
+            c.vy = p0->vx < p2->vx ? z - (-arg2) : z - arg2;
+            gte_mfMAC0(r1);
+            if (r1 <= 0) {
+                gte_ldsxy3(&d, &a, &c);
+                gte_nclip();
+                gte_mfMAC0(r2);
+                if (r2 <= 0) {
+                    return 1;
+                }
+            }
+        }
+    } else {
+    c.vx = p1->vz < p0->vz ? x - (-arg2) : x - arg2;
+    c.vy = p1->vx < p0->vx ? z - arg2 : z + arg2;
+    gte_ldsxy3(&a, &b, &c);
+    gte_nclip();
+    u = p2->vx;
+    v = p2->vz;
+    d.vx = u;
+    d.vy = v;
+    gte_mfMAC0(r2);
+    if (r2 >= 0) {
+        c.vx = p2->vz < p1->vz ? x - (-arg2) : x - arg2;
+        c.vy = p2->vx < p1->vx ? z - arg2 : z + arg2;
+        gte_ldsxy3(&b, &d, &c);
+        gte_nclip();
+        c.vx = p0->vz < p2->vz ? x - (-arg2) : x - arg2;
+        c.vy = p0->vx < p2->vx ? z - arg2 : z + arg2;
+        gte_mfMAC0(r1);
+        if (r1 >= 0) {
+            gte_ldsxy3(&d, &a, &c);
+            gte_nclip();
+            gte_mfMAC0(r0);
+            if (r0 >= 0) {
+                return 1;
+            }
+        }
+    }
+    }
+    return 0;
+}
 
 #ifdef NON_MATCHING
 s32 func_80072190(PlaneSet *arg0, SVECTOR *arg1, s32 arg2, s32 arg3, PlaneEnt *arg4) {
@@ -459,7 +753,171 @@ s32 func_80072E28(HMesh *m, HitCtx *h) {
     return h->hit;
 }
 
+#ifdef NON_MATCHING
+s32 func_8007369C(s32 a0, u16 *arg1, u16 *arg2, s32 arg3, s32 arg4, s32 arg5) {
+    s32 sx0, sx1, sy0, sy1;
+    s32 bx0, bx1, by0, by1;
+    s32 split;
+    u32 sign;
+    u8 *base;
+    ClipNode *n;
+    ClipEnt *e;
+    ClipHdr *arg0 = (ClipHdr *)a0;
+    s32 cnt;
+    s32 ret;
+    s32 result;
+    Scr *sp;
+    s32 w54;
+    s32 w58;
+    s32 prod;
+
+    cnt = 0;
+    sp = (Scr *)0x1F800000;
+    *(ClipV2 *)sp = *(ClipV2 *)arg1;
+    ((ClipV2 *)sp)[1] = *(ClipV2 *)arg2;
+    sp->w38 = arg0->w24;
+    sp->w44 = arg3;
+    sp->w48 = arg4;
+    sp->w70 = arg5;
+    sp->w4c = 0x7FFF;
+    sx0 = sp->sx0;
+    sx1 = sp->sx1;
+    sy0 = sp->sy0;
+    sy1 = sp->sy1;
+    bx0 = arg0->bx0;
+    bx1 = arg0->bx1;
+    by0 = arg0->by0;
+    by1 = arg0->by1;
+    base = arg0->nodes;
+    n = (ClipNode *)base;
+    result = -1;
+    while (1) {
+        if (n->a < 0) {
+            sp->w3c = arg0->leaf + n->b * 2;
+            sp->w40 = -(n->a + 1);
+            ret = func_80072E28(arg0, (s16 *)sp);
+            if (ret >= 0) result = ret;
+            if (cnt > 0) {
+                cnt = cnt - 1;
+                e = (ClipEnt *)(D_800E2E4C + cnt * 0x1C);
+                bx0 = e->bx0;
+                bx1 = e->bx1;
+                by0 = e->by0;
+                by1 = e->by1;
+                sx0 = e->x0;
+                sx1 = e->x1;
+                sy0 = e->y0;
+                sy1 = e->y1;
+                n = (ClipNode *)(base + e->ref * 6);
+            } else {
+                break;
+            }
+        } else {
+            sign = (u32)n->b >> 31;
+            if (sign == 0) {
+                split = bx0 + (u16)n->c;
+                if (sx0 < split) {
+                    if (split < sx1 && cnt < 8) {
+                        w58 = sx1 - sx0;
+                        if (w58 != 0) w58 = ((split - sx0) << 16) / w58; else w58 = 0;
+                        prod = (sy1 - sy0) * w58;
+                        w54 = sy0 + (prod >> 16);
+                        e = (ClipEnt *)(D_800E2E4C + cnt++ * 0x1C);
+                        e->bx0 = split;
+                        e->bx1 = bx1;
+                        e->by0 = by0;
+                        e->by1 = by1;
+                        e->ref = n->b;
+                        e->x0 = split;
+                        e->x1 = sx1;
+                        e->y0 = w54;
+                        e->y1 = sy1;
+                        bx1 = split - 1;
+                        sx1 = split;
+                        sy1 = w54;
+                    } else {
+                        bx1 = split - 1;
+                    }
+                    n = (ClipNode *)(base + n->a * 6);
+                } else if (sx1 < split && cnt < 8) {
+                    w54 = sx1 - sx0;
+                    if (w54 != 0) w54 = ((split - sx0) << 16) / w54; else w54 = 0;
+                    prod = (sy1 - sy0) * w54;
+                        w58 = sy0 + (prod >> 16);
+                    e = (ClipEnt *)(D_800E2E4C + cnt++ * 0x1C);
+                    e->bx0 = bx0;
+                    e->bx1 = split - 1;
+                    e->by0 = by0;
+                    e->by1 = by1;
+                    e->ref = n->a;
+                    e->x0 = split;
+                    e->x1 = sx1;
+                    e->y0 = w58;
+                    e->y1 = sy1;
+                    bx0 = split;
+                    sx1 = split;
+                    sy1 = w58;
+                    n = (ClipNode *)(base + n->b * 6);
+                } else {
+                    bx0 = split;
+                    n = (ClipNode *)(base + n->b * 6);
+                }
+            } else {
+                split = by0 + (u16)n->c;
+                if (sy0 < split) {
+                    if (split < sy1 && cnt < 8) {
+                        w54 = sy1 - sy0;
+                        if (w54 != 0) w54 = ((split - sy0) << 16) / w54; else w54 = 0;
+                        prod = (sx1 - sx0) * w54;
+                        w58 = sx0 + (prod >> 16);
+                        e = (ClipEnt *)(D_800E2E4C + cnt++ * 0x1C);
+                        e->bx0 = bx0;
+                        e->bx1 = bx1;
+                        e->by0 = split;
+                        e->by1 = by1;
+                        e->ref = -((u16)n->b + 1);
+                        e->x0 = w58;
+                        e->x1 = sx1;
+                        e->y0 = split;
+                        e->y1 = sy1;
+                        by1 = split - 1;
+                        sx1 = w58;
+                        sy1 = split;
+                    } else {
+                        by1 = split - 1;
+                    }
+                    n = (ClipNode *)(base + n->a * 6);
+                } else if (sy1 < split && cnt < 8) {
+                    w54 = sy1 - sy0;
+                    if (w54 != 0) w54 = ((split - sy0) << 16) / w54; else w54 = 0;
+                    prod = (sx1 - sx0) * w54;
+                        w58 = sx0 + (prod >> 16);
+                    e = (ClipEnt *)(D_800E2E4C + cnt++ * 0x1C);
+                    e->bx0 = bx0;
+                    e->bx1 = bx1;
+                    e->by0 = by0;
+                    e->by1 = split - 1;
+                    e->ref = n->a;
+                    e->x0 = w58;
+                    e->x1 = sx1;
+                    e->y0 = split;
+                    e->y1 = sy1;
+                    by0 = split;
+                    sx1 = w58;
+                    sy1 = split;
+                    n = (ClipNode *)(base + (n->b + 1) * -6);
+                } else {
+                    by0 = split;
+                    n = (ClipNode *)(base + (n->b + 1) * -6);
+                }
+            }
+        }
+    }
+    return result;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8006FA54", func_8007369C);
+#endif
 
 s32 func_800743E8(s32 arg0, s32 *arg1, s32 arg2, s32 arg3, SVECTOR *arg4, s32 arg5, s32 arg6) {
     SVECTOR sv;
