@@ -15,12 +15,12 @@ You need your own copy of the game. No game data is in this repository.
 | Full disc image from rebuilt executables | **byte-identical** to the retail dump (`tools/build_all.sh`) |
 | All 11 levels are **shiftable** | code and data can grow or shrink and the game still runs. Tested by inserting 4 KB early in the code of levels 1, 2 and 6; in Level 1, gameplay, the pause menu and the developer menu all work. Mods can be written in C without matching. |
 | C mods in **every level** | `make cmod CMODS="TWINSTICK WIDEFOV"`: modern twin-stick controls and a wider field of view, checked in DuckStation (twin-stick in Levels 1, 2 and 4, and played with a DualSense; wide FOV in Level 2) |
-| Level 1 game functions in C | 745 of 866 functions match exactly (86%). 51 more are near-miss C under `#ifdef NON_MATCHING` (the matching build keeps their asm; a disc built with them plays fine in DuckStation), so 92% of functions and about 71% of game-code bytes have C. Run `tools/progress.py` for current numbers. |
-| Levels 2–11 | Each gets 351–408 functions from Level 1's C (`tools/port_level.py`), still byte-identical. |
+| Level 1 game functions in C | 774 of 866 functions match exactly (89%). 90 more are near-miss C under `#ifdef NON_MATCHING` (the matching build keeps their asm; a disc built with them plays fine in DuckStation), so every function except the two startup stubs has C. Run `tools/progress.py` and `tools/banked_scores.py` for current numbers. |
+| Levels 2–11 | Each builds byte-identical with about 420–440 functions from Level 1's C, 100–118 from Level 2's (levels 3–11), and 90–120 of its own (`tools/port_level.py`, `auto_match.py --level`), plus 63–70 near misses. Roughly 170–210 functions per level are still asm, mostly that level's own code. |
 | Compiler | GCC 2.8.x, Sony PSX build (old-gcc `2.8.1-psx`), `-O2 -G0`, no `-fno-builtin`. Three source regions are `-O0`. |
 | SDK | PsyQ 4.4 (580 library functions auto-identified) |
 
-The 11 levels share one engine. 617 of Level 1's 841 game functions appear unchanged in every other level, in the same link order, so most decompiled code applies to all levels.
+The 11 levels share one engine. 617 of Level 1's 841 game functions appear unchanged in every other level, in the same link order, so most decompiled code applies to all levels. See `docs/port_plan.md` for the plan for a native PC port.
 
 ## Setup
 
