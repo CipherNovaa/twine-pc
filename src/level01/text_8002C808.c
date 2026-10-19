@@ -21427,48 +21427,48 @@ void func_8005CF40(void) {
     M2C_FIELD(temp_a1, s16 *, 0x44) = (s16) ((u16) M2C_FIELD(temp_a1, s16 *, 0x48) + (u16) M2C_FIELD(temp_a1, s16 *, 0x4A));
 }
 
-#ifdef NON_MATCHING
 void func_8005CFC8(s16 *q, s16 *rx, s16 *ry, s16 *rz) {
-    s32 m;
-    s32 n;
-    s32 s;
-    s32 len;
-    s32 sq;
-    s16 a;
-    s16 b;
-    s16 c;
-    s16 d;
-
-    a = (q[3] * q[3]) >> 12;
-    b = (q[1] * q[1]) >> 12;
-    c = (q[1] * q[2]) >> 12;
-    d = (q[0] * q[3]) >> 12;
-    m = 0x1000 - b * 2 - a * 2;
-    n = (c + d) * 2;
-    m *= m;
-    sq = m + n * n;
-    s = (q[0] * q[1] - q[2] * q[3]) * 2;
-    len = SquareRoot0(sq) << 12;
-    *ry = ((s32 (*)(s32, s32))ratan2)(s, len);
-    if (len > 0x4000) {
-        *rx = ((s32 (*)(s32, s32))ratan2)((q[1] * q[3] + q[0] * q[2]) * 2, 0x1000000 - q[2] * q[2] * 2 - q[1] * q[1] * 2);
-        *rz = ((s32 (*)(s32, s32))ratan2)((q[1] * q[2] + q[0] * q[3]) * 2, 0x1000000 - q[1] * q[1] * 2 - q[3] * q[3] * 2);
-    } else {
-        *rx = ((s32 (*)(s32, s32))ratan2)((q[0] * q[3] - q[1] * q[2]) * 2, 0x1000000 - q[2] * q[2] * 2 - q[3] * q[3] * 2);
-        *rz = 0;
-    }
-    *ry &= 0xFFF;
-    *rx &= 0xFFF;
-    *rz &= 0xFFF;
-    if (*ry > 0x400 && *ry < 0xC00) {
-        *ry = (0x800 - *ry) & 0xFFF;
-        *rx = (*rx + 0x800) & 0xFFF;
-        *rz = (*rz + 0x800) & 0xFFF;
-    }
+  s32 m;
+  s32 n;
+  s32 s;
+  s32 len;
+  s32 sq;
+  s16 a;
+  s16 b;
+  s16 c;
+  s16 d;
+  a = (q[3] * q[3]) >> 12;
+  b = (q[1] * q[1]) >> 12;
+  c = (q[1] * q[2]) >> 12;
+  d = (q[0] * q[3]) >> 12;
+  m = (0x1000 - (b * 2)) - (a * 2);
+  n = (c + d) * 2;
+  m *= m;
+  sq = n * n;
+  sq = sq + m;
+  s = ((q[0] * q[1]) - (q[2] * q[3])) * 2;
+  len = SquareRoot0(sq) << 12;
+  *ry = ((s32 (*)(s32, s32)) ratan2)(s, len);
+  if (len >= (0x4000 + 1))
+  {
+    *rx = ((s32 (*)(s32, s32)) ratan2)(((q[1] * q[3]) + (q[0] * q[2])) * 2, (0x1000000 - ((q[2] * q[2]) * 2)) - ((q[1] * q[1]) * 2));
+    *rz = ((s32 (*)(s32, s32)) ratan2)(((q[1] * q[2]) + (q[0] * q[3])) * 2, (0x1000000 - ((q[1] * q[1]) * 2)) - ((q[3] * q[3]) * 2));
+  }
+  else
+  {
+    *rx = ((s32 (*)(s32, s32)) ratan2)(((q[0] * q[3]) - (q[1] * q[2])) * 2, (0x1000000 - ((q[2] * q[2]) * 2)) - ((q[3] * q[3]) * 2));
+    *rz = 0;
+  }
+  *ry &= 0xFFF;
+  *rx &= 0xFFF;
+  *rz &= 0xFFF;
+  if (((*ry) > 0x400) && ((*ry) < 0xC00))
+  {
+    *ry = (0x800 - (*ry)) & 0xFFF;
+    *rx = ((*rx) + 0x800) & 0xFFF;
+    *rz = ((*rz) + 0x800) & 0xFFF;
+  }
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8005CFC8);
-#endif
 
 void func_8005D2B0(s16 *a, s16 *b, s16 t, s16 *out) {
     s16 tmp[4];
