@@ -3,7 +3,8 @@
 gcc puts each switch table in .rdata, which has no place in the original layout. The original tables are
 already in the level's data (`dlabel jtbl_X`, entries `.word jtgt_Y`). This filter runs between cc1 and
 maspsx: it drops gcc's tables, refers to jtbl_X instead, and defines the global jtgt_Y labels at gcc's case
-labels. Tables pair up in order of first use with the jtbl_ symbols the function's original asm uses.
+labels. Tables pair up in order of first use with the jtbl_ symbols listed for the function in
+config/<level>_jtbl.txt.
 Right after a fresh split the entries are still raw addresses, which already point at the right code.
 
 usage: jtbl_fix.py <level> < cc1.s > out.s"""
@@ -31,8 +32,10 @@ def blob_tables(level):
 
 
 def target_tables(level, func):
-    for f in sorted((ROOT / "asm" / level / "nonmatchings").glob(f"*/{func}.s")):
-        return list(dict.fromkeys(re.findall(r"%hi\((jtbl_\w+)\)", f.read_text())))
+    # A fresh split writes no asm for functions already in C, so the names live in config.
+    for line in (ROOT / "config" / f"{level}_jtbl.txt").read_text().splitlines():
+        if line.split()[:1] == [func]:
+            return line.split()[1:]
     return []
 
 

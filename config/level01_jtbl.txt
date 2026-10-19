@@ -1,0 +1,16 @@
+# Switch jump tables each function uses, in order of first use (tools/jtbl_fix.py).
+Cheat_DoAction jtbl_800A7380
+DebugScreen_DrawPage jtbl_800A74B0
+func_80029A34 jtbl_800A6F68
+func_8002B69C jtbl_800A7168
+func_80030B04 jtbl_800A7764
+func_80039A9C jtbl_800A7ED8
+func_8003D76C jtbl_800A8028
+func_8003E158 jtbl_800A8088
+func_80047318 jtbl_800A859C
+func_80051AE0 jtbl_800A8988
+func_80055878 jtbl_800A8AC0
+func_80055BA8 jtbl_800A8B20
+func_800566F8 jtbl_800A8BE8
+func_8005CB38 jtbl_800A8D74 jtbl_800A8ECC
+func_8006AA20 jtbl_800A969C
