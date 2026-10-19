@@ -1050,6 +1050,20 @@ typedef struct { s32 w[10]; } W40;
 typedef struct { u8 b[20]; } B20;
 typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; u8 r1, g1, b1, p1; s16 x1, y1; u8 u1, v1; u16 tpage; u8 r2, g2, b2, p2; s16 x2, y2; u8 u2, v2; u16 pad2; u8 r3, g3, b3, p3; s16 x3, y3; u8 u3, v3; u16 pad3; } POLY_GT4;
 typedef struct { s32 pad0; s32 rows; s32 cols; s32 w; s32 h; s32 *tiles; } SkyGrid;
+extern s32 D_800E2DF4;
+void func_8006DD20(s32 *a, s32 *b, s32 *c, s32 *out);
+#define NORM(i, o, w) { s32 ax, az, ay, k, sh; u32 m; ax = abs((i)->vx); az = abs((i)->vz); ay = abs((i)->vy); m = 0x40000000; k = 30; do { if ((ax & m) || (ay & m) || (az & m)) break; k--; m >>= 1; } while (k >= 0xE); sh = k - 13; if (sh > 0) { (o)->vx = (i)->vx >> sh; (o)->vz = (i)->vz >> sh; (o)->vy = (i)->vy >> sh; } else { (o)->vx = (i)->vx; (o)->vy = (i)->vy; (o)->vz = (i)->vz; } func_8008C5D8((s32 *)(o), (s32 *)(w)); }
+extern s32 D_800A93C0;
+extern s32 D_800A93D4;
+extern s32 D_800A93E8;
+extern s32 D_800A93F8;
+extern s32 D_800A9410;
+extern s32 D_800A9428;
+extern s32 D_800A943C;
+void func_80061FB4(void);
+#define PT(k) { a = f[k]; b = f[k + 1]; c = f[k + 2]; if (a < 0) v[0] = lo.x; else v[0] = hi.x; if (b < 0) v[1] = lo.y; else v[1] = hi.y; if (c < 0) v[2] = lo.z; else v[2] = hi.z; }
+u8 *func_80058B6C(u8 type);
+void func_80058D5C(u8 *arg0, s32 arg1, s32 arg2, s32 arg3);
 s32 func_800743E8(s32, s32 *, s32, s32, SVECTOR *, s32, s32);
 void *func_8006421C(void *obj, s16 *pos, s16 arg2, s16 arg3, s16 arg4);
 void func_800699B8(void *arg0);
@@ -1136,7 +1150,7 @@ s32 func_80069920(void);
 void func_80069928(s32 arg0);
 extern Fr6E D_800E2DE4;
 extern u8 *D_800E2448[];
-s32 func_8006E620(void *, V3s, V3s);
+s32 func_8006E620(void *fr, V3s lo, V3s hi);
 extern V4050 D_800D4050;
 extern V4058 D_800D4058;
 extern s32 D_800A9488;
@@ -1179,7 +1193,7 @@ void func_80065100(void *arg0);
 void func_800652F0(void *arg0);
 void func_80064A10(u8 *arg0);
 void func_80064C28(u8 *arg0);
-void func_80062FAC(s32, s16, u8 *, u8 *);
+void func_80062FAC(s32 arg0, s16 arg1, u8 *arg2, u8 *arg3);
 Ent34 *func_800637B0(s16 x, s16 y, s16 z);
 s32 *func_8006412C(void);
 void func_8006461C(void *arg0, s8 arg1, s32 arg2, s16 arg3);
@@ -2018,7 +2032,137 @@ void func_80061F38(void) {
   func_800636B8();
 }
 
+#ifdef NON_MATCHING
+void func_80061FB4(void) {
+    u8 *base;
+    u8 *p;
+
+    base = (u8 *)D_8009D8B8;
+    p = base + 0x28;
+    if (base + 0xC8 < p) {
+        func_8006B230(0, (s32)&D_800A93C0);
+    }
+    M2C_FIELD(p, s16 *, 0x0) = 0x3C;
+    *(u8 *)(p + 0xA) = 0x3F;
+    M2C_FIELD(p, u8 *, 0xB) = 0x3F;
+    M2C_FIELD(p, s16 *, 0xE) = 0x1C0;
+    M2C_FIELD(p, u8 *, 0x8) = 0x0;
+    *(s16 *)(p + 0x2) = 0x3C;
+    *(u8 *)(p + 0x6) = 0x60;
+    *(u8 *)(p + 0x9) = 0x80;
+    *(u8 *)(p + 0x7) = 0x60;
+    *(s16 *)(p + 0xC) = 0x260;
+    *(u8 *)(p + 0x5) = 0x60;
+    M2C_FIELD(p, s16 *, 0x12) = 0x180;
+    *(s16 *)(p + 0x10) = 0x300;
+    *(u8 *)(p + 0x4) = 0x27;
+    base = (u8 *)D_8009D8B8;
+    p = base + 0x3C;
+    if (base + 0xC8 < p) {
+        func_8006B230(0, (s32)&D_800A93D4);
+    }
+    M2C_FIELD(p, s16 *, 0x0) = 0xC8;
+    M2C_FIELD(p, u8 *, 0xA) = 0x3F;
+    M2C_FIELD(p, u8 *, 0xB) = 0x3F;
+    *(s16 *)(p + 0x2) = 0xC8;
+    *(u8 *)(p + 0x5) = 0x80;
+    M2C_FIELD(p, s16 *, 0xE) = 0x1E1;
+    M2C_FIELD(p, u8 *, 0x6) = 0x80;
+    *(u8 *)(p + 0x7) = 0x80;
+    *(s16 *)(p + 0xC) = 0x250;
+    M2C_FIELD(p, u8 *, 0x8) = 0x0;
+    M2C_FIELD(p, s16 *, 0x10) = 0x240;
+    M2C_FIELD(p, u8 *, 0x9) = 0x80;
+    M2C_FIELD(p, s16 *, 0x12) = 0x180;
+    *(u8 *)(p + 0x4) = 0x35;
+    base = (u8 *)D_8009D8B8;
+    p = base + 0x50;
+    if (base + 0xC8 < p) {
+        func_8006B230(0, (s32)&D_800A93E8);
+    }
+    M2C_FIELD(p, s16 *, 0x0) = 0x64;
+    M2C_FIELD(p, s16 *, 0x2) = 0x64;
+    *(u8 *)(p + 0xA) = 0x1F;
+    M2C_FIELD(p, s16 *, 0xC) = 0x240;
+    M2C_FIELD(p, s16 *, 0xE) = 0x1C1;
+    M2C_FIELD(p, u8 *, 0xB) = 0x1F;
+    *(u8 *)(p + 0x5) = 0x80;
+    M2C_FIELD(p, u8 *, 0x6) = 0x80;
+    *(u8 *)(p + 0x7) = 0x80;
+    *(u8 *)(p + 0x8) = 0xC0;
+    M2C_FIELD(p, s16 *, 0x10) = 0x230;
+    M2C_FIELD(p, u8 *, 0x9) = 0x80;
+    *(u8 *)(p + 0x4) = 0x80;
+    M2C_FIELD(p, s16 *, 0x12) = 0x180;
+    base = (u8 *)D_8009D8B8;
+    p = base + 0x64;
+    if (base + 0xC8 < p) {
+        func_8006B230(0, (s32)&D_800A93F8);
+    }
+    M2C_FIELD(p, s16 *, 0x0) = 0x64;
+    M2C_FIELD(p, s16 *, 0xC) = 0x270;
+    M2C_FIELD(p, s16 *, 0x10) = 0x220;
+    *(u8 *)(p + 0xA) = 0x1F;
+    *(u8 *)(p + 0xB) = 0x1F;
+    *(u8 *)(p + 0x5) = 0x80;
+    M2C_FIELD(p, u8 *, 0x6) = 0x80;
+    M2C_FIELD(p, s16 *, 0x2) = 0x64;
+    M2C_FIELD(p, s16 *, 0xE) = 0x1C1;
+    M2C_FIELD(p, u8 *, 0x7) = 0x80;
+    M2C_FIELD(p, s16 *, 0x12) = 0x1A0;
+    *(u8 *)(p + 0x8) = 0x80;
+    *(u8 *)(p + 0x9) = 0xA0;
+    M2C_FIELD(p, u8 *, 0x4) = 0x80;
+    base = (u8 *)D_8009D8B8;
+    p = base + 0x78;
+    if (base + 0xC8 < p) {
+        func_8006B230(0, (s32)&D_800A9410);
+    }
+    M2C_FIELD(p, s16 *, 0x0) = 0x64;
+    M2C_FIELD(p, s16 *, 0x2) = 0x64;
+    M2C_FIELD(p, s16 *, 0xE) = 0x1C0;
+    M2C_FIELD(p, u8 *, 0xB) = 0x1E;
+    M2C_FIELD(p, u8 *, 0xA) = 0x1F;
+    M2C_FIELD(p, u8 *, 0x9) = 0xE0;
+    M2C_FIELD(p, u8 *, 0x5) = 0x80;
+    *(u8 *)(p + 0x6) = 0x80;
+    *(s16 *)(p + 0xC) = 0x280;
+    M2C_FIELD(p, u8 *, 0x7) = 0x80;
+    M2C_FIELD(p, u8 *, 0x8) = 0x80;
+    *(s16 *)(p + 0x10) = 0x320;
+    M2C_FIELD(p, s16 *, 0x12) = 0x1E0;
+    *(u8 *)(p + 0x4) = 0x81;
+    base = (u8 *)D_8009D8B8;
+    p = base + 0x8C;
+    if (base + 0xC8 < p) {
+        func_8006B230(0, (s32)&D_800A9428);
+    }
+    M2C_FIELD(p, s16 *, 0x0) = 0x64;
+    M2C_FIELD(p, s16 *, 0x2) = 0x64;
+    M2C_FIELD(p, u8 *, 0x4) = 0x80;
+    base = (u8 *)D_8009D8B8;
+    p = base + 0xA0;
+    if (base + 0xC8 < p) {
+        func_8006B230(0, (s32)&D_800A943C);
+    }
+    M2C_FIELD(p, s16 *, 0x0) = 0x55;
+    *(s16 *)(p + 0x2) = 0x55;
+    M2C_FIELD(p, u8 *, 0xB) = 0x3F;
+    M2C_FIELD(p, s16 *, 0x10) = 0x370;
+    M2C_FIELD(p, u8 *, 0x5) = 0x80;
+    M2C_FIELD(p, u8 *, 0x6) = 0x80;
+    M2C_FIELD(p, u8 *, 0x7) = 0x80;
+    M2C_FIELD(p, u8 *, 0x8) = 0xC0;
+    M2C_FIELD(p, u8 *, 0x9) = 0x80;
+    M2C_FIELD(p, s16 *, 0xC) = 0x260;
+    M2C_FIELD(p, s16 *, 0xE) = 0x1E1;
+    M2C_FIELD(p, s16 *, 0x12) = 0x180;
+    *(u8 *)(p + 0xA) = 0x3E;
+    *(u8 *)(p + 0x4) = 0x97;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_80061FB4);
+#endif
 
 void func_80062300(void) {
     GsGetLs(D_800D3238, D_800DF10C);
@@ -2316,7 +2460,51 @@ void func_80062F38(u8 *a, u8 *b) {
     }
 }
 
+#ifdef NON_MATCHING
+void func_80062FAC(s32 arg0, s16 arg1, u8 *arg2, u8 *arg3) {
+    s32 r;
+    s32 a;
+    s16 *p;
+    s16 mat[16];
+    SVECTOR rot;
+    u8 *o;
+    r = rand();
+    o = func_80058B6C(0x50);
+    if (o != NULL) {
+        o[0x59] = arg2[0];
+        o[0x5A] = arg2[1];
+        o[0x5B] = arg2[2];
+        o[0x5C] = arg3[0];
+        o[0x5D] = arg3[1];
+        o[0x5E] = arg3[2];
+        *(u16 *)(o + 0x44) = *(u16 *)0x1F8003D8;
+        a = r % 15;
+        *(u16 *)(o + 0x48) = a * 57 + 0x80;
+        arg0 = arg0 + (r % 3) * (arg0 >> 1);
+        *(s16 *)(o + 0x68) = arg1;
+        *(s16 *)(o + 0x60) = a * 250;
+        *(s16 *)(o + 0x46) = -((arg0 * ((s16 *)D_800A0370)[(*(u16 *)(o + 0x48) & 0xFFF) * 2]) >> 12);
+        func_80058D5C(o, *(s16 *)(o + 0x60), *(s16 *)(o + 0x48), arg0);
+        *(s16 *)(o + 0x62) = SquareRoot0(*(s16 *)(o + 0x3E) * *(s16 *)(o + 0x3E) + *(s16 *)(o + 0x42) * *(s16 *)(o + 0x42));
+        rot.vx = ratan2(-*(s16 *)(o + 0x40), *(s16 *)(o + 0x62));
+        rot.vz = 0;
+        rot.vy = *(u16 *)(o + 0x60);
+        RotMatrixYXZ_gte(&rot, mat);
+        rot.vx = 0;
+        rot.vy = 0;
+        rot.vz = *(u16 *)(o + 0x68);
+        gte_SetRotMatrix(mat);
+        gte_ldv0(&rot);
+        gte_rtv0();
+        gte_stsv(o + 0x34);
+        *(u16 *)(o + 0x34) = *(u16 *)(o + 0x2C) - *(u16 *)(o + 0x34);
+        *(u16 *)(o + 0x36) = *(u16 *)(o + 0x2E) - *(u16 *)(o + 0x36);
+        *(u16 *)(o + 0x38) = *(u16 *)(o + 0x30) - *(u16 *)(o + 0x38);
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_80062FAC);
+#endif
 
 void func_80063230(void) {
     u8 c1[8];
@@ -5646,9 +5834,157 @@ void func_8006DD20(s32 *a, s32 *b, s32 *c, s32 *out) {
   out[2] = ((n1[0] >> 8) * (n2[1] >> 8)) - ((n1[1] >> 8) * (n2[0] >> 8));
 }
 
+#ifdef NON_MATCHING
+void func_8006E054(void) {
+    VECTOR f;
+    VECTOR r;
+    VECTOR u;
+    VECTOR apex;
+    SVECTOR fwd;
+    VECTOR t1;
+    VECTOR t2;
+    VECTOR p1;
+    VECTOR p2;
+    VECTOR p3;
+    VECTOR p4;
+    s32 h;
+    s32 *pl;
+    s32 fx;
+    fwd.vx = 0;
+    fwd.vy = 0;
+    fwd.vz = 0x1000;
+    fwd.pad = 0;
+    apex.vx = g_Camera.posX << 16;
+    apex.vy = g_Camera.posY << 16;
+    apex.vz = g_Camera.posZ << 16;
+    gte_ldv0(&fwd);
+    gte_rtv0();
+    gte_stlvnl(&t1);
+    NORM(&t1, &t2, &p1);
+    f.vx = p1.vx << 4;
+    f.vy = p1.vy << 4;
+    f.vz = p1.vz << 4;
+    {
+        s32 nx;
+        s32 z = t1.vz;
+        nx = -t1.vx;
+        t1.vy = nx;
+        t1.vx = z;
+        t1.vz = nx;
+        t1.vy = 0;
+    }
+    NORM(&t1, &t2, &p1);
+    {
+        s32 rz = p1.vz << 4;
+        s32 rx = p1.vx << 4;
+        s32 a, b, c, d;
+        a = (rz >> 8) * (f.vy >> 8);
+        b = (rz >> 8) * (f.vx >> 8);
+        c = (rx >> 8) * (f.vz >> 8);
+        d = (rx >> 8) * (f.vy >> 8);
+        r.vz = rz;
+        r.vx = rx;
+        t1.vx = -a;
+        r.vy = p1.vy << 4;
+        t1.vy = b - c;
+        t1.vz = d;
+    }
+    NORM(&t1, &t2, &p1);
+    u.vx = p1.vx << 4;
+    u.vy = p1.vy << 4;
+    u.vz = p1.vz << 4;
+    {
+        s32 k = (s16)g_Args->displayW >> 1;
+        r.vx = r.vx * k;
+        r.vz = r.vz * k;
+        k = (s16)g_Args->displayW * 3 / 4 >> 1;
+        u.vx = u.vx * k;
+        u.vy = u.vy * k;
+        u.vz = u.vz * k;
+    }
+    gte_ReadGeomScreen(&h);
+    {
+        s32 cx = apex.vx + h * f.vx;
+        s32 cy = apex.vy + h * f.vy;
+        s32 cz = apex.vz + h * f.vz;
+        t2.vx = cx;
+        p1.vx = cx + u.vx - r.vx;
+        t2.vy = cy;
+        p1.vy = cy + u.vy - r.vy;
+        p1.vz = cz + u.vz - r.vz;
+        p2.vx = cx + u.vx + r.vx;
+        p2.vy = cy + u.vy + r.vy;
+        t2.vz = cz;
+        p2.vz = cz + u.vz + r.vz;
+        p3.vx = cx - u.vx - r.vx;
+        p3.vy = cy - u.vy - r.vy;
+        p3.vz = cz - u.vz - r.vz;
+        p4.vx = cx - u.vx + r.vx;
+        p4.vy = cy - u.vy + r.vy;
+        p4.vz = cz - u.vz + r.vz;
+    }
+    pl = &D_800E2DF4;
+    func_8006DD20((s32 *)&apex, (s32 *)&p1, (s32 *)&p3, pl);
+    func_8006DD20((s32 *)&apex, (s32 *)&p4, (s32 *)&p2, pl + 4);
+    func_8006DD20((s32 *)&apex, (s32 *)&p2, (s32 *)&p1, pl + 8);
+    func_8006DD20((s32 *)&apex, (s32 *)&p3, (s32 *)&p4, pl + 12);
+    fx = f.vx;
+    pl[-4] = fx;
+    pl -= 4;
+    pl[0x14] = -fx;
+    pl[1] = f.vy;
+    pl[2] = f.vz;
+    pl[0x15] = -f.vy;
+    pl[0x16] = -f.vz;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006E054);
+#endif
 
+#ifdef NON_MATCHING
+s32 func_8006E620(void *fr, V3s lo, V3s hi) {
+    register s32 *f REG("t0") = fr;
+    u16 v[4];
+    s16 r[2];
+    u32 z;
+    u32 flag;
+    s32 a, b, c;
+    PT(0);
+    gte_ldv0(v);
+    gte_rtps();
+    PT(4);
+    gte_cfFLAG(flag);
+    if (flag & 0x20000) return 0;
+    gte_ldv0(v);
+    gte_rtps();
+    PT(8);
+    gte_stsxy(r);
+    if (r[0] < 0) return 0;
+    gte_ldv0(v);
+    gte_rtps();
+    PT(12);
+    gte_stsxy(r);
+    if (r[0] >= 0x21D) return 0;
+    gte_ldv0(v);
+    gte_rtps();
+    PT(16);
+    gte_stsxy(r);
+    if (r[1] < 0) return 0;
+    gte_ldv0(v);
+    gte_rtps();
+    PT(20);
+    gte_stsxy(r);
+    if (r[1] >= 0xF1) return 0;
+    gte_ldv0(v);
+    gte_rtps();
+    a = 1;
+    gte_stsz(&z);
+    if (f[0x18] < z) a = 0;
+    return a;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006E620);
+#endif
 
 void func_8006E9E0(s32 arg0) {
     Stk6E stk[32];
