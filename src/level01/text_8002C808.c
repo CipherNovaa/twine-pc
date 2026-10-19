@@ -151,7 +151,7 @@ void func_800632AC(u8 *, s32);
 
 extern s32 D_8009CF50;
 extern s32 D_800D31BC;
-s32 func_80050A10(VECTOR *, VECTOR *, u8 *, void *);
+s32 func_80050A10(VECTOR *arg0, VECTOR *arg1, u8 *arg2, void *arg3);
 void func_80049A88(void);
 
 
@@ -1052,7 +1052,7 @@ s32 func_80054098(s32 a);
 
 extern char D_800A7344[];
 void func_80032880(s32 arg0, GsIMAGE *arg1);
-void func_800324D0(s32, s16, s16);
+void func_800324D0(s32 timArg, s16 x, s16 y);
 
 
 extern char D_800A7778[];
@@ -1128,6 +1128,45 @@ typedef struct { u8 pad0[4]; u8 active; u8 pad5; u8 id; u8 pad7[0x59]; s32 busy;
 typedef struct { s32 unk0; char name[0x64]; u8 unk68; u8 unk69; u8 pad[2]; } SaveSlot;
 typedef struct { s32 m[8]; } GsMat32;
 typedef struct { s16 v[4]; } V4S;
+typedef struct { u8 b[8]; } PairC368;
+typedef struct { void * p0; u8 b4; u8 pad5[1]; u8 b6; u8 pad7[2]; u8 b9; u8 padA[6]; s32 w10; s16 h14; u8 pad16[2]; s32 w18; u8 pad1C[16]; s32 w2C; s32 w30; u8 pad34[6]; u8 b3A; u8 pad3B[1]; PairC368 c3C; u8 pad44[24]; s32 w5C; s32 w60; s16 h64; u8 b66; u8 b67; s16 h68; s16 h6A; s32 w6C; s32 w70; s32 w74; u8 pad78[8]; s32 w80; s32 w84; s32 w88; s32 w8C; u8 pad90[32]; s16 hB0; u8 padB2[26]; u8 bCC; u8 bCD; u8 bCE; u8 padCF[1]; s32 wD0; s32 wD4; s32 wD8; u8 padDC[4]; s32 wE0; s32 wE4; s32 wE8; u8 padEC[4]; s32 wF0; s32 wF4; s32 wF8; u8 padFC[4]; s32 w100; s32 w104; s32 w108; s32 w10C; u8 pad110[4]; s32 w114; } ObjC368;
+extern char D_800A80B0[];
+extern char D_800A80BC[];
+extern char D_800A80C8[];
+extern s32 D_8009D5F0;
+extern s32 D_8009CD90;
+extern u8 D_800A89BC[];
+EffSlot *func_8003A898(s32 arg0, s32 arg1);
+void func_80053650(s32 *arg0);
+void func_80069C10(void *, void *, s32 *, s32 *);
+s32 func_80076A0C(u8 *);
+void func_8003BE68(s16 *a, s16 *b);
+void func_80069C10(void *arg0, void *arg1, s32 *arg2, s32 *arg3);
+s32 func_80076A0C(u8 *arg0);
+extern u16 D_8009D3F8;
+extern s32 D_8009D3F4;
+extern s32 D_8009D3F0;
+extern VECTOR D_8009D3BC;
+void ApplyMatrixLV(void *, void *, void *);
+extern s32 D_8009D0FC;
+extern u8 D_800B0E8C[];
+extern u8 D_800B0EA0[];
+void SetDefDispEnv(void *, s32, s32, s32, s32);
+void SetDefDrawEnv(void *, s32, s32, s32, s32);
+void func_8007F530(void *);
+void func_8007F5F0(void *);
+extern M2C_UNK D_800A7A0C;
+void func_80038448(void);
+void func_800388E8(void);
+void func_80038954(void);
+extern M2C_UNK D_800A7C14;
+extern u8 D_800A7C20;
+extern M2C_UNK D_800A7C24;
+extern M2C_UNK D_800A7C30;
+extern M2C_UNK D_800A7C3C;
+extern M2C_UNK D_800A7C50;
+extern M2C_UNK D_800A7C58;
+void func_800335B4(void);
 extern s32 D_8009CA94;
 extern char D_800A8F94[];
 void func_8005D654(void);
@@ -1155,7 +1194,7 @@ extern char D_800A73D8[];
 extern char D_800A7418[];
 extern char D_800A7424[];
 extern char D_800A7EFC[];
-void func_8004C368(s32, u8 *);
+void func_8004C368(s32 idx, ObjC368 *o);
 s32 func_800752E8(u8);
 extern char D_800A773C[];
 extern char D_800A76E4[];
@@ -1225,7 +1264,7 @@ void func_80053804(u8 *arg0);
 void func_8005772C(void *arg0);
 extern s8 D_800A8944;
 extern u8 D_800D91E7;
-void func_80053114(u8 *);
+void func_80053114(u8 *obj);
 #define LOADV(ix, w) { SVECTOR *p = (SVECTOR *) (verts + (ix) * 8); u16 x = p->vx; u16 y; u16 z; sv->vx = x; y = p->vy; sv->vy = y; z = p->vz; sv->vz = z; w[0] = (s16) x; w[1] = (s16) y; w[2] = (s16) z; if (scale != 0) { w[0] = ((s16) x * scale) >> 12; w[1] = ((s16) y * scale) >> 12; w[2] = ((s16) z * scale) >> 12; } }
 extern char D_800A7FF8[];
 extern char D_800A8000[];
@@ -1513,7 +1552,7 @@ void *calloc3(s32 size, s32 n);
 extern C3 D_800AFF64;
 extern H3 D_800AFF68;
 extern s32 D_8009CF14[];
-void func_800381CC(void *, s32);
+void func_800381CC(void *objArg, s32 arg1);
 extern s32 D_8009CF34;
 extern u8 D_8009D09C[];
 extern s32 D_800A86C0[];
@@ -3346,7 +3385,41 @@ void func_8002FE04(void) {
     M2C_FIELD(&D_800F1274, M2C_UNK **, 0x114) = &GsTMDfastG3GNL;
 }
 
+#ifdef NON_MATCHING
+void func_8002FFD8(void) {
+    SetDefDrawEnv(D_800B0EA0, 0, 0, *(s16 *)((u8 *)g_Args + 0x190), *(s16 *)((u8 *)g_Args + 0x192));
+    D_800B0EA0[0x18] = 0;
+    D_800B0EA0[0x16] = 1;
+    func_8007F530(D_800B0EA0);
+    SetDefDispEnv(D_800B0E8C, 0, 0, *(s16 *)((u8 *)g_Args + 0x190), *(s16 *)((u8 *)g_Args + 0x192));
+    func_8007F5F0(D_800B0E8C);
+    func_8007F0D8(0);
+    func_80088C44(&D_800D2BC4);
+    M2C_FIELD(&D_800D2BC4, u8 *, 4) = 0x38;
+    M2C_FIELD(&D_800D2BC4, u8 *, 20) = 0x38;
+    M2C_FIELD(&D_800D2BC4, u8 *, 5) = 0x30;
+    M2C_FIELD(&D_800D2BC4, u8 *, 21) = 0x30;
+    M2C_FIELD(&D_800D2BC4, u8 *, 6) = 0xA0;
+    M2C_FIELD(&D_800D2BC4, u8 *, 22) = 0xA0;
+    M2C_FIELD(&D_800D2BC4, u8 *, 12) = 0xF0;
+    M2C_FIELD(&D_800D2BC4, u8 *, 13) = 0xCB;
+    M2C_FIELD(&D_800D2BC4, u8 *, 14) = 0x1E;
+    M2C_FIELD(&D_800D2BC4, u8 *, 28) = 0xF0;
+    M2C_FIELD(&D_800D2BC4, u8 *, 29) = 0xCB;
+    M2C_FIELD(&D_800D2BC4, u8 *, 30) = 0x1E;
+    ((void (*)(void *, s32, s32))func_80081CE4)(&D_800D2BC4, 0, *(u8 *)((u8 *)&D_800D2BC4 + 0x1C));
+    M2C_FIELD(&D_800D2BC4, s16 *, 8) = 0x4A;
+    M2C_FIELD(&D_800D2BC4, s16 *, 10) = 0xCC;
+    M2C_FIELD(&D_800D2BC4, s16 *, 18) = 0xCC;
+    M2C_FIELD(&D_800D2BC4, s16 *, 24) = 0x4A;
+    M2C_FIELD(&D_800D2BC4, s16 *, 26) = 0xCF;
+    M2C_FIELD(&D_800D2BC4, s16 *, 16) = *(u16 *)((u8 *)g_Args + 0x2E0) + 0x4A;
+    M2C_FIELD(&D_800D2BC4, s16 *, 34) = 0xCF;
+    M2C_FIELD(&D_800D2BC4, s16 *, 32) = *(u16 *)((u8 *)g_Args + 0x2E0) + 0x4A;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8002FFD8);
+#endif
 
 void func_80030118(void) {
     u32 r;
@@ -4319,7 +4392,52 @@ s32 func_800324C0(void) {
     return D_800D2F90 == 0;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_800324D0);
+void func_800324D0(s32 timArg, s16 x, s16 y) {
+    u32 *tim = (u32 *)timArg;
+    GsIMAGE img;
+    s16 rect[4];
+    u32 *p;
+    s32 hasClut;
+    u32 mode;
+    u32 n;
+
+    if (*tim != 0x10) {
+        printf(&D_800A79F0, tim);
+        exit(0);
+    }
+    tim++;
+    p = tim;
+    mode = *p & 7;
+    hasClut = 0;
+    if (mode < 2) {
+        hasClut = 1;
+    } else if (mode >= 4) {
+        func_8006B230(0, (s32)&D_800A7A0C);
+    }
+    tim++;
+    n = *tim >> 2;
+    if (hasClut) {
+        tim += n + 1;
+    } else {
+        tim++;
+    }
+    ((s16 *)tim)[0] = x;
+    ((s16 *)tim)[1] = y;
+    GsGetTimInfo(p, &img);
+    rect[0] = img.px;
+    rect[1] = img.py;
+    rect[2] = img.pw;
+    rect[3] = img.ph;
+    func_8007F2EC((M2C_UNK *)rect, (M2C_UNK *)img.pixel);
+    if ((img.pmode & 3) == 1) {
+        func_8007F0D8(0);
+        LoadClut(img.clut, img.cx, img.cy);
+    } else if ((img.pmode & 3) == 0) {
+        func_8007F0D8(0);
+        LoadClut2(img.clut, img.cx, img.cy);
+    }
+    func_8007F0D8(0);
+}
 
 void func_80032648(u32 *tim) {
     GsIMAGE img;
@@ -4840,7 +4958,309 @@ void func_800334F4(s32 *arg0) {
   }
 }
 
+#ifdef NON_MATCHING
+void func_800335B4(void) {
+    s32 sp0;
+    s32 sp4;
+    s32 sp8;
+    s32 temp_a0;
+    s32 temp_a0_2;
+
+    sp0 = 0x28000;
+    sp4 = 0x03FFFFFF;
+    sp8 = 0xFC00FFFF;
+    g_Weapons->pad5E[0x21] = 4;
+    M2C_FIELD(g_Weapons, s16 *, 0xB2) = 0x2EE0;
+    g_Weapons->pad5E[0x17] = 5;
+    g_Weapons->pad5E[0x18] = 6;
+    g_Weapons->pad5E[0x20] = 3;
+    g_Weapons->pad5E[0x19] = 1;
+    g_Weapons->pad5E[0x1A] = -1U;
+    g_Weapons->pad5E[0x1D] = 0;
+    g_Weapons->pad5E[0x1E] = 2;
+    g_Weapons->pad5E[0x1F] = 2;
+    g_Weapons->pad5E[0x37] = -1U;
+    g_Weapons->pad5E[0x38] = -1U;
+    g_Weapons->pad5E[0x3A] = -1U;
+    M2C_FIELD(g_Weapons, s32 *, 0xB4) = 0x14;
+    g_Weapons->pad51[0xA] = D_8009D2B4;
+    g_Weapons->flags = (g_Weapons->flags & 0xFFF87FFF) | sp0 | 0x400000 | 0x800000;
+    M2C_FIELD(g_Weapons, s32 *, 0) = (s32) M2C_FIELD(&D_800A7C14, s32 *, 0);
+    M2C_FIELD(g_Weapons, s32 *, 4) = (s32) M2C_FIELD(&D_800A7C14, s32 *, 4);
+    M2C_FIELD(g_Weapons, s32 *, 8) = (s32) M2C_FIELD(&D_800A7C14, s32 *, 8);
+    g_Weapons->pad0[0x1C] = D_800A7C20;
+    M2C_FIELD(g_Weapons, s16 *, 0xB0) = 0x16;
+    g_Weapons->ammo = 0x50;
+    g_Weapons->clipSize = 0x10;
+    g_Weapons->clip = 0x10;
+    M2C_FIELD(g_Weapons, s16 *, 0xAE) = 0xA;
+    M2C_FIELD(g_Weapons, s8 *, 0x46) = 6;
+    M2C_FIELD(g_Weapons, s8 *, 0x47) = 5;
+    M2C_FIELD(g_Weapons, void (**)(), 0x3C) = func_80038448;
+    M2C_FIELD(g_Weapons, void (**)(), 0x40) = func_80069318;
+    g_Weapons->reserve = 0x40;
+    g_Weapons->pad4C[2] = 1;
+    g_Weapons->pad4C[3] = 1;
+    g_Weapons->maxAmmo = 0x60;
+    M2C_FIELD(g_Weapons, s16 *, 0xAC) = 0x3E8;
+    g_Weapons->pad51[2] = 0x20;
+    g_Weapons->pad51[7] = 0x18;
+    M2C_FIELD(g_Weapons, s16 *, 0x60) = 0x3C;
+    M2C_FIELD(g_Weapons, s16 *, 0x62) = 0x2D;
+    g_Weapons->pad51[9] = 0x2B;
+    g_Weapons[3].pad5E[0x17] = 7;
+    M2C_FIELD(g_Weapons, s16 *, 0x64) = 0x11D;
+    g_Weapons[3].pad5E[0x18] = 8;
+    M2C_FIELD(g_Weapons, s16 *, 0xAA) = 0x294;
+    g_Weapons->pad51[0] = 3;
+    g_Weapons->pad51[1] = 2;
+    M2C_FIELD(g_Weapons, s16 *, 0x66) = 0x136;
+    M2C_FIELD(g_Weapons, s16 *, 0x68) = -5;
+    M2C_FIELD(g_Weapons, s16 *, 0x6C) = 0xA;
+    M2C_FIELD(g_Weapons, s16 *, 0x6E) = -0xA;
+    g_Weapons[3].pad5E[0x20] = 3;
+    g_Weapons[3].pad5E[0x21] = 3;
+    g_Weapons[3].pad5E[0x19] = 1;
+    g_Weapons[3].pad5E[0x1A] = 1;
+    g_Weapons[3].pad5E[0x37] = 4;
+    g_Weapons[3].pad5E[0x1D] = 0;
+    g_Weapons[3].pad5E[0x1E] = 2;
+    g_Weapons[3].pad5E[0x1F] = 2;
+    g_Weapons[3].pad5E[0x38] = 5;
+    g_Weapons[3].pad5E[0x3A] = 6;
+    M2C_FIELD(g_Weapons, u32 *, 0x5C) = (s32) ((((M2C_FIELD(g_Weapons, u32 *, 0x5C) & sp8) | 0x8C0000) & sp4) | 0x08000000);
+    g_Weapons->flags = ((((g_Weapons->flags | 4) & ~0x600) | 0x1800) & ~0x1F8) | 0x2008 | 0x80000 | 0x200000;
+    g_Weapons[3].pad51[0xA] = D_8009D2EC;
+    g_Weapons[3].flags = (g_Weapons[3].flags & 0xFFF87FFF) | sp0 | 0x800000;
+    M2C_FIELD(g_Weapons, s16 *, 0x2DA) = 0x2EE0;
+    M2C_FIELD(g_Weapons, s32 *, 0x2DC) = 0x14;
+    M2C_FIELD(g_Weapons, s32 *, 0x228) = (s32) M2C_FIELD(&D_800A7C24, s32 *, 0);
+    M2C_FIELD(g_Weapons, s32 *, 0x22C) = (s32) M2C_FIELD(&D_800A7C24, s32 *, 4);
+    M2C_FIELD(g_Weapons, s32 *, 0x230) = (s32) M2C_FIELD(&D_800A7C24, s32 *, 8);
+    M2C_FIELD(g_Weapons, s16 *, 0x2D6) = 7;
+    M2C_FIELD(g_Weapons, s16 *, 0x2D4) = 0x1770;
+    M2C_FIELD(g_Weapons, s16 *, 0x2D8) = 0x14;
+    M2C_FIELD(g_Weapons, s8 *, 0x26E) = 6;
+    M2C_FIELD(g_Weapons, s8 *, 0x26F) = 5;
+    M2C_FIELD(g_Weapons, void (**)(), 0x264) = func_80038448;
+    M2C_FIELD(g_Weapons, void (**)(), 0x268) = func_80069318;
+    g_Weapons[3].ammo = 0x14;
+    g_Weapons[3].clipSize = 0xA;
+    g_Weapons[3].clip = 0xA;
+    g_Weapons[3].reserve = 0xA;
+    g_Weapons[3].pad4C[2] = 1;
+    g_Weapons[3].pad4C[3] = 1;
+    g_Weapons[3].pad51[1] = 2;
+    M2C_FIELD(g_Weapons, s16 *, 0x27C) = 0x2328;
+    M2C_FIELD(g_Weapons, s16 *, 0x27E) = 0x15E;
+    M2C_FIELD(g_Weapons, s16 *, 0x28C) = 0x127;
+    M2C_FIELD(g_Weapons, s16 *, 0x290) = 0x7D;
+    M2C_FIELD(g_Weapons, s16 *, 0x288) = 0x3C;
+    g_Weapons[3].pad51[2] = 0x20;
+    g_Weapons[3].pad51[7] = 0x18;
+    g_Weapons[3].maxAmmo = 0x1E;
+    M2C_FIELD(g_Weapons, s16 *, 0x28A) = 0xC8;
+    M2C_FIELD(g_Weapons, s16 *, 0x28E) = 0x144;
+    M2C_FIELD(g_Weapons, s16 *, 0x294) = -0xA;
+    M2C_FIELD(g_Weapons, u32 *, 0x284) = (s32) ((((M2C_FIELD(g_Weapons, u32 *, 0x284) & 0xFC00FFFF) | 0x02580000) & 0x03FFFFFF) | 0x10000000);
+    g_Weapons[3].pad0[0x1C] = D_800A7C20;
+    M2C_FIELD(g_Weapons, s16 *, 0x2D2) = 0x3AC;
+    g_Weapons[3].pad51[9] = 0x31;
+    g_Weapons[1].pad5E[0x20] = 4;
+    g_Weapons[1].pad5E[0x17] = 5;
+    g_Weapons[1].pad5E[0x18] = 6;
+    g_Weapons[1].pad5E[0x21] = 4;
+    g_Weapons[1].pad5E[0x19] = 1;
+    g_Weapons[1].pad5E[0x1A] = -1U;
+    g_Weapons[1].pad5E[0x1D] = 0;
+    g_Weapons[1].pad5E[0x1E] = 3;
+    g_Weapons[1].pad5E[0x1F] = 2;
+    g_Weapons[1].pad5E[0x37] = -1U;
+    g_Weapons[1].pad5E[0x38] = -1U;
+    g_Weapons[1].pad5E[0x3A] = -1U;
+    M2C_FIELD(g_Weapons, s16 *, 0x16A) = 0x2EE0;
+    M2C_FIELD(g_Weapons, s32 *, 0x16C) = 0x14;
+    g_Weapons[3].flags = (g_Weapons[3].flags & ~0x600) | 0x2200 | 0x80000 | 0x100000 | 0x200000;
+    g_Weapons[1].pad51[0xA] = D_8009D2E0;
+    g_Weapons[1].flags = (g_Weapons[1].flags & 0xFFF87FFF) | 0x38000 | 0x400000 | 0x800000;
+    M2C_FIELD(g_Weapons, s32 *, 0xB8) = (s32) M2C_FIELD(&D_800A7C30, s32 *, 0);
+    M2C_FIELD(g_Weapons, s32 *, 0xBC) = (s32) M2C_FIELD(&D_800A7C30, s32 *, 4);
+    M2C_FIELD(g_Weapons, s16 *, 0xC0) = (s16) M2C_FIELD(&D_800A7C30, s16 *, 8);
+    M2C_FIELD(g_Weapons, s16 *, 0x166) = 8;
+    M2C_FIELD(g_Weapons, s16 *, 0x168) = 0x12;
+    M2C_FIELD(g_Weapons, s8 *, 0xFE) = 6;
+    M2C_FIELD(g_Weapons, s8 *, 0xFF) = 5;
+    M2C_FIELD(g_Weapons, void (**)(), 0xF4) = func_80038448;
+    M2C_FIELD(g_Weapons, void (**)(), 0xF8) = func_80069318;
+    g_Weapons[1].ammo = 0x1E;
+    g_Weapons[1].clipSize = 0x1E;
+    g_Weapons[1].pad0[0x1C] = D_800A7C20;
+    g_Weapons[1].clip = 0x1E;
+    M2C_FIELD(g_Weapons, s16 *, 0x164) = 0x384;
+    g_Weapons[1].maxAmmo = 0x96;
+    M2C_FIELD(g_Weapons, s16 *, 0x11C) = 0x1E5;
+    g_Weapons[1].pad51[2] = 0x20;
+    g_Weapons[1].pad51[7] = 0x18;
+    M2C_FIELD(g_Weapons, s16 *, 0x11E) = 0x168;
+    M2C_FIELD(g_Weapons, s16 *, 0x10C) = 0xC8;
+    g_Weapons[1].reserve = 0;
+    g_Weapons[1].pad4C[2] = 1;
+    g_Weapons[1].pad4C[3] = 1;
+    g_Weapons[1].pad51[0] = 3;
+    g_Weapons[1].pad51[1] = 2;
+    M2C_FIELD(g_Weapons, s16 *, 0x10E) = 0x64;
+    M2C_FIELD(g_Weapons, s16 *, 0x118) = 0x3C;
+    M2C_FIELD(g_Weapons, s16 *, 0x11A) = 5;
+    M2C_FIELD(g_Weapons, s16 *, 0x120) = -5;
+    M2C_FIELD(g_Weapons, s16 *, 0x124) = 0xA;
+    M2C_FIELD(g_Weapons, s16 *, 0x126) = -0xA;
+    M2C_FIELD(g_Weapons, s16 *, 0x162) = 0x294;
+    g_Weapons[1].pad51[9] = 0x30;
+    g_Weapons[2].pad5E[0x17] = 4;
+    g_Weapons[2].pad5E[0x18] = 5;
+    g_Weapons[2].pad5E[0x20] = 3;
+    g_Weapons[2].pad5E[0x21] = 3;
+    g_Weapons[2].pad5E[0x19] = 1;
+    g_Weapons[2].pad5E[0x1A] = -1U;
+    g_Weapons[2].pad5E[0x1D] = 0;
+    g_Weapons[2].pad5E[0x1E] = 2;
+    g_Weapons[2].pad5E[0x1F] = 2;
+    M2C_FIELD(g_Weapons, u32 *, 0x114) = (s32) ((((M2C_FIELD(g_Weapons, u32 *, 0x114) & 0xFC00FFFF) | 0xB40000) & 0x03FFFFFF) | 0x08000000);
+    g_Weapons[1].flags = ((((g_Weapons[1].flags | 6) & ~0x600) | 0x200) & ~0x1F8) | 0x2028 | 0x80000 | 0x100000 | 0x200000;
+    g_Weapons[2].pad5E[0x37] = -1U;
+    M2C_FIELD(g_Weapons, s16 *, 0x222) = 0x2EE0;
+    g_Weapons[2].pad5E[0x38] = -1U;
+    g_Weapons[2].pad5E[0x3A] = -1U;
+    M2C_FIELD(g_Weapons, s32 *, 0x224) = 0x14;
+    g_Weapons[2].pad51[0xA] = D_8009D2DC;
+    g_Weapons[2].flags = (g_Weapons[2].flags & 0xFFF87FFF) | sp0 | 0x400000 | 0x800000;
+    M2C_FIELD(g_Weapons, s32 *, 0x170) = (s32) M2C_FIELD(&D_800A7C3C, s32 *, 0);
+    M2C_FIELD(g_Weapons, s32 *, 0x174) = (s32) M2C_FIELD(&D_800A7C3C, s32 *, 4);
+    M2C_FIELD(g_Weapons, s32 *, 0x178) = (s32) M2C_FIELD(&D_800A7C3C, s32 *, 8);
+    M2C_FIELD(g_Weapons, s32 *, 0x17C) = (s32) M2C_FIELD(&D_800A7C3C, s32 *, 0xC);
+    g_Weapons[2].pad0[0x10] = (u8) M2C_FIELD(&D_800A7C3C, s8 *, 0x10);
+    M2C_FIELD(g_Weapons, s16 *, 0x220) = 0xF;
+    M2C_FIELD(g_Weapons, s16 *, 0x21E) = -1;
+    g_Weapons[2].pad0[0x1C] = D_800A7C20;
+    M2C_FIELD(g_Weapons, s8 *, 0x1B6) = -1;
+    M2C_FIELD(g_Weapons, void (**)(), 0x1AC) = func_800388E8;
+    g_Weapons[2].reserve = 9;
+    g_Weapons[2].maxAmmo = 0xA;
+    M2C_FIELD(g_Weapons, s16 *, 0x21C) = 0x1388;
+    g_Weapons[2].pad51[7] = 0x18;
+    M2C_FIELD(g_Weapons, s8 *, 0x1B7) = 3;
+    M2C_FIELD(g_Weapons, void (**)(), 0x1B0) = func_80069318;
+    g_Weapons[2].ammo = 0xA;
+    g_Weapons[2].clipSize = 1;
+    g_Weapons[2].clip = 1;
+    g_Weapons[2].pad4C[2] = 1;
+    g_Weapons[2].pad4C[3] = 1;
+    g_Weapons[2].pad51[0] = 3;
+    g_Weapons[2].pad51[1] = 2;
+    g_Weapons[2].pad51[2] = 0x20;
+    M2C_FIELD(g_Weapons, s16 *, 0x1D0) = 0x3C;
+    M2C_FIELD(g_Weapons, u32 *, 0x1CC) = (s32) ((((M2C_FIELD(g_Weapons, u32 *, 0x1CC) & 0xFC00FFFF) | 0x012C0000) & 0x03FFFFFF) | 0x08000000);
+    M2C_FIELD(g_Weapons, s16 *, 0x1D2) = 0x12C;
+    M2C_FIELD(g_Weapons, s16 *, 0x1D4) = 0x11D;
+    M2C_FIELD(g_Weapons, s16 *, 0x1D6) = 0x136;
+    M2C_FIELD(g_Weapons, s16 *, 0x1D8) = -5;
+    M2C_FIELD(g_Weapons, s16 *, 0x1DC) = 0xA;
+    M2C_FIELD(g_Weapons, s16 *, 0x1DE) = -0xA;
+    M2C_FIELD(g_Weapons, s16 *, 0x21A) = 0x294;
+    g_Weapons[5].pad5E[0x17] = 2;
+    g_Weapons[5].pad5E[0x18] = -1U;
+    g_Weapons[5].pad5E[0x20] = -1U;
+    g_Weapons[5].pad5E[0x21] = -1U;
+    g_Weapons[5].pad5E[0x19] = 1;
+    g_Weapons[5].pad5E[0x1A] = -1U;
+    g_Weapons[5].pad5E[0x1D] = 0;
+    g_Weapons[5].pad5E[0x1E] = -1U;
+    g_Weapons[5].pad5E[0x1F] = -1U;
+    g_Weapons[5].pad5E[0x37] = -1U;
+    g_Weapons[5].pad5E[0x38] = -1U;
+    g_Weapons[5].pad5E[0x3A] = -1U;
+    M2C_FIELD(g_Weapons, s16 *, 0x44A) = 0x2EE0;
+    M2C_FIELD(g_Weapons, s32 *, 0x44C) = 0x14;
+    g_Weapons[2].flags = (((g_Weapons[2].flags & ~0x600) | 0x1A00) & ~0x1F8) | 0x21C0 | 0x80000 | 0x100000;
+    g_Weapons[5].pad51[0xA] = D_8009D2E8;
+    M2C_FIELD(g_Weapons, s32 *, 0x398) = (s32) M2C_FIELD(&D_800A7C50, s32 *, 0);
+    M2C_FIELD(g_Weapons, s32 *, 0x39C) = (s32) M2C_FIELD(&D_800A7C50, s32 *, 4);
+    M2C_FIELD(g_Weapons, s16 *, 0x446) = -1;
+    M2C_FIELD(g_Weapons, s16 *, 0x448) = -1;
+    M2C_FIELD(g_Weapons, s8 *, 0x3DE) = -1;
+    M2C_FIELD(g_Weapons, s8 *, 0x3DF) = -1;
+    M2C_FIELD(g_Weapons, void (**)(), 0x3D4) = func_80038448;
+    g_Weapons[5].pad0[0x1C] = D_800A7C20;
+    M2C_FIELD(g_Weapons, void (**)(), 0x3D8) = func_80069318;
+    g_Weapons[5].reserve = 0x1E;
+    g_Weapons[5].ammo = 0x32;
+    g_Weapons[5].clipSize = 0x14;
+    g_Weapons[5].clip = 0x14;
+    g_Weapons[5].pad4C[2] = 1;
+    g_Weapons[5].pad4C[3] = 1;
+    g_Weapons[5].pad51[0] = 3;
+    g_Weapons[5].pad51[1] = 2;
+    g_Weapons[5].pad51[2] = 0x20;
+    g_Weapons[5].pad51[7] = 0x18;
+    g_Weapons[5].maxAmmo = 0x64;
+    M2C_FIELD(g_Weapons, s16 *, 0x3FC) = -0xF64;
+    M2C_FIELD(g_Weapons, s16 *, 0x3FE) = 0x134C;
+    M2C_FIELD(g_Weapons, s16 *, 0x400) = 0x64F;
+    M2C_FIELD(g_Weapons, s16 *, 0x442) = 0x960;
+    g_Weapons[4].pad5E[0x17] = 3;
+    g_Weapons[4].pad5E[0x18] = 4;
+    g_Weapons[4].pad5E[0x20] = -1U;
+    g_Weapons[4].pad5E[0x21] = -1U;
+    g_Weapons[4].pad5E[0x19] = 1;
+    g_Weapons[4].pad5E[0x1A] = -1U;
+    g_Weapons[4].pad5E[0x1D] = 0;
+    g_Weapons[4].pad5E[0x1E] = 2;
+    g_Weapons[4].pad5E[0x1F] = -1U;
+    g_Weapons[4].pad5E[0x37] = -1U;
+    g_Weapons[4].pad5E[0x38] = -1U;
+    g_Weapons[4].pad5E[0x3A] = -1U;
+    M2C_FIELD(g_Weapons, s16 *, 0x3F8) = 0x3C;
+    M2C_FIELD(g_Weapons, s16 *, 0x3FA) = 0xA;
+    temp_a0 = g_Weapons[5].flags & 0xF9FFFFFF;
+    g_Weapons[5].flags = temp_a0;
+    g_Weapons[5].flags = (((temp_a0 & ~0x600) | 0x200) & ~0x1F8) | 0x1C0;
+    g_Weapons[4].pad51[0xA] = D_8009D318;
+    M2C_FIELD(g_Weapons, s32 *, 0x394) = 4;
+    M2C_FIELD(g_Weapons, s16 *, 0x392) = 0x3E8;
+    M2C_FIELD(g_Weapons, s32 *, 0x2E0) = (s32) M2C_FIELD(&D_800A7C58, s32 *, 0);
+    M2C_FIELD(g_Weapons, s32 *, 0x2E4) = (s32) M2C_FIELD(&D_800A7C58, s32 *, 4);
+    M2C_FIELD(g_Weapons, void (**)(), 0x31C) = func_80038954;
+    M2C_FIELD(g_Weapons, s16 *, 0x38E) = -1;
+    M2C_FIELD(g_Weapons, s16 *, 0x390) = -1;
+    M2C_FIELD(g_Weapons, s8 *, 0x326) = -1;
+    M2C_FIELD(g_Weapons, s8 *, 0x327) = -1;
+    M2C_FIELD(g_Weapons, void (**)(), 0x320) = func_80069318;
+    g_Weapons[4].ammo = 0x32;
+    g_Weapons[4].clipSize = 0x14;
+    M2C_FIELD(g_Weapons, s16 *, 0x38C) = 0x7D0;
+    M2C_FIELD(g_Weapons, s16 *, 0x344) = 0x16D;
+    M2C_FIELD(g_Weapons, s16 *, 0x346) = 0x14A;
+    M2C_FIELD(g_Weapons, s16 *, 0x348) = 0x311;
+    M2C_FIELD(g_Weapons, s16 *, 0x34E) = -0x1E;
+    g_Weapons[4].pad51[2] = 0x20;
+    g_Weapons[4].pad51[7] = 0x18;
+    g_Weapons[4].pad4C[2] = 1;
+    g_Weapons[4].pad4C[3] = 1;
+    g_Weapons[4].pad51[1] = 2;
+    g_Weapons[4].maxAmmo = 0x64;
+    M2C_FIELD(g_Weapons, s16 *, 0x340) = 0x3C;
+    M2C_FIELD(g_Weapons, s16 *, 0x342) = 0xA;
+    M2C_FIELD(g_Weapons, s16 *, 0x38A) = 0x474;
+    temp_a0_2 = g_Weapons[4].flags & 0xF9FFFFFF;
+    g_Weapons[4].pad0[0x1C] = D_800A7C20;
+    g_Weapons[4].clip = (s16) g_Weapons[4].clipSize;
+    g_Weapons[4].reserve = 0x32 - g_Weapons[4].clipSize;
+    g_Weapons[4].flags = temp_a0_2;
+    g_Weapons[4].flags = ((temp_a0_2 | 0x1E00) & ~0x1F8) | 0x1C0 | 0x08000000;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_800335B4);
+#endif
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80033F38);
 
@@ -6093,7 +6513,40 @@ void func_800380DC(void *arg0, s32 arg1) {
     M2C_FIELD(arg0, u16 *, 0x62) = (u16) (M2C_FIELD(arg0, u16 *, 0x62) + (u16) D_800D31B8);
 }
 
+#ifdef NON_MATCHING
+void func_800381CC(void *objArg, s32 arg1) {
+    u8 *obj = (u8 *)objArg;
+    u8 *m;
+    u8 *p;
+    s32 speed;
+    s32 *t;
+    *(SVECTOR *)D_1F8003E0 = M2C_FIELD(obj, SVECTOR *, 0x3C);
+    ((SVECTOR *)D_1F8003E0)->vz = ((SVECTOR *)D_1F8003E0)->vz >> 1;
+    m = M2C_FIELD(obj, u8 **, 0x90);
+    gte_SetRotMatrix(m + 0x14);
+    gte_ldv0(D_1F8003E0);
+    gte_rtv0();
+    t = (s32 *)(m + 0x28);
+    gte_stlvnl(D_1F8003E8);
+    D_1F8003D4 = t[0] + D_1F8003E8[0];
+    D_1F8003D8 = t[1] + D_1F8003E8[1];
+    D_1F8003DC = t[2] + D_1F8003E8[2];
+    p = (u8 *)func_80039A9C(0, arg1, 2);
+    if (p != NULL) {
+        speed = 70;
+        M2C_FIELD(p, s16 *, 0xB0) = (rand() & 0xF) * 34 + 0x5B;
+        *(s32 *)(p + 0x58) = 100;
+        M2C_FIELD(p, s16 *, 0xAC) = D_1F8003D8;
+        M2C_FIELD(p, s16 *, 0xAE) = -((*(s16 *)&D_800A0370[M2C_FIELD(p, u16 *, 0xB0) & 0xFFF] * speed) >> 12);
+        func_8003B53C(p, (M2C_FIELD(M2C_FIELD(obj, u8 **, 0x90), u16 *, 0x62) - 0x38E) & 0xFFF, M2C_FIELD(p, s16 *, 0xB0), speed);
+        M2C_FIELD(p, s16 *, 0x9E) = (rand() & 3) * 91 + 0x22;
+        M2C_FIELD(p, s16 *, 0xA0) = (rand() & 3) * 91 + 0x22;
+        M2C_FIELD(p, s16 *, 0xA2) = (rand() & 3) * 91 + 0x22;
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_800381CC);
+#endif
 
 void func_80038404(void *a0, void *a1) {
     ((SVECTOR *)D_1F8003E0)->vx = -60;
@@ -8361,7 +8814,283 @@ void func_8003EB00(u8 *arg0) {
     M2C_FIELD(dst, s16 *, 0x62) = v.vy & 0xFFF;
 }
 
+#ifdef NON_MATCHING
+s32 func_8003EC44(s32 *arg0, s32 *arg1, s16 *arg2, s16 *arg3) {
+    VECTOR v10;
+    VECTOR v20;
+    VECTOR v30;
+    VECTOR v40;
+    VECTOR v50;
+    VECTOR v60;
+    VECTOR v70;
+    VECTOR v80;
+    VECTOR v90;
+    u8 fA0;
+    u8 fA8;
+    u8 sx0, sz0, sx1, sy0;
+    u8 hit;
+
+    M2C_FIELD(&D_800D4388, s8 *, 0) = 0;
+    M2C_FIELD(&D_800D4388, s8 *, 1) = 0;
+    M2C_FIELD(&D_800D4388, s8 *, 2) = 0;
+    M2C_FIELD(&D_800D4388, s8 *, 3) = 0;
+    M2C_FIELD(&D_800D4384, s8 *, 0) = 0;
+    M2C_FIELD(&D_800D4384, s8 *, 1) = 0;
+    M2C_FIELD(&D_800D4384, s8 *, 2) = 0;
+    M2C_FIELD(&D_800D4384, s8 *, 3) = 0;
+    M2C_FIELD(&D_800D438C, s8 *, 0) = 0;
+    M2C_FIELD(&D_800D438C, s8 *, 1) = 0;
+    M2C_FIELD(&D_800D438C, s8 *, 2) = 0;
+    M2C_FIELD(&D_800D438C, s8 *, 3) = 0;
+    /* in-range flags: *0 = start point (arg0), *1 = end point (arg1), per axis against box arg2..arg3 */
+    sx0 = 0;
+    if (arg0[0] >= arg2[0]) sx0 = arg3[0] >= arg0[0];
+    sz0 = 0;
+    if (arg0[2] >= arg2[2]) sz0 = arg3[2] >= arg0[2];
+    sx1 = 0;
+    if (arg1[0] >= arg2[0]) sx1 = arg3[0] >= arg1[0];
+    fA8 = 0;
+    if (arg1[2] >= arg2[2]) fA8 = arg3[2] >= arg1[2];
+    sy0 = 0;
+    if (arg0[1] >= arg2[1]) sy0 = arg3[1] >= arg0[1];
+    fA0 = 0;
+    if (arg1[1] >= arg2[1]) fA0 = arg3[1] >= arg1[1];
+    v80.vx = (arg3[0] - arg2[0]) * 2;
+    v80.vy = (arg3[1] - arg2[1]) * 2;
+    v80.vz = (arg3[2] - arg2[2]) * 2;
+    v90.vx = arg1[0] - arg0[0];
+    v90.vy = arg1[1] - arg0[1];
+    v90.vz = arg1[2] - arg0[2];
+    /* pass 1: x/z plane (box edges as segments) */
+    v10.vx = arg0[0];
+    v10.vy = arg0[2];
+    v20.vx = arg1[0];
+    v20.vy = arg1[2];
+    v30.vx = arg2[0];
+    v30.vy = arg3[2];
+    v40.vx = arg3[0];
+    v40.vy = arg3[2];
+    v50.vx = arg2[0];
+    v50.vy = arg2[2];
+    v60.vx = arg3[0];
+    v60.vy = arg2[2];
+    if (sx0) {
+    hit = 0;
+    if (sz0) {
+        if (v90.vx > 0) {
+            v70.vx = -v80.vx;
+        } else if (v90.vx < 0) {
+            v70.vx = v80.vx;
+        } else {
+            v70.vx = 0;
+            if (v90.vz > 0) {
+                v70.vz = -v80.vz;
+            } else if (v90.vz < 0) {
+                v70.vz = v80.vz;
+            } else {
+                v70.vz = 0;
+            }
+        }
+        if (v70.vx != 0) {
+            if (v90.vx == 0) {
+                func_8006B230(0, (s32)D_800A80B0);
+            }
+            v70.vz = v70.vx * v90.vz / v90.vx;
+        }
+        v10.vx += v70.vx;
+        v10.vy += v70.vz;
+    }
+    } else {
+        hit = 0;
+    }
+    if (func_8003DE58(&v10, &v20, &v30, &v40) != 0) {
+        hit = 1;
+        if (v20.vy < v10.vy) {
+            D_800D4388 = 1;
+        } else {
+            D_800D4388 = -1;
+        }
+    }
+    if (func_8003DE58(&v10, &v20, &v60, &v40) != 0) {
+        hit = 1;
+        if (v20.vx < v10.vx) {
+            D_800D4389 = 1;
+        } else {
+            D_800D4389 = -1;
+        }
+    }
+    if (func_8003DE58(&v10, &v20, &v60, &v50) != 0) {
+        hit = 1;
+        if (v10.vy < v20.vy) {
+            D_800D438A = 1;
+        } else {
+            D_800D438A = -1;
+        }
+    }
+    if (func_8003DE58(&v10, &v20, &v30, &v50) != 0) {
+        if (v10.vx < v20.vx) {
+            D_800D438B = 1;
+        } else {
+            D_800D438B = -1;
+        }
+        hit = 1;
+    }
+    if (hit == 0 && (sx1 == 0 || fA8 == 0)) return 0;
+    /* pass 2: x/y plane */
+    v10.vx = arg0[0];
+    v10.vy = arg0[1];
+    v20.vx = arg1[0];
+    v20.vy = arg1[1];
+    v30.vx = arg2[0];
+    v30.vy = arg2[1];
+    v40.vx = arg3[0];
+    v40.vy = arg2[1];
+    v50.vx = arg2[0];
+    v50.vy = arg3[1];
+    v60.vx = arg3[0];
+    v60.vy = arg3[1];
+    if (sx0) {
+    hit = 0;
+    if (sy0) {
+        if (v90.vx > 0) {
+            v70.vx = -v80.vx;
+        } else if (v90.vx < 0) {
+            v70.vx = v80.vx;
+        } else {
+            v70.vx = 0;
+            if (v90.vy > 0) {
+                v70.vy = -v80.vy;
+            } else if (v90.vy < 0) {
+                v70.vy = v80.vy;
+            } else {
+                v70.vy = 0;
+            }
+        }
+        if (v70.vx != 0) {
+            if (v90.vx == 0) {
+                func_8006B230(0, (s32)D_800A80BC);
+            }
+            v70.vy = v70.vx * v90.vy / v90.vx;
+        }
+        v10.vx += v70.vx;
+        v10.vy += v70.vy;
+    }
+    } else {
+        hit = 0;
+    }
+    if (func_8003DE58(&v10, &v20, &v30, &v40) != 0) {
+        hit = 1;
+        if (v10.vy < v20.vy) {
+            D_800D4384 = 1;
+        } else {
+            D_800D4384 = -1;
+        }
+    }
+    if (func_8003DE58(&v10, &v20, &v60, &v40) != 0) {
+        hit = 1;
+        if (v20.vx < v10.vx) {
+            D_800D4385 = 1;
+        } else {
+            D_800D4385 = -1;
+        }
+    }
+    if (func_8003DE58(&v10, &v20, &v60, &v50) != 0) {
+        hit = 1;
+        if (v20.vy < v10.vy) {
+            D_800D4386 = 1;
+        } else {
+            D_800D4386 = -1;
+        }
+    }
+    if (func_8003DE58(&v10, &v20, &v30, &v50) != 0) {
+        if (v10.vx < v20.vx) {
+            D_800D4387 = 1;
+        } else {
+            D_800D4387 = -1;
+        }
+        hit = 1;
+    }
+    if (hit == 0 && (sx1 == 0 || fA0 == 0)) return 0;
+    /* pass 3: y/z plane */
+    v10.vx = arg0[1];
+    v10.vy = arg0[2];
+    v20.vx = arg1[1];
+    v20.vy = arg1[2];
+    v30.vx = arg2[1];
+    v30.vy = arg2[2];
+    v40.vx = arg2[1];
+    v40.vy = arg3[2];
+    v50.vx = arg3[1];
+    v50.vy = arg2[2];
+    v60.vx = arg3[1];
+    v60.vy = arg3[2];
+    if (sy0) {
+    hit = 0;
+    if (sz0) {
+        if (v90.vy > 0) {
+            v70.vy = -v80.vy;
+        } else if (v90.vy < 0) {
+            v70.vy = v80.vy;
+        } else {
+            v70.vy = 0;
+            if (v90.vz > 0) {
+                v70.vz = -v80.vz;
+            } else if (v90.vz < 0) {
+                v70.vz = v80.vz;
+            } else {
+                v70.vz = 0;
+            }
+        }
+        if (v70.vy != 0) {
+            if (v90.vy == 0) {
+                func_8006B230(0, (s32)D_800A80C8);
+            }
+            v70.vz = v70.vy * v90.vz / v90.vy;
+        }
+        v10.vx += v70.vy;
+        v10.vy += v70.vz;
+    }
+    } else {
+        hit = 0;
+    }
+    if (func_8003DE58(&v10, &v20, &v30, &v40) != 0) {
+        hit = 1;
+        if (v10.vx < v20.vx) {
+            D_800D438C = 1;
+        } else {
+            D_800D438C = -1;
+        }
+    }
+    if (func_8003DE58(&v10, &v20, &v60, &v40) != 0) {
+        hit = 1;
+        if (v20.vy < v10.vy) {
+            D_800D438D = 1;
+        } else {
+            D_800D438D = -1;
+        }
+    }
+    if (func_8003DE58(&v10, &v20, &v60, &v50) != 0) {
+        hit = 1;
+        if (v20.vx < v10.vx) {
+            D_800D438E = 1;
+        } else {
+            D_800D438E = -1;
+        }
+    }
+    if (func_8003DE58(&v10, &v20, &v30, &v50) != 0) {
+        if (v10.vy < v20.vy) {
+            D_800D438F = 1;
+        } else {
+            D_800D438F = -1;
+        }
+        hit = 1;
+    }
+    if (hit) return 1;
+    return fA0 && fA8;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8003EC44);
+#endif
 
 s32 func_8003F768(VECTOR *p, VECTOR *q, SVECTOR *min, SVECTOR *max) {
     VECTOR a;
@@ -12365,7 +13094,77 @@ void func_8004C0C0(s32 arg0, void *arg1) {
     d->fF4 = e;
 }
 
+#ifdef NON_MATCHING
+void func_8004C368(s32 idx, ObjC368 *o) {
+    s32 *q;
+    s32 n;
+    u8 *r;
+    s32 *g;
+    s32 t0, t1, t2, t3;
+    r = (u8 *)D_8009D0FC + idx * 0x70;
+    q = (s32 *)((u8 *)o + 0x98);
+    o->b6 = idx;
+    o->p0 = r;
+    n = 5;
+    o->b3A = r[0x2C];
+    o->c3C = *(PairC368 *)(r + 0x30);
+    o->b4 = 0;
+    o->w18 = 0;
+    o->w10 = 0;
+    o->h14 = 0x1B57;
+    o->w2C = 0;
+    o->w30 = 0;
+    o->h6A = 0;
+    o->w60 = 0;
+    o->h64 = 0;
+    o->b66 = 0;
+    o->b67 = 0;
+    o->h68 = 0;
+    o->w6C = 0;
+    o->w70 = 0;
+    o->w74 = 0;
+    o->w80 = 0;
+    o->w84 = 0;
+    o->w88 = 0;
+    o->w8C = 0;
+    o->w5C = 0;
+    do {
+        *q = 0;
+        n -= 1;
+        q += 1;
+    } while (n >= 0);
+    o->hB0 = 0;
+    o->bCC = 0;
+    o->bCD = 0;
+    o->bCE = 0;
+    g = D_800B8F28;
+    t0 = D_800B8F28[0];
+    t1 = g[1];
+    t2 = g[2];
+    t3 = g[4];
+    o->wD0 = t0;
+    o->wD4 = t1;
+    o->wD8 = t2;
+    o->wE0 = t3;
+    o->wF8 = 0x3E8;
+    o->w108 = 0;
+    o->w10C = 0;
+    o->w100 = 0;
+    o->w104 = 0;
+    o->b9 = 0;
+    o->w114 = 0;
+    t0 = g[5];
+    t1 = g[6];
+    t2 = g[8];
+    t3 = g[9];
+    o->wE4 = t0;
+    o->wE8 = t1;
+    o->wF0 = t2;
+    o->wF4 = t3;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8004C368);
+#endif
 
 void func_8004C498(s32 idx, u8 *e) {
     u8 *w;
@@ -13261,7 +14060,37 @@ void func_8004E37C(void) {
     }
 }
 
+#ifdef NON_MATCHING
+void func_8004E5D8(void) {
+    GsMat32 m;
+    s32 p;
+    s32 sc;
+    s32 y;
+    s32 x;
+
+    if ((D_800DDC44 != 0 || (*(s32 *)(*(u8 **)((u8 *)g_Player + 0x94) + 0x24) & 0x400)) && (*(s16 *)((u8 *)g_Player + 0x98) != 0 || *(s16 *)((u8 *)g_Player + 0x9C) != 0)) {
+        p = (((u16 *)&D_8009D3FC)[1] + D_8009D3F8) & 0xFFF;
+        sc = D_800A0370[p];
+        ((u16 *)&D_8009D3FC)[1] = p;
+        y = (D_8009D3F4 * (s16)sc) >> 12;
+        x = (D_8009D3F0 * (sc >> 16)) >> 12;
+        if (y > 0) {
+            y = -y;
+        }
+        D_8009D3BC.vx = x;
+        D_8009D3BC.vy = y;
+        D_8009D3BC.vz = 0;
+        m = D_800FC6A0;
+        RotMatrixY(g_Camera.rotY, &m);
+        ApplyMatrixLV(&m, &D_8009D3BC, D_1F8003E8);
+        g_Camera.targetX += D_1F8003E8[0];
+        g_Camera.targetY += D_1F8003E8[1];
+        g_Camera.targetZ += D_1F8003E8[2];
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8004E5D8);
+#endif
 
 void func_8004E78C(void) {
 }
@@ -13939,7 +14768,19 @@ void func_800509E4(void *x) {
     b[0] = 0; b[1] = -0x5DC; b[2] = -0x32;
 }
 
+#ifdef NON_MATCHING
+s32 func_80050A10(VECTOR *arg0, VECTOR *arg1, u8 *arg2, void *arg3) {
+    s16 a[4];
+    s16 b[4];
+
+    if (func_80050A70((s32 *)arg0, (s32 *)arg1, arg2, (s32)arg3) == 0) {
+        return func_800746D0(D_800E2F2C, (s32 *)arg1, (s32 *)arg0, a, b, 0) == 0;
+    }
+    return 0;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80050A10);
+#endif
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80050A70);
 
@@ -14676,7 +15517,139 @@ void func_800530F4(void) {
     M2C_FIELD(&D_800D9234, u16 *, 4) = (u16) D_800D31B4;
 }
 
+#ifdef NON_MATCHING
+void func_80053114(u8 *obj) {
+    u8 *tgt;
+    u8 *sub;
+    u8 *s3;
+    u8 *s2;
+    u8 *eff;
+    s32 ok;
+    s32 a0;
+    u32 sp18;
+    s32 sp1C;
+    s32 a2;
+    s32 t;
+    s32 half;
+    s32 fr;
+    s32 rv;
+    s32 gt;
+    s32 oa;
+    u32 okv;
+    u16 tv;
+    u16 px;
+    u16 py;
+    s32 m;
+    u32 v;
+    s32 *pos;
+    s32 idx;
+
+    tgt = *(u8 **)(obj + 0x8C);
+    if (tgt != 0) {
+        a0 = *(s16 *)(obj + 0xC4);
+        if (*(u32 *)(*(u8 **)(obj + 0x94) + 0x24) & 0x40000) {
+            ok = (u32)(a0 + 0x200) < 0x401;
+            goto test;
+        }
+        if (obj[6] == D_8009D30C && *(s32 *)(obj + 0x88) != 0) {
+            goto body;
+        }
+        ok = (u32)(a0 + 0xFA) < 0x1F5U;
+test:
+        if (ok) {
+body:
+            sp18 = (*(*(u8 **)(obj + 0x94))) >> 4;
+            if (g_Args->pad118[0x12] == 2) {
+                func_80053650((s32 *)&sp18);
+            }
+            sub = *(u8 **)(tgt + 0x90);
+            GsGetLs(sub + 0x10, sub + 0x68);
+            *(SVECTOR *)D_1F8003E0 = *(SVECTOR *)(tgt + 0x3C);
+            gte_SetRotMatrix(sub + 0x34);
+            gte_ldv0(D_1F8003E0);
+            gte_rtv0();
+            gte_stlvnl(D_1F8003E8);
+            pos = (s32 *)(sub + 0x48);
+            D_1F8003D4 = pos[0] + D_1F8003E8[0];
+            sp1C = 0;
+            D_1F8003D8 = pos[1] + D_1F8003E8[1];
+            D_1F8003DC = pos[2] + D_1F8003E8[2];
+            func_80069C10(obj, tgt, &sp1C, &D_8009D5F0);
+            if (tgt[6] == D_8009D314) {
+                D_8009D5F0 = 1;
+                func_80076A0C(tgt);
+                return;
+            }
+            if (sp1C != 0 || D_8009D5F0 != 0) {
+                s3 = (u8 *)func_80039A9C((s32)obj, tgt[0x3A], 7);
+            } else {
+                s3 = (u8 *)func_80039A9C((s32)obj, tgt[0x3A], *(u8 *)(g_Args->unk228 + tgt[0x3A] * 0x70 + 1));
+            }
+            D_8009D5F0 = 0;
+            if (s3 != 0) {
+                gt = D_8009CDA8;
+                s2 = *(u8 **)(s3 + 0x90);
+                D_8009DB38 = gt;
+                if (*(u32 *)(obj + 0x48) & 0x4000000) {
+                    if (*(u8 **)(obj + 0x5C) != 0) {
+                        func_80036E10(*(u8 **)(obj + 0x5C), s3);
+                        if (obj == (u8 *)D_8009CD90 || (obj[0xA] & 2) || sp18 == 0xA) {
+                            px = *(u16 *)&D_800B0084;
+                            py = *(u16 *)&D_800B0D50;
+                            *(u16 *)(s2 + 0x62) = px;
+                            *(u16 *)(s2 + 0x60) = py;
+                        } else {
+                            m = (g_Args->pad118[0x12] == 1) ? 0x17 : 0x11;
+                            t = (0xA - sp18) * m;
+                            half = t >> 1;
+                            *(u16 *)(s2 + 0x62) = *(u16 *)&D_800B0084 + (half - rand() % t);
+                            *(u16 *)(s2 + 0x60) = *(u16 *)&D_800B0D50 + (half - rand() % t);
+                        }
+                    } else {
+                        func_8003BE68(sub + 0x34, s2 + 0x60);
+                    }
+                } else {
+                    func_8003BE68(sub + 0x34, s2 + 0x60);
+                }
+                func_8003B53C(s3, *(s16 *)(s2 + 0x62), *(s16 *)(s2 + 0x60), 0xBB8);
+                *(u8 **)(s3 + 0x5C) = *(u8 **)(obj + 0x5C);
+                *(u32 *)(s3 + 0x7C) |= 0x80000000;
+                if (*(u32 *)(obj + 0x48) & 0x800000) {
+                    if (*(s16 *)(*(u8 **)obj + 0x36) >= 3) {
+                        func_8006B230(0, (s32)D_800A89BC);
+                    }
+                    tv = *(u16 *)((u8 *)&D_800D9234 + *(s16 *)(*(u8 **)obj + 0x36) * 2);
+                    if (tv != 0) {
+                        eff = (u8 *)func_8003A898(tv & 0xFF, 0);
+                        if (eff != 0) {
+                            *(u16 *)(*(u8 **)(eff + 0x1C) + 0x62) = *(u16 *)(*(u8 **)(obj + 0x90) + 0x62);
+                            rv = (rand() & 7) * 0x44;
+                            fr = g_FrameRate;
+                            *(s16 *)(*(u8 **)(eff + 0x1C) + 0x64) = rv;
+                            if (fr >= 0x14) {
+                                ((SVECTOR *)D_1F8003E0)->vy = -0x3C;
+                                ((SVECTOR *)D_1F8003E0)->vz = 0xC8;
+                                ((SVECTOR *)D_1F8003E0)->vx = 0;
+                                func_800381CC(tgt, D_8009D280);
+                            }
+                        }
+                    }
+                }
+                a0 = *(s32 *)(tgt + 0x34);
+                if (a0 > 0) {
+                    *(s32 *)(s3 + 0x34) = a0;
+                }
+                if ((g_Args->flags2 >> 12) & 1) {
+                    *(s32 *)(s3 + 0x34) = *(s32 *)(s3 + 0x34) * 2;
+                }
+                func_80053DE4(0, 0, D_1F8003D4, D_1F8003D8, D_1F8003DC);
+            }
+        }
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80053114);
+#endif
 
 void func_80053650(s32 *arg0) {
     s32 temp_v1;
