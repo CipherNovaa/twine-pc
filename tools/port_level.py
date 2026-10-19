@@ -726,6 +726,20 @@ def port(level):
                 print(f"  dropped back to asm (this level's own C no longer compiles): {' '.join(sorted(native_drop))}")
             continue
         if "Error" in r.stderr and not (ROOT / f"build/{level}/{level}.elf").exists():
+            # A ported switch whose case labels can't take this level's jump table (jtbl_fix keeps gcc's
+            # tables): the level's table data then misses its jtgt_ labels. Leave that function asm.
+            missing = {int(a, 16) for a in re.findall(r"undefined reference to `jtgt_([0-9A-F]{8})'", r.stderr)}
+            spans = [(a, a + s) for a, s, _ in port_symbols.shared_code.functions(level)]
+            hit = {(key, n) for key, names, addrs in
+                   [("L1", ported, pairs)] + [(S.key, S.ported, S.pairs) for S in srcs]
+                   for n in names if n in addrs and any(lo <= m < hi for m in missing
+                                                        for lo, hi in spans if lo == addrs[n])}
+            if hit:
+                print(f"pass {attempt}: jump tables don't fit, left asm: {' '.join(sorted(s + ':' + n for s, n in hit))}")
+                exclude |= {n for s, n in hit if s == "L1"}
+                for S in srcs:
+                    S.exclude |= {n for s, n in hit if s == S.key}
+                continue
             print(r.stderr[-3000:])
             sys.exit("build failed outside a ported function")
         bad = set()

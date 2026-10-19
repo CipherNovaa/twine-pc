@@ -181,6 +181,7 @@ extern s32 L1_D_800F0F5C;
 
 
 
+extern s32 L2_D_800A0FE0;
 extern void *L2_D_800B6010;
 void L2_func_8006E97C(s32 arg0);
 void L2_func_80085F1C();
@@ -192,7 +193,6 @@ void L2_func_80086FAC();
 extern M2C_UNK (*L2_D_800A1078)(s16);
 void L2_func_8006E9D0(s32 arg0, s32 arg1);
 extern void *L2_D_800B6FE4;
-extern s32 L2_D_800A0FE0;
 void L2_func_80078A60(void);
 void L2_func_8007906C(void);
 void L2_func_800796AC(void);
@@ -406,7 +406,7 @@ void L1_func_8007567C(void *arg0) {
         model = M2C_FIELD(arg0, void **, 0x114);
         if (model != NULL) {
             i = 0;
-            L1_func_80077764();
+            L1_func_80077764(arg0);
             unit = M2C_FIELD(model, s32 **, 4);
             flags = M2C_FIELD(model, u8 **, 8);
             idx = L1_D_800B8F24;

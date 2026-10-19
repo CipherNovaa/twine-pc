@@ -213,8 +213,10 @@ extern s8 L1_D_8009C1EE;
 
 
 
+typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
 typedef struct { u8 pad[0x23E]; s16 a; s16 b; } S9F8;
 s32 L2_func_80026B00(s32 arg0);
+void L2_func_80029200(void);
 void L2_func_80027520(s32 arg0, s32 arg1, s32 *arg2, s32 arg3, s32 arg4, s32 arg5);
 void L2_func_800288B4(s8 arg0);
 extern char L2_D_800AC4AC[];
@@ -246,14 +248,19 @@ extern s32 L2_D_800B1FA0;
 extern s32 L2_D_800B4E3C;
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
 extern M2C_UNK (*L2_D_800A1078)(s16);
-void L2_func_80029200(void);
 void L2_func_800275FC(u8 id, s32 x, s32 y, s32 z, u8 flags);
 void L2_func_80027634(s32 x, s32 y, s32 z, s16 voice, s32 id, u8 flags);
 void L2_func_80027674(s32 x, s32 y, s32 z, s32 arg1, s32 *arg2, s32 arg3, s32 arg4, s32 arg5);
 s32 L2_func_80026C38(s32 arg0);
 void L2_func_80028B88(s16 arg0, char *text);
+extern M2C_UNK D_800B1CBC_80029BFC asm("L2_D_800B1CBC");
+extern S1CBC L2_D_800B1CBC;
 void L3_func_800299F8(char *a0, s16 a1, s16 a2, s16 a3, s16 a4, s32 a5, s32 a6, s32 a7);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern s32 D_800A03A0;
+extern s8 D_800B0600;
+extern s16 D_800B0614;
+extern Args *L1_g_Args;
 
 s32 L2_func_80026B00(s32 arg0) {
   L1_SsSetSerialAttr(0, 0, 1);
@@ -1342,7 +1349,47 @@ void L1_func_80028C08(u32 *ot, s32 db) {
     ((PTag *)ot)->addr = (u32)&L1_D_800AEDBC[db];
 }
 
-INCLUDE_ASM("asm/level10/nonmatchings/text_80026B00", func_80028F58);
+void func_80028F58(u32 *ot, s32 db) {
+    s32 i;
+    s32 j;
+    s32 k;
+
+    if (D_800A03A0 == 0) {
+        L1_Menu_ResetState();
+        return;
+    }
+    if (L1_D_800AC54C > 0) {
+        if (D_800B0614 == L1_D_800AC54C) {
+            D_800B0600 = 1;
+        }
+        L1_SetDrawMode((M2C_UNK *)&L1_D_800AEDBC[db], 0, 0, (u16)L1_GetTPage(0, 0, L1_D_800AC4E0, L1_D_800AC4E4), 0);
+        for (i = 0; i < L1_D_800AC54C; i++) {
+            if (D_800B0614 < i) {
+                break;
+            }
+            for (j = ((TwLine *)L1_D_800AB744)[i].first, k = 0; j <= ((TwLine *)L1_D_800AB744)[i].last; j++, k++) {
+                if (((TwLine *)L1_D_800AB744)[i].flag != 0) {
+                    if (((TwLine *)L1_D_800AB744)[i].cnt < k) {
+                        ((TwLine *)L1_D_800AB744)[i].cnt++;
+                        if (((TwLine *)L1_D_800AB744)[i].cnt % 2 == 0) {
+                            L1_g_Args->pad12E[0xA] = 0xF;
+                            func_80026F30(2, 2);
+                        }
+                        if (((TwLine *)L1_D_800AB744)[i].cnt >= ((TwLine *)L1_D_800AB744)[i].last - ((TwLine *)L1_D_800AB744)[i].first) {
+                            D_800B0614++;
+                        }
+                        goto end;
+                    }
+                    ((PTag *)&((SPRT (*)[2])L1_D_800AC550)[j][db])->addr = ((PTag *)ot)->addr;
+                    ((PTag *)ot)->addr = (u32)&((SPRT (*)[2])L1_D_800AC550)[j][db];
+                }
+            }
+        }
+end:
+        ((PTag *)&L1_D_800AEDBC[db])->addr = ((PTag *)ot)->addr;
+        ((PTag *)ot)->addr = (u32)&L1_D_800AEDBC[db];
+    }
+}
 
 void L2_func_80029200(void) {
     L2_D_800B4E3C = 0;

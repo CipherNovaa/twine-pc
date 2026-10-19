@@ -39,4 +39,14 @@ typedef double f64;
 #define KEEP(x) ((void)0)
 #endif
 
+/* MIPS `break` (a debugger trap in dev builds), and the symbol of the game's main(): the native port has
+ * its own main and calls this one as game_main. */
+#ifndef NATIVE_PORT
+#define BREAK(code) __asm__ volatile("break " #code)
+#define GAME_MAIN "main"
+#else
+#define BREAK(code) ((void)0)
+#define GAME_MAIN "game_main"
+#endif
+
 #endif

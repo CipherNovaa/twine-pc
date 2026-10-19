@@ -29,3 +29,6 @@ asm/
 linkers/
 tools/decomp-permuter/
 *.o
+port.log
+shot_*.ppm
+__pycache__/

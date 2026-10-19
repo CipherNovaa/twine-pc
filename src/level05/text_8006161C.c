@@ -2042,6 +2042,7 @@ extern int L1_g_CheatCodes[];
 
 
 
+extern s32 L2_D_800A0CD4;
 s32 L2_func_80083044(char *, ...);
 s32 L2_func_80085C3C();                                /* extern */
 extern void *L2_D_800B6010;
@@ -2052,7 +2053,6 @@ void L2_func_8006E9D0(s32 arg0, s32 arg1);
 extern void *L2_D_800B6FE4;
 void L2_func_800637D0(void);
 void L2_func_80063A54(void *arg0);
-extern s32 L2_D_800A0CD4;
 void L2_func_8006E948(void);
 void L2_func_80063630();
 extern u8 *L2_D_800A1C74;

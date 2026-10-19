@@ -213,8 +213,10 @@ extern s8 L1_D_8009C1EE;
 
 
 
+typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
 typedef struct { u8 pad[0x23E]; s16 a; s16 b; } S9F8;
 s32 L2_func_80026B00(s32 arg0);
+void L2_func_80029200(void);
 void L2_func_800288B4(s8 arg0);
 extern char L2_D_800AC4AC[];
 extern char L2_D_800AC4D4[];
@@ -241,9 +243,10 @@ extern s32 L2_D_800B1FA0;
 extern s32 L2_D_800B4E3C;
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
 extern M2C_UNK (*L2_D_800A1078)(s16);
-void L2_func_80029200(void);
 s32 L2_func_80026C38(s32 arg0);
 void L2_func_80028B88(s16 arg0, char *text);
+extern M2C_UNK D_800B1CBC_80029BFC asm("L2_D_800B1CBC");
+extern S1CBC L2_D_800B1CBC;
 void L3_func_800299F8(char *a0, s16 a1, s16 a2, s16 a3, s16 a4, s32 a5, s32 a6, s32 a7);
 /* This level's own declarations (kept by tools/port_level.py): */
 

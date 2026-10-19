@@ -381,7 +381,7 @@ void L1_func_8007567C(void *arg0) {
         model = M2C_FIELD(arg0, void **, 0x114);
         if (model != NULL) {
             i = 0;
-            L1_func_80077764();
+            L1_func_80077764(arg0);
             unit = M2C_FIELD(model, s32 **, 4);
             flags = M2C_FIELD(model, u8 **, 8);
             idx = L1_D_800B8F24;

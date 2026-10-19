@@ -167,6 +167,7 @@ extern s32 L1_D_800AFEBC;
 
 
 s32 L2_func_80026B00(s32 arg0);
+extern s8 L2_D_800B5F4A;
 s32 L2_func_80083044(char *, ...);
 extern void *L2_D_800B6010;
 void L2_func_8002A7E4();
@@ -193,7 +194,6 @@ M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
 extern M2C_UNK L2_D_800AC6FC;
 M2C_UNK L2_func_8002B464(s32, M2C_UNK);                /* extern */
 extern s8 L2_D_800B5F49;
-extern s8 L2_D_800B5F4A;
 extern s32 L2_D_800B5F50;
 extern void (*L2_D_800A107C)(s32);
 void L2_func_8002BFAC(void);

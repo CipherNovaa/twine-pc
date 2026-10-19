@@ -1,0 +1,6 @@
+-m32
+-std=gnu11
+-DNATIVE_PORT
+-I../include
+-I../src
+-Isrc

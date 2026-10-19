@@ -1455,7 +1455,7 @@ void func_8002E318(void);
 void func_8002D0F0(void);
 void func_8002F114(void);
 void func_800841F8(void);
-MainFn main_ __asm("main");
+MainFn main_ __asm(GAME_MAIN);
 extern u8 D_800D7DFC[];
 extern u8 D_800D7E9C[];
 extern u8 D_800D7EEC[];
@@ -1860,7 +1860,7 @@ void func_800268CC(void);
 M2C_UNK func_80082E04(M2C_UNK);
 M2C_UNK func_80082F78(M2C_UNK);
 s16 SsVabOpenHead(s32, M2C_UNK);                    /* extern */
-s16 SsVabTransBody(s32);                            /* extern */
+s16 SsVabTransBody(s32, s16);                            /* extern */
 M2C_UNK SsVabTransCompleted(M2C_UNK);               /* extern */
 extern s8 D_800A763C;
 extern s8 D_800A7650;
@@ -3483,7 +3483,7 @@ void func_8002F7CC(void) {
 
     skip = (s16)func_8004B06C();
     if (g_Args->cdArchive == 0) {
-        __asm__ volatile("break 1024");
+        BREAK(1024);
     }
     D_800B8F24 = 1 - D_800B8F24;
     D_800D3234 = (s32)D_800B8F88[D_800B8F24].org;
@@ -3880,7 +3880,7 @@ void func_80030868(void) {
         printf(&D_800A7678, &D_800A76A0, 0xB0);
         exit(1);
     }
-    if (SsVabTransBody(D_800D2E7C) != M2C_FIELD(g_Args, s16 *, 0x12C)) {
+    if (SsVabTransBody(D_800D2E7C, temp_v0) != M2C_FIELD(g_Args, s16 *, 0x12C)) {
         printf(&D_800A76AC);
         printf(&D_800A7678, &D_800A76A0, 0xB9);
         exit(1);
@@ -5746,11 +5746,12 @@ void func_80034A48(u8 *arg0, u8 *arg1, s16 arg2, s16 arg3) {
     s32 isPlayerSrc, noArmor, dmg, a1, ang, d, t, code, cnt;
     u8 *w;
     s32 s6;
+    AnimSlot *func_800378FC(u8 *obj, u8 *anim, s16 arg2, s32 arg3);
 
     sel = arg2;
     s6 = 0;
     if (W(arg1, u16, 0xE) & 0x200) {
-        W(arg1, s32, 0x104) = (s32)func_800378FC(W(arg1, u8 *, 0x90) + 0x14, D_800D31C0, W(arg1, s16, 0x2A), W(arg1, s32, 0x88));
+        W(arg1, s32, 0x104) = (s32)func_800378FC(W(arg1, u8 *, 0x90) + 0x14, (u8 *)&D_800D31C0, W(arg1, s16, 0x2A), W(arg1, s32, 0x88));
     }
     if (W(W(arg1, u8 *, 0), u8, 5) != 0) {
         u8 *pos = W(arg1, u8 *, 0x90) + 0x14;
@@ -7641,7 +7642,7 @@ s32 func_80039A9C(s32 arg0, u8 arg1, s32 arg2) {
     u8 *rec;
     u8 *parent;
     u8 *ent;
-    AnimSlot *func_800378FC();
+    AnimSlot *func_800378FC(u8 *obj, u8 *anim, s16 arg2, s32 arg3);
 
     type = arg1;
     kind = arg2;

@@ -2042,6 +2042,7 @@ extern int L1_g_CheatCodes[];
 
 
 
+extern s32 L2_D_800A0CD4;
 s32 L2_func_80083044(char *, ...);
 s32 L2_func_80085C3C();                                /* extern */
 void L2_func_8006E97C(s32 arg0);
@@ -2052,7 +2053,6 @@ extern void *L2_D_800B6FE4;
 void L2_func_800637D0(void);
 extern s32 L2_D_800F4458;
 void L2_func_80063A54(void *arg0);
-extern s32 L2_D_800A0CD4;
 extern u8 L2_D_800A0F34;
 void L2_func_8006DC08(void);
 void L2_func_80061A24(PlObj *obj);
@@ -2086,6 +2086,26 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern char D_800AED5C[];
+extern char D_800AED6C[];
+s32 func_800304D8(u8 mode);
+void func_80030AB8(u8 *arg0);
+void func_80030E2C(u8 arg0, u8 *buf, u8 *name);
+void func_80031044(void);
+s32 func_800321E4(void);
+void func_80069B60(void);
+void func_80069BB8(void);
+void func_80069CA0(void);
+void func_80069CF8(void);
+void func_80069DDC(void);
+void func_80069E34(void);
+void func_80069F18(void);
+void func_80069F70(void);
+void func_8006A054(void);
+void func_8006A0AC(void);
+void func_8006A190(void);
+void func_8006A1E8(void);
+s32 func_80086A10(char *buf, const char *fmt, ...);
 extern s16 D_800B6744;
 extern s16 D_800B6D54;
 typedef struct { u8 pad0[4]; u8 f; u8 pad1[0x3F]; void (*fn)(s32 *); u8 pad2[0xDC]; } FB6BFA0E;
@@ -4159,7 +4179,48 @@ void L2_func_8006DC08(void) {
     L2_func_8003D7CC(5, L2_D_800A1510);
 }
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_8006A25C);
+void func_8006A25C(u32 arg0) {
+    s16 temp_a2;
+    s32 temp_s1;
+
+    temp_s1 = func_800321E4();
+    func_800304D8(0);
+    func_80031044();
+    func_80086A10(((Args *)D_800B5ACC)->exePath, D_800AED5C, M2C_FIELD(D_800B5ACC, s16 *, 0x188), arg0);
+    func_80030E2C(5, (u8 *)temp_s1, ((Args *)D_800B5ACC)->exePath);
+    temp_a2 = M2C_FIELD(D_800B5ACC, s16 *, 0x188);
+    func_80086A10(((Args *)D_800B5ACC)->exePath, D_800AED6C, temp_a2, temp_a2, arg0);
+    func_80030AB8(((Args *)D_800B5ACC)->exePath);
+    switch (arg0) {
+    case 1:
+        func_80069B60();
+        func_80069BB8();
+        break;
+    case 2:
+        func_80069CA0();
+        func_80069CF8();
+        break;
+    case 3:
+        func_80069DDC();
+        func_80069E34();
+        break;
+    case 4:
+        func_80069F18();
+        func_80069F70();
+        break;
+    case 5:
+        func_8006A054();
+        func_8006A0AC();
+        break;
+    case 6:
+        func_8006A190();
+        func_8006A1E8();
+        break;
+    case 7:
+        break;
+    }
+    func_800304D8(1);
+}
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_8006A3BC);
 

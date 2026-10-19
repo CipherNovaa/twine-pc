@@ -2042,6 +2042,7 @@ extern int L1_g_CheatCodes[];
 
 
 
+extern s32 L2_D_800A0CD4;
 s32 L2_func_80083044(char *, ...);
 s32 L2_func_80085C3C();                                /* extern */
 void L2_func_8006E97C(s32 arg0);
@@ -2050,7 +2051,6 @@ void L2_func_8006E9D0(s32 arg0, s32 arg1);
 void L2_func_800637D0(void);
 extern s32 L2_D_800F4458;
 void L2_func_80063A54(void *arg0);
-extern s32 L2_D_800A0CD4;
 void L2_func_8006DEEC(s32 arg0);
 extern char L2_D_800AF004[];
 extern char L2_D_800AF014[];
@@ -2084,6 +2084,11 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
+typedef struct { u8 pad[0xA0]; s16 xA0; } Pl1EA4;
+extern s16 L1_gPsi;
+extern s32 L1_g_FrameCap;
+extern s32 L1_g_FrameRate;
+extern void *L1_g_Player;
 void func_80069D30(void);
 extern s32 D_8009F704;
 extern s32 D_8009F708;
@@ -2124,7 +2129,7 @@ extern M2C_UNK *D_800E0D90;
 extern M2C_UNK *D_800E0D94;
 M2C_UNK func_80050064();                            /* extern */
 M2C_UNK func_8005D94C();                            /* extern */
-M2C_UNK func_800619D4(void *);                      /* extern */
+void func_800619D4(PlObj *obj);
 void func_80061CA4(void *arg0);
 M2C_UNK func_8007C540(M2C_UNK);                     /* extern */
 s32 func_8007C574();                                /* extern */
@@ -2255,7 +2260,84 @@ extern s32 D_8009F700;
 extern s32 D_8009F6C0;
 extern s32 D_8009F6FC;
 
-INCLUDE_ASM("asm/level08/nonmatchings/text_800619D4", func_800619D4);
+void func_800619D4(PlObj *obj) {
+    s16 pos[4];
+    s16 hit[4];
+    s32 speed;
+    s32 cur;
+    s32 limit;
+    s32 ang;
+    s32 h;
+    s32 pitch;
+    s32 *cs;
+    s32 sn, cn;
+    Args *args;
+    s32 bsp;
+    s32 l, r;
+
+    cur = obj->speed;
+    speed = cur;
+    if (*(u8 *)&L1_D_800B0E54) {
+        L1_Pad_StickToSpeed(0, 0x50, &speed);
+    } else {
+        l = L1_D_800DDCC4;
+        r = L1_D_800DDDB8;
+        if (l != 0 || r != 0) {
+        if (L1_D_800DDC60 != 0 || L1_D_800DDC54 != 0) {
+            if (l != 0) {
+                speed = -0x50;
+            } else {
+                speed = 0x50;
+            }
+        } else {
+            if (l != 0) {
+                if (cur < -9) {
+                    speed = cur - 10;
+                } else {
+                    speed = -10;
+                }
+            } else {
+                if (cur < 10) {
+                    speed = 10;
+                } else {
+                    speed = cur + 10;
+                }
+            }
+            limit = 0x50;
+            if (limit < speed) {
+                speed = limit;
+            } else if (speed < -limit) {
+                speed = -limit;
+            }
+        }
+        } else {
+            speed = 0;
+        }
+    }
+    if (!*(u8 *)&L1_D_800B0E54 && L1_g_FrameRate < L1_g_FrameCap) {
+        speed = speed * L1_g_FrameCap / L1_g_FrameRate;
+    }
+    obj->speed = speed;
+    ang = (*(s16 *)(((PlObj *)L1_g_Player)->sub + 0x62) + speed) & 0xFFF;
+    L1_gPsi = ang;
+    *(s16 *)(((PlObj *)L1_g_Player)->sub + 0x62) = ang;
+    ((Pl1EA4 *)L1_g_Player)->xA0 = ang >> 6;
+    if (D_800A1510 != 0) {
+        return;
+    }
+    sn = *(s16 *)&L1_D_800A0370[ang];
+    cn = *(volatile s32 *)&L1_D_800A0370[ang] >> 16;
+    pos[0] = L1_g_Args->playerX + ((sn * 125) >> 10);
+    pos[1] = L1_g_Args->playerY;
+    pos[2] = L1_g_Args->playerZ + ((cn * 125) >> 10);
+    h = ((s32 (*)(s32, s16 *, s16 *, s32))L1_func_800705A8)(L1_D_800E2F54, pos, hit, 0);
+    if (h == -0x7FFF || h == pos[1] || (hit[1] < -0x7EF4 && *(s16 *)((u8 *)L1_g_Player + 0x11E) < -0x7EF4)) {
+        pitch = 0;
+    } else {
+        pitch = ((s32 (*)(s32, s32))L1_ratan2)(pos[1] - h, 500);
+    }
+    *(s16 *)(obj->sub + 0x60) = pitch;
+}
 
 void func_80061CA4(void *arg0) {
     s32 ang;

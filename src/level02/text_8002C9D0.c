@@ -1478,7 +1478,7 @@ void L1_func_8002E318(void);
 void L1_func_8002D0F0(void);
 void L1_func_8002F114(void);
 void L1_func_800841F8(void);
-MainFn main_ __asm("main");
+MainFn main_ __asm(GAME_MAIN);
 extern u8 L1_D_800D7DFC[];
 extern u8 L1_D_800D7E9C[];
 extern u8 L1_D_800D7EEC[];
@@ -1883,7 +1883,7 @@ void func_800268CC(void);
 M2C_UNK L1_func_80082E04(M2C_UNK);
 M2C_UNK L1_func_80082F78(M2C_UNK);
 s16 L1_SsVabOpenHead(s32, M2C_UNK);                    /* extern */
-s16 L1_SsVabTransBody(s32);                            /* extern */
+s16 L1_SsVabTransBody(s32, s16);                            /* extern */
 M2C_UNK L1_SsVabTransCompleted(M2C_UNK);               /* extern */
 extern s8 D_800A763C;
 extern s8 D_800A7650;
@@ -4976,7 +4976,7 @@ void func_8002F93C(void) {
 
     skip = (s16)L1_func_8004B06C();
     if (L1_g_Args->cdArchive == 0) {
-        __asm__ volatile("break 1024");
+        BREAK(1024);
     }
     L1_D_800B8F24 = 1 - L1_D_800B8F24;
     D_800D5960 = (s32)L1_D_800B8F88[L1_D_800B8F24].org;
@@ -9608,7 +9608,7 @@ s32 L1_func_80039A9C(s32 arg0, u8 arg1, s32 arg2) {
     u8 *rec;
     u8 *parent;
     u8 *ent;
-    AnimSlot *L1_func_800378FC();
+    AnimSlot *L1_func_800378FC(u8 *obj, u8 *anim, s16 arg2, s32 arg3);
 
     type = arg1;
     kind = arg2;

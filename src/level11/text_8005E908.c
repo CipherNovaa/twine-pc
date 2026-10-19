@@ -2042,6 +2042,7 @@ extern int L1_g_CheatCodes[];
 
 
 
+extern s32 L2_D_800A0CD4;
 s32 L2_func_80083044(char *, ...);
 s32 L2_func_80085C3C();                                /* extern */
 void L2_func_8006E97C(s32 arg0);
@@ -2052,7 +2053,6 @@ extern void *L2_D_800B6FE4;
 void L2_func_800637D0(void);
 extern s32 L2_D_800F4458;
 void L2_func_80063A54(void *arg0);
-extern s32 L2_D_800A0CD4;
 extern u8 L2_D_800A0F34;
 void L2_func_80061A24(PlObj *obj);
 void L2_func_80061CE8(void *arg0);
@@ -2080,6 +2080,7 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern void *D_800B3F70_80064E38 asm("D_800B3F70");
 extern s16 L1_gPsi;
 extern Args *L1_g_Args;
 extern s32 L1_g_FrameCap;
@@ -4086,7 +4087,7 @@ void func_80064E38(void) {
     s32 var_v0;
 
     var_v0 = func_8005A874(&D_800B3A20, &D_800B3A20 + 0x188);
-    M2C_FIELD(D_800B3F70, s32 *, 0x94) = var_v0;
+    M2C_FIELD(D_800B3F70_80064E38, s32 *, 0x94) = var_v0;
     if (var_v0 == 0) {
         func_8007E4B0(&D_800A8870);
         var_v0 = func_800812E8(-1);

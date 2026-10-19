@@ -1728,6 +1728,7 @@ extern int L1_g_CheatCodes[];
 
 
 
+typedef struct { u8 pad[0x25A]; s16 a; s16 b; } S1CBC;
 void func_80085E7C_nr(s32) asm("L2_func_80085E7C") __attribute__((noreturn));
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
 void L2_func_8005FEC4(void);
@@ -1752,6 +1753,8 @@ M2C_UNK L2_func_8002D6AC(M2C_UNK *);                   /* extern */
 extern M2C_UNK L2_D_800AE968;
 void L2_func_8006004C(s32 *arg0);
 void L2_func_80060EE0(u8 *obj, s16 dx, s16 dz);
+extern M2C_UNK D_800B1CBC_80029BFC asm("L2_D_800B1CBC");
+extern S1CBC L2_D_800B1CBC;
 void L3_func_800600D8(void);
 extern M2C_UNK L3_D_800B37BC;
 extern s32 L3_D_800F4720;
