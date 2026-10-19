@@ -3042,7 +3042,7 @@ extern u8 L2_D_800AD400[];
 extern u8 L2_D_800AD428[];
 extern u8 L2_D_800DB3D8[];
 extern u8 L2_D_800DB814[];
-s16 L2_func_8008FCDC();
+s16 L2_func_8008FCDC(s32, s16);
 void L2_func_8008FDAC();
 s16 L2_func_8008FF2C();
 extern u8 L2_D_800ACC18[];
@@ -5238,12 +5238,12 @@ void L2_func_800309B8(void) {
     if (temp_v0 < 0) {
         ((void (*)())L2_func_80083044)(((u8 *)&L2_D_800ACC40), temp_v0);
         ((void (*)())L2_func_80083044)(((u8 *)&L2_D_800ACC54), ((u8 *)&L2_D_800ACC7C), 0xB0);
-        ((void (*)())L2_func_80085E7C)(1);
+        func_80085E7C_nr(1);
     }
-    if (L2_func_8008FCDC(L2_D_800D55A8) != M2C_FIELD(L2_D_800B6010, s16 *, 0x12C)) {
+    if (L2_func_8008FCDC(L2_D_800D55A8, temp_v0) != M2C_FIELD(L2_D_800B6010, s16 *, 0x12C)) {
         ((void (*)())L2_func_80083044)(((u8 *)&L2_D_800ACC88));
         ((void (*)())L2_func_80083044)(((u8 *)&L2_D_800ACC54), ((u8 *)&L2_D_800ACC7C), 0xB9);
-        ((void (*)())L2_func_80085E7C)(1);
+        func_80085E7C_nr(1);
     }
     ((void (*)())L2_func_8008FDAC)(1);
 }
@@ -12892,7 +12892,7 @@ void L1_func_800475BC(void) {
 }
 
 void L3_func_80048204(void *arg0, void *arg1) {
-    L2_func_80085E4C();
+    L2_func_80085E4C(arg0, arg1);
     M2C_FIELD(arg0, u8 *, 0x23) = (u8) M2C_FIELD(arg1, u8 *, 0x23);
     M2C_FIELD(arg0, u16 *, 0x24) = (u16) M2C_FIELD(arg1, u16 *, 0x24);
     M2C_FIELD(arg0, u8 *, 0x26) = (u8) M2C_FIELD(arg1, u8 *, 0x26);

@@ -14354,7 +14354,7 @@ void L1_func_800475BC(void) {
 }
 
 void func_80048510(void *arg0, void *arg1) {
-    func_80085E4C();
+    func_80085E4C(arg0, arg1);
     M2C_FIELD(arg0, u8 *, 0x23) = (u8) M2C_FIELD(arg1, u8 *, 0x23);
     M2C_FIELD(arg0, u16 *, 0x24) = (u16) M2C_FIELD(arg1, u16 *, 0x24);
     M2C_FIELD(arg0, u8 *, 0x26) = (u8) M2C_FIELD(arg1, u8 *, 0x26);

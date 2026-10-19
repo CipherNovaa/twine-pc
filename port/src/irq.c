@@ -41,6 +41,7 @@ static void run_vblank(void) {
     if (vsync_callback)
         vsync_callback();
     port_pad_vblank();
+    port_cd_irq();
     in_irq = 0;
 }
 

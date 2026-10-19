@@ -21,7 +21,7 @@ static FILE *disc;
 static u32 cd_lba;  /* current read position (sector index from the start of the data track) */
 static u8 cd_mode;
 static u8 cd_status = 0x02; /* motor on */
-static void *ready_callback, *sync_callback;
+static void *ready_callback, *sync_callback, *read_callback, *data_callback;
 
 static const char *disc_path(void) {
     const char *p = getenv("TWINE_DISC");
@@ -168,6 +168,8 @@ s32 CdControlF(u8 com, u8 *param) {
     return CdControl(com, param, NULL);
 }
 
+static volatile int read_done; /* a CdRead finished: its callback is due */
+
 s32 CdRead(s32 sectors, u32 *buf, s32 mode) {
     int whole = (mode & 0x20) != 0;
     u8 *p = (u8 *)buf;
@@ -178,6 +180,7 @@ s32 CdRead(s32 sectors, u32 *buf, s32 mode) {
         p += whole ? 2340 : 2048;
     }
     cd_lba += sectors;
+    read_done = 1;
     return 1;
 }
 
@@ -207,8 +210,6 @@ void *CdSyncCallback(void *fn) {
     return old;
 }
 
-static void *read_callback, *data_callback;
-
 void *CdReadCallback(void *fn) {
     void *old = read_callback;
     read_callback = fn;
@@ -219,6 +220,19 @@ void *CdDataCallback(void *fn) {
     void *old = data_callback;
     data_callback = fn;
     return old;
+}
+
+/* The CD interrupt (run with the vblank): a read issued with CdRead reports completion (CdlComplete) to the
+ * CdReadCallback function, like libcd's interrupt handler does when the last sector has arrived. The game's
+ * asynchronous loads (weapon models) wait for this. */
+void port_cd_irq(void) {
+    static u8 result[8];
+    if (!read_done)
+        return;
+    read_done = 0;
+    result[0] = cd_status;
+    if (read_callback)
+        ((void (*)(u8, u8 *))read_callback)(2, result);
 }
 
 /* PC file server (development builds only; the retail game reads the CD) */

@@ -25,6 +25,7 @@ u32 port_vblank_count(void);
 void port_wait_vblank(void);
 
 void port_pad_vblank(void);  /* pad.c: per-vblank controller update */
+void port_cd_irq(void);      /* cdrom.c: CD completion callbacks */
 void port_video_init(void);  /* video.c: window and input */
 void port_frame_end(void);   /* video.c: present a finished frame */
 
