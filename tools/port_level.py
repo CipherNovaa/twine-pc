@@ -75,6 +75,24 @@ def split(level):
         starts.append(region_start(lo, hi, prev_end))
         shared = [pairs[n] for a, s, n in l1_funcs if lo <= a < hi and n in pairs]
         prev_end = max(shared) if shared else starts[-1]
+    # -O0 code always sets up a frame pointer (`addu $fp, $sp, $zero`) and -O1/-O2 code never does, so the
+    # -O0 regions' edges go exactly where the frame-pointer functions start and end (this level's own
+    # functions next to a boundary would otherwise land on the wrong side).
+    n = int(level[-2:])
+    t_addr, t_words = port_symbols.shared_code.load(port_symbols.shared_code.EXTRACTED / f"L{n:02d}/LEVEL{n:02d}.EXE")
+
+    def has_fp(a):
+        end = next((b for b in t_starts if b > a), a + 64)
+        return any(t_words[k] == 0x03A0F021 for k in range((a - t_addr) // 4, (end - t_addr) // 4))
+
+    for k, (l1_start, l1_name) in enumerate(l1_c):
+        if opts.get(l1_name) != "-O0":
+            continue
+        inside = [a for a in t_starts if starts[k] <= a < starts[k + 1]]
+        fp = [a for a in inside if has_fp(a)]
+        if fp:
+            starts[k] = fp[0]
+            starts[k + 1] = next(a for a in t_starts if a > fp[-1])
     # The data segment starts where it does in this level's yaml.
     t_text = (ROOT / f"config/{level}.yaml").read_text()
     t_data = next(off for off, kind, name in subsegments(level) if kind == "data")
@@ -338,6 +356,17 @@ def port(level):
         return all(i in l2_smap for i in set(IDENT.findall(code)) if i in l2_globals)
 
     exclude2 = set()  # LEVEL02 names that failed to compile or match here
+
+    # After a re-split (file boundaries moved), the previous files wait in a pool: their own C goes to
+    # whichever new file has the function now.
+    pool_dir = ROOT / f"build/{level}/port_pool"
+    pool_funcs, pool_decls = {}, {}  # function -> (kind, code, old file); old file -> its own declarations
+    for c in sorted(pool_dir.glob("*.c")) if pool_dir.exists() else ():
+        h, f = parse_c(c.read_text())
+        for key, (k, code) in f.items():
+            if is_native(defined_name(code), same_named):
+                pool_funcs.setdefault(key, (k, code, c.name))
+        pool_decls[c.name] = [l for l in (h[h.index(NATIVE_MARK) + 1:] if NATIVE_MARK in h else []) if l.strip()]
     native_drop = set()  # this level's own C that no longer compiles next to the regenerated code
 
     # LEVEL01's text gets its names renamed to L1_ when it's put in. Only names the shared headers declare
@@ -383,6 +412,7 @@ def port(level):
             c_path = ROOT / f"src/{level}/{t_stem}.c"
             current = orig = c_path.read_text()
             native_decls, native_funcs = [], {}
+            pooled = []
             if "port_level.py" in orig.split("\n", 1)[0]:
                 orig = (ROOT / f"build/{level}/port_base/{t_stem}.c").read_text()
                 # Work done on this level itself (integrate_one --level): declarations below the marker,
@@ -402,6 +432,10 @@ def port(level):
                     if not line.startswith("#include"):
                         body.append(line)
                     continue
+                if m.group(2) not in native_funcs and m.group(2) in pool_funcs:
+                    k, code, old = pool_funcs[m.group(2)]
+                    native_funcs[m.group(2)] = (k, code)
+                    pooled.append(old)
                 if m.group(2) in native_funcs and m.group(2) not in native_drop:  # done on this level itself
                     native_names.add(m.group(2))
                     kind, code = native_funcs[m.group(2)]
@@ -434,6 +468,8 @@ def port(level):
                 else:
                     body.append(line)
             l1_header = [l1_rename(l) for l in header]
+            for old in dict.fromkeys(pooled):  # pooled functions bring their old file's own declarations
+                native_decls += [d for d in pool_decls[old] if d not in native_decls]
             l2_header = [d for d in map(l2_rename, l2_decls) if d not in l1_header] if l2 else []
             text = "\n".join(l1_header + l2_header + [NATIVE_MARK] + native_decls) + "\n" + "\n".join(body) + "\n"
             used2 |= {i[3:] for i in IDENT.findall(text) if i.startswith("L2_")}
@@ -539,6 +575,9 @@ def port(level):
         ok = r.returncode == 0 and ": OK" in r.stdout
         print(f"{level}: {len(ported)} functions from LEVEL01's C, {len(ported2)} from LEVEL02's; "
               f"EXE {'matches' if ok else 'DOES NOT MATCH'}")
+        if ok and pool_dir.exists():
+            import shutil
+            shutil.rmtree(pool_dir)
         if not ok:
             print((r.stdout + r.stderr)[-2000:])
         return ok
