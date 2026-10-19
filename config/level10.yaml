@@ -40,13 +40,13 @@ segments:
     subsegments:
       - [0x800, c, text_80026800]  # O2, LEVEL01 text_80026800
       - [0x80C, c, text_8002680C]  # O0, LEVEL01 text_8002680C
-      - [0xB44, c, text_80026B44]  # O2, LEVEL01 text_80026B00
+      - [0xB00, c, text_80026B00]  # O2, LEVEL01 text_80026B00
       - [0x47B8, c, text_8002A7B8]  # O0, LEVEL01 text_8002A61C
       - [0x69A4, c, text_8002C9A4]  # O2, LEVEL01 text_8002C808
       - [0x3B480, c, text_80061480]  # O1, LEVEL01 text_8005EDF8
       - [0x3E0B0, c, text_800640B0]  # O2, LEVEL01 text_800617AC
       - [0x4DCE4, c, text_80073CE4]  # O0, LEVEL01 text_8006FA54
-      - [0x53550, c, text_80079550]  # O2, LEVEL01 text_80075290
+      - [0x53520, c, text_80079520]  # O2, LEVEL01 text_80075290
       - [0x54D8C, asm, psyq_libs]  # PsyQ libraries
       - [0x7A330, data]
   - [0x8A800]
