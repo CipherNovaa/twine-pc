@@ -3350,6 +3350,11 @@ void L2_func_8005DAD0(void);
 void L2_func_8005DF80(void *arg0);
 void L3_func_80048204(void *arg0, void *arg1);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern char D_800A6970[];
+void func_80067484_800306F8(s32 arg0, M2C_UNK arg1) asm("func_80067484");
+void func_8008ADF8(s32, s32, s32);
+s32 func_80051510(void);
+void func_80054E68(s32, s32);
 #define AIM_CLAMP(v, lo, hi) ((v) < (lo) ? (lo) : (v) > (hi) ? (hi) : (v))
 extern s32 L1_g_FrameCap;
 void func_80044188(void);
@@ -4695,18 +4700,18 @@ s32 L1_func_800303B4(u8 mode) {
 }
 
 #ifdef NON_MATCHING
-void L1_func_8003052C(void) {
+void func_800306F8(void) {
     s32 t;
-    s32 a = 0x801687D0;
-    s32 b = 0x97830;
-    *(s32 *)((u8 *)g_Args + 0x1EC) = a;
-    *(s32 *)((u8 *)g_Args + 0x1F0) = b;
-    L1_InitHeap3(a, 0x97830, b);
-    t = *(s32 *)((u8 *)g_Args + 0x1F0);
-    *(s32 *)((u8 *)g_Args + 0x1F4) = 0;
+    s32 a = 0x80170B00;
+    s32 b = 0x8F500;
+    *(s32 *)((u8 *)L1_g_Args + 0x1EC) = a;
+    *(s32 *)((u8 *)L1_g_Args + 0x1F0) = b;
+    func_8008ADF8(a, 0x8F500, b);
+    t = *(s32 *)((u8 *)L1_g_Args + 0x1F0);
+    *(s32 *)((u8 *)L1_g_Args + 0x1F4) = 0;
     if (t & 7) {
-        sprintf(g_Args->exePath, L1_D_800A74D4, t);
-        L1_func_8006B230(0, g_Args->exePath);
+        L1_sprintf(L1_g_Args->exePath, D_800A6970, t);
+        func_80067484_800306F8(0, L1_g_Args->exePath);
     }
 }
 #else
@@ -15109,7 +15114,22 @@ void func_800509C8(void) {
     } while (var_a1 < 7);
 }
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8002C9C0", func_80050A4C);
+void func_80050A4C(u8 *arg0, s32 arg1) {
+    s32 s0;
+    s32 t;
+    s0 = arg1;
+    if (s0 < 0) {
+        s0 = 6;
+    }
+    if (s0 < 7) {
+        t = func_80051510();
+        *(s32 *)(arg0 + 0x118) = t;
+        if (t != 0) {
+            func_80054E68(t, ((s32 *)&D_800DC5A4)[s0]);
+            arg0[0xA7] = s0;
+        }
+    }
+}
 
 void L1_func_80053804(u8 *arg0) {
   s16 x;

@@ -222,6 +222,14 @@ s32 L2_func_80079040(void *arg0, s32 arg1);
 s32 L2_func_80079740(void);
 void L2_func_80079854(s32 arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern SrcRec D_800A167C[];
+extern char D_800AC838[];
+extern char D_800AC850[];
+extern char D_800F6400[];
+extern Args *L1_g_Args;
+int L1_sprintf(char *buf, char *fmt, ...);
+char *L1_strcpy(char *dst, char *src);
+int L1_strlen(char *s);
 typedef struct { s16 pos[3]; s16 vel[3]; u8 *tgt; s16 unk10; s16 unk12; } TrkRec;
 typedef struct { TrkRec rec[5]; u8 busy; } TrkTbl;
 typedef struct { s16 pos[3]; s16 vel[3]; s32 pad0C; s32 pad10; s32 pad14; u8 *tgt; s32 unk1C; s32 pad20; s16 unk24; } TrkDst;
@@ -717,7 +725,32 @@ void L1_func_80076184(s32 idx, u32 val) {
     }
 }
 
-INCLUDE_ASM("asm/level06/nonmatchings/text_80075E84", func_80076DD0);
+void func_80076DD0(void) {
+    s32 i, j;
+    u8 found;
+    for (i = 0; i < 3; i++) {
+        j = 0;
+        found = 0;
+        ((DstRec *)&D_800F63FC)[i].a = 0;
+        ((DstRec *)&D_800F63FC)[i].b = 1;
+        for (; j < 3; j++) {
+            if (D_800A167C[j].id == i) {
+                if ((s32)L1_strlen(D_800A167C[j].name) >= 100) {
+                    L1_sprintf(L1_g_Args->exePath, D_800AC838, D_800A167C[j].name);
+                    L1_func_8006B230(0, (s32)L1_g_Args->exePath);
+                }
+                L1_strcpy(&D_800F6400[i * 0x6C], D_800A167C[j].name);
+                ((DstRec *)&D_800F63FC)[i].idx = j;
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            L1_sprintf(L1_g_Args->exePath, D_800AC850, i);
+            L1_func_8006B230(0, (s32)L1_g_Args->exePath);
+        }
+    }
+}
 
 void func_80076F20(s32 arg0) {
     if (arg0 >= 3) {

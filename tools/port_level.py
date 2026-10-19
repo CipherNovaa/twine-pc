@@ -283,6 +283,25 @@ def target_exe(level):
     return data, load
 
 
+INSN = re.compile(r"^\s*/\* [0-9A-F]+ [0-9A-F]{8} ([0-9A-F]{8}) \*/\s+(\S+)\s*(.*)$")
+
+
+def same_constants(a_path, b_path):
+    """Whether two functions' asm (the same code modulo addresses) also agree in every constant: all words
+    without a symbol (%hi/%lo, j/jal) are equal. Banked C has no byte check, so a constant that differs
+    (a heap size, an array count) would go unnoticed."""
+    def words(p):
+        out = []
+        for line in p.read_text().splitlines():
+            m = INSN.match(line)
+            if m:
+                sym = "%hi(" in m.group(3) or "%lo(" in m.group(3) or m.group(2) in ("j", "jal")
+                out.append(None if sym else m.group(1))
+        return out
+    a, b = words(a_path), words(b_path)
+    return len(a) == len(b) and all(x == y for x, y in zip(a, b) if x is not None and y is not None)
+
+
 def object_mismatches(level, obj, wanted, exe, load):
     """Keys of ported functions whose bytes differ from the EXE (relocations masked).
     wanted: {name the object defines: (key, address in this level)}."""
@@ -464,6 +483,7 @@ def port(level):
         own = set(re.findall(r"^\s*(\.L[0-9A-F]{8}):", txt, re.M))
         defined[s.stem] = own
         referenced |= set(re.findall(r"(?<![\w.])(\.L[0-9A-F]{8})\b", txt)) - own
+    l1_asm = {q.stem: q for q in (ROOT / "asm/level01/nonmatchings").glob("*/*.s")}
     exclude = set()  # LEVEL01 names that failed to compile or match
     nm_exclude = set()  # banked LEVEL01 names whose C doesn't compile here
     asm_dir = ROOT / f"asm/{level}/nonmatchings"
@@ -522,7 +542,8 @@ def port(level):
                     if jt:  # keyed by the name the C defines (no L1_ when both levels use the same name)
                         jtbl_lines.append(f"{'L1_' + n if n in renamed else n} {' '.join(dict.fromkeys(jt))}")
                 elif item and item[0] == "banked" and n not in nm_exclude and portable(item[1]) \
-                        and not defined.get(m.group(2), set()) & referenced:
+                        and not defined.get(m.group(2), set()) & referenced \
+                        and same_constants(l1_asm[n], asm_dir / m.group(1).split("/")[-1] / f"{m.group(2)}.s"):
                     # LEVEL01's near-miss C, for NON_MATCHING builds; the matching build keeps this level's asm.
                     banked[n] = t_stem
                     body.append(f"#ifdef NON_MATCHING\n{l1_rename(item[1])}\n#else\n{line}\n#endif")

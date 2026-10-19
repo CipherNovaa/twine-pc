@@ -2086,6 +2086,27 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
+extern s16 D_800B6744;
+extern s16 D_800B6D54;
+typedef struct { u8 pad0[4]; u8 f; u8 pad1[0x3F]; void (*fn)(s32 *); u8 pad2[0xDC]; } FB6BFA0E;
+extern s32 D_800B5B18;
+extern s16 D_800B6758;
+extern s16 D_800B6D48;
+extern s32 D_800A19CC;
+extern s32 D_800A1C48;
+extern s8 D_800B6A6C;
+extern s8 D_800B6A70;
+extern s8 D_800B6A74;
+extern s16 D_800B6A88;
+extern s16 D_800B6A9C;
+extern s8 D_800B6C40;
+extern s8 D_800B6C44;
+extern s8 D_800B6C48;
+extern s16 D_800B6C4C;
+extern s16 D_800B6D74;
+extern s16 D_800B6D78;
+extern M2C_UNK D_800BEEC8;
+extern M2C_UNK D_800BEF50;
 extern s16 L1_gPsi;
 extern Args *L1_g_Args;
 extern s32 L1_g_FrameCap;
@@ -4157,7 +4178,30 @@ INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_8006A788);
 void func_8006AAB0(void) {
 }
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_8006AAB8);
+void func_8006AAB8(void) {
+    D_800B6D78 = 0;
+    D_800B6D74 = 0;
+    M2C_FIELD(&D_800BEF50, s8 *, 0) = 0;
+    M2C_FIELD(&D_800BEF50, s8 *, 1) = 0;
+    M2C_FIELD(&D_800BEF50, s8 *, 2) = 0;
+    M2C_FIELD(&D_800BEEC8, s32 *, 0) = 1;
+    M2C_FIELD(&D_800BEEC8, s32 *, 4) = 1;
+    M2C_FIELD(&D_800BEEC8, s32 *, 8) = 1;
+    *(u8 *)&D_800B6A6C = 0x82;
+    *(u8 *)&D_800B6A74 = 0x82;
+    *(u8 *)&D_800B6A70 = 0x82;
+    D_800B6C48 = 0x64;
+    D_800B6C40 = 0x64;
+    *(u8 *)&D_800B6C44 = 0x82;
+    D_800B6A88 = 0xDAC;
+    D_800B6C4C = 0x848;
+    D_800A1C48 = 0;
+    D_800B6A9C = 0;
+    D_800A19CC = 0;
+    M2C_FIELD(D_800B5ACC, s32 *, 0x208) = 0;
+    M2C_FIELD(D_800B5ACC, s32 *, 0x20C) = 0;
+    M2C_FIELD(D_800B5ACC, s32 *, 0x210) = 0;
+}
 
 void func_8006AB74(void) {
     s32 temp_v0;
@@ -4329,9 +4373,35 @@ INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_8006D300);
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_8006D484);
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_8006D75C);
+void func_8006D75C(void) {
+    FB6BFA0E *p;
+    FB6BFA0E *end;
+    s32 sp[2];
+    p = (FB6BFA0E *)D_800B5B18 + D_800B6D48;
+    end = (FB6BFA0E *)D_800B5B18 + D_800B6758;
+    for (; p <= end; p++) {
+        if (p->fn != 0 && p->f != 0) {
+            sp[0] = (s32)p;
+            sp[1] = 0;
+            p->fn(sp);
+        }
+    }
+}
 
-INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_8006D824);
+void func_8006D824(void) {
+    FB6BFA0E *p;
+    FB6BFA0E *end;
+    s32 sp[2];
+    p = (FB6BFA0E *)D_800B5B18 + D_800B6D54;
+    end = (FB6BFA0E *)D_800B5B18 + D_800B6744;
+    for (; p <= end; p++) {
+        if (p->fn != 0 && p->f != 0) {
+            sp[0] = (s32)p;
+            sp[1] = 0;
+            p->fn(sp);
+        }
+    }
+}
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80061B0C", func_8006D8EC);
 

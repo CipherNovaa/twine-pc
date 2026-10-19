@@ -1746,11 +1746,15 @@ void L2_func_800616AC(u8 *obj);
 extern void *L2_D_800A0CEC;
 void L2_func_80061890(s32 id);
 void L2_func_80060EE0(u8 *obj, s16 dx, s16 dz);
-extern M2C_UNK L3_D_800B37BC;
 void L3_func_800600D8(void);
+extern M2C_UNK L3_D_800B37BC;
 /* This level's own declarations (kept by tools/port_level.py): */
+M2C_UNK func_8002D5C0(M2C_UNK *);
+extern s32 D_8009F3E8;
+extern M2C_UNK D_800AC068;
+extern M2C_UNK D_800AC078;
 extern s32 D_800F668C;
-void func_800618CC(void *arg0);
+void func_800618CC(u8 *arg0);
 extern s32 D_800A3050[];
 extern s32 L1_g_FrameRate;
 M2C_UNK func_80040DC4(s32);
@@ -2654,5 +2658,13 @@ void L2_func_80061890(s32 id) {
     }
 }
 
+#ifdef NON_MATCHING
+void func_800618CC(u8 *arg0) {
+    if (arg0[0xA] == 1) {
+        if (D_8009F3E8 == arg0[6]) { func_8002D5C0(&D_800AC068); } else { func_8002D5C0(&D_800AC078); }
+    }
+}
+#else
 INCLUDE_ASM("asm/level06/nonmatchings/text_8005EE64", func_800618CC);
+#endif
 

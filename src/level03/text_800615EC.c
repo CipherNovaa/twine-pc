@@ -2068,6 +2068,12 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
+void func_80033690(void);
+extern s32 D_800B29BC;
+typedef struct { u8 pad0[4]; u8 f; u8 pad1[0x3F]; void (*fn)(s32 *); u8 pad2[0xDC]; } FB6BFA0E;
+extern s32 D_800B28E0;
+extern s16 D_800B32F8;
+extern s16 D_800B38E8;
 extern s16 L1_gPsi;
 extern Args *L1_g_Args;
 extern s32 L1_g_FrameCap;
@@ -4063,7 +4069,16 @@ void func_80069980(void) {
     func_800334CC(-1);
 }
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_800699FC);
+void func_800699FC(void) {
+    u8 *p;
+    func_80033690();
+    p = (u8 *)&D_800B29BC;
+    *(s32 *)(p + 0x38) |= 0x1000;
+    *(s32 *)(p + 0x540) |= 0x1000;
+    *(s32 *)(p + 0x260) &= ~0x1000;
+    *(s32 *)(p + 0x318) &= ~0x1000;
+    *(s32 *)(p + 0x3D0) &= ~0x1000;
+}
 
 void func_80069A64(void) {
     M2C_UNK var_a0;
@@ -4558,7 +4573,20 @@ s32 func_8006BD50(void) {
 
 INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_8006BD60);
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_8006BFA0);
+void func_8006BFA0(void) {
+    FB6BFA0E *p;
+    FB6BFA0E *end;
+    s32 sp[2];
+    p = (FB6BFA0E *)D_800B28E0 + D_800B38E8;
+    end = (FB6BFA0E *)D_800B28E0 + D_800B32F8;
+    for (; p <= end; p++) {
+        if (p->fn != 0 && p->f != 0) {
+            sp[0] = (s32)p;
+            sp[1] = 0;
+            p->fn(sp);
+        }
+    }
+}
 
 void func_8006C068(void) {
     D_8009EF20 = 1;

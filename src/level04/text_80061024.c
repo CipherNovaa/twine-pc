@@ -3884,7 +3884,29 @@ void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3) {
 
 INCLUDE_ASM("asm/level04/nonmatchings/text_80061024", func_80065B18);
 
-INCLUDE_ASM("asm/level04/nonmatchings/text_80061024", func_80065BF0);
+void func_80065BF0(void *arg0) {
+    u8 *obj;
+    s16 v[3];
+
+    obj = *(u8 **)((u8 *)arg0 + 0xC);
+    if (L1_g_FrameRate != 20) {
+        v[0] = *(s16 *)((u8 *)arg0 + 4);
+        v[1] = *(s16 *)((u8 *)arg0 + 6);
+        v[2] = *(s16 *)((u8 *)arg0 + 8);
+        v[0] = v[0] * 20 / L1_g_FrameRate;
+        v[1] = v[1] * 20 / L1_g_FrameRate;
+        v[2] = v[2] * 20 / L1_g_FrameRate;
+        *(u16 *)(obj + 0x54) += v[0];
+        *(u16 *)(obj + 0x56) += v[1];
+        *(u16 *)(obj + 0x58) += v[2];
+    } else {
+        *(u16 *)(obj + 0x54) += *(u16 *)((u8 *)arg0 + 4);
+        *(u16 *)(obj + 0x56) += *(u16 *)((u8 *)arg0 + 6);
+        *(u16 *)(obj + 0x58) += *(u16 *)((u8 *)arg0 + 8);
+    }
+    *(u16 *)(obj + 0x78) += *(s16 *)(obj + 0x78) >> 4;
+    *(u16 *)(obj + 0x7A) += *(s16 *)(obj + 0x7A) >> 4;
+}
 
 INCLUDE_ASM("asm/level04/nonmatchings/text_80061024", func_80065D9C);
 

@@ -1,5 +1,4 @@
 # Switch jump tables each function uses, in order of first use (tools/jtbl_fix.py).
-L1_func_80029A34 jtbl_800A6404
 L1_func_8002B69C jtbl_800A6604
 L1_Cheat_DoAction jtbl_800A681C
 L1_DebugScreen_DrawPage jtbl_800A694C

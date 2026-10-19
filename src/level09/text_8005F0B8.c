@@ -1747,9 +1747,13 @@ extern void *L2_D_800A0CEC;
 void L2_func_80061890(s32 id);
 void L2_func_800619B8();
 void L2_func_80060EE0(u8 *obj, s16 dx, s16 dz);
-extern M2C_UNK L3_D_800B37BC;
 void L3_func_800600D8(void);
+extern M2C_UNK L3_D_800B37BC;
 /* This level's own declarations (kept by tools/port_level.py): */
+extern s32 D_800A1F84;
+extern M2C_UNK D_800AEAD0;
+extern M2C_UNK D_800AEAE0;
+M2C_UNK func_8002D680(M2C_UNK *);
 extern char D_800AEA40[];
 extern char D_800AEA54[];
 extern char D_800AEA7C[];
@@ -1762,7 +1766,7 @@ int L1_printf(char *fmt, ...);
 M2C_UNK func_80083D74(M2C_UNK);
 void func_80086970(s32) __attribute__((noreturn));
 extern s32 D_800F68C0;
-void func_80061AB8(void *arg0);
+void func_80061AB8(u8 *arg0);
 extern s32 D_800A5ADC[];
 extern s32 L1_g_FrameRate;
 M2C_UNK func_80041088(s32);
@@ -2743,5 +2747,13 @@ u8 *e; s32 id; {
     L1_D_800D4390 = 0;
 }
 
+#ifdef NON_MATCHING
+void func_80061AB8(u8 *arg0) {
+    if (arg0[0xA] == 1) {
+        if (D_800A1F84 == arg0[6]) { func_8002D680(&D_800AEAD0); } else { func_8002D680(&D_800AEAE0); }
+    }
+}
+#else
 INCLUDE_ASM("asm/level09/nonmatchings/text_8005F0B8", func_80061AB8);
+#endif
 

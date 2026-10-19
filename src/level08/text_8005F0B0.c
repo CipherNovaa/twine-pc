@@ -1740,9 +1740,9 @@ s32 L2_func_8003815C(void *, void *);
 void L2_func_800616AC(u8 *obj);
 M2C_UNK L2_func_8002D6AC(M2C_UNK *);                   /* extern */
 extern M2C_UNK L2_D_800AE968;
+void L3_func_800600D8(void);
 extern M2C_UNK L3_D_800B37BC;
 extern s32 L3_D_800F4720;
-void L3_func_800600D8(void);
 void L3_func_80060C80(void *arg0, s32 arg1);
 /* This level's own declarations (kept by tools/port_level.py): */
 extern char D_800AC3E0[];

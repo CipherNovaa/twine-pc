@@ -227,6 +227,16 @@ s32 L2_func_80079040(void *arg0, s32 arg1);
 s32 L2_func_80079740(void);
 void L2_func_80079854(s32 arg0);
 /* This level's own declarations (kept by tools/port_level.py): */
+typedef struct { u8 pad0[0x44]; s16 h44; u8 pad1[0x72]; } FB78290E;
+extern s32 D_800A19E8;
+extern s32 D_800A1A44;
+extern M2C_UNK D_800AF3A8;
+extern u8 D_800B5BB4[];
+extern M2C_UNK D_800B5BF4;
+extern s16 D_800B6D74;
+s32 func_8003AB10(M2C_UNK, u8, M2C_UNK);
+M2C_UNK func_8006DE94(M2C_UNK *);
+void func_8007AE7C(void **arg0);
 typedef struct { s16 pos[3]; s16 vel[3]; u8 *tgt; s16 unk10; s16 unk12; } TrkRec;
 typedef struct { TrkRec rec[5]; u8 busy; } TrkTbl;
 typedef struct { s16 pos[3]; s16 vel[3]; s32 pad0C; s32 pad10; s32 pad14; u8 *tgt; s32 unk1C; s32 pad20; s16 unk24; } TrkDst;
@@ -1022,7 +1032,40 @@ INCLUDE_ASM("asm/level09/nonmatchings/text_80077F48", func_8007AAC4);
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80077F48", func_8007AE7C);
 
+#ifdef NON_MATCHING
+void *func_8007AF84(s32 arg0, s32 arg1, s8 arg2) {
+    FB78290E *s;
+    u8 *p;
+    s32 v;
+    s = (FB78290E *)&D_800B5BF4 + D_800B6D74;
+    if (s->h44 > 0) {
+        p = (u8 *)func_8003AB10(arg0, arg2 & 0xFF, 1);
+        if (p == 0) {
+            func_8006DE94(&D_800AF3A8);
+            return 0;
+        }
+        p[0xA5] = 0x18;
+        *(s32 *)(p + 0x34) = 0x1F4;
+        *(s16 *)(p + 0x28) = 0x125C;
+        p[8] = arg2;
+        s->h44 = s->h44 - 1;
+        if (D_800A19E8 != 0) {
+            v = (*(u16 *)D_800B5BB4 + 0x39) & 0xFFF;
+        } else {
+            v = 0x72;
+        }
+        *(s16 *)(p + 0xB0) = v;
+        *(s32 *)(p + 0x6C) = 0x3C;
+        *(void **)(p + 0x44) = &func_8007AE7C;
+        *(s32 *)(p + 0x2C) = D_800A1A44;
+        *(u16 *)(p + 0xAC) = *(u16 *)0x1F8003D8;
+        return p;
+    }
+    return 0;
+}
+#else
 INCLUDE_ASM("asm/level09/nonmatchings/text_80077F48", func_8007AF84);
+#endif
 
 INCLUDE_ASM("asm/level09/nonmatchings/text_80077F48", func_8007B094);
 

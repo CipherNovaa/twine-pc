@@ -1,6 +1,6 @@
 # Native PC port: plan
 
-Draft for review. Decisions that need the owner are marked **Decide**.
+Decisions made by the owner on 2026-10-19 are listed under **Decided** at the end.
 
 ## Where the code is
 
@@ -47,14 +47,19 @@ Draft for review. Decisions that need the owner are marked **Decide**.
 4. The other levels; shell (front-end menus) and movie player.
 5. 60+ FPS interpolation, mouse and keyboard, widescreen/high resolution.
 
-## Decide
+## Decided (2026-10-19)
 
-- **Renderer backend:** SDL2 + OpenGL 3.3 (simple, portable) is the suggestion; Vulkan or SDL_GPU possible.
-- **Level structure:** each level EXE is its own copy of the engine. Simplest: one host module per level
-  (like the original EXEs, loaded by the front-end), unifying the engine later. Alternative: one engine
-  built from Level 1's C, with per-level differences patched in (more work up front, smaller result).
-- **Licensing:** emulator GTE/SPU code (DuckStation, Mednafen) is GPL or non-commercial; writing our own or
-  using permissively licensed parts keeps options open. Game data always comes from the user's disc.
-- **Near misses:** keep porting with them (they run in DuckStation), or require exact matches first for
-  code the port depends on. O8 found one real bug in a banked function (value read instead of address),
-  so `tools/difftest` checks are worth running on the important ones.
+- **Renderer:** SDL3 + OpenGL. Simplest, runs on Linux, Windows and Steam Deck, and is far faster than
+  PS1-scale scenes need at uncapped frame rates. SDL3 also covers mouse/keyboard and gamepads (DualSense
+  rumble and gyro).
+- **Licensing:** keep the option to share the port's code later. So the GTE and SPU are written for this
+  project from public documentation (psx-spx), not taken from GPL or non-commercial emulator code; any
+  third-party code must be permissively licensed. Game data always comes from the user's own disc.
+- **Level structure:** one host module per level first (each level's C already builds exactly; the front
+  end loads a level the way the PS1 chain-loaded its EXE), so the port runs as early as possible. The
+  engine is unified over time: `tools/twin_port.py` already records which functions differ between levels
+  only in constants, which can become per-level data. Players see no difference either way; unifying is
+  for maintenance and mods applying once.
+- **Near misses:** the port may use them, with verification: DuckStation runs of each level's
+  NON_MATCHING build, `tools/difftest` on suspicious ones, and replacing them with exact matches over
+  time. If they cause too many problems, the port waits for exact matches instead.

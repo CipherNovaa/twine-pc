@@ -48,7 +48,8 @@ def asm_info(s_path):
     return txt, size, vram
 
 
-def compile_unit(c_text, opt, td):
+def compile_unit(c_text, opt, td, jtbl_level=None):
+    """JTBL_LEVEL: point switch tables at that level's own (tools/jtbl_fix.py), as the real build does."""
     td = Path(td)
     (td / "u.c").write_text(c_text)
     steps = [
@@ -60,6 +61,13 @@ def compile_unit(c_text, opt, td):
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if r.returncode:
             return None, (r.stderr or "").strip()[-300:]
+    if jtbl_level:
+        with open(td / "u.cc1.s") as fin, open(td / "u.jt.s", "w") as fout:
+            r = subprocess.run([PY, str(ROOT / "tools/jtbl_fix.py"), jtbl_level], stdin=fin, stdout=fout,
+                               stderr=subprocess.PIPE, text=True, timeout=60)
+        if r.returncode:
+            return None, "jtbl_fix: " + r.stderr[-300:]
+        (td / "u.jt.s").replace(td / "u.cc1.s")
     with open(td / "u.cc1.s") as fin, open(td / "u.s", "w") as fout:
         r = subprocess.run([PY, str(ROOT / "tools/maspsx/maspsx.py"), "--aspsx-version=2.56", "--expand-div"],
                            stdin=fin, stdout=fout, stderr=subprocess.PIPE, text=True, timeout=60)
@@ -350,7 +358,9 @@ def sync_prototypes(text):
     out, depth = [], 0
     for line in text.splitlines():
         stripped = line.split("/*")[0].strip()
-        if depth == 0 and stripped.endswith(";") and "(" in stripped and not re.search(r"\b(?:asm|__asm__|__asm)\(", stripped):
+        if depth == 0 and stripped.endswith(";") and not re.search(r"\b(?:asm|__asm__|__asm)\(", stripped) \
+                and ("(" in stripped or stripped.startswith("extern ")):
+            # (also `extern T name;`: a function defined here, declared as data where code takes its address)
             n = decl_name(stripped)
             if n in defs:
                 line = defs[n]

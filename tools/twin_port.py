@@ -512,7 +512,7 @@ def words_differ(level, name, includes, text, opt):
     a, s = level.funcs[name]
     orig = level.exe[0x800 + a - level.load:0x800 + a - level.load + s]
     with tempfile.TemporaryDirectory() as td:
-        res, err = am.compile_unit(includes + "\n" + text, opt, td)
+        res, err = am.compile_unit(includes + "\n" + text, opt, td, jtbl_level=level.level)
     return am.compare(orig, *res) if res else None
 
 
@@ -525,7 +525,7 @@ def bank(args, lv, dst, by_key, opts):
             continue
         twins = [(l, s) for l, s in by_key[dst.masked(t)] if l != dst.level and lv[l].c_for(s, banked=True)
                  and const_pairs(lv[l], s, dst, t) is not None]
-        if not twins or any(r.startswith("jtbl_") for _, refs in dst.insns(t) for r, _ in refs):
+        if not twins:
             continue
         result = None
         for l, s in twins[:3]:

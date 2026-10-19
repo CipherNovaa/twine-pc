@@ -2917,6 +2917,9 @@ extern int L1_g_CheatCodes[];
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+extern char D_800ACAB0[];
+void func_8006E9D0_8003067C(s32 arg0, M2C_UNK arg1) asm("func_8006E9D0");
+void func_8008F98C(s32, s32, s32);
 int printf_80032A44(char *fmt, ...) asm("L1_printf");
 int printf_80030760(char *fmt, ...) asm("L1_printf");
 int printf_80030704(char *fmt, ...) asm("L1_printf");
@@ -5262,18 +5265,18 @@ s32 L1_func_800303B4(u8 mode) {
 }
 
 #ifdef NON_MATCHING
-void L1_func_8003052C(void) {
+void func_8003067C(void) {
     s32 t;
-    s32 a = 0x801687D0;
-    s32 b = 0x97830;
-    *(s32 *)((u8 *)g_Args + 0x1EC) = a;
-    *(s32 *)((u8 *)g_Args + 0x1F0) = b;
-    L1_InitHeap3(a, 0x97830, b);
-    t = *(s32 *)((u8 *)g_Args + 0x1F0);
-    *(s32 *)((u8 *)g_Args + 0x1F4) = 0;
+    s32 a = 0x80167E80;
+    s32 b = 0x98180;
+    *(s32 *)((u8 *)L1_g_Args + 0x1EC) = a;
+    *(s32 *)((u8 *)L1_g_Args + 0x1F0) = b;
+    func_8008F98C(a, 0x98180, b);
+    t = *(s32 *)((u8 *)L1_g_Args + 0x1F0);
+    *(s32 *)((u8 *)L1_g_Args + 0x1F4) = 0;
     if (t & 7) {
-        sprintf(g_Args->exePath, L1_D_800A74D4, t);
-        L1_func_8006B230(0, g_Args->exePath);
+        L1_sprintf(L1_g_Args->exePath, D_800ACAB0, t);
+        func_8006E9D0_8003067C(0, L1_g_Args->exePath);
     }
 }
 #else
@@ -15767,7 +15770,6 @@ void func_8004C530(s32 dist, u8 *r, u8 *g, u8 *b, s32 *scale) {
     *scale = 0x1000;
 }
 
-#ifdef NON_MATCHING
 void func_8004C604(s32 idx, s32 x0, s32 x1, s32 y0, s32 y1, u8 r, u8 g, u8 b) {
     RBlk *blk;
     s32 buf;
@@ -15775,13 +15777,11 @@ void func_8004C604(s32 idx, s32 x0, s32 x1, s32 y0, s32 y1, u8 r, u8 g, u8 b) {
     s32 t;
     s32 t2;
     s32 tf;
-    s32 tg;
     u32 *o1;
     PFT4 *p2;
     u8 *q3;
     s32 cw;
     s32 ch;
-    s32 off;
     PFT4 *p;
     u32 *o;
     u8 *q;
@@ -15789,14 +15789,11 @@ void func_8004C604(s32 idx, s32 x0, s32 x1, s32 y0, s32 y1, u8 r, u8 g, u8 b) {
     s32 i;
     s32 j;
     s32 fade;
-    RBlk *bp;
-    RGrp *gp;
-    RSub *sp;
 
     cw = (x1 - x0) >> 3;
     buf = L1_D_800B8F24;
-    blk = (RBlk *)(D_800D8840 + idx * 0x404);
     ot = L1_D_800B8F88[buf].org;
+    blk = (RBlk *)(D_800D8840 + idx * 0x404);
     if (cw >= 0) {
         if (cw < 0x20) {
             t = cw;
@@ -15899,24 +15896,24 @@ void func_8004C604(s32 idx, s32 x0, s32 x1, s32 y0, s32 y1, u8 r, u8 g, u8 b) {
     p->g0 = g;
     p->b0 = b;
     if (D_800A12CC == 0) {
-        blk->flag = 0;
         o1 = ot + D_800A12D0;
-        *(u32 *)&((RSub *)blk->p[0])->prim[buf] = (*(u32 *)&((RSub *)blk->p[0])->prim[buf] & 0xFF000000) | (*o1 & 0xFFFFFF);
-        *o1 = (*o1 & 0xFF000000) | ((u32)&((RSub *)blk->p[0])->prim[buf] & 0xFFFFFF);
-        *(u32 *)&((RSub *)blk->p[1])->prim[buf] = (*(u32 *)&((RSub *)blk->p[1])->prim[buf] & 0xFF000000) | (*o1 & 0xFFFFFF);
-        *o1 = (*o1 & 0xFF000000) | ((u32)&((RSub *)blk->p[1])->prim[buf] & 0xFFFFFF);
-        *(u32 *)&((RSub *)blk->p[2])->prim[buf] = (*(u32 *)&((RSub *)blk->p[2])->prim[buf] & 0xFF000000) | (*o1 & 0xFFFFFF);
-        *o1 = (*o1 & 0xFF000000) | ((u32)&((RSub *)blk->p[2])->prim[buf] & 0xFFFFFF);
-        *(u32 *)&((RSub *)blk->p[3])->prim[buf] = (*(u32 *)&((RSub *)blk->p[3])->prim[buf] & 0xFF000000) | (*o1 & 0xFFFFFF);
-        *o1 = (*o1 & 0xFF000000) | ((u32)&((RSub *)blk->p[3])->prim[buf] & 0xFFFFFF);
+        blk->flag = 0;
+        ((PTag *)&((RSub *)blk->p[0])->prim[buf])->addr = ((PTag *)o1)->addr;
+        ((PTag *)o1)->addr = (u32)&((RSub *)blk->p[0])->prim[buf];
+        ((PTag *)&((RSub *)blk->p[1])->prim[buf])->addr = ((PTag *)o1)->addr;
+        ((PTag *)o1)->addr = (u32)&((RSub *)blk->p[1])->prim[buf];
+        ((PTag *)&((RSub *)blk->p[2])->prim[buf])->addr = ((PTag *)o1)->addr;
+        ((PTag *)o1)->addr = (u32)&((RSub *)blk->p[2])->prim[buf];
+        ((PTag *)&((RSub *)blk->p[3])->prim[buf])->addr = ((PTag *)o1)->addr;
+        ((PTag *)o1)->addr = (u32)&((RSub *)blk->p[3])->prim[buf];
         return;
     }
     if (blk->flag < 2) {
         for (i = 0; i < 4; i++) {
             head = (u8 *)blk->p[i];
+            p = &((RSub *)head)->prim[buf];
             fade = D_800A12D8;
             q = *(u8 **)(head + 0x50);
-            p = &((RSub *)head)->prim[buf];
             while (q != head) {
                 L1_memcpy(&((RSub *)q)->prim[buf], p, 0x28);
                 tf = p->r0 - fade;
@@ -15935,12 +15932,12 @@ void func_8004C604(s32 idx, s32 x0, s32 x1, s32 y0, s32 y1, u8 r, u8 g, u8 b) {
             q = *(u8 **)(head + 0x50);
             while (q != head) {
                 p2 = &((RSub *)q)->prim[buf];
-                tg = p2->r0 - D_800A12D8;
-                if (tg > 0) p2->r0 = tg; else p2->r0 = 0;
-                tg = p2->g0 - D_800A12D8;
-                if (tg > 0) p2->g0 = tg; else p2->g0 = 0;
-                tg = p2->b0 - D_800A12D8;
-                if (tg > 0) p2->b0 = tg; else p2->b0 = 0;
+                tf = p2->r0 - D_800A12D8;
+                if (tf > 0) p2->r0 = tf; else p2->r0 = 0;
+                tf = p2->g0 - D_800A12D8;
+                if (tf > 0) p2->g0 = tf; else p2->g0 = 0;
+                tf = p2->b0 - D_800A12D8;
+                if (tf > 0) p2->b0 = tf; else p2->b0 = 0;
                 q = *(u8 **)(q + 0x50);
             }
             blk->p[i] = *(void **)((u8 *)blk->p[i] + 0x50);
@@ -15949,18 +15946,15 @@ void func_8004C604(s32 idx, s32 x0, s32 x1, s32 y0, s32 y1, u8 r, u8 g, u8 b) {
     o = ot + D_800A12D0;
     for (i = 0; i < 4; i++) {
         for (j = 0; j < 3; j++) {
-            q3 = (u8 *)&blk->g[i].s[j].prim[buf];
-            *(u32 *)q3 = (*(u32 *)q3 & 0xFF000000) | (*o & 0xFFFFFF);
-            *o = (*o & 0xFF000000) | ((u32)q3 & 0xFFFFFF);
+            q3 = (u8 *)(buf * 0x28 + (s32)&blk->g[i].s[j]);
+            ((PTag *)q3)->addr = ((PTag *)o)->addr;
+            ((PTag *)o)->addr = (u32)q3;
         }
     }
     if (blk->flag < 2) {
         blk->flag++;
     }
 }
-#else
-INCLUDE_ASM("asm/level02/nonmatchings/text_8002C9D0", func_8004C604);
-#endif
 
 void func_8004CBF4(s32 *minX, s32 *maxX, s32 *minY, s32 *maxY) {
     s32 i;
