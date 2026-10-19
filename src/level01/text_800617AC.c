@@ -1556,7 +1556,7 @@ extern s32 D_800AFFC8;
 extern s16 D_800B07A8;
 extern s16 D_800B0DA4;
 extern s16 D_800B0DC0;
-M2C_UNK func_80063858();                            /* extern */
+void func_80063858(void);
 void func_80063F84(void);
 M2C_UNK func_8002BC18();                            /* extern */
 extern s32 D_8009D35C;
@@ -1679,7 +1679,7 @@ void func_80061AB0(s32 a, s32 b) {
     s32 d;
 
     if (a != 0 && D_8009DB3C != 0 && D_8009DB44 != 0) {
-        s32 t = -(a >> 4); __asm__("" : "+r"(t)); b += t;
+        s32 t = -(a >> 4); KEEP(t); b += t;
     }
     if (b < 0) {
         if (b < -2) {
@@ -2255,7 +2255,65 @@ Ent34 *func_800637B0(s16 x, s16 y, s16 z) {
     return NULL;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_80063858);
+void func_80063858(void) {
+    s16 i;
+    Ent34 *e;
+    s32 range;
+    s32 px;
+    s32 pz;
+    s32 dx;
+    s32 dz;
+    u16 period;
+    s32 *src;
+
+    if (D_8009CA9C == 0 && D_8009CDA0 == 0) {
+        i = 0;
+        e = D_800DF200;
+        px = g_Args->playerX;
+        range = D_800E2DE0;
+        pz = g_Args->playerZ;
+        for (; i < 16; i++, e++) {
+            if (e->flags & 1) {
+                dz = 0;
+                dx = 0;
+                if (e->unk2C != 0 && (e->flags & 0xFE) != 4) {
+                    src = (s32 *)(*(u8 **)(e->unk2C + 0x90) + 0xD4);
+                    e->x = src[0];
+                    e->y = src[1];
+                    e->z = src[2];
+                    if ((e->flags & 0xFE) == 6) {
+                        e->x += *(s16 *)(e->unk30 + 0x10);
+                        e->y += *(s16 *)(e->unk30 + 0x12);
+                        e->z += *(s16 *)(e->unk30 + 0x14);
+                    }
+                } else if (e->unk10 != -1) {
+                    dx = e->x - px;
+                    if (dx < 0) dx = -dx;
+                    if (dx > range) goto kill;
+                    dz = e->z - pz;
+                    if (dz < 0) dz = -dz;
+                    if (dz > range) goto kill;
+                }
+                if (e->unk20 != 0) {
+                    period = *(u16 *)&e->unk14;
+                    if ((e->flags & 0xFE) == 4 && (dx > 7000 || dz > 7000)) {
+                        period <<= 1;
+                    }
+                    if (e->unkC == 0 || e->unkC - ((s16 *)&e->unk14)[1] >= (s16)period) {
+                        ((s16 *)&e->unk14)[1] = e->unkC;
+                        ((u16 *)&e->unk18)[1]++;
+                        ((void (*)(Ent34 *))e->unk20)(e);
+                    }
+                }
+                e->unkC++;
+                if (e->unk10 != -1 && e->unk10 < e->unkC) {
+kill:
+                    func_80063ADC(e);
+                }
+            }
+        }
+    }
+}
 
 void func_80063ADC(void *arg0) {
     s32 *temp_a0;

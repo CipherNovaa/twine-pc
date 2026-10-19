@@ -24,7 +24,7 @@ s32 func_800743E8(s32, s32 *, s32, s32, SVECTOR *, s32, s32);
 
 
 extern s16 D_8009D10C;
-void *func_8004C698(s32, s32);
+char *func_8004C698(s32 arg0, s32 arg1);
 
 
 extern s8 D_800D4384;
@@ -942,7 +942,7 @@ extern u8 D_800D2AF4[];
 extern s32 D_800A962C;
 s32 func_8004CB2C(void *obj, Weapon *w);
 s32 func_8004C558(u8 *arg0, s32 arg1);
-void *func_8004C5C8(s32, s32);
+void *func_8004C5C8(s32 arg0, s32 arg1);
 
 
 extern s16 D_8009CF80;
@@ -1105,6 +1105,13 @@ typedef struct { s32 a[3]; s32 x; s32 y; } E14;
 typedef struct { s32 a[3]; s32 x; s32 b[2]; } E18;
 typedef struct { s32 n; E14 *p; s32 m; E18 *q; } Tbl;
 typedef struct { s32 pad[2]; u32 *e; s32 u1; s32 u2; } F14;
+typedef struct { u8 pad[0x20]; s32 t[56]; s32 x[2]; } Q;
+typedef struct { u8 f; u8 pad[3]; s32 *b; s32 *a; } E1;
+typedef struct { u8 f; u8 pad[3]; s32 x; s32 *c; } E2;
+extern s32 D_800D8EE8[][32];
+extern s32 D_800D8FE8[][2];
+extern s32 D_800A8794;
+s32 func_8004C50C(void *arg0, s32 arg1);
 s32 func_8005EC84(void *a, u32 *b);
 extern struct { u8 pad[0x1C]; u16 v; u8 pad2[2]; } D_800D2E84_r[] asm("D_800D2E84");
 void func_80033348(void);
@@ -1576,7 +1583,7 @@ void func_800393AC(void *arg0);
 M2C_UNK func_80060614(s32);                         /* extern */
 
 
-M2C_UNK func_80032768(s32);                         /* extern */
+M2C_UNK func_80032768(s32 arg0);
 extern M2C_UNK D_800A76C0;
 extern s32 D_800D2F44;
 
@@ -3729,7 +3736,41 @@ void func_80032724(s16 arg0, s16 arg1, s16 arg2, s16 arg3) {
     func_8007F0D8(0);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80032768);
+M2C_UNK func_80032768(s32 arg0) {
+    s16 rect[4];
+    GsIMAGE img;
+    u32 *p;
+    register s32 n REG("v1");
+    s32 w;
+    s32 h;
+
+    p = (u32 *)arg0;
+    func_8007F0D8(0);
+loop:
+    if (*p++ == 0x10) {
+        GsGetTimInfo(p, &img);
+        n = img.pw * img.ph / 2;
+        n = n * 4 + 0x10;
+        p = (u32 *)((u8 *)p + n);
+        rect[0] = img.px;
+        rect[1] = img.py;
+        rect[2] = img.pw;
+        rect[3] = img.ph;
+        func_8007F2EC((M2C_UNK *)rect, (M2C_UNK *)img.pixel);
+        func_8007F0D8(0);
+        if ((img.pmode >> 3) & 1) {
+            rect[0] = img.cx;
+            rect[1] = img.cy;
+            rect[2] = img.cw;
+            rect[3] = img.ch;
+            func_8007F2EC((M2C_UNK *)rect, (M2C_UNK *)img.clut);
+            func_8007F0D8(0);
+            n = img.cw * img.ch / 2;
+            p += n + 3;
+        }
+        goto loop;
+    }
+}
 
 void func_80032880(s32 arg0, GsIMAGE *arg1) {
     u32 *p;
@@ -9033,9 +9074,43 @@ s32 func_8004C558(u8 *arg0, s32 arg1) {
     return arg1;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8004C5C8);
+void *func_8004C5C8(s32 arg0, s32 arg1) {
+    s32 *e = &D_8009D130[arg0 * 4];
+    Weapon *w = &g_Weapons[e[0]];
+    char *ret;
+    s32 n;
+    register s32 x REG("a2") = arg1;
+    ret = 0;
+    if (*(s16 *)&w->maxAmmo != 0 && *(s16 *)&w->maxAmmo <= w->reserve) {
+        func_80048B4C((M2C_UNK *)&D_800A8794, 0x80, 0);
+        return 0;
+    }
+    n = ((s32 (*)(Weapon *, s32, s32))func_8004C558)(w, x, x);
+    if (e[3] != 0) {
+        sprintf(g_Args->exePath, (char *)e[3], n);
+        ret = g_Args->exePath;
+    }
+    return ret;
+}
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8004C698);
+char *func_8004C698(s32 arg0, s32 arg1) {
+    s32 *e = &D_8009D130[arg0 * 4];
+    Weapon *w = &g_Weapons[e[0]];
+    char *ret;
+    s32 n;
+    register s32 x REG("a2") = arg1;
+    ret = 0;
+    if (*(s16 *)&w->maxAmmo != 0 && *(s16 *)&w->maxAmmo <= w->reserve) {
+        func_80048B4C((M2C_UNK *)&D_800A8794, 0x80, 0);
+        return 0;
+    }
+    n = func_8004C50C(w, x);
+    if (e[3] != 0) {
+        sprintf(g_Args->exePath, (char *)e[3], n);
+        ret = g_Args->exePath;
+    }
+    return ret;
+}
 
 M2C_UNK *func_8004C768(void *arg0) {
     M2C_UNK *var_s0;
@@ -9300,7 +9375,30 @@ void func_8004CF00(u8 *arg0, u8 *arg1) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8004D048);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8004D214);
+void func_8004D214(void) {
+    s32 i;
+    u32 j;
+    s32 k;
+    u8 *p;
+    for (i = 0; i < 2; i++) {
+        p = D_800D8FF8[i];
+        j = 0;
+        do {
+            *p = 0;
+            j++;
+            p++;
+        } while (j < 0x48);
+        ((E2 *)D_800D8E8C)[i].f = 1;
+        ((E2 *)D_800D8E8C)[i].x = 0;
+        ((E2 *)D_800D8E8C)[i].c = D_800D8FE8[i];
+        ((E1 *)D_800D8E74)[i].f = 1;
+        ((E1 *)D_800D8E74)[i].b = D_800D8EE8[i];
+        ((E1 *)D_800D8E74)[i].a = D_800D8EA8[i];
+    }
+    for (i = 0x29; i >= 0; i--) {
+        D_800D8BE8[i] = 0;
+    }
+}
 
 void func_8004D2D0(void) {
     AnimEnt *r;
@@ -12308,7 +12406,18 @@ s32 func_80056500(s32 arg0, void *arg1) {
     return 1;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80056538);
+s32 func_80056538(u32 *arg0, Q *arg1) {
+    u32 w = *arg0;
+    u32 i;
+    if (arg1 != NULL) {
+        i = (w >> 8) & 0xFF;
+        KEEP(i);
+        arg1->t[i] = (s32) g_Player;
+        M2C_FIELD(arg1, s32 *, 0x1C4) = 0;
+        M2C_FIELD(arg1, void **, 0xA4) = (void *) (arg0 + 1);
+    }
+    return 1;
+}
 
 s32 func_80056570(u32 *cmd, ScriptObj *obj, s32 arg2) {
     u32 idx;
@@ -12322,7 +12431,18 @@ s32 func_80056570(u32 *cmd, ScriptObj *obj, s32 arg2) {
     return 1;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_800565DC);
+s32 func_800565DC(u32 *arg0, Q *arg1, void *arg2) {
+    u32 w = *arg0;
+    u32 i;
+    if (arg1 != NULL) {
+        i = (w >> 8) & 0xFF;
+        KEEP(i);
+        M2C_FIELD(arg2, s32 *, 0x5C) = arg1->t[i];
+        M2C_FIELD(arg1, s32 *, 0x1C4) = 0;
+        M2C_FIELD(arg1, void **, 0xA4) = (void *) (arg0 + 1);
+    }
+    return 1;
+}
 
 s32 func_80056614(u32 *cmd, ScriptObj *obj) {
     /* op 0x08: vars[byte 1] = a + rand() % b (a, b: immediate or variable, modes bits 2-3 / 4-5); 3 words */

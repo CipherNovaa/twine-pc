@@ -29,6 +29,10 @@ extern char D_800A6ED0[];
 extern char D_800A6EF8[];
 typedef struct { u16 w; u8 pad2[0xA]; u16 x; u16 y; char text[0x50]; } TextEnt;
 typedef struct { u16 a; s16 len; u16 c; s16 d; s8 e; s8 f; s8 g; u8 pad[5]; char txt[0x50]; } TxtEnt;
+typedef struct { u16 first; u8 p0[2]; u16 last; u8 p1[0x5A]; } Rec60;
+typedef struct { u8 p0[0xE]; s16 a; u8 p1[0x12]; s16 b; u8 p2[4]; } Rec28;
+extern Rec28 D_800AC550[];
+extern s8 D_800A6F00;
 extern char D_800A6F1C[];
 void func_800272A4(s16 arg0, s32 arg1, s32 arg2);
 void func_80081A08(u8 *);
@@ -44,7 +48,7 @@ void func_800289C0(s16 arg0, char *text);
 extern s32 D_8009CFB4;
 extern char D_800AB618[];
 void func_800286EC(s8 arg0);
-void func_80028B58(s32, s16, s16);
+void func_80028B58(s32 arg0, s32 arg1, s32 arg2);
 
 
 extern s8 D_8009C1EC;
@@ -461,7 +465,29 @@ void func_800289C0(s16 arg0, char *text) {
     func_800291B0(buf, x, y, &sp38, 1, -1);
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80028B58);
+void func_80028B58(s32 arg0, s32 arg1, s32 arg2) {
+    s16 v;
+    s32 i;
+    Rec60 *rec;
+    Rec60 *r2;
+    u8 *base;
+    if (arg0 >= D_800AC54C) {
+        func_8006B1DC((M2C_UNK *)&D_800A6F00);
+        return;
+    }
+    base = D_800AB744;
+    rec = (Rec60 *)(arg0 * 0x60 + base);
+    i = rec->first;
+    if (rec->last >= i) {
+        v = (arg2 << 6) | ((arg1 >> 4) & 0x3F);
+        r2 = rec;
+        do {
+            D_800AC550[i].a = v;
+            D_800AC550[i].b = v;
+            i++;
+        } while (r2->last >= i);
+    }
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80028C08);
 

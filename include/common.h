@@ -23,4 +23,14 @@ typedef double f64;
 #define NULL ((void *)0)
 #endif
 
+/* Matching-only hints for the PS1 build, empty in the native port (-DNATIVE_PORT):
+ * `register s32 x REG("a2");` pins a MIPS register; KEEP(x) hides x's value from the optimizer. */
+#ifndef NATIVE_PORT
+#define REG(r) __asm__(r)
+#define KEEP(x) __asm__("" : "+r"(x))
+#else
+#define REG(r)
+#define KEEP(x) ((void)0)
+#endif
+
 #endif
