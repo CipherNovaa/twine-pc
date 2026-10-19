@@ -15,7 +15,8 @@ You need your own copy of the game. No game data is in this repository.
 | Full disc image from rebuilt executables | **byte-identical** to the retail dump (`tools/build_all.sh`) |
 | All 11 levels are **shiftable** | code and data can grow or shrink and the game still runs. Tested by inserting 4 KB early in the code of levels 1, 2 and 6; in Level 1, gameplay, the pause menu and the developer menu all work. Mods can be written in C without matching. |
 | C mods in **every level** | `make cmod CMODS="TWINSTICK WIDEFOV"`: modern twin-stick controls and a wider field of view, checked in DuckStation (twin-stick in Levels 1, 2 and 4, and played with a DualSense; wide FOV in Level 2) |
-| Level 1 game functions in C | 368 of 866 functions (42%), 16.7% of game-code bytes, since the matched ones are mostly small. Run `tools/progress.py` for current numbers. |
+| Level 1 game functions in C | 745 of 866 functions match exactly (86%). 51 more are near-miss C under `#ifdef NON_MATCHING` (the matching build keeps their asm; a disc built with them plays fine in DuckStation), so 92% of functions and about 71% of game-code bytes have C. Run `tools/progress.py` for current numbers. |
+| Levels 2–11 | Each gets 351–408 functions from Level 1's C (`tools/port_level.py`), still byte-identical. |
 | Compiler | GCC 2.8.x, Sony PSX build (old-gcc `2.8.1-psx`), `-O2 -G0`, no `-fno-builtin`. Three source regions are `-O0`. |
 | SDK | PsyQ 4.4 (580 library functions auto-identified) |
 
@@ -236,7 +237,7 @@ workbench/    your disc, BIOS, extracted files, screenshots (never committed)
 
 Main tools:
 - **Matching:** `auto_match.py` (m2c + compile + compare, with fixups), `match_test.py` (try one function), `permute.py` (decomp-permuter on near-misses), `integrate_one.py` (put a match into the source), `progress.py`
-- **Building and mods:** `make_shiftable.py`, `fix_exe.py`, `build_cmod.py`, `port_symbols.py`, `apply_mods.py`, `make_boot_patch.py`, `make_disc.py`, `build_all.sh`
+- **Building and mods:** `make_shiftable.py`, `fix_exe.py`, `build_cmod.py`, `port_symbols.py`, `port_level.py` (Level 1's C into the other levels), `jtbl_fix.py` (switch jump tables), `apply_mods.py`, `make_boot_patch.py`, `make_disc.py`, `build_all.sh`
 - **Data:** `cdbin.py` (level archives)
 
 ## Workflow for decompiling a function
@@ -244,7 +245,8 @@ Main tools:
 1. Pick an `INCLUDE_ASM(...)` line in `src/level01/*.c`.
 2. Get a starting point with `.venv/bin/python tools/m2c/m2c.py -t mipsel-gcc-c --globals=used --valid-syntax asm/level01/nonmatchings/<file>/<func>.s`, or from the Ghidra decompiler.
 3. Iterate on the C in a scratch file named `<func>.c`, using `tools/match_test.py <file> --gcc 2.8.1-psx --opt=-O2 --diff`.
-4. Replace the `INCLUDE_ASM` line with the C and run `make`. It must still print `OK`.
+4. Replace the `INCLUDE_ASM` line with the C and run `make`. It must still print `OK`. `tools/integrate_one.py <func> <file.c>` does this and keeps the change only if the build still matches; with `--nonmatching` it banks a near miss under `#ifdef NON_MATCHING` instead (build a disc that runs those with `make cmod CMODS=NONMATCHING LEVELS=level01`).
+5. After matching more Level 1 functions, rerun `tools/port_level.py port levelNN` to carry them into the other levels.
 
 `tools/auto_match.py` automates steps 2–4 for functions that m2c gets right on the first try. It also retries common m2c mistakes:
 - pointer strides
