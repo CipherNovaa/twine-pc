@@ -32,11 +32,11 @@ def level_info(level):
 
 def file_opt(stem):
     """Optimization level the original developers used for a C file (Makefile O0_FILES / O1_FILES)."""
-    mk = (ROOT / "Makefile").read_text()
-    for level in ("O0", "O1"):
-        m = re.search(rf"{level}_FILES := (.*)", mk)
-        if m and stem in m.group(1).split():
-            return f"-{level}"
+    for mk in sorted((ROOT / "config").glob("*_opt.mk")):
+        for level in ("O0", "O1"):
+            m = re.search(rf"{level}_FILES := (.*)", mk.read_text())
+            if m and stem in m.group(1).split():
+                return f"-{level}"
     return "-O2"
 
 

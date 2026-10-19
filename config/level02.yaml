@@ -47,6 +47,15 @@ segments:
     # Payload ends at 0x800B1000 (sector-padded); BSS cleared by start() runs to 0x80100D94.
     bss_size: 0x4FD94
     subsegments:
-      - [0x800, asm]
+      - [0x800, c, text_80026800]  # O2, LEVEL01 text_80026800
+      - [0x80C, c, text_8002680C]  # O0, LEVEL01 text_8002680C
+      - [0xB44, c, text_80026B44]  # O2, LEVEL01 text_80026B00
+      - [0x47E4, c, text_8002A7E4]  # O0, LEVEL01 text_8002A61C
+      - [0x69D0, c, text_8002C9D0]  # O2, LEVEL01 text_8002C808
+      - [0x38E38, c, text_8005EE38]  # O1, LEVEL01 text_8005EDF8
+      - [0x3B890, c, text_80061890]  # O2, LEVEL01 text_800617AC
+      - [0x4D1F4, c, text_800731F4]  # O0, LEVEL01 text_8006FA54
+      - [0x52A60, c, text_80078A60]  # O2, LEVEL01 text_80075290
+      - [0x54780, asm, psyq_libs]  # PsyQ libraries
       - [0x7A3B0, data]
   - [0x8B000]
