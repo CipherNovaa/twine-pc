@@ -32,3 +32,9 @@ tools/decomp-permuter/
 port.log
 shot_*.ppm
 __pycache__/
+
+# Claude Code worktrees and local state
+.claude/
+# BIOS images (never commit): uppercase extensions too
+*.BIN
+*.rom

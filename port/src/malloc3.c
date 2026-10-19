@@ -1,59 +1,78 @@
-/* PsyQ malloc3 family on the host: a first-fit heap inside the PS1 RAM region the game hands to InitHeap3,
- * so every allocation is a PS1 address like on the console. */
+/* PsyQ malloc3 family on the host, the same allocator as the console's (libc2: K&R's malloc): a circular
+ * free list of 8-byte headers {next, size in 8-byte units} with a rover, blocks carved from the end of the
+ * first free block big enough, and a zero-size header at the top of the heap that is never merged. The
+ * levels size their heaps to fit this allocator's overhead, and every allocation lands at the address it
+ * has on the console. */
 #include <string.h>
 #include "port.h"
 
-typedef struct Block {
-    u32 size;          /* bytes after the header */
-    u32 free;
-    struct Block *next;
-    u32 pad;
-} Block;
+typedef struct Header {
+    struct Header *next;
+    u32 size; /* in units of sizeof(Header), the header included */
+} Header;
 
-static Block *heap_first;
+static Header *freep;
 
 void InitHeap3(u32 *addr, u32 size) {
-    Block *b = (Block *)(((u32)addr + 15) & ~15u);
-    size -= (u32)b - (u32)addr;
-    b->size = (size & ~15u) - sizeof(Block);
-    b->free = 1;
-    b->next = NULL;
-    heap_first = b;
+    Header *base = (Header *)addr, *top;
+    if (!addr || !size)
+        return;
+    size &= ~7u;
+    top = (Header *)((u8 *)addr + size) - 1;
+    top->next = base;
+    top->size = 0;
+    base->next = top;
+    base->size = size / sizeof(Header) - 1;
+    freep = base;
     port_log("InitHeap3 %08X, %X bytes\n", (u32)addr, size);
 }
 
-void *malloc3(u32 size) {
-    Block *b;
-    size = (size + 15) & ~15u;
-    for (b = heap_first; b; b = b->next) {
-        if (b->free && b->size >= size) {
-            if (b->size >= size + sizeof(Block) + 16) {
-                Block *n = (Block *)((u8 *)(b + 1) + size);
-                n->size = b->size - size - sizeof(Block);
-                n->free = 1;
-                n->next = b->next;
-                b->next = n;
-                b->size = size;
+void *malloc3(u32 nbytes) {
+    Header *p, *prevp = freep;
+    u32 nunits;
+    if (!nbytes)
+        return NULL;
+    nunits = (nbytes + 7) / sizeof(Header) + 1;
+    for (p = prevp->next;; prevp = p, p = p->next) {
+        if (p->size >= nunits) {
+            if (p->size == nunits) {
+                prevp->next = p->next;
+            } else {
+                p->size -= nunits;
+                p += p->size;
+                p->size = nunits;
             }
-            b->free = 0;
-            return b + 1;
+            freep = prevp;
+            return p + 1;
+        }
+        if (p == freep) {
+            port_log("malloc3(%X): out of memory\n", nbytes);
+            return NULL;
         }
     }
-    port_log("malloc3(%X): out of memory\n", size);
-    return NULL;
 }
 
-void free3(void *p) {
-    Block *b;
-    if (!p)
+void free3(void *ap) {
+    Header *bp, *p;
+    if (!ap)
         return;
-    ((Block *)p - 1)->free = 1;
-    /* merge neighbouring free blocks */
-    for (b = heap_first; b; b = b->next)
-        while (b->free && b->next && b->next->free) {
-            b->size += sizeof(Block) + b->next->size;
-            b->next = b->next->next;
-        }
+    bp = (Header *)ap - 1;
+    for (p = freep; !(bp > p && bp < p->next); p = p->next)
+        if (p >= p->next && (bp > p || bp < p->next))
+            break;
+    if (bp + bp->size == p->next && p->next->size != 0) {
+        bp->size += p->next->size;
+        bp->next = p->next->next;
+    } else {
+        bp->next = p->next;
+    }
+    if (p + p->size == bp) {
+        p->size += bp->size;
+        p->next = bp->next;
+    } else {
+        p->next = bp;
+    }
+    freep = p;
 }
 
 void *calloc3(u32 n, u32 size) {
@@ -69,7 +88,7 @@ void *realloc3(void *p, u32 size) {
         return malloc3(size);
     n = malloc3(size);
     if (n) {
-        u32 old = ((Block *)p - 1)->size;
+        u32 old = (((Header *)p - 1)->size - 1) * sizeof(Header);
         memcpy(n, p, old < size ? old : size);
         free3(p);
     }

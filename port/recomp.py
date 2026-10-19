@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "port"))
-from gen_native import HOST_LIBC, nm, ps1_symbols, psyq_names  # noqa: E402
+from gen_native import HOST_LIBC, library_layout, nm, ps1_symbols, psyq_names  # noqa: E402
 
 # Calls between native and recompiled code carry this many arguments: $a0-$a3 and the rest from the PS1
 # stack (sp+16...). Extra ones are harmless: native callees ignore them, recompiled ones never read them.
@@ -56,6 +56,18 @@ def functions(level):
             out.append(("port_recomp_main", main, owner[1] + owner[2] - main))
     out += data_code(level, out, addr)
     out = sorted(set(out), key=lambda f: f[1])
+    # library functions this level's asm has merged into a neighbour get entry points of their own
+    if level != "level01":
+        starts = {a for _, a, _ in out}
+        for entry, _, _ in library_layout(level):
+            k = next((k for k, (_, a, s) in enumerate(out) if a < entry < a + s), None)
+            if entry in starts or k is None:
+                continue
+            n, a, s = out[k]
+            out[k] = (n, a, entry - a)
+            out.insert(k + 1, (f"func_{entry:08X}", entry, a + s - entry))
+            addr[f"func_{entry:08X}"] = entry
+            starts.add(entry)
     # padding after a function belongs to it (code can fall through it into the next function)
     for k in range(len(out) - 1):
         n, a, s = out[k]

@@ -8,6 +8,7 @@ Writes into OUTDIR:
   funcs.c   PS1 address -> native function for every game/library function the build defines, so calls
             through function pointers read from PS1 data reach native code
 """
+import functools
 import re
 import subprocess
 import sys
@@ -25,19 +26,71 @@ def nm(paths, *flags):
     return [l.split() for l in out.splitlines() if l.strip() and not l.endswith(":")]
 
 
+BINDING = re.compile(r"^(?:PROVIDE\()?L1_(\w+) = (\w+)\)?;", re.M)
+
+
+def bindings(level):
+    """Level 1 name -> the level's name, from config/<level>_syms.ld (`L1_X = Y;` or `PROVIDE(L1_X = Y);`)"""
+    return dict(BINDING.findall((ROOT / f"config/{level}_syms.ld").read_text()))
+
+
 def psyq_names(level):
-    """level name -> PsyQ name for library functions the signature tool left unnamed. psyq_names.txt has
-    Level 1's names; other levels bind each Level 1 name to theirs in config/<level>_syms.ld (L1_X = Y)."""
+    """level name -> Level 1 name (the PsyQ name for library functions), so the level's copies of functions
+    the runtime implements natively use the native version. psyq_names.txt names Level 1's library functions
+    the signature tool left unnamed. Other levels bind Level 1 names to theirs in config/<level>_syms.ld, and
+    their library functions are found by code (library_layout), as func_<address>."""
     names = dict(l.split() for l in (ROOT / "port/psyq_names.txt").read_text().splitlines()
                  if l.strip() and not l.startswith("#"))
     if level == "level01":
         return names
-    out = {}
-    for line in (ROOT / f"config/{level}_syms.ld").read_text().splitlines():
-        m = re.match(r"L1_(\w+) = (\w+);", line)
-        if m and m.group(1) in names:
-            out[m.group(2)] = names[m.group(1)]
+    out = {y: names.get(x, x) for x, y in bindings(level).items()}
+    for a, _, x in library_layout(level):
+        out.setdefault(f"func_{a:08X}", names.get(x, x))
     return out
+
+
+@functools.lru_cache(None)
+def library_layout(level):
+    """[(address, size, Level 1 name)] of Level 1's library functions in another level's library segment:
+    where a binding puts them, else where their code is (addresses masked out). Small functions (call
+    thunks, setters) can have several identical copies: the one at the same distance from a bound neighbour
+    as in Level 1 is it (the libraries link in the same order). The level's asm can have two of these as one
+    function, which the recompiler splits (recomp.py functions)."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import shared_code
+
+    def lib_functions(lvl):
+        return [(int(a, 16), int(s, 16), n) for n, s, a in re.findall(
+            r"^nonmatching (\w+), 0x(\w+)\n\n\w+ \1\n.*?/\* [0-9A-F]+ ([0-9A-F]{8}) ",
+            (ROOT / f"asm/{lvl}/psyq_libs.s").read_text(), re.M | re.S)]
+
+    l1_lib = lib_functions("level01")
+    t_lib = lib_functions(level)
+    lo, hi = t_lib[0][0], t_lib[-1][0] + t_lib[-1][1]
+    l1_addr, l1_words = shared_code.load(shared_code.EXTRACTED / "L01/LEVEL01.EXE")
+    n = int(level[-2:])
+    t_addr, t_words = shared_code.load(shared_code.EXTRACTED / f"L{n:02d}/LEVEL{n:02d}.EXE")
+    t_syms = ps1_symbols(level)
+    bound = bindings(level)
+    out = [(t_syms[bound[x]], size, x) for _, size, x in l1_lib if bound.get(x) in t_syms]
+    anchors = sorted((a, t_syms[bound[x]]) for a, _, x in l1_lib if bound.get(x) in t_syms)
+    index = {}
+    for i in range(len(t_words) - 1):
+        index.setdefault((t_words[i], t_words[i + 1]), []).append(i)
+    for a, size, x in l1_lib:
+        if bound.get(x) in t_syms or size < 8:
+            continue
+        i = (a - l1_addr) // 4
+        seq = l1_words[i:i + size // 4]
+        hits = [t_addr + 4 * j for j in index.get(tuple(seq[:2]), []) if t_words[j:j + len(seq)] == seq]
+        hits = [h for h in hits if lo <= h < hi]
+        if len(hits) > 1:
+            prev = max((p for p in anchors if p[0] < a), default=None)
+            nxt = min((p for p in anchors if p[0] > a), default=None)
+            hits = [h for h in hits if any(p and h - p[1] == a - p[0] for p in (prev, nxt))]
+        if len(hits) == 1:
+            out.append((hits[0], size, x))
+    return sorted(set(out))
 
 
 def ps1_symbols(level):
@@ -68,6 +121,7 @@ def main():
         elif len(f) == 2 and f[0] in "Uw":
             undefined.add(f[1])
     undefined -= set(defined)
+    game_undefined = {f[1] for f in nm(game_objs) if len(f) == 2 and f[0] in "Uw"} & undefined
 
     def is_code(name, addr):
         if text_start <= addr < data_start:
@@ -79,12 +133,15 @@ def main():
     names = psyq_names(level)
     aliases = {n: names[n] for n in undefined if n in names and defined.get(names[n]) in ("T", "W")}
     if level != "level01":
-        for line in (ROOT / f"config/{level}_syms.ld").read_text().splitlines():
-            m = re.match(r"(L1_\w+) = (\w+);", line)
-            if m and m.group(1) in undefined:
-                target = names.get(m.group(2), m.group(2))
-                if defined.get(target) in ("T", "W") or target in HOST_LIBC:
-                    aliases[m.group(1)] = target
+        # another level's names bound to this level's (L1_X = Y, L2_X = Y, ...): the native version when
+        # there is one, else the level's own function (C or recompiled)
+        text = (ROOT / f"config/{level}_syms.ld").read_text()
+        for x, y in re.findall(r"^(?:PROVIDE\()?(L\d+_\w+) = (\w+)\)?;", text, re.M):
+            if x in undefined:
+                for target in (names.get(y), y):
+                    if defined.get(target) in ("T", "W") or target in HOST_LIBC:
+                        aliases[x] = target
+                        break
 
     syms, stubs = [], []
     for name in sorted(undefined):
@@ -93,7 +150,8 @@ def main():
             continue
         addr = ps1[name]
         (stubs if is_code(name, addr) else syms).append((name, addr))
-    missing = sorted(n for n in undefined if n not in ps1 and not n.startswith(("GTE_", "port_")))
+    missing = sorted(n for n in game_undefined if n not in ps1 and not n.startswith(("GTE_", "port_"))
+                     and n not in HOST_LIBC)
 
     # the BSS range the entry point clears: its two lui/addiu address pairs
     exe = (ROOT / f"build/{level}/{level}.exe").read_bytes()
@@ -121,6 +179,11 @@ def main():
     # every native function with a PS1 address (game C, library implementations, stubs)
     funcs = sorted({(ps1[n], n) for n, t in defined.items() if t in "TW" and n in ps1 and is_code(n, ps1[n])}
                    | {(a, n) for n, a in stubs} | {(ps1[n], aliases[n]) for n in aliases})
+    # library functions implemented natively that nothing calls by name (function pointers, recompiled calls)
+    if level != "level01":
+        have = {a for a, _ in funcs}
+        funcs = sorted(set(funcs) | {(a, names[f"func_{a:08X}"]) for a, _, _ in library_layout(level)
+                                     if a not in have and defined.get(names[f"func_{a:08X}"]) in ("T", "W")})
     (outdir / "funcs.c").write_text(
         "/* Generated by port/gen_native.py: PS1 address -> native function, and the level's layout. */\n"
         f"const int port_level = {int(level[-2:])};\n"

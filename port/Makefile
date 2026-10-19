@@ -40,13 +40,15 @@ $(RT_OUT)/%.o: $(ROOT)/port/src/%.c $(wildcard $(ROOT)/port/src/*.h) $(wildcard 
 	$(CC) $(RT_CFLAGS) -c $< -o $@
 
 # MIPS code that has no C yet (PsyQ libraries, hand-written GTE code) is statically recompiled
-$(OUT)/recomp.c: $(GAME_OBJ) $(RT_OBJ) $(ELF) recomp.py psyq_names.txt
+LEVEL_DEPS := $(ELF) gen_native.py psyq_names.txt $(wildcard $(ROOT)/config/$(LEVEL)_syms.ld)
+
+$(OUT)/recomp.c: $(GAME_OBJ) $(RT_OBJ) $(LEVEL_DEPS) recomp.py
 	python3 recomp.py $(LEVEL) $@ $(GAME_OBJ) $(RT_OBJ)
 
 $(OUT)/recomp.o: $(OUT)/recomp.c src/recomp.h
 	$(CC) -m32 -std=gnu11 -fno-builtin -fpermissive -fno-pie -O1 -g -w -DNATIVE_PORT -I$(ROOT)/include -Isrc -c $< -o $@
 
-$(OUT)/gen.stamp: $(GAME_OBJ) $(RT_OBJ) $(OUT)/recomp.o $(ELF) gen_native.py psyq_names.txt
+$(OUT)/gen.stamp: $(GAME_OBJ) $(RT_OBJ) $(OUT)/recomp.o $(LEVEL_DEPS)
 	python3 gen_native.py $(LEVEL) $(OUT) $(GAME_OBJ) -- $(RT_OBJ) $(OUT)/recomp.o
 	@touch $@
 

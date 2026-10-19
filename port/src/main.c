@@ -188,6 +188,10 @@ static void install_trampolines(void) {
 
 #define ARGS_ADDR 0x8001F164u
 
+/* The mission each level folder holds (0 = Courier ... 10 = Meltdown), which the front end stores next to
+ * the level number: the level opens its mission's speech and music stream, \Lnn\XA<mission + 1>.STR. */
+static const s16 level_mission[12] = {-1, 2, 0, 8, 4, 7, 6, 5, 1, 9, 10, 3};
+
 /* The boot stub's g_Args setup (SLUS_012.72 func_80010000 and func_80010544), then what it does before it
  * runs a level (func_80010240): the level number and the executable's path. */
 static void boot_init_args(s32 level) {
@@ -239,6 +243,7 @@ static void boot_init_args(s32 level) {
 
     *(u32 *)a |= 0x40; /* skip the front end (the boot-to-level patch) */
     *(s16 *)(a + 0x188) = level;
+    *(s16 *)(a + 0x18A) = level_mission[level];
     *(u32 *)(a + 0x204) = 0x801FFF00; /* the stub's stack pointer when it starts a child */
     sprintf((char *)(a + 0x234), "\\L%02d\\LEVEL%02d.EXE;1", level, level);
 }

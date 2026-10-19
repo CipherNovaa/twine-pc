@@ -3439,7 +3439,7 @@ extern u8 D_800AD400[];
 extern u8 D_800AD428[];
 extern u8 D_800DB3D8[];
 extern u8 D_800DB814[];
-s16 func_8008FCDC();
+s16 func_8008FCDC(s32, s16);
 void func_8008FDAC();
 s16 func_8008FF2C();
 extern u8 D_800ACC18[];
@@ -5363,12 +5363,12 @@ void func_800309B8(void) {
     if (temp_v0 < 0) {
         ((void (*)())func_80083044)(((u8 *)&D_800ACC40), temp_v0);
         ((void (*)())func_80083044)(((u8 *)&D_800ACC54), ((u8 *)&D_800ACC7C), 0xB0);
-        ((void (*)())func_80085E7C)(1);
+        func_80085E7C_nr(1);
     }
-    if (func_8008FCDC(D_800D55A8) != M2C_FIELD(D_800B6010, s16 *, 0x12C)) {
+    if (func_8008FCDC(D_800D55A8, temp_v0) != M2C_FIELD(D_800B6010, s16 *, 0x12C)) {
         ((void (*)())func_80083044)(((u8 *)&D_800ACC88));
         ((void (*)())func_80083044)(((u8 *)&D_800ACC54), ((u8 *)&D_800ACC7C), 0xB9);
-        ((void (*)())func_80085E7C)(1);
+        func_80085E7C_nr(1);
     }
     ((void (*)())func_8008FDAC)(1);
 }
