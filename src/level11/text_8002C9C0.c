@@ -2926,7 +2926,15 @@ M2C_UNK L2_func_80026F5C(s32, M2C_UNK);                /* extern */
 extern void *L2_D_800B6010;
 void L2_func_80085F1C();
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
+void L2_func_800462CC(void);
+void L2_func_8002F32C(void);
+void L2_func_8002FF60(void);
+void L2_func_80055188(void);
+void L2_func_8005EDC8(void);
+void L2_func_8002F364(void);
+void L2_func_800457C0(void);
 void L2_func_80045624(void);
+void L2_func_80045728(void);
 void L2_func_8005CB20(void *);
 extern s32 L2_D_800A1278;
 extern char *L2_D_800D6B70[];
@@ -3023,7 +3031,6 @@ extern s32 L2_D_800B733C;
 extern u8 L2_D_800B7340;
 extern u8 L2_D_800B7344;
 extern s32 L2_D_800A106C;
-extern M2C_UNK (*L2_D_800A1078)(s16);
 extern s16 L2_D_800A3E74;
 extern u8 L2_D_800A3E8C;
 M2C_UNK L2_func_80046098(M2C_UNK *, M2C_UNK, M2C_UNK, M2C_UNK, s32, s32, s32, s32, s32, s32, s32, s32); /* extern */
@@ -3238,6 +3245,7 @@ extern s16 L2_D_800E0504;
 M2C_UNK L2_func_800606F8(s32);                         /* extern */
 M2C_UNK L2_func_8005BA6C(void *, s32, void *);         /* extern */
 M2C_UNK L2_func_80081390(s32, M2C_UNK);                /* extern */
+void L2_func_8005ECF4(void *arg0, void *arg1);
 void L2_func_80039C5C(void *arg0);
 void L2_func_8005D5CC(u8 *p);
 s32 L2_func_800426E8(s32 a, s32 b, s32 c);
@@ -3250,9 +3258,6 @@ void L2_func_8002E508(void);
 void L2_func_8002E5F4(void);
 void L2_func_8002E69C(s32 arg0);
 void L2_func_8002F214(void);
-void L2_func_8002F32C(void);
-void L2_func_8002F364(void);
-void L2_func_8002FF60(void);
 void *L2_func_80030454(s32 arg0);
 void L2_func_80030474(void);
 void L2_func_800304A4(void);
@@ -3262,7 +3267,9 @@ void L2_func_80031000(void);
 void L2_func_80031E68(void);
 void L2_func_800324E8(s32 arg0);
 void L2_func_8003280C(s32 *arg0);
+s32 L2_func_800384D4(u8 *obj);
 void L2_func_80039A40(void);
+s32 L2_func_80039BA0(void);
 void *L2_func_8003A110(s32 arg0);
 void L2_func_8003A538(void *arg0);
 AnimEnt *L2_func_8003B70C(u8 **obj);
@@ -3271,7 +3278,6 @@ void L2_func_800421C8(void);
 void L2_func_800427AC(void *arg0);
 void L2_func_80043874(void);
 void L2_func_80043C14(void);
-void L2_func_800462CC(void);
 void L2_func_80049C80(void);
 void L2_func_8004AF34(void);
 void L2_func_8004AF78(void);
@@ -3294,7 +3300,6 @@ void L2_func_8004F9BC(s32 *arg0);
 void L2_func_80050790(void);
 void L2_func_80050D78(void *arg0);
 void L2_func_80051444(s16 arg0, s8 arg1);
-void L2_func_80055188(void);
 void L2_func_80055698(s32 *arg0);
 s32 L2_func_80055938(void *arg0);
 s32 L2_func_80055A20(s32 arg0);
@@ -3310,8 +3315,6 @@ void L2_func_80059C6C(void *arg0, s16 arg1);
 s32 L2_func_8005AEB0(void);
 void L2_func_8005DAD0(void);
 void L2_func_8005DF80(void *arg0);
-void L2_func_8005ECF4(void *arg0, void *arg1);
-void L2_func_8005EDC8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_80032494(s32, M2C_UNK);                /* extern */
 extern s32 D_8009C4D8;
@@ -6254,7 +6257,83 @@ void L1_func_80037ACC(void) {
     L1_D_800D31D0.unk7 = 0;
 }
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8002C9C0", func_800375B4);
+s32 L2_func_800384D4(u8 *obj) {
+    AnimSlot *s;
+    s32 *pos;
+    u8 hit;
+
+    if (L1_D_8009CF54 != 0) {
+        goto fail;
+    }
+    if (g_CutScene != 0) {
+        goto fail;
+    }
+    if (*(u16 *)(obj + 0xE) == 0x7FFF) {
+        goto fail;
+    }
+    if (*(u16 *)(obj + 0xE) & 0x200) {
+        goto fail;
+    }
+    if (*(s32 *)(obj + 0x34) <= 0) {
+        goto fail;
+    }
+    if (obj[0xA4] & 2) {
+        goto fail;
+    }
+    if (L1_func_800349F8(g_Player) != 0) {
+        goto fail;
+    }
+    if (obj[5] == 6 && L1_func_800349F8(obj) != 0) {
+    fail:
+        return 0;
+    }
+    pos = (s32 *)(*(u8 **)(obj + 0x90) + 0x28);
+    hit = 0;
+    for (s = L1_D_800D30D8; s < &L1_D_800D30D8[6]; s++) {
+        if (!(s->flags & 1)) {
+            continue;
+        }
+        if (s->unk0 != 0) {
+            if (*(void **)(s->unk0 + 0x88) != g_Player) {
+                if (!(*(u16 *)(obj + 0xE) & 0x400)) goto next;
+                goto fail;
+            }
+            if (*(u16 *)(obj + 0xE) & 0x800) goto fail;
+        }
+    next:
+        if (s->L1_start + *(u16 *)(obj + 0x2A) < ((pos[0] - s->x) < 0 ? -(pos[0] - s->x) : (pos[0] - s->x))) {
+            continue;
+        }
+        if (s->L1_start + *(u16 *)(obj + 0x28) < ((pos[1] - s->y) < 0 ? -(pos[1] - s->y) : (pos[1] - s->y))) {
+            continue;
+        }
+        if (s->L1_start + *(u16 *)(obj + 0x2A) < ((pos[2] - s->z) < 0 ? -(pos[2] - s->z) : (pos[2] - s->z))) {
+            continue;
+        }
+        if ((u32)(s->time - 3) >= *(u32 *)(obj + 0x2C)) {
+            hit = 1;
+            break;
+        }
+    }
+    if (!hit) {
+        goto fail;
+    }
+    if (obj == g_Player) {
+        return L1_D_8009CF54 == 0;
+    }
+    if (obj[0xA] & 2) {
+        M2C_FIELD(obj, s32 *, 0x34) -= 1000;
+    } else if (obj[5] == 6) {
+        *(s32 *)(obj + 0x34) = 0;
+    } else {
+        *(s32 *)(obj + 0x34) -= 0x88B8;
+    }
+    if (*(s32 *)(obj + 0x34) <= 0 && obj[5] == 6 && obj != g_Player) {
+        obj[0xA4] |= 4;
+        *(s16 *)(*(u8 **)(obj + 0x90) + 0x62) = ((s32 (*)(s32, s32))L1_ratan2)(s->x - pos[0], s->z - pos[2]) & 0xFFF;
+    }
+    return 1;
+}
 
 INCLUDE_ASM("asm/level11/nonmatchings/text_8002C9C0", func_800378A4);
 
@@ -6447,7 +6526,19 @@ void L2_func_80039A40(void) {
     }
 }
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8002C9C0", func_800385AC);
+s32 L2_func_80039BA0(void) {
+    if (L1_D_8009CD4C != 0) {
+    ret1:
+        return 1;
+    }
+    if (M2C_FIELD(M2C_FIELD(g_Player, void **, 0x94), s32 *, 0x24) & 0x400) {
+        goto ret1;
+    }
+    if (abs(L1_g_CamPosY + L1_D_8009CFA8 + L1_D_800D91FC) >= 0x1F) {
+        goto ret1;
+    }
+    return 0;
+}
 
 s32 L1_func_80038C04(void) {
   Weapon *new_var;
@@ -10481,9 +10572,30 @@ void L1_func_800448F4(void) {
     L1_D_800D43F0 = *(s16 *)((u8 *)w + 0x68) - 0xB4;
 }
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8002C9C0", func_8004428C);
+void L2_func_80045728(void) {
+    Weapon *w;
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8002C9C0", func_80044324);
+    w = &L1_g_Weapons[L1_D_800B0DD4];
+    if (M2C_FIELD(w, s16 *, 0x54) >= M2C_FIELD(w, s16 *, 0x56)) {
+        if (M2C_FIELD(w, s16 *, 0x68) > L1_D_800D43F0) {
+            M2C_FIELD(w, s16 *, 0x68) -= L1_D_800D43AC;
+        }
+        L1_func_8007A040(L1_D_800B0DD4);
+        L1_D_8009CFCC = 0;
+    }
+}
+
+void L2_func_800457C0(void) {
+    Weapon *w;
+
+    w = &L1_g_Weapons[L1_D_800B0DD4];
+    if (M2C_FIELD(w, s16 *, 0x54) >= M2C_FIELD(w, s16 *, 0x56)) {
+        if (M2C_FIELD(w, s16 *, 0x68) <= L1_D_800D43F4) {
+            M2C_FIELD(w, s16 *, 0x68) = L1_D_800D43F4;
+        }
+        L1_func_8007A040(L1_D_800B0DD4);
+    }
+}
 
 s16 func_800443AC(void) {
     return D_8009C148;

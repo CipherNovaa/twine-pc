@@ -191,6 +191,7 @@ extern M2C_UNK (*L2_D_800A1078)(s16);
 void L2_func_8006E9D0(s32 arg0, s32 arg1);
 void L2_func_8007906C(void);
 void L2_func_800796AC(void);
+void L2_func_8007A354(u8 *obj, s16 *vel);
 extern s8 L2_D_800A40AC;
 extern u8 L2_D_800F430C;
 M2C_UNK L2_func_800307C0(s32);                         /* extern */
@@ -726,7 +727,32 @@ s32 L2_func_8007A190(void *arg0) {
 
 INCLUDE_ASM("asm/level03/nonmatchings/text_80076430", func_80077CA0);
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_80076430", func_80077D64);
+void L2_func_8007A354(u8 *obj, s16 *vel) {
+    u8 *m;
+    s32 t;
+    s16 r[3];
+    VECTOR ang;
+    s16 *d;
+
+    m = *(u8 **)(obj + 0x90);
+    t = L1_D_800A0370[*(u16 *)(m + 0x62) & 0xFFF];
+    r[0] = (-vel[0] * (t >> 16) + vel[2] * (s16)t) >> 12;
+    r[1] = -vel[1];
+    r[2] = (-vel[2] * (t >> 16) - vel[0] * (s16)t) >> 12;
+    ang.vx = L1_ratan2(r[2], r[1]);
+    ang.vz = L1_ratan2(-r[0], L1_SquareRoot0(r[2] * r[2] + r[1] * r[1]));
+    *(s32 *)(*(u8 **)(obj + 0x90) + 0x10) = 2;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x60) = ang.vx;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x62) = ang.vy;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x64) = ang.vz;
+    d = *(s16 **)(obj + 0x108);
+    obj = m + 0x28;
+    if (d != NULL) {
+        ((s32 *)obj)[0] = d[0];
+        ((s32 *)obj)[1] = d[1];
+        ((s32 *)obj)[2] = d[2];
+    }
+}
 
 INCLUDE_ASM("asm/level03/nonmatchings/text_80076430", func_80077EE4);
 

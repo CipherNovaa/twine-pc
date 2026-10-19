@@ -1737,6 +1737,8 @@ void L2_func_800387C4(void *);
 void L2_func_8005C9C4(void *, void *);
 s32 L2_func_8003815C(void *, void *);
 void L2_func_800616AC(u8 *obj);
+void L2_func_80061890(s32 id);
+void L2_func_800619B8();
 M2C_UNK L2_func_8002D6AC(M2C_UNK *);                   /* extern */
 extern M2C_UNK L2_D_800AE968;
 void L2_func_80060EC4(void *arg0);
@@ -2300,9 +2302,40 @@ void L1_func_80061708(s32 arg0) {
     L1_func_8006B1DC((s32)buf);
 }
 
-INCLUDE_ASM("asm/level10/nonmatchings/text_800615C4", func_800640B0);
+void L2_func_80061890(s32 id) {
+    u8 *e;
+    s32 i;
+    u8 *o;
 
-INCLUDE_ASM("asm/level10/nonmatchings/text_800615C4", func_800641D8);
+    if (id > 0 && M2C_FIELD(g_Args, s32 *, 0x214) >= id) {
+        if (((u8 *)(id * 0x70 + g_Args->unk228))[2] == 0x22) {
+            e = (u8 *)L1_D_8009CF7C;
+            for (i = 0; i < L1_D_8009CF80; i++) {
+                if (e[0] != 0 && **(u8 **)(e + 0x1C) == id) {
+                    e[3] = 0;
+                    *(u32 *)(*(u8 **)(e + 0x1C) + 4) |= 0x80000000;
+                }
+                e += 0x44;
+            }
+        } else {
+            o = L1_func_8004BE84(g_Player, id);
+            if (o != NULL) {
+                *(s32 *)(o + 0x48) &= ~2;
+                *(u32 *)(*(u8 **)(o + 0x60) + 4) |= 0x80000000;
+            }
+        }
+    }
+}
+
+void L2_func_800619B8(e, id)
+u8 *e; s32 id; {
+    e[0] = 0;
+    **(s32 **)(e + 0x1C) = 0;
+    if (id != 0) {
+        L2_func_80061890(id);
+    }
+    L1_D_800D4390 = 0;
+}
 
 void L2_func_800619F0(void *arg0) {
     if (M2C_FIELD(arg0, u8 *, 0xA) == 1) {

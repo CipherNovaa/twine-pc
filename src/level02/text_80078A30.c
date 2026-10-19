@@ -182,6 +182,13 @@ extern s32 L1_D_800F0F5C;
 
 
 /* This level's own declarations (kept by tools/port_level.py): */
+void L1_GsGetLs(void *, void *);
+extern s32 L1_D_800D40D8[];
+s32 L1_ratan2(s32, s32);
+typedef struct { s16 pos[3]; s16 vel[3]; u8 *tgt; s16 unk10; s16 unk12; } TrkRec;
+typedef struct { TrkRec rec[5]; u8 busy; } TrkTbl;
+typedef struct { s16 pos[3]; s16 vel[3]; s32 pad0C; s32 pad10; s32 pad14; u8 *tgt; s32 unk1C; s32 pad20; s16 unk24; } TrkDst;
+void func_8007A354(u8 *obj, s16 *vel);
 void func_80078A60(void);
 void func_8007906C(void);
 void func_800796AC(void);
@@ -210,8 +217,8 @@ M2C_UNK func_80086FAC(M2C_UNK);                     /* extern */
 extern M2C_UNK D_800AF188;
 M2C_UNK func_8003A600(void *);                      /* extern */
 M2C_UNK func_80064FB0(void *, M2C_UNK, M2C_UNK);    /* extern */
-M2C_UNK func_8007A190(void *);                      /* extern */
-M2C_UNK func_8007A4D4(void *);                      /* extern */
+s32 func_8007A190(void *arg0);
+void func_8007A4D4(u8 *obj);
 void func_8007A678(void *arg0);
 extern s32 D_800A0FE0;
 extern s32 D_800B6FE4;
@@ -704,9 +711,72 @@ INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_80079E1C);
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_80079F1C);
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_80079FE0);
+void func_80079FE0(u8 *obj, s32 idx) {
+    TrkTbl *tbl;
+    u8 *tgt;
+    TrkDst *d;
+    s16 v[3];
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_8007A190);
+    tbl = *(TrkTbl **)(obj + 0x10C);
+    if (tbl == NULL) {
+        return;
+    }
+    tgt = tbl->rec[idx].tgt;
+    tbl->busy = 0;
+    d = *(TrkDst **)(obj + 0x108);
+    if (d == NULL) {
+        return;
+    }
+    *(s16 *)(obj + 0x98) = 0;
+    *(s16 *)(obj + 0x9C) = 0;
+    if (tgt != NULL && tgt[4] != 0 && tgt[5] == 6) {
+        return;
+    }
+    *(s16 *)(obj + 0x9A) = 0;
+    *(s16 *)(obj + 0x9E) = 0;
+    *(s16 *)(obj + 0xA0) = 0;
+    *(s16 *)(obj + 0xA2) = 0;
+    d->pos[0] = tbl->rec[idx].pos[0];
+    d->pos[1] = tbl->rec[idx].pos[1];
+    d->pos[2] = tbl->rec[idx].pos[2];
+    d->vel[0] = tbl->rec[idx].vel[0];
+    d->vel[1] = tbl->rec[idx].vel[1];
+    d->vel[2] = tbl->rec[idx].vel[2];
+    d->tgt = tbl->rec[idx].tgt;
+    d->unk1C = *(s32 *)(tbl->rec[idx].tgt + 0x60);
+    d->unk24 = tbl->rec[idx].unk12;
+    v[0] = d->vel[0];
+    v[1] = d->vel[1];
+    v[2] = d->vel[2];
+    d->pos[0] += v[0] >> 10;
+    d->pos[1] += v[1] >> 10;
+    d->pos[2] += v[2] >> 10;
+    if (tgt != NULL) {
+        func_8007A4D4(obj);
+    } else {
+        func_8007A354(obj, v);
+    }
+    tbl->busy = 0;
+    *(s32 *)(obj + 0x4C) |= 0x2000400;
+}
+
+s32 func_8007A190(void *arg0) {
+    s32 i;
+    u8 *p;
+    s32 pos;
+    i = L1_D_800B0DA0;
+    p = L1_D_800AFFC8 + i * 0x124;
+    pos = *(s32 *)((u8 *)arg0 + 0x90) + 0x28;
+    if (i <= L1_D_800B07B0) {
+        do {
+            if (p[4] != 0 && L1_func_8005397C(pos, *(s32 *)(p + 0x90) + 0x28) < (u32)(*(u16 *)(p + 0x2A) + 0xFA0) && *(s32 *)(p + 0x118) != 0 && (L1_func_80051728((s32)p, *(s32 *)(p + 0x5C)) & 0x40)) {
+                **(u32 **)(p + 0x118) |= 0x02000000;
+            }
+            i++;
+            p += 0x124;
+        } while (i <= L1_D_800B07B0);
+    }
+}
 
 void func_8007A2A0(void *arg0) {
     s32 temp_v1;
@@ -728,9 +798,71 @@ void func_8007A2A0(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_8007A354);
+void func_8007A354(u8 *obj, s16 *vel) {
+    u8 *m;
+    s32 t;
+    s16 r[3];
+    VECTOR ang;
+    s16 *d;
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80078A30", func_8007A4D4);
+    m = *(u8 **)(obj + 0x90);
+    t = L1_D_800A0370[*(u16 *)(m + 0x62) & 0xFFF];
+    r[0] = (-vel[0] * (t >> 16) + vel[2] * (s16)t) >> 12;
+    r[1] = -vel[1];
+    r[2] = (-vel[2] * (t >> 16) - vel[0] * (s16)t) >> 12;
+    ang.vx = L1_ratan2(r[2], r[1]);
+    ang.vz = L1_ratan2(-r[0], L1_SquareRoot0(r[2] * r[2] + r[1] * r[1]));
+    *(s32 *)(*(u8 **)(obj + 0x90) + 0x10) = 2;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x60) = ang.vx;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x62) = ang.vy;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x64) = ang.vz;
+    d = *(s16 **)(obj + 0x108);
+    obj = m + 0x28;
+    if (d != NULL) {
+        ((s32 *)obj)[0] = d[0];
+        ((s32 *)obj)[1] = d[1];
+        ((s32 *)obj)[2] = d[2];
+    }
+}
+
+void func_8007A4D4(u8 *obj) {
+    s16 *d;
+    u8 *e;
+    u8 *m;
+    s32 *p;
+    SVECTOR v;
+    SVECTOR out;
+
+    d = *(s16 **)(obj + 0x108);
+    if (d == NULL) {
+        return;
+    }
+    if (*(u8 **)(d + 0xC) != NULL) {
+        e = *(u8 **)(*(u8 **)(d + 0xC) + 0x90);
+        m = *(u8 **)(obj + 0x90);
+        e += d[0x12] * 0x8C;
+        p = (s32 *)(m + 0x28);
+        if (*(s32 *)(e + 0x10) == 0) {
+            L1_GsGetLs(e + 0x10, L1_D_800D40D8);
+        }
+        gte_SetRotMatrix(e + 0x34);
+        ((SVECTOR *)D_1F8003E0)->vx = d[0];
+        ((SVECTOR *)D_1F8003E0)->vy = d[1];
+        ((SVECTOR *)D_1F8003E0)->vz = d[2];
+        gte_ldv0(D_1F8003E0);
+        gte_rtv0();
+        gte_stsv(D_1F8003E0);
+        p[0] = ((SVECTOR *)D_1F8003E0)->vx + *(s32 *)(e + 0x48);
+        p[1] = ((SVECTOR *)D_1F8003E0)->vy + *(s32 *)(e + 0x4C);
+        p[2] = ((SVECTOR *)D_1F8003E0)->vz + *(s32 *)(e + 0x50);
+        v.vx = d[3];
+        v.vy = d[4];
+        v.vz = d[5];
+        L1_func_8003EA24(&v, (s32 *)(e + 0x34), &out);
+        *(s16 *)(*(u8 **)(obj + 0x90) + 0x60) = (out.vx + 0x800) & 0xFFF;
+    }
+    *(s32 *)(*(u8 **)(obj + 0x90) + 0x10) = 2;
+}
 
 void func_8007A678(void *arg0) {
     void *temp_v0;

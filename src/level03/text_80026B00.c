@@ -235,11 +235,9 @@ extern s16 L2_D_800B102C;
 extern s32 L2_D_800B1FA0;
 extern s32 L2_D_800B4E3C;
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
-extern void (*L2_D_800A100C)(void);
 extern M2C_UNK (*L2_D_800A1078)(s16);
 void L2_func_80029200(void);
 void L2_func_80028B88(s16 arg0, char *text);
-// D_8009CDD4 -> L2_D_800A100C (L2 own)
 /* This level's own declarations (kept by tools/port_level.py): */
 
 INCLUDE_ASM("asm/level03/nonmatchings/text_80026B00", func_80026B00);

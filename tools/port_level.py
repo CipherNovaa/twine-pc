@@ -323,6 +323,11 @@ def nonmatching_errors(level, t_stem, renamed):
 
 
 def port(level):
+    def native_addr(func, stem):
+        s = ROOT / f"asm/{level}/nonmatchings/{stem}/{func}.s"
+        m = re.search(r"/\* [0-9A-F]+ ([0-9A-F]{8}) ", s.read_text()) if s.exists() else None
+        return int(m.group(1), 16) if m else None
+
     pairs, votes = port_symbols.pairings(level)
     smap = port_symbols.symbol_map(votes)
     l1_globals = elf_symbols(ROOT / "build/level01/level01.elf")
@@ -333,6 +338,11 @@ def port(level):
     known = set(smap) | set(aliased) | absolute
     t_name = {pairs[n]: smap[n][0] for n in pairs if n in smap and smap[n][1] == 0}
     same_named = {n for n, (t, d) in smap.items() if t == n and d == 0}
+    # LEVEL01 functions the last port put in under their own name (no L1_): only those unprefixed
+    # definitions are LEVEL01's; anything else is this level's own C, even with a LEVEL01 name
+    record = ROOT / f"config/{level}_samename.txt"
+    if record.exists():
+        same_named = set(record.read_text().split())
     inv = {tn: n for n, a in pairs.items() if (tn := t_name.get(a))}
 
     l1 = level01_sources()
@@ -435,6 +445,8 @@ def port(level):
     exe, load = target_exe(level)
     for attempt in range(20):
         ported, banked, ported2, jtbl_lines, used2, native_names = {}, {}, {}, [], set(), set()
+        moved = set()  # pooled functions that landed in a different file than before
+        native_stem = {}
         used1 = set()  # LEVEL01 names (L1_X) that LEVEL02's C uses here
         for l1_stem, t_stem in zip(l1_stems, t_stems):
             header, funcs = l1[l1_stem]
@@ -461,12 +473,15 @@ def port(level):
                     if not line.startswith("#include"):
                         body.append(line)
                     continue
-                if m.group(2) not in native_funcs and m.group(2) in pool_funcs:
+                if m.group(2) not in native_funcs and m.group(2) in pool_funcs and m.group(2) not in native_drop:
                     k, code, old = pool_funcs[m.group(2)]
                     native_funcs[m.group(2)] = (k, code)
-                    pooled.append(old)
+                    pooled.append((old, code))
+                    if old != f"{t_stem}.c":
+                        moved.add(m.group(2))
                 if m.group(2) in native_funcs and m.group(2) not in native_drop:  # done on this level itself
                     native_names.add(m.group(2))
+                    native_stem.setdefault(t_stem, []).append(m.group(2))
                     kind, code = native_funcs[m.group(2)]
                     body.append(code if kind == "c" else f"#ifdef NON_MATCHING\n{code}\n#else\n{line}\n#endif")
                     continue
@@ -498,8 +513,20 @@ def port(level):
                 else:
                     body.append(line)
             l1_header = [l1_rename(l) for l in header]
-            for old in dict.fromkeys(pooled):  # pooled functions bring their old file's own declarations
+            # Pooled functions bring their old file's own declarations: all of them when it is the same
+            # file; else only what their code names that isn't declared here (the old file's other
+            # declarations can use types only its header has).
+            for old in dict.fromkeys(o for o, c in pooled if o == f"{t_stem}.c"):
                 native_decls += [d for d in pool_decls[old] if d not in native_decls]
+            here = {l2_decl_name(l) for l in header + native_decls} - {None}
+            for old, code in pooled:
+                if old != f"{t_stem}.c":
+                    ids = set(IDENT.findall(code))
+                    for d in pool_decls[old]:
+                        nm = l2_decl_name(d)
+                        if nm in ids and nm not in here:
+                            native_decls.append(d)
+                            here.add(nm)
             l2_header = []
             if l2 and l2_bodies:
                 # only what this file's LEVEL02 functions use (with the typedefs those declarations need):
@@ -565,6 +592,10 @@ def port(level):
             n_failed = nm_failed & native_names
             nm_failed -= n_failed
             if nm_failed <= nm_exclude and not l2_failed - exclude2 and not n_failed - native_drop:
+                if moved - native_drop:  # declarations that came along with moved functions: drop those
+                    print(f"  dropped back to asm (moved to another file, declarations clash): {' '.join(sorted(moved))}")
+                    native_drop |= moved
+                    continue
                 sys.exit("the NON_MATCHING errors are outside the banked functions (declarations?)")
             nm_exclude |= nm_failed
             exclude2 |= l2_failed
@@ -593,6 +624,10 @@ def port(level):
                 else:
                     unattributed.append(line)
         if unattributed and not failed:
+            if moved - native_drop:
+                print(f"  dropped back to asm (moved to another file, declarations clash): {' '.join(sorted(moved))}")
+                native_drop |= moved
+                continue
             print("\n".join(unattributed[:10]))
             sys.exit("compile errors outside ported functions")
         if failed:
@@ -614,16 +649,24 @@ def port(level):
             obj = ROOT / f"build/{level}/src/{level}/{t_stem}.o"
             wanted = {("L1_" + n if n in renamed else n): (("L1", n), pairs[n]) for n, s in ported.items() if s == t_stem}
             wanted.update({"L2_" + n: (("L2", n), l2_pairs[n]) for n, s in ported2.items() if s == t_stem})
+            # this level's own C too: a stale copy of excluded code must not pass as native
+            for f in native_names & set(native_stem.get(t_stem, ())):
+                a = native_addr(f, t_stem)
+                if a is not None and f not in wanted:
+                    wanted[f] = (("N", f), a)
             if wanted and obj.exists():
                 bad |= object_mismatches(level, obj, wanted, exe, load)
         if bad:
             print(f"pass {attempt}: {len(bad)} functions differ: {' '.join(sorted(s + ':' + n for s, n in bad))}")
             exclude |= {n for s, n in bad if s == "L1"}
             exclude2 |= {n for s, n in bad if s == "L2"}
+            native_drop |= {n for s, n in bad if s == "N"}
             continue
         ok = r.returncode == 0 and ": OK" in r.stdout
         print(f"{level}: {len(ported)} functions from LEVEL01's C, {len(ported2)} from LEVEL02's; "
               f"EXE {'matches' if ok else 'DOES NOT MATCH'}")
+        if ok:
+            record.write_text("\n".join(sorted(n for n in list(ported) + list(banked) if n not in renamed)) + "\n")
         if ok and pool_dir.exists():
             import shutil
             shutil.rmtree(pool_dir)

@@ -248,7 +248,12 @@ extern s16 D_800B102C;
 extern s32 D_800B1FA0;
 extern s32 D_800B4E3C;
 
-INCLUDE_ASM("asm/level02/nonmatchings/text_80026B00", func_80026B00);
+s32 func_80026B00(s32 arg0) {
+  L1_SsSetSerialAttr(0, 0, 1);
+  arg0 = arg0;
+  arg0 = arg0 & 0xFF;
+  return L1_SsSetSerialVol(0, arg0, arg0);
+}
 
 s32 func_80026B44(u8 arg0) {
     switch (arg0) {
@@ -264,9 +269,7 @@ s32 func_80026B44(u8 arg0) {
     return 0;
 }
 
-void func_80026C14(s16 arg0) {
-    func_80085600(arg0);
-}
+INCLUDE_ASM("asm/level02/nonmatchings/text_80026B00", func_80026C14);
 
 INCLUDE_ASM("asm/level02/nonmatchings/text_80026B00", func_80026C38);
 

@@ -195,7 +195,6 @@ extern s32 L2_D_800A0FE0;
 void L2_func_80079ACC(s32 arg0);
 void L2_func_8007906C(void);
 void L2_func_800796AC(void);
-s32 L1_ratan2(s32, s32);
 void L2_func_8007A354(u8 *obj, s16 *vel);
 extern u8 L2_D_800AF1E0;
 extern u8 L2_D_800F415C;
@@ -214,7 +213,7 @@ extern M2C_UNK L2_D_800AF188;
 void L2_func_8003A600(void *arg0);
 M2C_UNK L2_func_80064FB0(void *, M2C_UNK, M2C_UNK);    /* extern */
 s32 L2_func_8007A190(void *arg0);
-M2C_UNK L2_func_8007A4D4(void *);                      /* extern */
+void L2_func_8007A4D4(u8 *obj);
 void L2_func_8007A678(void *arg0);
 void L2_func_80078B44(void *arg0);
 M2C_UNK *L2_func_80078B90(s32 arg0);

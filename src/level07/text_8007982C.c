@@ -193,6 +193,7 @@ extern void *L2_D_800B6FE4;
 extern s32 L2_D_800A0FE0;
 void L2_func_8007906C(void);
 void L2_func_800796AC(void);
+void L2_func_8007A354(u8 *obj, s16 *vel);
 extern s8 L2_D_800A40AC;
 extern u8 L2_D_800F430C;
 M2C_UNK L2_func_800307C0(s32);                         /* extern */
@@ -208,7 +209,7 @@ extern M2C_UNK L2_D_800AF188;
 void L2_func_8003A600(void *arg0);
 M2C_UNK L2_func_80064FB0(void *, M2C_UNK, M2C_UNK);    /* extern */
 s32 L2_func_8007A190(void *arg0);
-M2C_UNK L2_func_8007A4D4(void *);                      /* extern */
+void L2_func_8007A4D4(u8 *obj);
 void L2_func_8007A678(void *arg0);
 void L2_func_80078B44(void *arg0);
 M2C_UNK *L2_func_80078B90(s32 arg0);
@@ -438,101 +439,7 @@ void L1_func_800758F0(u8 *p) {
     *(s32 *)p = 0;
 }
 
-void L1_func_80075920(HmdModel *arg0) {
-    GsTYPEUNIT ut;
-    u32 *p;
-    u32 n;
-    u32 i;
-    s32 j;
-    s32 cnt;
-    s32 len;
-    GsOT *ot;
-
-    ot = L1_D_800B8F88;
-    p = arg0->hmd;
-    if (p == NULL) {
-        return;
-    }
-    arg0->nframes = 0;
-    arg0->coords = NULL;
-    arg0->sub = 0;
-    arg0->coord = L1_D_800FC6A0;
-    arg0->unk84 = 0;
-    arg0->unk78 = -1;
-    arg0->unk7C = 0;
-    arg0->unk80 = 0;
-    arg0->unk88 = -1;
-    arg0->unk8C = -1;
-    n = p[3];
-    arg0->units = L1_func_80030610(n * 8);
-    arg0->seq = L1_func_80030610(n * 0x1C);
-    arg0->flags = L1_func_80030610(n);
-    if (p[1] != 0) {
-        L1_func_80075D48(arg0);
-        return;
-    }
-    L1_GsMapUnit(p);
-    p += 3;
-    arg0->nunits = *p++;
-    for (i = 0; i < arg0->nunits; i++) {
-        arg0->flags[i] = 0;
-        arg0->units[i].primtop = (u32 *)*p;
-        arg0->units[i].coord = NULL;
-        p++;
-        if (arg0->units[i].primtop != NULL) {
-            L1_GsScanUnit(arg0->units[i].primtop, NULL, NULL, NULL);
-            while (L1_GsScanUnit(NULL, &ut, ot, (u32 *)0x1F800000)) {
-                if (((ut.type >> 24) < 2 || (ut.type >> 24) == 6) && (ut.type & 0x800000)) {
-                    arg0->coords = L1_GsMapCoordUnit(arg0->hmd, ut.ptr);
-                    ut.type &= ~0x800000;
-                    cnt = ((s32 *)arg0->coords)[-1];
-                    for (j = 0; j < cnt; j++) {
-                        if (arg0->coords[j].super == NULL) {
-                            arg0->coords[j].super = &arg0->flg;
-                        }
-                    }
-                }
-                *ut.ptr = NULL;
-                switch (ut.type >> 24) {
-                case 0:
-                    *ut.ptr = L1_func_8008E03C(ut.type);
-                    break;
-                case 1:
-                    *ut.ptr = L1_func_8008DAAC(ut.type);
-                    break;
-                case 2:
-                    *ut.ptr = L1_func_8008CCB8(ut.type);
-                    ((void (*)(u32 *))*ut.ptr)((u32 *)0x1F800000);
-                    *ut.ptr = L1_func_8008E378;
-                    break;
-                case 3:
-                    *ut.ptr = L1_func_8008DB68(ut.type);
-                    if (*ut.ptr != NULL && *ut.ptr != L1_func_8008E378) {
-                        len = L1_GsLinkAnim(arg0->seq, ut.ptr);
-                        if (arg0->nframes <= 0) {
-                            arg0->nframes = len;
-                        }
-                        if (len != arg0->nframes && arg0->nframes < len) {
-                            arg0->nframes = len;
-                        }
-                        if (L1_GsScanAnim(ut.ptr, 0)) {
-                            L1_func_8008DBDC();
-                        }
-                    }
-                    break;
-                }
-                if (*ut.ptr == NULL) {
-                    *ut.ptr = L1_func_8008E378;
-                }
-            }
-        }
-    }
-    if (arg0->coords != NULL) {
-        for (i = 1; i < arg0->nunits - 1; i++) {
-            arg0->units[i].coord = &arg0->coords[i - 1];
-        }
-    }
-}
+INCLUDE_ASM("asm/level07/nonmatchings/text_8007982C", func_80079EBC);
 
 void L1_func_80075D48(u8 *obj) {
     u8 *s0;
@@ -750,7 +657,32 @@ void L2_func_8007A2A0(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8007982C", func_8007B1AC);
+void L2_func_8007A354(u8 *obj, s16 *vel) {
+    u8 *m;
+    s32 t;
+    s16 r[3];
+    VECTOR ang;
+    s16 *d;
+
+    m = *(u8 **)(obj + 0x90);
+    t = L1_D_800A0370[*(u16 *)(m + 0x62) & 0xFFF];
+    r[0] = (-vel[0] * (t >> 16) + vel[2] * (s16)t) >> 12;
+    r[1] = -vel[1];
+    r[2] = (-vel[2] * (t >> 16) - vel[0] * (s16)t) >> 12;
+    ang.vx = L1_ratan2(r[2], r[1]);
+    ang.vz = L1_ratan2(-r[0], L1_SquareRoot0(r[2] * r[2] + r[1] * r[1]));
+    *(s32 *)(*(u8 **)(obj + 0x90) + 0x10) = 2;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x60) = ang.vx;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x62) = ang.vy;
+    *(s16 *)(*(u8 **)(obj + 0x90) + 0x64) = ang.vz;
+    d = *(s16 **)(obj + 0x108);
+    obj = m + 0x28;
+    if (d != NULL) {
+        ((s32 *)obj)[0] = d[0];
+        ((s32 *)obj)[1] = d[1];
+        ((s32 *)obj)[2] = d[2];
+    }
+}
 
 INCLUDE_ASM("asm/level07/nonmatchings/text_8007982C", func_8007B32C);
 

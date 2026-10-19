@@ -1730,12 +1730,15 @@ extern int L1_g_CheatCodes[];
 
 s32 L2_func_8003BC0C(u8 *o, s32 arg1);
 void L2_func_8005F74C(void);
+// func_80061068 -> L2_func_8006114C (L2 own)
+s32 func_80061068(u8 *e);
 void L2_func_8005FBBC(u8 *obj);
 void L2_func_800387C4(void *);
 void L2_func_8005C9C4(void *, void *);
 s32 L2_func_8003815C(void *, void *);
 void L2_func_800616AC(u8 *obj);
 void L2_func_80060EC4(void *arg0);
+void L2_func_80060EE0(u8 *obj, s16 dx, s16 dz);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_80038668();                            /* extern */
 M2C_UNK func_8005D96C();                            /* extern */
@@ -2084,7 +2087,37 @@ void L2_func_80060EC4(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_8005C0A8", func_8005DFD0);
+void L2_func_80060EE0(u8 *obj, s16 dx, s16 dz) {
+    s32 len;
+    s32 max;
+    s32 ang;
+
+    *(s16 *)(obj + 0x9C) = 0;
+    *(s16 *)(obj + 0x9A) = 0;
+    *(s16 *)(obj + 0x98) = 0;
+    ang = *(u16 *)(obj + 0xA0) & 0xFFF;
+    *(u16 *)(obj + 0xA0) = ang;
+    if (ang > 0x800) {
+        *(u16 *)(obj + 0xA0) = ang - 0x1000;
+    }
+    if (dx != 0 || dz != 0) {
+        len = L1_SquareRoot0(dx * dx + dz * dz);
+        max = *(u16 *)(obj + 0x2A);
+        if (max < len) {
+            dx = dx * max / len;
+            dz = dz * max / len;
+        }
+        *(s16 *)(obj + 0x98) = dx;
+        *(s16 *)(obj + 0x9C) = dz;
+        if (L2_func_8006114C(obj) != 0) {
+            *(s16 *)(obj + 0x98) = 0;
+            *(s16 *)(obj + 0x9C) = 0;
+        }
+        *(s32 *)(*(u8 **)(obj + 0x90) + 0x28) += *(s16 *)(obj + 0x98);
+        *(s32 *)(*(u8 **)(obj + 0x90) + 0x30) += *(s16 *)(obj + 0x9C);
+    }
+    L1_func_80060AC0(obj);
+}
 
 void func_8005E174(void *arg0, s32 arg1) {
     s32 *temp_a0;

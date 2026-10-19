@@ -2927,22 +2927,27 @@ M2C_UNK L2_func_80026F5C(s32, M2C_UNK);                /* extern */
 extern void *L2_D_800B6010;
 void L2_func_80085F1C();
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
+void L2_func_8004CCC4(SVECTOR *pos);
+#define gte_SetRotMatrix_la(r0) __asm__ volatile("la $8, %0; lw $12, 0($8); lw $13, 4($8); ctc2 $12, $0; ctc2 $13, $1; lw $12, 8($8); lw $13, 12($8); lw $14, 16($8); ctc2 $12, $2; ctc2 $13, $3; ctc2 $14, $4" : : "i"(r0) : "$8", "$12", "$13", "$14")
+#define gte_SetTransMatrix_la(r0) __asm__ volatile("la $8, %0; lw $12, 20($8); lw $13, 24($8); ctc2 $12, $5; lw $14, 28($8); ctc2 $13, $6; ctc2 $14, $7" : : "i"(r0) : "$8", "$12", "$13", "$14")
+#define gte_ldv3c_la(r0) __asm__ volatile("la $8, %0; lwc2 $0, 0($8); lwc2 $1, 4($8); lwc2 $2, 8($8); lwc2 $3, 12($8); lwc2 $4, 16($8); lwc2 $5, 20($8)" : : "i"(r0) : "$8")
+#define gte_stsz3(r0, r1, r2) __asm__ volatile("swc2 $17, 0(%0); swc2 $18, 0(%1); swc2 $19, 0(%2)" : : "r"(r0), "r"(r1), "r"(r2) : "memory")
+extern SVECTOR L2_D_800D6D54[];
+extern SVECTOR L2_D_800D6D6C[];
+extern SVECTOR L2_D_800D6D84[];
 void L2_func_80045E88(void);
 void L2_func_80048AC4(void);
-void L1_func_800334F4(s32 *arg0);
 extern s32 L2_D_800A12CC;
 extern u16 L2_D_800A12D4;
 extern SVECTOR L2_D_800D6D9C[8];
 extern s32 L2_D_800A12D0;
 void L2_func_8004CBF4(s32 *minX, s32 *maxX, s32 *minY, s32 *maxY);
 void L2_func_80048B04(void);
-extern Weapon L1_g_Weapons[6];
 void L2_func_8002F32C(void);
 void L2_func_8002FF60(void);
 void L2_func_80040B30(void);
 void L2_func_80055188(void);
 void L2_func_8005EDC8(void);
-extern void (*L2_D_800A100C)(void);
 void L2_func_8002F364(void);
 void L2_func_800457C0(void);
 void L2_func_80045624(void);
@@ -3043,9 +3048,7 @@ extern s8 L2_D_800B7338;
 extern s32 L2_D_800B733C;
 extern u8 L2_D_800B7340;
 extern u8 L2_D_800B7344;
-M2C_UNK L2_func_8003251C(s32, M2C_UNK);                /* extern */
 extern s32 L2_D_800A106C;
-extern M2C_UNK (*L2_D_800A1078)(s16);
 extern s16 L2_D_800A3E74;
 extern u8 L2_D_800A3E8C;
 void L2_func_8004857C(void *arg0);
@@ -3290,7 +3293,6 @@ void L2_func_80030840(void);
 void L2_func_800309B8(void);
 void L2_func_80031000(void);
 void L2_func_80031E68(void);
-void L2_func_800322F0(void);
 void L2_func_800324E8(s32 arg0);
 void L2_func_8003280C(s32 *arg0);
 s32 L2_func_800384D4(u8 *obj);
@@ -3327,6 +3329,8 @@ s32 L2_func_8004BCBC(void);
 s32 L2_func_8004BCD4(void);
 void L2_func_8004BEC0(s32 arg0, s32 arg1, s32 arg2);
 void L2_func_8004C530(s32 dist, u8 *r, u8 *g, u8 *b, s32 *scale);
+void L2_func_8004CEB8(u8 *obj, s32 scale);
+void L2_func_8004D174(u8 *obj, s32 scale);
 void L2_func_8004D48C(s32 arg0);
 u8 *L2_func_8004EAE8(void *arg0);
 void L2_func_8004F24C(s32 arg0, M2C_UNK arg1);
@@ -3349,7 +3353,6 @@ s32 L2_func_8005AEB0(void);
 void L2_func_8005CF80(void);
 void L2_func_8005DAD0(void);
 void L2_func_8005DF80(void *arg0);
-// D_8009CDD4 -> L2_D_800A100C (L2 own)
 /* This level's own declarations (kept by tools/port_level.py): */
 extern u32 D_800A1DD4;
 M2C_UNK func_80046494(M2C_UNK *, M2C_UNK, M2C_UNK, M2C_UNK, s32, s32, s32, s32, s32, s32, s32, s32); /* extern */
@@ -4742,25 +4745,7 @@ void L1_func_80032074(s32 arg0) {
     L1_func_800310B4(base);
 }
 
-void L2_func_800322F0(void) {
-    s16 *var_v0;
-    s32 temp_v0;
-
-    temp_v0 = L2_D_800A106C + 1;
-    L2_D_800A106C = temp_v0;
-    if (temp_v0 >= 8) {
-        L2_D_800A106C = -1;
-    }
-    if (L2_D_800A1078 != NULL) {
-        if (L2_D_800A106C >= 0) {
-            var_v0 = (L2_D_800A106C * 0x10) + &L2_D_800A3E8C;
-        } else {
-            var_v0 = &L2_D_800A3E74;
-        }
-        L2_D_800A1078(*var_v0);
-    }
-    L2_func_8003251C(L2_D_800A106C, 0);
-}
+INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_8003220C);
 
 void L1_func_800321F0(s32 arg0) {
     s32 *hdr;
@@ -11684,11 +11669,112 @@ void L2_func_8004CBF4(s32 *minX, s32 *maxX, s32 *minY, s32 *maxY) {
     L2_D_800A12D0 = z;
 }
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_8004D1E8);
+void L2_func_8004CCC4(SVECTOR *pos) {
+    s32 i;
+    SVECTOR *p;
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_8004D3DC);
+    p = L2_D_800D6D54;
+    for (i = 0; i < 8; i++, p++) {
+        gte_ldv0(p);
+        gte_rtv0();
+        gte_stsv(p);
+        p->vx += pos->vx;
+        p->vy += pos->vy;
+        p->vz += pos->vz;
+    }
+    gte_SetRotMatrix_la(L1_D_800B0808);
+    gte_SetTransMatrix_la(L1_D_800B0808);
+    p = L2_D_800D6D9C;
+    gte_ldv3c_la(L2_D_800D6D54);
+    gte_rtpt();
+    gte_stsxy3(p, p + 1, p + 2);
+    gte_stsz3(&p[0].vz, &p[1].vz, &p[2].vz);
+    p += 3;
+    gte_ldv3c_la(L2_D_800D6D6C);
+    gte_rtpt();
+    gte_stsxy3(p, p + 1, p + 2);
+    gte_stsz3(&p[0].vz, &p[1].vz, &p[2].vz);
+    p += 3;
+    gte_ldv3c_la(L2_D_800D6D84);
+    gte_rtpt();
+    gte_stsxy3(p, p + 1, p + 2);
+    gte_stsz3(&p[0].vz, &p[1].vz, &p[2].vz);
+}
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8002C808", func_8004D698);
+void L2_func_8004CEB8(u8 *obj, s32 scale) {
+    u8 *m;
+    s32 *p;
+    SVECTOR v;
+
+    L2_D_800D6D54[0].vx = (*(s16 *)(obj + 0x1C) * scale) >> 12;
+    L2_D_800D6D54[0].vy = (*(s16 *)(obj + 0x20) * scale) >> 12;
+    L2_D_800D6D54[0].vz = (*(s16 *)(obj + 0x24) * scale) >> 12;
+    L2_D_800D6D54[1].vx = (*(s16 *)(obj + 0x1E) * scale) >> 12;
+    L2_D_800D6D54[1].vy = (*(s16 *)(obj + 0x20) * scale) >> 12;
+    L2_D_800D6D54[1].vz = (*(s16 *)(obj + 0x24) * scale) >> 12;
+    L2_D_800D6D54[2].vx = (*(s16 *)(obj + 0x1E) * scale) >> 12;
+    L2_D_800D6D54[2].vy = (*(s16 *)(obj + 0x20) * scale) >> 12;
+    L2_D_800D6D54[2].vz = (*(s16 *)(obj + 0x26) * scale) >> 12;
+    L2_D_800D6D54[3].vx = (*(s16 *)(obj + 0x1C) * scale) >> 12;
+    L2_D_800D6D54[3].vy = (*(s16 *)(obj + 0x20) * scale) >> 12;
+    L2_D_800D6D54[3].vz = (*(s16 *)(obj + 0x26) * scale) >> 12;
+    L2_D_800D6D54[4].vx = (*(s16 *)(obj + 0x1C) * scale) >> 12;
+    L2_D_800D6D54[4].vy = (*(s16 *)(obj + 0x22) * scale) >> 12;
+    L2_D_800D6D54[4].vz = (*(s16 *)(obj + 0x24) * scale) >> 12;
+    L2_D_800D6D54[5].vx = (*(s16 *)(obj + 0x1E) * scale) >> 12;
+    L2_D_800D6D54[5].vy = (*(s16 *)(obj + 0x22) * scale) >> 12;
+    L2_D_800D6D54[5].vz = (*(s16 *)(obj + 0x24) * scale) >> 12;
+    L2_D_800D6D54[6].vx = (*(s16 *)(obj + 0x1E) * scale) >> 12;
+    L2_D_800D6D54[6].vy = (*(s16 *)(obj + 0x22) * scale) >> 12;
+    L2_D_800D6D54[6].vz = (*(s16 *)(obj + 0x26) * scale) >> 12;
+    L2_D_800D6D54[7].vx = (*(s16 *)(obj + 0x1C) * scale) >> 12;
+    L2_D_800D6D54[7].vy = (*(s16 *)(obj + 0x22) * scale) >> 12;
+    L2_D_800D6D54[7].vz = (*(s16 *)(obj + 0x26) * scale) >> 12;
+    m = *(u8 **)(obj + 0x90);
+    gte_SetRotMatrix(m + 0x14);
+    p = (s32 *)(m + 0x28);
+    v.vx = p[0];
+    v.vy = p[1];
+    v.vz = p[2];
+    L2_func_8004CCC4(&v);
+}
+
+void L2_func_8004D174(u8 *obj, s32 scale) {
+    GsMat32 m;
+    SVECTOR v;
+
+    L2_D_800D6D54[0].vx = (*(s16 *)(obj + 0x4) * scale) >> 12;
+    L2_D_800D6D54[0].vy = (*(s16 *)(obj + 0x8) * scale) >> 12;
+    L2_D_800D6D54[0].vz = (*(s16 *)(obj + 0xC) * scale) >> 12;
+    L2_D_800D6D54[1].vx = (*(s16 *)(obj + 0x6) * scale) >> 12;
+    L2_D_800D6D54[1].vy = (*(s16 *)(obj + 0x8) * scale) >> 12;
+    L2_D_800D6D54[1].vz = (*(s16 *)(obj + 0xC) * scale) >> 12;
+    L2_D_800D6D54[2].vx = (*(s16 *)(obj + 0x6) * scale) >> 12;
+    L2_D_800D6D54[2].vy = (*(s16 *)(obj + 0x8) * scale) >> 12;
+    L2_D_800D6D54[2].vz = (*(s16 *)(obj + 0xE) * scale) >> 12;
+    L2_D_800D6D54[3].vx = (*(s16 *)(obj + 0x4) * scale) >> 12;
+    L2_D_800D6D54[3].vy = (*(s16 *)(obj + 0x8) * scale) >> 12;
+    L2_D_800D6D54[3].vz = (*(s16 *)(obj + 0xE) * scale) >> 12;
+    L2_D_800D6D54[4].vx = (*(s16 *)(obj + 0x4) * scale) >> 12;
+    L2_D_800D6D54[4].vy = (*(s16 *)(obj + 0xA) * scale) >> 12;
+    L2_D_800D6D54[4].vz = (*(s16 *)(obj + 0xC) * scale) >> 12;
+    L2_D_800D6D54[5].vx = (*(s16 *)(obj + 0x6) * scale) >> 12;
+    L2_D_800D6D54[5].vy = (*(s16 *)(obj + 0xA) * scale) >> 12;
+    L2_D_800D6D54[5].vz = (*(s16 *)(obj + 0xC) * scale) >> 12;
+    L2_D_800D6D54[6].vx = (*(s16 *)(obj + 0x6) * scale) >> 12;
+    L2_D_800D6D54[6].vy = (*(s16 *)(obj + 0xA) * scale) >> 12;
+    L2_D_800D6D54[6].vz = (*(s16 *)(obj + 0xE) * scale) >> 12;
+    L2_D_800D6D54[7].vx = (*(s16 *)(obj + 0x4) * scale) >> 12;
+    L2_D_800D6D54[7].vy = (*(s16 *)(obj + 0xA) * scale) >> 12;
+    L2_D_800D6D54[7].vz = (*(s16 *)(obj + 0xE) * scale) >> 12;
+    m = L1_D_800FC6A0;
+    L1_RotMatrixY(*(s16 *)(obj + 0x22), &m);
+    gte_SetRotMatrix(&m);
+    v.vx = *(s32 *)(obj + 0x10);
+    v.vy = *(s32 *)(obj + 0x14);
+    v.vz = *(s32 *)(obj + 0x18);
+    L2_func_8004CCC4(&v);
+}
 
 void L2_func_8004D48C(s32 arg0) {
     L2_func_80085D5C(&L2_D_800DA894, 0, 0, L2_func_80085EDC(0, arg0, 0, 0) & 0xFFFF, 0);

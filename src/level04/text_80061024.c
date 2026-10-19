@@ -2046,22 +2046,20 @@ s32 L2_func_80083044(char *, ...);
 s32 L2_func_80085C3C();                                /* extern */
 void L2_func_8006E97C(s32 arg0);
 M2C_UNK L2_func_80085E7C(M2C_UNK);                     /* extern */
-extern void (*L2_D_800A100C)(void);
-extern M2C_UNK (*L2_D_800A1078)(s16);
 void L2_func_8006E9D0(s32 arg0, s32 arg1);
 void L2_func_800637D0(void);
 extern s32 L2_D_800F4458;
 void L2_func_80063A54(void *arg0);
 extern s32 L2_D_800A0CD4;
-extern Ent34 L2_D_800E1628[];
-extern s32 L2_D_800E6694;
-extern M2C_UNK L2_D_800AF0A0;
-void L2_func_80030504();
-extern M2C_UNK L2_D_800AF09C;
 void L2_func_80063630();
 extern u8 *L2_D_800A1C74;
 extern u8 L2_D_800DCD68[];
 extern s32 L2_D_800E1554[];
+extern Ent34 L2_D_800E1628[];
+extern s32 L2_D_800E6694;
+void L2_func_80030504();
+extern M2C_UNK L2_D_800AF09C;
+extern M2C_UNK L2_D_800AF0A0;
 void L2_func_80061F64(void);
 void L2_func_80063E4C(void *arg0);
 void L2_func_80064C38(u8 *arg0);
@@ -2069,7 +2067,6 @@ void L2_func_80064F24(void *arg0);
 void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
-// D_8009CDD4 -> L2_D_800A100C (L2 own)
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_8005CAB8(s32);                         /* extern */
 s32 func_8005CAF0(M2C_UNK *, void *);               /* extern */
