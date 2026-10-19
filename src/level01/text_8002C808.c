@@ -1127,6 +1127,17 @@ typedef struct { u8 pad[4]; u8 active; u8 type; u8 pad2[0x11E]; } ObjEnt;
 typedef struct { u8 pad0[4]; u8 active; u8 pad5; u8 id; u8 pad7[0x59]; s32 busy; u8 pad64[0x24]; s32 owner; u8 pad8C[0x98]; } Ent124;
 typedef struct { s32 unk0; char name[0x64]; u8 unk68; u8 unk69; u8 pad[2]; } SaveSlot;
 typedef struct { s32 m[8]; } GsMat32;
+extern char D_800A7EFC[];
+void func_8004C368(s32, u8 *);
+s32 func_800752E8(u8);
+extern char D_800A773C[];
+extern char D_800A76E4[];
+extern char D_800A76F8[];
+extern char D_800A7714[];
+extern char D_800A7728[];
+s32 func_80031F18(void);
+s32 func_8007D2B4(RECT16 *, RECT16 *);
+s32 func_8007DA88(s32, s32);
 extern u8 D_800A8D34[];
 extern GsMat32 D_800FC6A0;
 extern u8 D_8009D8DD;
@@ -1693,7 +1704,7 @@ extern s16 D_8009D126;
 extern M2C_UNK D_800A87A0;
 extern M2C_UNK D_800A87B0;
 extern M2C_UNK D_800A87C0;
-M2C_UNK func_80030994(u8 *);                        /* extern */
+void func_80030994(u8 *arg0);
 void func_80030D08(u8 arg0, u8 *buf, u8 *name);
 void func_80030F20(void);
 extern s8 D_800A9604;
@@ -3378,7 +3389,46 @@ void func_80030868(void) {
     SsVabTransCompleted(1);
 }
 
+#ifdef NON_MATCHING
+void func_80030994(u8 *arg0) {
+    RECT16 r1;
+    RECT16 r2;
+    s32 buf;
+    RECT16 *a;
+    RECT16 *b;
+    buf = func_80031F18();
+    a = &r1;
+    b = &r2;
+    a->x = 0x200;
+    a->h = 0x80;
+    a->w = 0x140;
+    a->y = 0x100;
+    b->x = 0x200;
+    b->y = 0x1CD;
+    b->w = 0x100;
+    b->h = 6;
+    if (func_8007D2B4(a, b) != 0) {
+        printf(&D_800A7678, &D_800A76A0, 0x15A);
+        exit(1);
+    }
+    func_8006B230(1, (s32)D_800A773C);
+    func_8002C168((M2C_UNK *)arg0, buf);
+    func_8006B230(func_8007DA88(buf, 0) == 0, (s32)D_800A76E4);
+    buf += 0x5258;
+    func_8006B230(func_8007DA88(buf, 1) == 0, (s32)D_800A76F8);
+    buf += 0x5258;
+    if (strcmp(D_800D2F48[2], (char *)&D_800A770C) != 0) {
+        func_8006B230(func_8007DA88(buf, 2) == 0, (s32)D_800A7714);
+        buf += 0x5258;
+    }
+    if (strcmp(D_800D2F48[3], (char *)&D_800A770C) != 0) {
+        func_8006B230(func_8007DA88(buf, 3) == 0, (s32)D_800A7728);
+    }
+    func_800303B4(1);
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80030994);
+#endif
 
 void func_80030B04(char *arg0) {
     Buf10 sp10;
@@ -6659,7 +6709,56 @@ no_slot:
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80039A9C);
 #endif
 
+#ifdef NON_MATCHING
+u8 *func_8003A51C(arg0, type, sub)
+s32 arg0;
+u8 type;
+u8 sub;
+{
+    s32 i;
+    u8 *e;
+    u8 *p;
+    if (type == 0) {
+        if (g_Args->cdArchive == 0) {
+            sprintf(D_800B0BC0, D_800A7EFC, 0, sub, D_8009CDA8);
+            func_8006B1DC((s32)D_800B0BC0);
+        }
+        return 0;
+    }
+    if (sub != 10) {
+        return 0;
+    }
+    i = D_800B0DA4;
+    e = (u8 *)D_800AFFC8 + i * 0x124;
+    for (; i <= D_800B07B4; i++, e += 0x124) {
+        if (e[4] == 0) {
+            goto found;
+        }
+    }
+    return 0;
+found:
+    func_8004C368(type, e);
+    e[5] = sub;
+    *(s32 *)(e + 0x94) = 0;
+    *(s32 *)(e + 0x114) = func_800752E8(e[6]);
+    if (*(s32 *)(e + 0x114) != 0) {
+        p = e;
+        p[0xB] = 1;
+        p[0xA4] = 0;
+        p[5] = sub;
+        *(s32 *)(p + 0x30) = 0;
+        *(s32 *)(p + 0x88) = arg0;
+        *(s32 *)(p + 0x8C) = 0;
+        p[4] = 1;
+        *(s32 *)(p + 0x2C) = D_8009CDA8;
+    } else {
+        p = (u8 *)func_800393E4(e);
+    }
+    return p;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8003A51C);
+#endif
 
 #ifdef NON_MATCHING
 u8 *func_8003A68C(void) {
