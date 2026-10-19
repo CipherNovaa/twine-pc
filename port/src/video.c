@@ -7,6 +7,7 @@
 #include <SDL3/SDL.h>
 #include "port.h"
 #include "gpu.h"
+#include "intro.h"
 
 extern u16 port_pad_buttons[2];
 extern u8 port_pad_sticks[2][4];
@@ -127,22 +128,25 @@ static u8 axis(Sint16 v) {
     return (u8)((v + 32768) >> 8);
 }
 
+static void window_event(const SDL_Event *e) {
+    if (e->type == SDL_EVENT_QUIT)
+        exit(0);
+    if (e->type == SDL_EVENT_GAMEPAD_ADDED && !gamepad)
+        gamepad = SDL_OpenGamepad(e->gdevice.which);
+    if (e->type == SDL_EVENT_GAMEPAD_REMOVED && gamepad && e->gdevice.which == SDL_GetGamepadID(gamepad)) {
+        SDL_CloseGamepad(gamepad);
+        gamepad = NULL;
+    }
+}
+
 static void poll_input(void) {
     SDL_Event e;
     const bool *keys;
     u16 down = 0;
     u8 lx = 0x80, ly = 0x80, rx = 0x80, ry = 0x80;
     size_t i;
-    while (SDL_PollEvent(&e)) {
-        if (e.type == SDL_EVENT_QUIT)
-            exit(0);
-        if (e.type == SDL_EVENT_GAMEPAD_ADDED && !gamepad)
-            gamepad = SDL_OpenGamepad(e.gdevice.which);
-        if (e.type == SDL_EVENT_GAMEPAD_REMOVED && gamepad && e.gdevice.which == SDL_GetGamepadID(gamepad)) {
-            SDL_CloseGamepad(gamepad);
-            gamepad = NULL;
-        }
-    }
+    while (SDL_PollEvent(&e))
+        window_event(&e);
     keys = SDL_GetKeyboardState(NULL);
     for (i = 0; i < sizeof(keymap) / sizeof(keymap[0]); i++)
         if (keys[keymap[i].key])
@@ -212,6 +216,51 @@ static void present(void) {
     if (!gpu_display.blank)
         SDL_RenderTexture(renderer, texture, &src, NULL);
     SDL_RenderPresent(renderer);
+}
+
+/* ---- the intro (intro.c), before the game: its frames don't count as the game's ---- */
+
+int port_video_headless(void) {
+    return headless;
+}
+
+void *port_video_renderer(void) {
+    return renderer;
+}
+
+void port_video_show_gpu(void) {
+    if (headless)
+        return;
+    RT_ENTER();
+    present();
+    RT_LEAVE();
+}
+
+void port_video_dump_gpu(const char *path) {
+    RT_ENTER();
+    dump_display(path);
+    RT_LEAVE();
+}
+
+/* Pump window events; 1 when Start, Cross, Enter or Esc has been pressed. */
+int port_video_poll_skip(void) {
+    SDL_Event e;
+    int skip = 0;
+    if (headless)
+        return 0;
+    RT_ENTER();
+    while (SDL_PollEvent(&e)) {
+        window_event(&e);
+        if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat &&
+            (e.key.scancode == SDL_SCANCODE_RETURN || e.key.scancode == SDL_SCANCODE_ESCAPE ||
+             e.key.scancode == SDL_SCANCODE_SPACE || e.key.scancode == SDL_SCANCODE_Z))
+            skip = 1;
+        if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN &&
+            (e.gbutton.button == SDL_GAMEPAD_BUTTON_START || e.gbutton.button == SDL_GAMEPAD_BUTTON_SOUTH))
+            skip = 1;
+    }
+    RT_LEAVE();
+    return skip;
 }
 
 extern u32 gpu_stats[8];

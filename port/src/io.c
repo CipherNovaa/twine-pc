@@ -183,6 +183,15 @@ void port_dma_callback(int ch, void *fn) {
         dma_callback[ch] = fn;
 }
 
+/* The BIOS boot animation (intro.c) drives the GPU and SPU through these ports before the game starts;
+ * afterwards their state goes back to power-on. */
+void port_io_reset(void) {
+    gp0_have = gp0_need = 0;
+    gpu_read_x = gpu_read_y = gpu_read_w = gpu_read_h = gpu_read_pos = 0;
+    gpustat_disp = 0x00800000;
+    spu_xfer_addr = 0;
+}
+
 /* ---- register access ---- */
 
 u32 port_io_read(u32 addr, int size) {

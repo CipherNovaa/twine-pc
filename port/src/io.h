@@ -10,5 +10,8 @@ extern u32 spu_xfer_addr;
 u16 spu_read(u32 reg);           /* reg = halfword index from 0x1F801C00 */
 void spu_write(u32 reg, u16 v);
 void port_dma_callback(int ch, void *fn);
+u32 port_io_read(u32 addr, int size);
+void port_io_write(u32 addr, u32 value, int size);
+void port_io_reset(void);        /* GPU/SPU port state back to power-on (after the intro) */
 
 #endif

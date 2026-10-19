@@ -7,6 +7,8 @@ workbench/
 *.img
 *.pbp
 *.bios
+# the user's PS1 BIOS, where the native port's boot animation looks for it
+bios/
 
 # Ghidra project databases embed the game's code
 tools/ghidra_projects/
@@ -31,6 +33,7 @@ tools/decomp-permuter/
 *.o
 port.log
 shot_*.ppm
+intro_*.ppm
 __pycache__/
 
 # Claude Code worktrees and local state

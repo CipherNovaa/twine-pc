@@ -16,6 +16,10 @@ int spu_set_clock(int mode); /* 0 if the mode can't be used (no mutex for SPU_CL
 /* Run the SPU for `frames` 44100 Hz ticks, writing interleaved stereo (L, R) to out (NULL: discard). */
 void spu_render(s16 *out, int frames);
 
+void spu_reset(void);       /* power-on state (after the intro) */
+void spu_set_sink(void (*fn)(const s16 *out, int frames)); /* SPU_CLOCK_HOST: where its samples go */
+
 void port_audio_init(void); /* audio.c: open the audio device (not with TWINE_HEADLESS) */
+void port_audio_wav(const s16 *samples, int frames); /* audio.c: into TWINE_WAV (headless), if set */
 
 #endif

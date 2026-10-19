@@ -462,6 +462,22 @@ void gpu_gp0(const u32 *w, int n) {
     }
 }
 
+/* Back to the power-on state, after the BIOS boot animation (intro.c) has drawn with this GPU. */
+void gpu_reset(void) {
+    static const GpuDisplay power_on = {0, 0, 320, 240, 0, 1};
+    memset(gpu_vram, 0, sizeof(gpu_vram));
+    memset(gpu_stats, 0, sizeof(gpu_stats));
+    gpu_poly_log = 0;
+    gpu_display = power_on;
+    area_x1 = area_y1 = 0;
+    area_x2 = 1023;
+    area_y2 = 511;
+    off_x = off_y = 0;
+    texpage = 0;
+    tw_mask_x = tw_mask_y = tw_off_x = tw_off_y = 0;
+    mask_set = mask_check = dither_on = 0;
+}
+
 /* drawing environment from libgpu's PutDrawEnv */
 void gpu_set_draw_area(s32 x1, s32 y1, s32 x2, s32 y2) {
     area_x1 = x1;

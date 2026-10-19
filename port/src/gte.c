@@ -35,6 +35,13 @@ static u32 C[32]; /* control registers */
 #define ZSF3 ((s32)(s16)C[29])
 #define ZSF4 ((s32)(s16)C[30])
 
+/* Back to the power-on state (all registers zero), after the BIOS boot animation (intro.c). */
+void GTE_reset(void) {
+    int i;
+    for (i = 0; i < 32; i++)
+        D[i] = C[i] = 0;
+}
+
 static u32 flag_with_error(void) {
     return (FLAG & 0x7FFFF000) | ((FLAG & 0x7F87E000) ? 0x80000000 : 0);
 }

@@ -34,6 +34,10 @@ $(RT_OUT)/%.o: $(ROOT)/port/src/%.c $(wildcard $(ROOT)/port/src/*.h) $(wildcard 
 	@mkdir -p $(dir $@)
 	$(CC) $(RT_CFLAGS) -c $< -o $@
 
+# The title card draws per pixel in floating point: SSE2 (vectorized) instead of the x87 unit 32-bit code
+# defaults to.
+$(RT_OUT)/intro_card.o: RT_CFLAGS += -O3 -msse2 -mfpmath=sse -fno-math-errno
+
 # One module: $(1) = its name
 define MODULE
 $(1)_OUT := $(PB)/$(1)

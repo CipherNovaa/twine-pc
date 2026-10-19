@@ -528,7 +528,14 @@ static void unlock(void) {
         SDL_UnlockMutex(mutex);
 }
 
-/* SPU_CLOCK_HOST: run the samples due since the last register access (at most half a second's worth). */
+static void (*sink)(const s16 *out, int frames);
+
+void spu_set_sink(void (*fn)(const s16 *out, int frames)) {
+    sink = fn;
+}
+
+/* SPU_CLOCK_HOST: run the samples due since the last register access (at most half a second's worth),
+ * into the sink if there is one (TWINE_WAV). */
 static void catch_up(void) {
     u64 due;
     s32 frames;
@@ -541,7 +548,37 @@ static void catch_up(void) {
         host_samples = due - 22050;
     frames = (s32)(due - host_samples);
     host_samples = due;
-    render(NULL, frames);
+    if (!sink) {
+        render(NULL, frames);
+        return;
+    }
+    while (frames > 0) {
+        s16 buf[512 * 2];
+        int n = frames < 512 ? frames : 512;
+        render(buf, n);
+        sink(buf, n);
+        frames -= n;
+    }
+}
+
+/* Back to the power-on state (silent, sound RAM cleared), after the BIOS boot animation (intro.c). */
+void spu_reset(void) {
+    lock();
+    memset(voices, 0, sizeof(voices));
+    endx = 0;
+    memset(main_vol, 0, sizeof(main_vol));
+    memset(main_vol_counter, 0, sizeof(main_vol_counter));
+    noise_timer = 0;
+    noise_level = 0;
+    rv_cur = rv_pos = 0;
+    memset(rv_in, 0, sizeof(rv_in));
+    memset(rv_out, 0, sizeof(rv_out));
+    rv_write_on = 0;
+    memset(spu_regs, 0, sizeof(spu_regs));
+    memset(spu_ram, 0, sizeof(spu_ram));
+    host_start_ns = host_ns();
+    host_samples = 0;
+    unlock();
 }
 
 void spu_render(s16 *out, int frames) {

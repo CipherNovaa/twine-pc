@@ -16,6 +16,7 @@
 #include "port.h"
 #include "module.h"
 #include "spu.h"
+#include "intro.h"
 
 const PortModule *port_module, *port_boot;
 
@@ -331,12 +332,14 @@ int main(int argc, char **argv) {
         sa.sa_flags = SA_SIGINFO | SA_NODEFER;
         sigaction(SIGSEGV, &sa, NULL);
     }
+    port_video_init();
+    port_audio_init();
+    if (level < 1 || level > 11)
+        port_intro(); /* the console's boot animation and the port's title card; they leave the machine as it was */
     kernel_tables();
     port_boot = port_module = find_module("boot");
     load_exe("SLUS_012.72"); /* the stub stays resident below the others (g_Args lives in its data) */
     install_trampolines(port_boot);
-    port_video_init();
-    port_audio_init();
     if (level < 1 || level > 11) {
         port_irq_start();
         boot_start();

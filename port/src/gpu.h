@@ -12,6 +12,7 @@ typedef struct {
 extern GpuDisplay gpu_display;
 
 void gpu_gp0(const u32 *words, int n);
+void gpu_reset(void);
 void gpu_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src);
 void gpu_store_image(s32 x, s32 y, s32 w, s32 h, u16 *dst);
 void gpu_move_image(s32 sx, s32 sy, s32 w, s32 h, s32 dx, s32 dy);
