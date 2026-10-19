@@ -21,8 +21,10 @@ typedef struct {
 } PortFunc;
 extern const PortFunc port_funcs[];
 extern const int port_func_count;
+extern const int port_level;                  /* which level this build is */
+extern s32 (*const port_game_main)(s32, void *); /* the level's main (native or recompiled) */
+extern const u32 port_bss_start, port_bss_end;
 
-s32 game_main(s32 argc, void *args);
 
 static FILE *log_file;
 
@@ -242,16 +244,18 @@ static void boot_init_args(s32 level) {
 }
 
 int main(int argc, char **argv) {
-    const char *exe = argc > 1 ? argv[1] : "build/level01/level01.exe";
-    const char *boot = argc > 2 ? argv[2] : "workbench/extracted/SLUS_012.72";
-    s32 level = 1, r;
+    char exe_default[64];
+    const char *exe, *boot = argc > 2 ? argv[2] : "workbench/extracted/SLUS_012.72";
+    s32 level = port_level, r;
+    snprintf(exe_default, sizeof(exe_default), "build/level%02d/level%02d.exe", level, level);
+    exe = argc > 1 ? argv[1] : exe_default;
     log_file = fopen("port.log", "w");
     load_exe(boot); /* resident stub data (g_Args lives in it) */
     load_exe(exe);
     install_trampolines();
     boot_init_args(level);
     /* start(): clear the level's BSS */
-    memset((void *)0x800AB540, 0, 0x800FDB2C - 0x800AB540);
+    memset((void *)port_bss_start, 0, port_bss_end - port_bss_start);
     {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
@@ -262,7 +266,7 @@ int main(int argc, char **argv) {
     port_video_init();
     port_audio_init();
     port_irq_start();
-    r = game_main(1, (void *)ARGS_ADDR);
+    r = port_game_main(1, (void *)ARGS_ADDR);
     port_log("game main returned %d\n", r);
     return 0;
 }

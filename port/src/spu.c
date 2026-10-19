@@ -222,7 +222,8 @@ static void adsr_tick(Voice *v, const u16 *reg) {
     case ENV_ATTACK: /* increase to 7FFFh */
         v->level = envelope_tick(v->level, &v->env_counter, (a1 >> 10) & 0x1F, (a1 >> 8) & 3, a1 >> 15, 0, 0);
         if (v->level >= 0x7FFF) {
-            v->phase = ENV_DECAY;
+            /* sustain level Fh (8000h) is reached at once: no decay */
+            v->phase = v->level <= ((a1 & 0xF) + 1) * 0x800 ? ENV_SUSTAIN : ENV_DECAY;
             v->env_counter = 0;
         }
         break;

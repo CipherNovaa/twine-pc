@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "port"))
-from gen_native import HOST_LIBC, nm, ps1_symbols  # noqa: E402
+from gen_native import HOST_LIBC, nm, ps1_symbols, psyq_names  # noqa: E402
 
 # Calls between native and recompiled code carry this many arguments: $a0-$a3 and the rest from the PS1
 # stack (sp+16...). Extra ones are harmless: native callees ignore them, recompiled ones never read them.
@@ -48,6 +48,12 @@ def functions(level):
                 last = int(words[-1], 16)
                 out.append((m.group(1), addr[m.group(1)], last + 4 - addr[m.group(1)]))
     out = sorted(set(out), key=lambda f: f[1])
+    # main can be a label inside another asm function (start jumps there): give it an entry of its own
+    main = main_address(level)
+    if all(a != main for _, a, _ in out):
+        owner = next(((n, a, s) for n, a, s in out if a < main < a + s), None)
+        if owner:
+            out.append(("port_recomp_main", main, owner[1] + owner[2] - main))
     out += data_code(level, out, addr)
     out = sorted(set(out), key=lambda f: f[1])
     # padding after a function belongs to it (code can fall through it into the next function)
@@ -57,6 +63,17 @@ def functions(level):
         if 0 < gap <= 16:
             out[k] = (n, a, s + gap)
     return out, addr
+
+
+def main_address(level):
+    """the game's main: where the EXE's entry point (start) jumps"""
+    exe = (ROOT / f"build/{level}/{level}.exe").read_bytes()
+    pc0, load = int.from_bytes(exe[0x10:0x14], "little"), int.from_bytes(exe[0x18:0x1C], "little")
+    for k in range(16):
+        w = int.from_bytes(exe[0x800 + pc0 - load + 4 * k:0x804 + pc0 - load + 4 * k], "little")
+        if w >> 26 == 2:
+            return (pc0 & 0xF0000000) | ((w & 0x3FFFFFF) << 2)
+    return None
 
 
 def data_code(level, funcs, addr):
@@ -312,6 +329,7 @@ class Gen:
         exe = (ROOT / f"build/{level}/{level}.exe").read_bytes()
         self.exe, self.base = exe, int.from_bytes(exe[0x18:0x1C], "little") - 0x800
         self.used_natives = set()
+        self.main_addr = addr_of.get("game_main")
 
     def word(self, a):
         o = a - self.base
@@ -482,8 +500,7 @@ class Gen:
 def main():
     level, out = sys.argv[1], sys.argv[2]
     native = {f[2] for f in nm(sys.argv[3:]) if len(f) == 3 and f[1] in "TW"}
-    names = dict(l.split() for l in (ROOT / "port/psyq_names.txt").read_text().splitlines()
-                 if l.strip() and not l.startswith("#"))
+    names = psyq_names(level)
     native |= {n for n, t in names.items() if t in native}
     funcs, addr_of = functions(level)
     # natively implemented names keep their native version; host libc names use the host's
