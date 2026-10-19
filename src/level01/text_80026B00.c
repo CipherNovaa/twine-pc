@@ -28,6 +28,7 @@ s32 rand();
 extern char D_800A6ED0[];
 extern char D_800A6EF8[];
 typedef struct { u16 w; u8 pad2[0xA]; u16 x; u16 y; char text[0x50]; } TextEnt;
+void func_80081A08(u8 *);
 void func_80027394(s32 pos, s16 voice, s32 id, s32 flags);
 extern u8 D_800AB754[];
 extern u16 D_800AB5E0;
@@ -181,7 +182,16 @@ s32 func_80026D08(u32 id, s32 flags) {
     return ret;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80026ED0);
+s32 func_80026ED0(void) {
+    u8 buf[0x18];
+    s32 n = 0;
+    s32 i;
+    func_80081A08(buf);
+    for (i = 0; i < 0x18; i++) {
+        if (buf[i] == 1) n++;
+    }
+    return n;
+}
 
 s32 func_80026F30(u32 id, s32 flags) {
     u8 vol;

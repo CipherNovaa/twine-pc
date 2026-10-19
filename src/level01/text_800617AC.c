@@ -684,7 +684,7 @@ s32 func_80035BBC(u8 *obj);
 
 extern s32 D_800A7CB8;
 void func_80076B9C(void *arg0);
-void func_8006417C(s32, s32, s32, s32, s32);
+Ent34 *func_8006417C(s16 arg0, s16 arg1, s16 arg2, s16 arg3, s16 arg4);
 
 
 extern s32 D_8009CE28;
@@ -1031,6 +1031,12 @@ typedef struct { TerrVert *verts; TerrVCache *cache; s32 pad8; TerrCol *cols; u8
 typedef struct { u32 active : 1; u32 life : 5; u32 f6 : 3; u32 f9 : 3; u32 state : 4; u32 pad16 : 16; s32 unk4; } SparkHdr;
 typedef struct { u32 pad0 : 11; u32 f11 : 1; u32 f12 : 1; u32 pad13 : 19; } WFlags;
 typedef struct { s16 sin; s16 cos; } SinCos;
+extern u16 D_8009E4A0;
+extern s32 D_8009E4B0;
+extern s32 D_8009E4AC;
+s32 func_800697C8(void *a);
+u8 *func_80033420(s32 *, s32, s32, s32);
+void func_8006484C(void *arg0);
 extern s32 D_8009DB40;
 extern s32 D_8009DB48;
 extern s32 D_8009DB4C;
@@ -2329,7 +2335,24 @@ s32 *func_8006412C(void) {
     return NULL;
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006417C);
+Ent34 *func_8006417C(s16 arg0, s16 arg1, s16 arg2, s16 arg3, s16 arg4) {
+    Ent34 *e;
+    e = func_800637B0(arg0, arg1, arg2);
+    if (e == NULL) {
+        return NULL;
+    }
+    {
+        *(s32 *)((u8*)e + 0x10) = arg3;
+        *(void **)((u8*)e + 0x20) = func_8006484C;
+        *(void **)((u8*)e + 0x24) = func_80064C28;
+        *(void **)((u8*)e + 0x28) = func_80063EF8;
+        *(s16 *)((u8*)e + 0x14) = 3;
+        *(s16 *)((u8*)e + 0x18) = 1;
+        *(s16 *)((u8 *)e + 0x1E) = arg4;
+        ((u8*)e)[0x1D] = 2;
+    }
+    return e;
+}
 
 void *func_8006421C(void *obj, s16 *pos, s16 arg2, s16 arg3, s16 arg4) {
     Ent34 *e;
@@ -3300,7 +3323,9 @@ void func_80069618(void) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_80069684);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_800697C8);
+s32 func_800697C8(void *a) {
+    return func_80027248((D_800E02B8 == 1 && func_8004A370() != 0) ? 0x42 : 0x40, M2C_FIELD(a, s32 *, 0x90) + 0x14, 0);
+}
 
 void func_8006981C(s32 arg0) {
   void *temp_v0;
@@ -3553,7 +3578,27 @@ void func_80069D60(u8 *obj) {
   }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006A0D8);
+u8 *func_8006A0D8(void) {
+    s32 sp[2];
+    u8 *e;
+    u8 *p;
+    s32 m;
+    sp[0] = 0;
+    sp[1] = 0;
+    e = func_80033420(sp, D_8009D30C, 0x01100000, 0);
+    if (e != NULL) {
+        *(s32 *)(e + 0x34) = 0x1F4;
+        *(s32 *)(e + 0x68) = (*(s32 *)(e + 0x68) & ~0x380) | 0x80;
+        m = 0x200000;
+        *(s32 *)(e + 0x48) |= m;
+        p = *(u8 **)(e + 0x118);
+        if (p != NULL) {
+            *(s32 *)(p + 0x10) |= 4;
+            *(s32 *)*(u8 **)(e + 0x118) |= m;
+        }
+    }
+    return e;
+}
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006A174);
 
@@ -3567,11 +3612,38 @@ void func_8006A3E0(void) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006A41C);
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006A700);
+void func_8006A700(void *a) {
+    u16 v = D_8009E4C0;
+    s32 q = ((s32)(v << 16) >> 5) / D_8009E4AC;
+    M2C_FIELD(a, s16 *, 0x50) = 0;
+    M2C_FIELD(a, s8 *, 0xA5) = 2;
+    M2C_FIELD(a, u16 *, 0x52) = v;
+    M2C_FIELD(a, s16 *, 0xA0) = q;
+}
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006A75C);
+void func_8006A75C(u8 *arg0) {
+    u16 u;
+    u16 t = D_8009E4C0;
+    s32 d = -((s32)(t << 16) >> 5);
+    d = d / D_8009E4B0;
+    u = D_8009E4A0;
+    arg0[0xA5] = 3;
+    *(u16 *)(arg0 + 0x52) = t;
+    *(u16 *)(arg0 + 0x50) = u;
+    *(s16 *)(arg0 + 0xA0) = d;
+}
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006A7C4);
+void func_8006A7C4(u8 *arg0) {
+    u16 u;
+    u16 t = D_8009E4C0;
+    s32 d = (s32)(t << 16) >> 5;
+    d = d / D_8009E4B0;
+    u = D_8009E4A0;
+    arg0[0xA5] = 4;
+    *(u16 *)(arg0 + 0x52) = t;
+    *(u16 *)(arg0 + 0x50) = u;
+    *(s16 *)(arg0 + 0xA0) = d;
+}
 
 void func_8006A828(void *arg0) {
   ((struct 
