@@ -46,8 +46,8 @@ def main():
     if not any(l.startswith("\t.word\t$L") for l in lines):
         sys.stdout.write("\n".join(lines))
         return
-    # Drop the jump tables (.rdata blocks holding only a label and `.word $Ln` entries), noting their owner.
-    out, gcc_tables, func, i = [], {}, None, 0
+    # Find the jump tables (.rdata blocks holding only a label and `.word $Ln` entries) and their owners.
+    spans, gcc_tables, func, i = {}, {}, None, 0
     while i < len(lines):
         m = re.match(r"\t\.ent\t(\w+)", lines[i])
         if m:
@@ -60,29 +60,39 @@ def main():
             if body and re.fullmatch(r"\$L\d+:", body[0]) and body[1:] and \
                     all(re.fullmatch(r"\t\.word\t\$L\d+", l) for l in body[1:]):
                 gcc_tables[body[0][:-1]] = (func, [l.split("\t")[-1] for l in body[1:]])
+                spans[body[0][:-1]] = (i, j)
                 i = j + 1
                 continue
-        out.append(lines[i])
         i += 1
 
     # Uses in instructions: `lui %hi($Ln)` at -O2, `la $4,$Ln` at -O0.
-    insns = "\n".join(l for l in out if not l.endswith(":") and not l.startswith("\t.word"))
+    insns = "\n".join(l for l in lines if not l.endswith(":") and not l.startswith("\t.word"))
     blob, rename, labels = blob_tables(level), {}, {}
     for f in dict.fromkeys(owner for owner, _ in gcc_tables.values()):
         used = [l for l in dict.fromkeys(re.findall(r"\$L\d+", insns)) if gcc_tables.get(l, (None,))[0] == f]
         targets = target_tables(level, f)
+        f_rename, f_labels, why = {}, {}, None
         if len(used) != len(targets):
-            sys.exit(f"jtbl_fix: {f} has {len(used)} switch tables, the original uses {len(targets)}")
-        for lab, jt in zip(used, targets):
+            why = f"{len(used)} switch tables, the original uses {len(targets)}"
+        for lab, jt in zip(used, targets) if not why else ():
             entries = gcc_tables[lab][1]
             if len(entries) > len(blob.get(jt, [])):
-                sys.exit(f"jtbl_fix: {f}: {lab} has {len(entries)} entries, {jt} has {len(blob.get(jt, []))}")
-            rename[lab] = jt
+                why = f"{lab} has {len(entries)} entries, {jt} has {len(blob.get(jt, []))}"
+                break
+            f_rename[lab] = jt
             for e, t in zip(entries, blob[jt]):
                 if not t.startswith("jtgt_"):
                     continue  # raw addresses (fresh split, before make_shiftable): nothing to define
-                if labels.setdefault(e, t) != t:
-                    sys.exit(f"jtbl_fix: {f}: {e} would be both {labels[e]} and {t}")
+                if f_labels.setdefault(e, t) != t or labels.get(e, t) != t:
+                    why = f"{e} would be both {f_labels[e]} and {t}"
+        if why:
+            # Leave gcc's own tables (fine for NON_MATCHING code; a matching build fails its checksum).
+            print(f"jtbl_fix: {f}: {why}; keeping gcc's tables", file=sys.stderr)
+            continue
+        rename.update(f_rename)
+        labels.update(f_labels)
+    drop = {k for lab in rename for k in range(spans[lab][0], spans[lab][1] + 1)}
+    out = [l for k, l in enumerate(lines) if k not in drop]
 
     text = "\n".join(out)
     for lab, jt in rename.items():

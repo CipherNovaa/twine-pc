@@ -15713,7 +15713,6 @@ void func_800509E4(void *x) {
     b[0] = 0; b[1] = -0x5DC; b[2] = -0x32;
 }
 
-#ifdef NON_MATCHING
 s32 func_80050A10(VECTOR *arg0, VECTOR *arg1, u8 *arg2, void *arg3) {
     s16 a[4];
     s16 b[4];
@@ -15723,9 +15722,6 @@ s32 func_80050A10(VECTOR *arg0, VECTOR *arg1, u8 *arg2, void *arg3) {
     }
     return 0;
 }
-#else
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80050A10);
-#endif
 
 #ifdef NON_MATCHING
 u8 *func_80050A70(s32 *arg0, s32 *arg1, u8 *arg2, s32 arg3) {
