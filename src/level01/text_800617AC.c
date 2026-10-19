@@ -1048,6 +1048,9 @@ typedef struct { u8 b[8]; } B8;
 typedef struct { u8 b[12]; } B12;
 typedef struct { s32 w[10]; } W40;
 typedef struct { u8 b[20]; } B20;
+typedef struct { u32 tag; u8 r0, g0, b0, code; s16 x0, y0; u8 u0, v0; u16 clut; u8 r1, g1, b1, p1; s16 x1, y1; u8 u1, v1; u16 tpage; u8 r2, g2, b2, p2; s16 x2, y2; u8 u2, v2; u16 pad2; u8 r3, g3, b3, p3; s16 x3, y3; u8 u3, v3; u16 pad3; } POLY_GT4;
+typedef struct { s32 pad0; s32 rows; s32 cols; s32 w; s32 h; s32 *tiles; } SkyGrid;
+extern s32 D_8009E9BC;
 #define FA65(o) (*(s16 *)((u8 *)arg0 + (o)))
 void func_8004B334(s32 arg0);
 void func_8004A8A8(s8 arg0, s8 arg1, s8 arg2, s16 arg3);
@@ -5802,7 +5805,98 @@ void func_8006F6AC(void) {
     func_8006E9E0(D_800E2DBC);
 }
 
+#ifdef NON_MATCHING
+void func_8006F784(void) {
+    s32 db;
+    s32 *tile;
+    s32 rows;
+    s32 cols;
+    s32 x0;
+    s32 x;
+    s32 x2;
+    s32 y;
+    s32 y2;
+    s32 r;
+    s32 c;
+    s32 a;
+    u32 *ot;
+    u8 *prim;
+
+    tile = ((SkyGrid *)D_800E2E44)->tiles;
+    rows = ((SkyGrid *)D_800E2E44)->rows;
+    cols = ((SkyGrid *)D_800E2E44)->cols;
+    x0 = 0x100 - (((M2C_FIELD(&g_Camera, u16 *, 0x82) & 0xFFF) * D_800E2E48) >> 12);
+    x = x0 + D_800E2E48;
+    db = D_800B8F24;
+    ot = D_800B8F88[db].tag;
+    if (x < 0x200) {
+        x0 = x;
+    }
+    a = M2C_FIELD(&g_Camera, u16 *, 0x80) & 0xFFF;
+    if (a > 0x800) {
+        a -= 0x1000;
+    }
+    y = (a * D_8009E9BC) >> 12;
+    for (r = 0; r < rows; r++) {
+        y2 = y + ((SkyGrid *)D_800E2E44)->h;
+        if (y2 < 0) {
+            tile += cols * 2;
+        } else {
+            if (y >= 0xF0) {
+                break;
+            }
+            x = x0;
+            for (c = 0; c < cols; c++) {
+                x2 = x + ((SkyGrid *)D_800E2E44)->w;
+                if (x2 >= 0) {
+                    if (x >= 0x200) {
+                        x -= D_800E2E48;
+                        x2 = x + ((SkyGrid *)D_800E2E44)->w;
+                        if (x2 < 0) {
+                            goto next;
+                        }
+                    }
+                    if (tile[0] == 0) {
+                        prim = (u8 *)tile[1];
+                        if (db != 0) {
+                            prim += 0x34;
+                        }
+                        ((POLY_GT4 *)prim)->x0 = x;
+                        ((POLY_GT4 *)prim)->y0 = y;
+                        ((POLY_GT4 *)prim)->x1 = x2;
+                        ((POLY_GT4 *)prim)->y1 = y;
+                        ((POLY_GT4 *)prim)->x2 = x;
+                        ((POLY_GT4 *)prim)->y2 = y2;
+                        ((POLY_GT4 *)prim)->x3 = x2;
+                        ((POLY_GT4 *)prim)->y3 = y2;
+                    } else {
+                        prim = (u8 *)tile[1];
+                        if (db != 0) {
+                            prim += 0x24;
+                        }
+                        ((POLY_G4 *)prim)->x0 = x;
+                        ((POLY_G4 *)prim)->y0 = y;
+                        ((POLY_G4 *)prim)->x1 = x2;
+                        ((POLY_G4 *)prim)->y1 = y;
+                        ((POLY_G4 *)prim)->x2 = x;
+                        ((POLY_G4 *)prim)->y2 = y2;
+                        ((POLY_G4 *)prim)->x3 = x2;
+                        ((POLY_G4 *)prim)->y3 = y2;
+                    }
+                    ((PTag *)prim)->addr = ((PTag *)ot)->addr;
+                    ((PTag *)ot)->addr = (u32)prim;
+                }
+            next:
+                x = x2;
+                tile += 2;
+            }
+        }
+        y = y2;
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_8006F784);
+#endif
 
 void func_8006F9A4(s32 arg0) {
     struct { u8 c[4]; } *col;

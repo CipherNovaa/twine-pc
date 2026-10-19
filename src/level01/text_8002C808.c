@@ -1124,6 +1124,15 @@ typedef struct { u8 pad0[0xA]; u8 unkA; u8 padB[0x3D]; s32 flags48; u8 pad4C[0x3
 typedef struct { u32 lo : 8; u32 analog : 1; u32 hi : 23; } Flags2;
 typedef s32 MainFn(s32 arg0, Args *arg1);
 typedef struct { u8 pad[4]; u8 active; u8 type; u8 pad2[0x11E]; } ObjEnt;
+typedef struct { u8 pad0[4]; u8 active; u8 pad5; u8 id; u8 pad7[0x59]; s32 busy; u8 pad64[0x24]; s32 owner; u8 pad8C[0x98]; } Ent124;
+void func_80044B04(void *arg0, s16 arg1, s16 arg2, s16 arg3, s32 arg4, s32 arg5, s32 arg6, s32 arg7, s32 arg8);
+extern POLY_FT4 D_800D7C64[];
+extern char D_800A7DF4[];
+extern char D_800A7E14[];
+extern s16 D_800AFF58;
+extern s16 D_800B05AC;
+extern s16 D_800B0B78;
+extern s16 D_800B0B80;
 void func_8005EADC();
 void func_8005EB6C(s32 arg0, s32 arg1);
 #define W(p, T, o) (*(T *)((u8 *)(p) + (o)))
@@ -1351,7 +1360,7 @@ extern u16 D_8009D394[];
 extern u8 D_800D4484[];
 extern u8 D_800D4564[];
 void func_800380DC(void *arg0, s32 arg1);
-void func_8003B53C(u8 *, s32, s32, u16);
+void func_8003B53C(u8 *obj, s32 yaw, s32 pitch, s32 speed);
 extern u16 D_800B0068;
 extern u8 D_800AE940[];
 extern E24 D_800D8154[];
@@ -1393,7 +1402,7 @@ void func_80057B94(void *arg0, s16 arg1, s16 arg2, s16 arg3);
 extern u16 D_800AFF8C;
 AISlot *func_800540CC(void);
 extern s32 D_8009D3AC;
-s32 func_8003982C();
+s32 func_8003982C(u8 *obj);
 extern char D_800A7510[];
 void *calloc3(s32 size, s32 n);
 extern C3 D_800AFF64;
@@ -1524,7 +1533,7 @@ void func_80047A04(void);
 M2C_UNK func_80047DBC();
 void func_800481B0(void);
 void func_80048E60(void);
-M2C_UNK func_80049220(u8 *);                        /* extern */
+void func_80049220(u8 *arg0);
 void func_800493C0(void);
 s32 func_80049D60(void);
 void func_8004A8E4(void);
@@ -6249,7 +6258,55 @@ void func_800397A8(void) {
   }
 }
 
+#ifdef NON_MATCHING
+s32 func_8003982C(u8 *obj) {
+    s32 first;
+    s32 last;
+    s32 i;
+    u8 id;
+    u8 t;
+    Ent124 *p;
+
+    id = obj[0x3A];
+    if (((u8 *)g_Args->unk228)[id * 0x70 + 0x2D] == 1) {
+        first = D_800B0B78;
+        last = D_800AFF58;
+    } else {
+        first = D_800B05AC;
+        last = D_800B0B80;
+    }
+    i = first;
+    p = (Ent124 *)D_800AFFC8 + i;
+    for (; i <= last; i++, p++) {
+        if (p->owner == 0 && p->active != 0) {
+            t = p->id;
+            if (t == id) {
+                p->active = 0;
+                if (g_Args->cdArchive == 0) {
+                    sprintf(D_800B0BC0, D_800A7DF4, t, i);
+                    func_8006B1DC((s32)D_800B0BC0);
+                }
+                return func_80039A9C((s32)obj, t, 4);
+            }
+        }
+    }
+    i = first;
+    p = (Ent124 *)D_800AFFC8 + i;
+    for (; i <= last; i++, p++) {
+        if (p->owner == 0 && p->active != 0 && p->busy == 0) {
+            p->active = 0;
+            if (g_Args->cdArchive == 0) {
+                sprintf(D_800B0BC0, D_800A7E14, p->id, i);
+                func_8006B1DC((s32)D_800B0BC0);
+            }
+            return func_80039A9C((s32)obj, id, 4);
+        }
+    }
+    return 0;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8003982C);
+#endif
 
 s32 func_80039A34(u8 *arg0) {
     s32 p;
@@ -6455,7 +6512,65 @@ void func_8003B4F4(void) {
     }
 }
 
+#ifdef NON_MATCHING
+void func_8003B53C(u8 *obj, s32 yaw, s32 pitch, s32 speed) {
+    s32 t;
+    s32 c1;
+    s32 sn1;
+    s32 c2;
+    s32 x;
+    s32 y;
+    s32 z;
+    s32 v;
+    s32 d;
+    u8 *s0;
+    u8 *o;
+    u8 *q;
+    s32 dx;
+    s32 dz;
+
+    t = D_800A0370[yaw & 0xFFF];
+    c1 = t >> 16;
+    sn1 = (s16)t;
+    t = D_800A0370[pitch & 0xFFF];
+    c2 = t >> 16;
+    x = (sn1 * c2) >> 12;
+    y = -(s16)t;
+    z = (c1 * c2) >> 12;
+    M2C_FIELD(obj, s16 *, 0x98) = (x * speed) >> 12;
+    M2C_FIELD(obj, s16 *, 0x9A) = (y * speed) >> 12;
+    M2C_FIELD(obj, s16 *, 0x9C) = (z * speed) >> 12;
+    if (M2C_FIELD(obj, u8 *, 5) == 1) {
+        v = M2C_FIELD(obj, s16 *, 0x26);
+        s0 = M2C_FIELD(obj, u8 **, 0x10C);
+        M2C_FIELD(obj, s16 *, 0x52) = speed;
+        M2C_FIELD(obj, s16 *, 0x52) = speed + M2C_FIELD(obj, u16 *, 0x26);
+        M2C_FIELD(obj, s16 *, 0x3C) = (x * v) >> 12;
+        M2C_FIELD(obj, s16 *, 0x3E) = (y * v) >> 12;
+        M2C_FIELD(obj, s16 *, 0x40) = (z * v) >> 12;
+        if (M2C_FIELD(s0, s16 *, 0x6E) == 0) {
+            o = M2C_FIELD(obj, u8 **, 0x88);
+            if (o != NULL && M2C_FIELD(o, u8 *, 5) == 6) {
+                if (o == (u8 *)g_Player) {
+                    o = &g_CamPosX;
+                } else {
+                    o = M2C_FIELD(o, u8 **, 0x90) + 0x28;
+                }
+                q = M2C_FIELD(obj, u8 **, 0x90);
+                dx = M2C_FIELD(q, s32 *, 0x28) - M2C_FIELD(o, s32 *, 0);
+                dz = M2C_FIELD(q, s32 *, 0x30) - M2C_FIELD(o, s32 *, 8);
+                d = SquareRoot0(dx * dx + dz * dz);
+                M2C_FIELD(s0, s16 *, 0x6E) = 1;
+                M2C_FIELD(s0, s16 *, 0x68) = (x * d) >> 12;
+                M2C_FIELD(s0, s16 *, 0x6A) = (y * d) >> 12;
+                M2C_FIELD(s0, s16 *, 0x6C) = (z * d) >> 12;
+            }
+        }
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_8003B53C);
+#endif
 
 u8 func_8003B750(s32 *arg0) {
     s32 x, y, d, v;
@@ -9583,7 +9698,35 @@ void func_8004900C(void) {
     D_8009D024 = D_8009D020;
 }
 
+#ifdef NON_MATCHING
+void func_80049220(u8 *arg0) {
+    POLY_FT4 *p;
+    s16 i;
+    s32 x;
+    s16 y;
+    s32 w;
+    s32 h;
+    s16 cx;
+
+    w = 0x40;
+    h = 0x20;
+    cx = 0x200;
+    x = ((s16)g_Args->displayW >> 1) - 0x20;
+    y = ((s16)g_Args->displayH >> 1) - 0x10;
+    for (i = 0; i < 2; i++) {
+        p = &D_800D7C64[i];
+        func_80081C84(p);
+        ((void (*)(void *, s32, s32, s32))func_80044BAC)(p, 0x80, 0x80, 0x80);
+        func_80081CE4(p, 1);
+        p->clut = GetClut(cx, 0x1FF);
+        p->tpage = GetTPage(0, 0, 0x220, 0x180);
+        ((void (*)(void *, s16, s16, s16, s16, s16, s16, s16, s16))func_80044B04)(p, x, y, x + w, y, x, y + h, x + w, y + h);
+        ((void (*)(void *, s32, s32, s32, s32, s32, s32, s32, s32))func_80044B74)(p, 0x80, 0x80, 0x80 + w, 0x80, 0x80, 0x80 + h, 0x80 + w, 0x80 + h);
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80049220);
+#endif
 
 void func_800493C0(void) {
     s32 i;
@@ -14793,7 +14936,92 @@ s32 func_8005683C(u32 *cmd, ScriptObj *obj) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80056894);
 
+#ifdef NON_MATCHING
+s32 func_80056D1C(u32 *cmd, u32 *obj, void *arg2) {
+    u32 w;
+    u16 f;
+    s32 n;
+    u32 *p;
+    u32 m;
+    s32 ok;
+    u8 *next;
+    u8 op;
+    u32 *a;
+
+    w = ((u16 *)cmd)[1];
+    n = (w & 1) + ((w >> 1) & 1) + ((w >> 2) & 1) + ((w >> 3) & 1) + ((w >> 4) & 1) + ((w >> 5) & 1);
+    n += 1;
+    next = (u8 *)(cmd + n);
+    op = *next;
+    if (obj != NULL) {
+        if (op != 0x1E) {
+            f = ((volatile u16 *)cmd)[1];
+            p = cmd;
+            if (f & 1) {
+                m = *++p;
+                if ((obj[0] & m) != m) goto fail;
+                if (f & 0x40) {
+                    if ((m & obj[1]) == m) goto fail;
+                }
+            }
+            if (f & 2) {
+                m = *++p;
+                if (obj[0] & m) goto fail;
+                if (f & 0x80) {
+                    if (!(obj[1] & m)) goto fail;
+                }
+            }
+            if (f & 4) {
+                m = *++p;
+                if ((m & obj[2]) != m) goto fail;
+                if (f & 0x100) {
+                    if ((m & obj[3]) == m) goto fail;
+                }
+            }
+            if (f & 8) {
+                m = *++p;
+                if (m & obj[2]) goto fail;
+                if (f & 0x100) {
+                    if (!(m & obj[3])) goto fail;
+                }
+            }
+            if (f & 0x10) {
+                m = *++p;
+                if ((m & obj[4]) != m) goto fail;
+                if (f & 0x400) {
+                    if ((m & obj[5]) == m) goto fail;
+                }
+            }
+            if (f & 0x20) {
+                m = *++p;
+                if (m & obj[4]) goto fail;
+                if (f & 0x400) {
+                    if (!(m & obj[5])) goto fail;
+                }
+            }
+            ok = 1;
+            goto done;
+        fail:
+            ok = 0;
+        done:
+            if (ok == 1) {
+                a = obj;
+                goto call;
+            }
+        }
+        obj[0x1C4 / 4] = 0;
+        n += func_800575FC(next, NULL, arg2);
+        ((u32 **)obj)[0xA4 / 4] = cmd + n;
+    } else {
+        a = NULL;
+    call:
+        n += func_800575FC(next, a, arg2);
+    }
+    return n;
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_8002C808", func_80056D1C);
+#endif
 
 s32 func_80056F90(u32 *cmd, ScriptObj *obj) {
     u32 w;

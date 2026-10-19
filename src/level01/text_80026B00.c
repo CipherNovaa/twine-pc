@@ -652,7 +652,6 @@ void func_80028DBC(u32 *ot, s32 db) {
     s32 i;
     s32 j;
     s32 k;
-    s32 c;
 
     if (D_8009C1F0 == 0) {
         Menu_ResetState();
@@ -670,9 +669,8 @@ void func_80028DBC(u32 *ot, s32 db) {
             for (j = ((TwLine *)D_800AB744)[i].first, k = 0; j <= ((TwLine *)D_800AB744)[i].last; j++, k++) {
                 if (((TwLine *)D_800AB744)[i].flag != 0) {
                     if (((TwLine *)D_800AB744)[i].cnt < k) {
-                        c = ++((TwLine *)D_800AB744)[i].cnt;
-                        KEEP(c);
-                        if (!(c & 1)) {
+                        ((TwLine *)D_800AB744)[i].cnt++;
+                        if (((TwLine *)D_800AB744)[i].cnt % 2 == 0) {
                             g_Args->pad12E[0xA] = 0xF;
                             func_80026F30(1, 2);
                         }
