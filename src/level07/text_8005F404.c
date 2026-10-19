@@ -1742,6 +1742,8 @@ void L2_func_80061890(s32 id);
 void L2_func_800619B8();
 M2C_UNK L2_func_8002D6AC(M2C_UNK *);                   /* extern */
 extern M2C_UNK L2_D_800AE968;
+extern M2C_UNK L3_D_800B37BC;
+void L3_func_800600D8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_80039C4C();                            /* extern */
 M2C_UNK func_80060CF4();                            /* extern */
@@ -1914,7 +1916,9 @@ void func_800605C0(void *arg0) {
 
 INCLUDE_ASM("asm/level07/nonmatchings/text_8005F404", func_80060618);
 
-INCLUDE_ASM("asm/level07/nonmatchings/text_8005F404", func_8006093C);
+void L3_func_800600D8(void) {
+    L2_func_80083494(&L3_D_800B37BC, &L1_D_800DE8E8);
+}
 
 void L1_func_8006043C(s32 a, s32 b) {
  s32 j; s32 ia; s32 ib;

@@ -213,6 +213,7 @@ extern s8 D_8009C1EE;
 
 
 
+s32 L2_func_80026B00(s32 arg0);
 void L2_func_80027520(s32 arg0, s32 arg1, s32 *arg2, s32 arg3, s32 arg4, s32 arg5);
 void L2_func_800288B4(s8 arg0);
 extern char L2_D_800AC4AC[];
@@ -251,7 +252,12 @@ void L2_func_80028B88(s16 arg0, char *text);
 /* This level's own declarations (kept by tools/port_level.py): */
 M2C_UNK func_80080A6C(s16);                         /* extern */
 
-INCLUDE_ASM("asm/level11/nonmatchings/text_80026B1C", func_80026B1C);
+s32 L2_func_80026B00(s32 arg0) {
+  L1_SsSetSerialAttr(0, 0, 1);
+  arg0 = arg0;
+  arg0 = arg0 & 0xFF;
+  return L1_SsSetSerialVol(0, arg0, arg0);
+}
 
 s32 L1_func_80026B44(u8 arg0) {
     switch (arg0) {

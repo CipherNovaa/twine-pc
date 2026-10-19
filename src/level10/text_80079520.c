@@ -181,6 +181,7 @@ extern s32 L1_D_800F0F5C;
 
 
 
+void L3_func_80076430(void);
 extern void *L2_D_800B6010;
 void L2_func_8006E97C(s32 arg0);
 void L2_func_80085F1C();
@@ -223,7 +224,11 @@ extern u8 D_800AE7C8;
 extern u8 D_800FC94C;
 extern u8 D_800AE7E8;
 
-INCLUDE_ASM("asm/level10/nonmatchings/text_80079520", func_80079520);
+void L3_func_80076430(void) {
+    L1_func_800752C0();
+    L2_func_8007906C();
+    L2_func_800796AC();
+}
 
 s32 L1_func_800752C0(void) {
   s32 var_v1;

@@ -220,6 +220,21 @@ def parse_c(text):
     return header, funcs
 
 
+class Src:
+    """An earlier level whose own C is ported into later levels."""
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+PREFIXED = re.compile(r"L\d+_")  # names of code ported from another level (L1_X, L2_X, ...)
+
+
+def PREFIXED_OTHER(S, name):
+    """A name from a source other than S (those are declared by that source's own code here)."""
+    m = PREFIXED.match(name)
+    return bool(m) and m.group(0) != S.pre
+
+
 def l2_decl_name(line):
     """The name a one-line declaration declares (a typedef's is the last name before the `;`)."""
     s = line.split("/*")[0].strip()
@@ -240,7 +255,7 @@ def is_native(name, same_named):
     """C a level got on its own (not from LEVEL01 or LEVEL02 sources). Ported code is either prefixed
     (L1_/L2_), or a LEVEL01 function that pairs with the same-named function here (same address); a
     LEVEL01 name alone proves nothing, since the level can have a different function at that address."""
-    return bool(name) and name not in same_named and not name.startswith(("L1_", "L2_"))
+    return bool(name) and name not in same_named and not PREFIXED.match(name)
 
 
 def level01_sources():
@@ -348,53 +363,62 @@ def port(level):
 
     l1 = level01_sources()
 
-    # Second source, for levels 3-11: functions written for LEVEL02 itself (not from LEVEL01). Their code
-    # names LEVEL02's symbols; those get an L2_ prefix here, bound to this level's symbols like L1_ names.
-    l2 = level not in ("level01", "level02") and (ROOT / "src/level02").exists()
-    l2_items, l2_decls, l2_inv, l2_smap, l2_pairs, l2_globals = {}, [], {}, {}, {}, set()
-    l2_decl_names = set()
-    if l2:
-        l2_pairs, l2_votes = port_symbols.pairings(level, src="level02")
-        l2_smap = port_symbols.symbol_map(l2_votes)
-        l2_tname = {l2_pairs[n]: l2_smap[n][0] for n in l2_pairs if n in l2_smap and l2_smap[n][1] == 0}
-        l2_inv = {tn: n for n, a in l2_pairs.items() if (tn := l2_tname.get(a))}
-        l2_globals = {s for s in elf_symbols(ROOT / "build/level02/level02.elf") if not s.startswith("L1_")}
-        _, l2_l1_votes = port_symbols.pairings("level02")
-        l2_same = {n for n, (t2, d2) in port_symbols.symbol_map(l2_l1_votes).items() if t2 == n and d2 == 0}
-        for c in sorted((ROOT / "src/level02").glob("*.c")):
+    # Further sources: functions written for an earlier level itself (LEVEL02, LEVEL03, ...; not taken from
+    # LEVEL01), in that order. Their code names that level's symbols; those get an L<n>_ prefix here, bound
+    # to this level's symbols like L1_ names.
+    srcs = []
+    for k in range(2, int(level[-2:])):
+        s_level = f"level{k:02d}"
+        if not (ROOT / f"src/{s_level}").exists():
+            continue
+        S = Src(level=s_level, key=f"L{k}", pre=f"L{k}_", items={}, decls=[], exclude=set())
+        S.pairs, votes = port_symbols.pairings(level, src=s_level)
+        S.smap = port_symbols.symbol_map(votes)
+        tname = {S.pairs[n]: S.smap[n][0] for n in S.pairs if n in S.smap and S.smap[n][1] == 0}
+        S.inv = {tn: n for n, a in S.pairs.items() if (tn := tname.get(a))}
+        S.globals = {s for s in elf_symbols(ROOT / f"build/{s_level}/{s_level}.elf") if not PREFIXED.match(s)}
+        rec = ROOT / f"config/{s_level}_samename.txt"
+        s_same = set(rec.read_text().split()) if rec.exists() else set()
+        decl_names = set()
+        for c in sorted((ROOT / f"src/{s_level}").glob("*.c")):
             h, f = parse_c(c.read_text())
             if NATIVE_MARK in h:
                 for l in h[h.index(NATIVE_MARK) + 1:]:
-                    # one declaration per name: LEVEL02's files can declare a symbol with different types
+                    # one declaration per name: a level's files can declare a symbol with different types
                     key = l2_decl_name(l) or l
-                    if l.strip() and key not in l2_decl_names:
-                        l2_decl_names.add(key)
-                        l2_decls.append(l)
-            for n, (k, code) in f.items():
-                if k == "c" and is_native(defined_name(code), l2_same):
-                    l2_items[n] = code
-        # A function brought over gets its prototype from its definition (another LEVEL02 file may
+                    if l.strip() and key not in decl_names:
+                        decl_names.add(key)
+                        S.decls.append(l)
+            for n, (k2, code) in f.items():
+                if k2 == "c" and is_native(defined_name(code), s_same):
+                    S.items[n] = code
+        # A function brought over gets its prototype from its definition (another file of that level may
         # declare it differently).
         protos = {}
-        for n, code in l2_items.items():
+        for n, code in S.items.items():
             first = code.split("{")[0].strip()
             if ";" not in first:  # not K&R
                 protos[n] = re.sub(r"\s+", " ", first) + ";"
-        l2_decls = [protos.get(next(iter(re.findall(r"(\w+)\s*\(", l)), None), l) if "(" in l else l
-                    for l in l2_decls]
-        l2_decls += [p for n, p in protos.items() if n not in l2_decl_names]
+        S.decls = [protos.get(next(iter(re.findall(r"(\w+)\s*\(", l)), None), l) if "(" in l else l for l in S.decls]
+        S.decls += [p for n, p in protos.items() if n not in decl_names]
+        srcs.append(S)
+    by_pre = {S.pre: S for S in srcs}
 
-    def l2_rename(text):
-        return IDENT.sub(lambda m: "L2_" + m.group(0) if m.group(0) in l2_globals else m.group(0), text)
+    def src_rename(S, text):
+        return IDENT.sub(lambda m: S.pre + m.group(0) if m.group(0) in S.globals else m.group(0), text)
 
-    def l2_portable(code):
-        ids = set(IDENT.findall(code))
-        # LEVEL02's C names its own symbols, and LEVEL01 ones as L1_X (functions ported there): both must
-        # exist here
-        return all(i in l2_smap for i in ids if i in l2_globals) and \
-            all(i[3:] in smap or i[3:] in aliased for i in ids if i.startswith("L1_"))
-
-    exclude2 = set()  # LEVEL02 names that failed to compile or match here
+    def src_portable(S, code):
+        """Every symbol the code names must exist here: its own level's (bound through S.smap), and names
+        it took from other sources (L1_X, L<k>_X)."""
+        for i in set(IDENT.findall(code)):
+            if i in S.globals and i not in S.smap:
+                return False
+            m = PREFIXED.match(i)
+            if m and m.group(0) == "L1_" and not (i[3:] in smap or i[3:] in aliased):
+                return False
+            if m and m.group(0) != "L1_" and (m.group(0) not in by_pre or i[len(m.group(0)):] not in by_pre[m.group(0)].smap):
+                return False
+        return True
 
     # After a re-split (file boundaries moved), the previous files wait in a pool: their own C goes to
     # whichever new file has the function now.
@@ -445,7 +469,9 @@ def port(level):
     asm_dir = ROOT / f"asm/{level}/nonmatchings"
     exe, load = target_exe(level)
     for attempt in range(20):
-        ported, banked, ported2, jtbl_lines, used2, native_names = {}, {}, {}, [], set(), set()
+        ported, banked, jtbl_lines, native_names = {}, {}, [], set()
+        for S in srcs:
+            S.ported, S.used = {}, set()
         moved = set()  # pooled functions that landed in a different file than before
         native_stem = {}
         used1 = set()  # LEVEL01 names (L1_X) that LEVEL02's C uses here
@@ -454,7 +480,7 @@ def port(level):
             c_path = ROOT / f"src/{level}/{t_stem}.c"
             current = orig = c_path.read_text()
             native_decls, native_funcs = [], {}
-            pooled, l2_bodies = [], []
+            pooled, src_bodies = [], []
             if "port_level.py" in orig.split("\n", 1)[0]:
                 orig = (ROOT / f"build/{level}/port_base/{t_stem}.c").read_text()
                 # Work done on this level itself (integrate_one --level): declarations below the marker,
@@ -503,16 +529,19 @@ def port(level):
                     jt = re.findall(r"%hi\((jtbl_\w+)\)", (asm_dir / m.group(1).split("/")[-1] / f"{m.group(2)}.s").read_text())
                     if jt:
                         jtbl_lines.append(f"{'L1_' + n if n in renamed else n} {' '.join(dict.fromkeys(jt))}")
-                elif l2 and (n2 := l2_inv.get(m.group(2))) in l2_items and n2 not in exclude2 \
-                        and l2_portable(l2_items[n2]):
-                    ported2[n2] = t_stem
-                    body.append(l2_rename(l2_items[n2]))
-                    l2_bodies.append(body[-1])
-                    jt = re.findall(r"%hi\((jtbl_\w+)\)", (asm_dir / m.group(1).split("/")[-1] / f"{m.group(2)}.s").read_text())
-                    if jt:
-                        jtbl_lines.append(f"L2_{n2} {' '.join(dict.fromkeys(jt))}")
                 else:
-                    body.append(line)
+                    for S in srcs:  # an earlier level's own C
+                        n2 = S.inv.get(m.group(2))
+                        if n2 in S.items and n2 not in S.exclude and src_portable(S, S.items[n2]):
+                            S.ported[n2] = t_stem
+                            body.append(src_rename(S, S.items[n2]))
+                            src_bodies.append((S, body[-1]))
+                            jt = re.findall(r"%hi\((jtbl_\w+)\)", (asm_dir / m.group(1).split("/")[-1] / f"{m.group(2)}.s").read_text())
+                            if jt:
+                                jtbl_lines.append(f"{S.pre}{n2} {' '.join(dict.fromkeys(jt))}")
+                            break
+                    else:
+                        body.append(line)
             l1_header = [l1_rename(l) for l in header]
             # Pooled functions bring their old file's own declarations: all of them when it is the same
             # file; else only what their code names that isn't declared here (the old file's other
@@ -528,25 +557,27 @@ def port(level):
                         if nm in ids and nm not in here:
                             native_decls.append(d)
                             here.add(nm)
-            l2_header = []
-            if l2 and l2_bodies:
-                # only what this file's LEVEL02 functions use (with the typedefs those declarations need):
-                # the declarations' types come from LEVEL02 files' headers, which other files here lack
-                # skip what the LEVEL01 header here already declares (by name), and LEVEL01 names (L1_X)
-                have = {l2_decl_name(l) for l in l1_header} - {None}
-                cand = [(l2_decl_name(d), d) for d in map(l2_rename, l2_decls)
-                        if l2_decl_name(d) not in have and not (l2_decl_name(d) or "").startswith("L1_")]
-                need, changed = set(IDENT.findall("\n".join(l2_bodies))), True
+            src_header = []
+            have = {l2_decl_name(l) for l in l1_header} - {None}
+            for S in dict.fromkeys(S for S, b in src_bodies):
+                # only what this file's functions from that level use (with the typedefs those declarations
+                # need): the declarations' types come from that level's headers, which other files here
+                # lack; skip what the LEVEL01 header here already declares (by name) and other sources' names
+                cand = [(l2_decl_name(d), d) for d in (src_rename(S, d) for d in S.decls)
+                        if l2_decl_name(d) not in have and not PREFIXED_OTHER(S, l2_decl_name(d) or "")]
+                need, changed = set(IDENT.findall("\n".join(b for S2, b in src_bodies if S2 is S))), True
                 while changed:
                     changed = False
                     for name, d in cand:
-                        if name in need and d not in l2_header:
-                            l2_header.append(d)
+                        if name in need and d not in src_header:
+                            src_header.append(d)
                             need |= set(IDENT.findall(d))
                             changed = True
-                l2_header.sort(key=lambda d: not d.startswith("typedef"))
-            text = "\n".join(l1_header + l2_header + [NATIVE_MARK] + native_decls) + "\n" + "\n".join(body) + "\n"
-            used2 |= {i[3:] for i in IDENT.findall(text) if i.startswith("L2_")}
+                have |= {l2_decl_name(d) for d in src_header} - {None}
+            src_header.sort(key=lambda d: not d.startswith("typedef"))
+            text = "\n".join(l1_header + src_header + [NATIVE_MARK] + native_decls) + "\n" + "\n".join(body) + "\n"
+            for S in srcs:
+                S.used |= {i[len(S.pre):] for i in IDENT.findall(text) if i.startswith(S.pre)}
             # LEVEL01 names (L1_X) this file's text uses that no rename covers (LEVEL02's C, this level's
             # own C, or functions too small to pair): the level's same-named symbol
             used1 |= {i[3:] for i in IDENT.findall(text) if i.startswith("L1_")}
@@ -572,13 +603,14 @@ def port(level):
                 ld.append(f"L1_{n} = {t}{f' + 0x{d:X}' if d > 0 else f' - 0x{-d:X}' if d < 0 else ''};")
         for x in sorted(used1 - renamed - set(aliased)):  # same name in both levels: no L1_ alias above
             ld.append(f"L1_{x} = {x};")
-        for n2, (t2, d2) in sorted(l2_smap.items()):
-            if n2 not in used2:
-                continue
-            if n2 in ported2 and d2 == 0:
-                ld.append(f"{t2} = L2_{n2};")
-            elif n2 not in ported2:
-                ld.append(f"L2_{n2} = {t2}{f' + 0x{d2:X}' if d2 > 0 else f' - 0x{-d2:X}' if d2 < 0 else ''};")
+        for S in srcs:
+            for n2, (t2, d2) in sorted(S.smap.items()):
+                if n2 not in S.used:
+                    continue
+                if n2 in S.ported and d2 == 0:
+                    ld.append(f"{t2} = {S.pre}{n2};")
+                elif n2 not in S.ported:
+                    ld.append(f"{S.pre}{n2} = {t2}{f' + 0x{d2:X}' if d2 > 0 else f' - 0x{-d2:X}' if d2 < 0 else ''};")
         for n, e in ld_entries:
             if n in absolute:
                 ld.append(f"{n} = {e.strip()};")
@@ -600,24 +632,27 @@ def port(level):
             nm_failed |= nonmatching_errors(level, t_stem, renamed)
         if nm_failed:
             print(f"pass {attempt}: {len(nm_failed)} banked functions don't compile: {' '.join(sorted(nm_failed))}")
-            l2_failed = {n[3:] for n in nm_failed if n.startswith("L2_")}  # LEVEL02 code, wrong here too
-            nm_failed -= {"L2_" + n for n in l2_failed}
+            # an earlier level's own C (L<k>_X) that is wrong here too
+            src_failed = {(S, n[len(S.pre):]) for n in nm_failed for S in srcs if n.startswith(S.pre)}
+            nm_failed -= {S.pre + n for S, n in src_failed}
             n_failed = nm_failed & native_names
             nm_failed -= n_failed
-            if nm_failed <= nm_exclude and not l2_failed - exclude2 and not n_failed - native_drop:
+            if nm_failed <= nm_exclude and all(n in S.exclude for S, n in src_failed) and not n_failed - native_drop:
                 if moved - native_drop:  # declarations that came along with moved functions: drop those
                     print(f"  dropped back to asm (moved to another file, declarations clash): {' '.join(sorted(moved))}")
                     native_drop |= moved
                     continue
                 sys.exit("the NON_MATCHING errors are outside the banked functions (declarations?)")
             nm_exclude |= nm_failed
-            exclude2 |= l2_failed
+            for S, n in src_failed:
+                S.exclude.add(n)
             native_drop |= n_failed
             continue
         r = subprocess.run(["make", f"LEVEL={level}", "-j8", "-k"], cwd=ROOT, capture_output=True, text=True)
         def owner(name):
-            if name and name.startswith("L2_"):
-                return ("L2", name[3:])
+            m = PREFIXED.match(name or "")
+            if m and m.group(0) in by_pre:
+                return (by_pre[m.group(0)].key, name[len(m.group(0)):])
             if name and name.startswith("L1_"):
                 return ("L1", name[3:])
             if name in native_names:
@@ -649,7 +684,8 @@ def port(level):
                 for n, e in sorted(failed.items()):
                     print(f"  {n}: {e}")
             exclude |= {n for s, n in failed if s == "L1"}
-            exclude2 |= {n for s, n in failed if s == "L2"}
+            for S in srcs:
+                S.exclude |= {n for s, n in failed if s == S.key}
             native_drop |= {n for s, n in failed if s == "N"}
             if native_drop:
                 print(f"  dropped back to asm (this level's own C no longer compiles): {' '.join(sorted(native_drop))}")
@@ -661,7 +697,8 @@ def port(level):
         for t_stem in t_stems:
             obj = ROOT / f"build/{level}/src/{level}/{t_stem}.o"
             wanted = {("L1_" + n if n in renamed else n): (("L1", n), pairs[n]) for n, s in ported.items() if s == t_stem}
-            wanted.update({"L2_" + n: (("L2", n), l2_pairs[n]) for n, s in ported2.items() if s == t_stem})
+            for S in srcs:
+                wanted.update({S.pre + n: ((S.key, n), S.pairs[n]) for n, s in S.ported.items() if s == t_stem})
             # this level's own C too: a stale copy of excluded code must not pass as native
             for f in native_names & set(native_stem.get(t_stem, ())):
                 a = native_addr(f, t_stem)
@@ -672,7 +709,8 @@ def port(level):
         if bad:
             print(f"pass {attempt}: {len(bad)} functions differ: {' '.join(sorted(s + ':' + n for s, n in bad))}")
             exclude |= {n for s, n in bad if s == "L1"}
-            exclude2 |= {n for s, n in bad if s == "L2"}
+            for S in srcs:
+                S.exclude |= {n for s, n in bad if s == S.key}
             native_drop |= {n for s, n in bad if s == "N"}
             continue
         ok = r.returncode == 0 and ": OK" in r.stdout
@@ -695,11 +733,13 @@ def port(level):
             if hit:
                 print(f"pass {attempt}: the linked EXE differs in {' '.join(sorted(s + ':' + n for s, n in hit))}")
                 exclude |= {n for s, n in hit if s == "L1"}
-                exclude2 |= {n for s, n in hit if s == "L2"}
+                for S in srcs:
+                    S.exclude |= {n for s, n in hit if s == S.key}
                 native_drop |= {n for s, n in hit if s == "N"}
                 continue
-        print(f"{level}: {len(ported)} functions from LEVEL01's C, {len(ported2)} from LEVEL02's; "
-              f"EXE {'matches' if ok else 'DOES NOT MATCH'}")
+        print(f"{level}: {len(ported)} functions from LEVEL01's C, "
+              + "".join(f"{len(S.ported)} from {S.level.upper()}'s, " for S in srcs)
+              + f"EXE {'matches' if ok else 'DOES NOT MATCH'}")
         if ok:
             record.write_text("\n".join(sorted(n for n in list(ported) + list(banked) if n not in renamed)) + "\n")
         if ok and pool_dir.exists():

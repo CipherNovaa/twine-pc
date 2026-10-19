@@ -227,7 +227,11 @@ M2C_UNK func_800613B4(M2C_UNK);                     /* extern */
 M2C_UNK func_8006630C(void *, M2C_UNK);             /* extern */
 extern s16 D_8009E8D8;
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_80076430", func_80076430);
+void func_80076430(void) {
+    L1_func_800752C0();
+    L2_func_8007906C();
+    L2_func_800796AC();
+}
 
 s32 L1_func_800752C0(void) {
   s32 var_v1;

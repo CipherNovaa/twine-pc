@@ -166,7 +166,7 @@ extern s32 L1_D_800AFEBC;
 
 
 
-void L2_func_80026B00(s32 arg0);
+s32 L2_func_80026B00(s32 arg0);
 s32 L2_func_80083044(char *, ...);
 extern void *L2_D_800B6010;
 void L2_func_8002A7E4();

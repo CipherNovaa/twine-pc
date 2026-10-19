@@ -2068,6 +2068,7 @@ void L2_func_80065250(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4);
 void L2_func_800663FC(void *arg0, s16 *arg1, s16 *arg2, s16 *arg3);
 void L2_func_80069DD8(void);
 /* This level's own declarations (kept by tools/port_level.py): */
+typedef struct { u8 pad0[0x56]; u16 a; u8 pad1[0x12]; u16 b; } S662;
 M2C_UNK func_800334CC(M2C_UNK);                     /* extern */
 M2C_UNK func_8005D1EC(s32);                         /* extern */
 s32 func_8005D224(M2C_UNK *, void *);               /* extern */
@@ -3727,9 +3728,19 @@ void L1_func_80066704(void *arg0) {
     *(u16 *)(obj + 0x7A) += d;
 }
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_80066124);
+void func_80066124(void **arg0) {
+    S662 *p = (S662 *)arg0[3];
+    p->b += 0xC8;
+    p->a -= 0xA;
+    L1_func_80066704(arg0);
+}
 
-INCLUDE_ASM("asm/level03/nonmatchings/text_800615EC", func_80066160);
+void func_80066160(void **arg0) {
+    S662 *p = (S662 *)arg0[3];
+    p->b += 0xC8;
+    p->a -= 0xA;
+    L1_func_80066704(arg0);
+}
 
 void L1_func_800669A4(SVECTOR *arg0, s32 *arg1, void *arg2) {
     gte_SetRotMatrix((u8 *)arg2 + 0x18);

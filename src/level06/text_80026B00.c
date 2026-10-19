@@ -213,6 +213,7 @@ extern s8 D_8009C1EE;
 
 
 
+s32 L2_func_80026B00(s32 arg0);
 void L2_func_80027520(s32 arg0, s32 arg1, s32 *arg2, s32 arg3, s32 arg4, s32 arg5);
 void L2_func_800288B4(s8 arg0);
 extern char L2_D_800AC4AC[];
@@ -227,7 +228,9 @@ s32 L2_func_80028B20(char *text);
 void L2_func_80029378(char *s, s16 x, s16 y, s32 *n, s32 arg4, s32 pal);
 s32 L2_func_80083044(char *, ...);
 void func_80085E7C_nr(s32) asm("L2_func_80085E7C") __attribute__((noreturn));
+void L2_func_80026C14(s16 arg0);
 extern s32 L2_D_800A03C0[];
+M2C_UNK L2_func_80085600(s16);                         /* extern */
 s32 L2_func_80026F5C(u32 id, s32 flags);
 M2C_UNK L2_func_80027274(s32, s32, M2C_UNK);           /* extern */
 s32 L2_func_80085C3C();                                /* extern */
@@ -247,7 +250,12 @@ s32 L2_func_80026C38(s32 arg0);
 void L2_func_80028B88(s16 arg0, char *text);
 /* This level's own declarations (kept by tools/port_level.py): */
 
-INCLUDE_ASM("asm/level06/nonmatchings/text_80026B00", func_80026B00);
+s32 L2_func_80026B00(s32 arg0) {
+  L1_SsSetSerialAttr(0, 0, 1);
+  arg0 = arg0;
+  arg0 = arg0 & 0xFF;
+  return L1_SsSetSerialVol(0, arg0, arg0);
+}
 
 s32 func_80026B44(u8 arg0) {
     switch (arg0) {
@@ -263,7 +271,9 @@ s32 func_80026B44(u8 arg0) {
     return 0;
 }
 
-INCLUDE_ASM("asm/level06/nonmatchings/text_80026B00", func_80026C14);
+void L2_func_80026C14(s16 arg0) {
+    L2_func_80085600(arg0);
+}
 
 s32 L2_func_80026C38(s32 arg0) {
     s16 i;
