@@ -38,6 +38,15 @@ segments:
     vram: 0x80026800
     bss_size: 0x69D08
     subsegments:
-      - [0x800, asm]
+      - [0x800, c, text_80026800]  # O2, LEVEL01 text_80026800
+      - [0x80C, c, text_8002680C]  # O0, LEVEL01 text_8002680C
+      - [0xB60, c, text_80026B60]  # O2, LEVEL01 text_80026B00
+      - [0x47D4, c, text_8002A7D4]  # O0, LEVEL01 text_8002A61C
+      - [0x69C0, c, text_8002C9C0]  # O2, LEVEL01 text_8002C808
+      - [0x360A8, c, text_8005C0A8]  # O1, LEVEL01 text_8005EDF8
+      - [0x38908, c, text_8005E908]  # O2, LEVEL01 text_800617AC
+      - [0x45CA8, c, text_8006BCA8]  # O0, LEVEL01 text_8006FA54
+      - [0x4F228, c, text_80075228]  # O2, LEVEL01 text_80075290
+      - [0x50350, asm, psyq_libs]  # PsyQ libraries
       - [0x75820, data]
   - [0x85000]
