@@ -31,6 +31,28 @@ typedef struct { u16 w; u8 pad2[0xA]; u16 x; u16 y; char text[0x50]; } TextEnt;
 typedef struct { u16 a; s16 len; u16 c; s16 d; s8 e; s8 f; s8 g; u8 pad[5]; char txt[0x50]; } TxtEnt;
 typedef struct { u16 first; u8 p0[2]; u16 last; u8 p1[0x5A]; } Rec60;
 typedef struct { u8 p0[0xE]; s16 a; u8 p1[0x12]; s16 b; u8 p2[4]; } Rec28;
+typedef struct { u8 a, b, c, d; s16 e, f; } TP8;
+void func_80028678(void);
+extern s16 D_800AB604;
+extern s16 D_800AB608;
+extern s16 D_800AC4E0;
+extern s16 D_800AC4E4;
+extern u16 D_800AC4E8;
+void func_80028370(void);
+void func_800274F4();
+void func_80081D14(void *);
+s16 GetClut(s32, s32);
+s32 GetTPage(M2C_UNK, s32, M2C_UNK, M2C_UNK);
+void func_8002847C(void);
+extern s16 D_800AB5E8;
+extern s16 D_800AB5EC;
+extern s16 D_800AB5F0;
+extern s16 D_800AB5F4;
+extern s16 D_800AB5F8;
+extern s16 D_800AB5FC;
+extern s16 D_800AB60C;
+extern s16 D_800AB610;
+extern TP8 D_800AC4EC[];
 extern Rec28 D_800AC550[];
 extern s8 D_800A6F00;
 extern char D_800A6F1C[];
@@ -339,9 +361,105 @@ void func_80027394(s32 pos, s16 voice, s32 id, s32 flags) {
 
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_800274F4);
 
+#ifdef NON_MATCHING
+void func_80028370(void) {
+    register TP8 *p REG("s0");
+    s32 i = 0;
+    p = D_800AC4EC;
+    D_800AB5F0 = 0x33E;
+    D_800AB5F4 = 0x180;
+    D_800AB5F8 = 0x2C0;
+    D_800AB5FC = 0x1E0;
+    D_800AB5E8 = 0xF8;
+    D_800AB5EC = 0x80;
+    D_800AB60C = 6;
+    D_800AB610 = 7;
+    do {
+        s32 t = GetTPage(0, 0, D_800AB5F0, D_800AB5F4);
+        p->a = D_800AB5E8;
+        p->e = t;
+        p->f = 0;
+        p->b = (u8)D_800AB5EC + D_800AB610 * i;
+        i++;
+        p->c = D_800AB60C;
+        p++;
+    } while (i < 12);
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_80028370);
+#endif
 
+#ifdef NON_MATCHING
+void func_8002847C(void) {
+    u8 *var_a0;
+    u8 *var_s1;
+    s32 var_s2;
+    s32 var_s3;
+    s32 var_s4;
+    s32 var_s5;
+    u8 *temp_s0;
+    s32 cur;
+    u8 *base;
+
+    D_800AEDD4 = 2;
+    func_80028370();
+    D_800AB604 = 0x80;
+    D_800AB608 = 0;
+    D_800AC4E0 = 0x360;
+    D_800AC4E4 = 0x100;
+    D_800AC4D8 = 0x210;
+    D_800AC4DC = 0x1E1;
+    D_800AEDA0 = 0x210;
+    D_800AEDA4 = 0x1E0;
+    D_800AEDB4 = 0x210;
+    D_800AEDB8 = 0x1E0;
+    D_800AEDAC = 0x210;
+    D_800AEDB0 = 0x1F2;
+    D_800AC4E8 = GetTPage(0, 0, 0x360, 0x100);
+    Menu_ResetState();
+    var_s5 = 0;
+    base = D_800AC550;
+    D_8009C1EE = 0;
+    var_s4 = 0;
+    do {
+        var_s3 = 0;
+        cur = var_s4;
+        var_s2 = var_s4;
+        var_s1 = base;
+        do {
+            func_80081D14((void *)(cur + (s32)var_s1));
+            temp_s0 = (u8 *)(var_s2 + (s32)base);
+            var_s2 += 0x14;
+            var_s1 += 0x14;
+            temp_s0[4] = 0x80;
+            temp_s0[5] = 0x80;
+            temp_s0[6] = 0x80;
+            var_s3 += 1;
+            *(s16 *)(temp_s0 + 0xE) = GetClut((s16)D_800AC4D8, (s16)D_800AC4DC);
+            *(s16 *)(temp_s0 + 0x10) = 0x11;
+            *(s16 *)(temp_s0 + 0x12) = 8;
+        } while (var_s3 < 2);
+        var_s5 += 1;
+        var_s4 += 0x28;
+    } while (var_s5 < 0xE6);
+    var_s5 = 0;
+    var_a0 = D_800AE940;
+    do {
+        *(s16 *)(var_a0 + 6) = 0;
+        *(u16 *)(var_a0 + 4) = D_800AC4E8;
+        var_a0[2] = 0x11;
+        var_a0[0] = D_800AB604;
+        var_a0[3] = 0;
+        var_a0[1] = D_800AB608;
+        var_s5 += 1;
+        var_a0 += 8;
+    } while (var_s5 < 0x8C);
+    func_800274F4();
+    func_80028678();
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_80026B00", func_8002847C);
+#endif
 
 void func_80028678(void) {
     M2C_FIELD(&D_800AC4C8, u16 *, 0) = (u16) D_800AC4D8;

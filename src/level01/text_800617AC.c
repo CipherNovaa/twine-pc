@@ -92,7 +92,7 @@ void func_8003732C(u8 *, s32);
 s16 func_80037768(u8 *obj, u8 *proj);
 void func_80038C8C(u8 *obj);
 void func_80062F38(u8 *a, u8 *b);
-void func_800632AC(u8 *, s32);
+void func_800632AC(u8 *arg0, s32 arg1);
 
 
 extern s32 D_8009CF50;
@@ -1032,7 +1032,21 @@ typedef struct { u32 active : 1; u32 life : 5; u32 f6 : 3; u32 f9 : 3; u32 state
 typedef struct { u32 pad0 : 11; u32 f11 : 1; u32 f12 : 1; u32 pad13 : 19; } WFlags;
 typedef struct { s16 sin; s16 cos; } SinCos;
 typedef struct PE { u8 active; u8 flags; u8 pad2[0xE]; s32 cnt; s32 limit; u8 *ptr; u8 b1C; u8 b1D; u8 pad1E[2]; void (*f20)(struct PE *); void (*f24)(struct PE *); u8 pad28[0xC]; } PE;
-void func_80063D40(void *arg0);
+typedef struct { u8 r, g, b; } C3;
+typedef struct { SparkHdr h; s16 v[6]; s32 time; MATRIX m; s32 pos[3]; } SparkEnt;
+typedef struct { s32 a; u16 b; } V4050;
+typedef struct { s32 a; s32 b; } V4058;
+extern V4050 D_800D4050;
+extern V4058 D_800D4058;
+extern s32 D_800A9488;
+SparkHdr *func_80065510(void);
+s32 func_800662A8(s16 *arg0, SVECTOR *arg1);
+s32 func_80065A20(void *arg0, SVECTOR *arg1, s32 arg2);
+void func_80053DE4(s16 arg0, s16 arg1, s32 arg2, s32 arg3, s32 arg4);
+void func_8003246C(u16 *a, s32 b, s32 c, C3 *d);
+AnimSlot *func_800378FC(u8 *obj, u8 *anim, s16 arg2, s32 arg3);
+extern M2C_UNK D_800A946C;
+void func_80063D40(u8 *e);
 extern s32 D_8009E47C;
 extern u8 D_800A9668[];
 void func_8002E1B0(void);
@@ -2141,7 +2155,30 @@ void func_80063230(void) {
     }
 }
 
+#ifdef NON_MATCHING
+void func_800632AC(u8 *arg0, s32 arg1) {
+    register u8 *o REG("a0");
+    u8 t = arg1;
+    s16 a3;
+    o = func_80058694(t);
+    if (o != NULL || (D_800DA5C0 != 0 && (o = func_80058A58(t)) != NULL)) {
+        *(s32 *)(o + 0x5C) = D_800D4050.a;
+        *(u8 **)(o + 0x74) = arg0;
+        *(u16 *)(o + 0x60) = D_800D4050.b;
+        a3 = *(u16 *)(arg0 + 0x66) & 0x1F;
+        *(s16 *)(o + 0x5C) = (u16)*(s16 *)(o + 0x5C) + ((*(s16 *)(o + 0x5C) * 0x41) >> 12);
+        *(s16 *)(o + 0x5E) = (u16)*(s16 *)(o + 0x5E) + ((*(s16 *)(o + 0x5E) * 0x41) >> 12);
+        *(s16 *)(o + 0x62) = a3;
+        *(s32 *)(o + 0x64) = D_800D4058.a;
+        *(s32 *)(o + 0x68) = D_800D4058.b;
+        *(u16 *)(o + 0x60) = *(u16 *)(o + 0x60) + ((*(s16 *)(o + 0x60) * 0x41) >> 12);
+        *(s16 *)(o + 0x6A) = -1;
+        func_800634C0(o);
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_800632AC);
+#endif
 
 void func_800633B0(u8 type, VECTOR v) {
     SVECTOR ang;
@@ -2391,7 +2428,75 @@ void *func_80063CAC(void *obj, s16 x, s16 y, s16 z, s16 arg4) {
     return NULL;
 }
 
+#ifdef NON_MATCHING
+void func_80063D40(u8 *e) {
+    u8 *o;
+    u8 *k;
+    u8 t, c, s;
+    s32 d;
+    o = M2C_FIELD(e, u8 **, 0xC);
+    k = (u8 *)((u32)e + e[0x1C] * 4 + 0x28);
+    t = k[0];
+    c = o[0x98];
+    d = t - c;
+    KEEP(k); KEEP(o);
+    s = k[3];
+    if (d > 0) {
+        if (k[0] < s + o[0x98]) {
+            o[0x98] = t;
+        } else {
+            o[0x98] = c + s;
+        }
+    } else if (d < 0) {
+        if (o[0x98] - s < k[0]) {
+            o[0x98] = t;
+        } else {
+            o[0x98] = c - s;
+        }
+    }
+    t = k[1];
+    c = o[0x99];
+    d = t - c;
+    KEEP(k); KEEP(o);
+    s = k[3];
+    if (d > 0) {
+        if (k[1] < s + o[0x99]) {
+            o[0x99] = t;
+        } else {
+            o[0x99] = c + s;
+        }
+    } else if (d < 0) {
+        if (o[0x99] - s < k[1]) {
+            o[0x99] = t;
+        } else {
+            o[0x99] = c - s;
+        }
+    }
+    t = k[2];
+    c = o[0x9a];
+    d = t - c;
+    KEEP(k); KEEP(o);
+    s = k[3];
+    if (d > 0) {
+        if (k[2] < s + o[0x9a]) {
+            o[0x9a] = t;
+        } else {
+            o[0x9a] = c + s;
+        }
+    } else if (d < 0) {
+        if (o[0x9a] - s < k[2]) {
+            o[0x9a] = t;
+        } else {
+            o[0x9a] = c - s;
+        }
+    }
+    if (o[0x98] == k[0] && o[0x99] == k[1] && o[0x9A] == k[2]) {
+        e[0x1C]++;
+    }
+}
+#else
 INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_80063D40);
+#endif
 
 void func_80063ED4(void *arg0) {
     void *temp_v0;
@@ -2935,7 +3040,53 @@ void func_80065100(void *arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_800652F0);
+void func_800652F0(void *arg0) {
+    void *s0;
+    void *a3;
+    s32 n;
+    s32 *t;
+    s32 *base;
+    s32 lo;
+    s32 hi;
+    s0 = M2C_FIELD(arg0, void **, 0x18);
+    if (s0 == NULL) {
+        func_8006B230(0, (s32)&D_800A946C);
+    }
+    a3 = M2C_FIELD(arg0, void **, 0xC);
+    n = 0xC;
+    if (g_FrameRate != 0x14) {
+        n = 0xF0 / g_FrameRate;
+    }
+    base = D_800A0370;
+    t = &base[M2C_FIELD(M2C_FIELD(s0, void **, 0x90), u16 *, 0x62) & 0xFFF];
+    lo = (n * *(s16 *)t) >> 12;
+    hi = (n * (*(volatile s32 *)t >> 16)) >> 12;
+    M2C_FIELD(a3, u16 *, 0x54) += lo;
+    M2C_FIELD(a3, u16 *, 0x58) += hi;
+    n = -8;
+    if ((u32)(D_8009CDA8 - M2C_FIELD(a3, s32 *, 0x94)) >= 7U) {
+        n = -0xC;
+    }
+    if (g_FrameRate != 0x14) {
+        n = (n * 0x14) / g_FrameRate;
+    }
+    M2C_FIELD(a3, u16 *, 0x56) += n;
+    n = 0x32;
+    if (g_FrameRate != 0x14) {
+        n = 0x3E8 / g_FrameRate;
+    }
+    if (M2C_FIELD(a3, s32 *, 0x94) & 1) {
+        M2C_FIELD(a3, u16 *, 0x9C) = M2C_FIELD(a3, u16 *, 0x9C) + n;
+    } else {
+        M2C_FIELD(a3, u16 *, 0x9C) = M2C_FIELD(a3, u16 *, 0x9C) - n;
+    }
+    n = 2;
+    if (g_FrameRate != 0x14) {
+        n = 0x28 / g_FrameRate;
+    }
+    M2C_FIELD(a3, u16 *, 0x78) += n;
+    M2C_FIELD(a3, u16 *, 0x7A) += n;
+}
 
 SparkHdr *func_80065510(void) {
     s16 i;
@@ -2975,7 +3126,70 @@ void func_800655B8(void) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_800617AC", func_80065614);
+M2C_UNK func_80065614(obj, life, kind)
+void *obj; u8 life; u8 kind; {
+    SparkEnt *p;
+    s32 *t;
+    s32 n;
+    SVECTOR sv;
+    C3 c;
+
+    if (obj == NULL) {
+        func_8006B230(0, (s32)&D_800A9488);
+    }
+    p = (SparkEnt *)func_80065510();
+    if (p == NULL) {
+        return 0;
+    }
+    t = p->m.t;
+    p->v[0] = *(s16 *)((u8 *)obj + 0x1C) + (*(s16 *)((u8 *)obj + 0x1C) >> 1);
+    p->v[2] = *(s16 *)((u8 *)obj + 0x20) + (*(s16 *)((u8 *)obj + 0x20) >> 1);
+    p->v[4] = *(s16 *)((u8 *)obj + 0x24) + (*(s16 *)((u8 *)obj + 0x24) >> 1);
+    p->v[1] = *(s16 *)((u8 *)obj + 0x1E) + (*(s16 *)((u8 *)obj + 0x1E) >> 1);
+    p->v[3] = *(s16 *)((u8 *)obj + 0x22) + (*(s16 *)((u8 *)obj + 0x22) >> 1);
+    p->v[5] = *(s16 *)((u8 *)obj + 0x26) + (*(s16 *)((u8 *)obj + 0x26) >> 1);
+    p->m = *(MATRIX *)(*(u8 **)((u8 *)obj + 0x90) + 0x14);
+    p->pos[0] = p->m.t[0];
+    p->pos[1] = t[1];
+    p->pos[2] = t[2];
+    c.r = 0xFF;
+    c.g = 0x50;
+    c.b = 0xA;
+    func_8003246C((u16 *)t, 0x2EE0, life, &c);
+    func_80053DE4(0x10, 0, p->m.t[0], t[1], t[2]);
+    p->h.life = life;
+    p->h.f6 = kind;
+    p->h.f9 = 2;
+    p->time = D_8009CDA8;
+    n = life * 5;
+    sv.vx = 0;
+    sv.vy = 0;
+    sv.vz = 0;
+    if (kind == 4) {
+        if ((s16)((s32 (*)(void *, SVECTOR *, s32))func_80066098)(p, &sv, n) != 0) {
+            goto done;
+        }
+        func_80065588(p);
+        return 0;
+    }
+    if (kind == 2) {
+        if ((s16)((s32 (*)(void *, SVECTOR *, s32))func_800662A8)(p, &sv, n) != 0) {
+            goto done;
+        }
+        func_80065588(p);
+        return 0;
+    }
+    if ((s16)func_80065A20(p, &sv, n) != 0) {
+        goto ok;
+    }
+fail:
+    func_80065588(p);
+    return 0;
+ok:
+    p->h.unk4 = (s32)func_800378FC((u8 *)&p->m, (u8 *)&D_800D31C0, *(s16 *)((u8 *)obj + 0x2A), (s32)obj);
+done:
+    return 1;
+}
 
 void func_800658B4(void *arg0, s32 arg1, s32 *arg2, s32 *arg3, s32 *arg4) {
     s32 temp_a1;

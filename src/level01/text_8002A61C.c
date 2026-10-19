@@ -5,6 +5,13 @@ typedef struct { u8 p[0x142]; u16 v; } ArgsX;
 typedef struct { u8 pad[0x340]; s32 f[11]; } ArgsFiles;
 typedef struct { u8 p[0x1A]; u16 v; } Rec;
 typedef struct { u8 pad[0x142]; u16 v; } G142;
+extern s32 D_8009C180;
+extern s16 D_8009CA5E;
+extern s16 D_8009CA60;
+extern s32 D_8009CA64;
+extern s32 D_8009CA68;
+extern s32 D_8009CA70;
+void func_8002BC18(void);
 extern s32 D_800AEDE8;
 extern s32 D_800AEDEC;
 extern s32 D_800AFEAC;
@@ -452,7 +459,26 @@ void func_8002BB68(u8 arg0) {
     }
 }
 
-INCLUDE_ASM("asm/level01/nonmatchings/text_8002A61C", func_8002BC18);
+void func_8002BC18(void) {
+    s32 x;
+
+    if (D_8009CA70 == 0) {
+        return;
+    }
+    if (M2C_FIELD(g_Args, s16 *, 0x142) != (*(s16 *)&D_8009CA5C)) {
+        x = D_8009C180 - D_8009CA68;
+        x *= D_8009CA60;
+        x /= D_8009CA64;
+        x += D_8009CA5E;
+        if ((D_8009CA60 > 0 && (*(s16 *)&D_8009CA5C) < x) || (D_8009CA60 < 0 && x < (*(s16 *)&D_8009CA5C))) {
+            x = (*(s16 *)&D_8009CA5C);
+        }
+        M2C_FIELD(g_Args, u16 *, 0x142) = x;
+        func_80026B00(M2C_FIELD(g_Args, u8 *, 0x142));
+    } else {
+        D_8009CA70 = 0;
+    }
+}
 
 void func_8002BDE4(void) {
     D_800AFEBC = -1;
