@@ -93,7 +93,27 @@ void port_video_init(void) {
     RT_LEAVE();
 }
 
-static void dump_rect(const char *path, s32 rx, s32 ry) {
+/* One line of the VRAM rectangle at (rx, ry) as 0x00BBGGRR pixels: 15-bit VRAM pixels, or in 24-bit mode
+ * (movies) 3 bytes a pixel from the rectangle's left edge on (w counts real pixels in both). */
+static void vram_line(s32 rx, s32 ry, int rgb24, s32 y, s32 w, u32 *out) {
+    const u16 *row = &gpu_vram[((ry + y) & 511) * 1024];
+    s32 x;
+    if (rgb24) {
+        for (x = 0; x < w; x++) {
+            u32 b = (rx & 1023) * 2 + x * 3, v = 0, k;
+            for (k = 0; k < 3; k++, b++) /* bytes of a line wrap at its 2048-byte end */
+                v |= (u32)((row[(b >> 1) & 1023] >> ((b & 1) * 8)) & 0xFF) << (k * 8);
+            out[x] = v;
+        }
+    } else {
+        for (x = 0; x < w; x++) {
+            u16 c = row[(rx + x) & 1023];
+            out[x] = ((c & 31) << 3) | (((c >> 5) & 31) << 11) | (((c >> 10) & 31) << 19);
+        }
+    }
+}
+
+static void dump_rect(const char *path, s32 rx, s32 ry, int rgb24) {
     FILE *f;
     s32 x, y, w = gpu_display.w, h = gpu_display.h;
     if (getenv("TWINE_SHOT_VRAM")) {
@@ -123,9 +143,9 @@ static void dump_rect(const char *path, s32 rx, s32 ry) {
         return;
     fprintf(f, "P6\n%d %d\n255\n", w, h);
     for (y = 0; y < h; y++) {
+        vram_line(rx, ry, rgb24, y, w, pixels);
         for (x = 0; x < w; x++) {
-            u16 c = gpu_vram[((ry + y) & 511) * 1024 + ((rx + x) & 1023)];
-            u8 rgb[3] = {(u8)((c & 31) << 3), (u8)(((c >> 5) & 31) << 3), (u8)(((c >> 10) & 31) << 3)};
+            u8 rgb[3] = {(u8)pixels[x], (u8)(pixels[x] >> 8), (u8)(pixels[x] >> 16)};
             fwrite(rgb, 1, 3, f);
         }
     }
@@ -133,7 +153,7 @@ static void dump_rect(const char *path, s32 rx, s32 ry) {
 }
 
 static void dump_display(const char *path) {
-    dump_rect(path, gpu_display.x, gpu_display.y);
+    dump_rect(path, gpu_display.x, gpu_display.y, gpu_display.rgb24);
 }
 
 static void maybe_shot(void) {
@@ -370,24 +390,12 @@ static void count_frame(void) {
 
 /* shows the VRAM rectangle at (rx, ry) the size of the display */
 static void present_rect(s32 rx, s32 ry, int rgb24) {
-    s32 x, y, w = gpu_display.w, h = gpu_display.h;
+    s32 y, w = gpu_display.w, h = gpu_display.h;
     SDL_FRect src;
     if (w <= 0 || h <= 0 || w > 640 || h > 512)
         return;
-    for (y = 0; y < h; y++) {
-        const u16 *row = &gpu_vram[((ry + y) & 511) * 1024];
-        u32 *out = &pixels[y * 640];
-        if (rgb24) {
-            const u8 *b = (const u8 *)row + rx * 2;
-            for (x = 0; x < w; x++)
-                out[x] = b[x * 3] | (b[x * 3 + 1] << 8) | (b[x * 3 + 2] << 16);
-        } else {
-            for (x = 0; x < w; x++) {
-                u16 c = row[(rx + x) & 1023];
-                out[x] = ((c & 31) << 3) | (((c >> 5) & 31) << 11) | (((c >> 10) & 31) << 19);
-            }
-        }
-    }
+    for (y = 0; y < h; y++)
+        vram_line(rx, ry, rgb24, y, w, &pixels[y * 640]);
     SDL_UpdateTexture(texture, NULL, pixels, 640 * 4);
     src.x = 0;
     src.y = 0;
@@ -418,7 +426,7 @@ void port_video_present_draw(int index, s32 x, s32 y) {
             if (!strcmp(s, want)) {
                 char path[64];
                 snprintf(path, sizeof(path), "shot_%04u_%d.ppm", frames, index);
-                dump_rect(path, x, y);
+                dump_rect(path, x, y, 0);
             }
     }
     if (!headless) {

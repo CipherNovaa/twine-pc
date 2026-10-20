@@ -42,6 +42,7 @@ static void run_vblank(void) {
         vsync_callback();
     port_pad_vblank();
     port_cd_irq();
+    port_dma_irq();
     in_irq = 0;
 }
 

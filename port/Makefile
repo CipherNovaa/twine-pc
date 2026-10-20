@@ -111,8 +111,14 @@ $(PB)/modules.o: $(PB)/modules.c src/module.h
 $(PB)/twine: $(RT_OBJ) $(PB)/modules.o $(foreach m,$(MODULES),$(PB)/$(m)/module.o)
 	$(CC) $(LDFLAGS) -o $@ $^ -lSDL3 -lm
 
+# Host tool: the MDEC model on its own, decoding movie frames from the disc image (port/tools/mdectest.c)
+mdectest: $(PB)/mdectest
+$(PB)/mdectest: tools/mdectest.c src/mdec.c src/mdec.h
+	@mkdir -p $(dir $@)
+	$(CC) -m32 -std=gnu11 -O2 -g -Wall -DNATIVE_PORT -I$(ROOT)/include -Isrc tools/mdectest.c src/mdec.c -o $@
+
 clean:
 	rm -rf $(PB)
 
-.PHONY: all clean FORCE
+.PHONY: all clean mdectest FORCE
 .PRECIOUS: $(PB)/%.c

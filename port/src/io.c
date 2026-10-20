@@ -1,12 +1,14 @@
 /* Hardware registers for recompiled library code (0x1F801000-0x1F802FFF), written from the psx-spx
- * documentation: DMA (GPU/SPU/OTC channels run at once), the GPU ports (into the software GPU), root
- * counters (from host time), interrupt registers, and the SPU register file with its 512 KB sound RAM
- * (the mixer in spu.c reads them). Anything else is stored and read back, and logged once. */
+ * documentation: DMA (GPU/SPU/OTC channels run at once), the GPU ports (into the software GPU), the MDEC
+ * (mdec.c) with its DMA channels 0 and 1, root counters (from host time), interrupt registers, and the SPU
+ * register file with its 512 KB sound RAM (the mixer in spu.c reads them). Anything else is stored and read
+ * back, and logged once. */
 #include <string.h>
 #include <time.h>
 #include "port.h"
 #include "gpu.h"
 #include "io.h"
+#include "mdec.h"
 
 u16 spu_regs[0x200];       /* 0x1F801C00-0x1F801FFF */
 u8 spu_ram[512 * 1024];
@@ -20,6 +22,20 @@ static u32 timer_mode[3], timer_target[3];
 static u64 timer_base[3];
 static void *dma_callback[7];
 extern int port_subframe; /* an extra drawing between ticks (interp.c) */
+
+/* MDEC transfers (channels 0 and 1) move their data at once but finish later, as on the console, where the
+ * MDEC takes a while to decode: MDEC_TIME after they started, they are signalled (CHCR no longer busy, then
+ * the DMA callback) at the next vblank, or when the game polls the channel. Movie players start the next
+ * frame's work after DecDCTout and expect the callback only later (the shell's clears its frame-done flag
+ * right after the call). What a callback starts (the next slice of a frame) is signalled right after it, so
+ * a frame decoded slice by slice is done in one go: libcd's stream reader, which leaves a sector for later
+ * while DMA1 is busy, sees it busy only briefly. DMA1 can also start before DMA0 has delivered the MDEC's
+ * input: it then waits for the decoded words. */
+#define MDEC_TIME (33868800 / 4000) /* 0.25 ms in system clock ticks */
+static u32 dma_done;               /* channels whose transfer is complete but not yet signalled */
+static u64 dma_due[2];             /* ...from this time on (sysclock) */
+static int dma_in_callback;
+static u32 mdec_out_madr, mdec_out_left; /* DMA1 waiting for decoded words */
 
 /* GPU ports */
 static u32 gp0_buf[0x10000];
@@ -126,11 +142,84 @@ static void gp1_write(u32 v) {
 
 /* ---- DMA ---- */
 
+/* An MDEC transfer has moved its data (under RT_ENTER). */
+static void mdec_dma_done(int ch) {
+    dma_done |= 1u << ch;
+    dma_due[ch] = dma_in_callback ? 0 : sysclock() + MDEC_TIME;
+}
+
+/* DMA1: copy what the MDEC has decoded; the transfer is done once all its words are out. */
+static void mdec_dma_out(void) {
+    if (!mdec_out_left)
+        return;
+    while (mdec_out_left && mdec_out_ready()) {
+        M32_RAM(mdec_out_madr) = mdec_read();
+        mdec_out_madr += 4;
+        mdec_out_left--;
+    }
+    if (!mdec_out_left)
+        mdec_dma_done(1);
+}
+
+/* Signal the channel's done MDEC transfer, if there is one and it's due (or forced): CHCR not busy, then
+ * the callback; then the ones the callback starts. (Taking one is guarded against the vblank, which signals
+ * them too.) */
+static void dma_finish(int ch, int force) {
+    int n;
+    for (n = 0; n < 1024; n++) {
+        u32 had;
+        RT_ENTER();
+        had = dma_done & (1u << ch);
+        if (had && !force && dma_due[ch] > sysclock())
+            had = 0;
+        if (had) {
+            dma_done &= ~had;
+            dma_chcr[ch] &= ~0x11000000u;
+        }
+        RT_LEAVE();
+        if (!had)
+            return;
+        if (dma_callback[ch]) {
+            dma_in_callback++;
+            ((void (*)(void))dma_callback[ch])();
+            dma_in_callback--;
+        }
+        force = 0;
+    }
+}
+
+/* Every vblank (irq.c): signal the MDEC transfers that are due. */
+void port_dma_irq(void) {
+    int n;
+    for (n = 0; n < 16 && dma_done; n++) {
+        u32 before = dma_done;
+        dma_finish(0, 0);
+        dma_finish(1, 0);
+        if (dma_done == before)
+            break;
+    }
+}
+
 static void dma_run(int ch) {
     u32 madr = dma_madr[ch] & 0xFFFFFC, chcr = dma_chcr[ch];
     u32 words = (dma_bcr[ch] & 0xFFFF) * ((dma_bcr[ch] >> 16) ? (dma_bcr[ch] >> 16) : 1), i;
     int to_dev = chcr & 1;
     switch (ch) {
+    case 0: /* MDEC in: command parameters (sync mode 1, 20h-word blocks) */
+        RT_ENTER();
+        for (i = 0; i < words; i++)
+            mdec_write(M32_RAM(madr + i * 4));
+        mdec_dma_done(0);
+        mdec_dma_out(); /* a DMA1 waiting for this input */
+        RT_LEAVE();
+        return;
+    case 1: /* MDEC out */
+        RT_ENTER();
+        mdec_out_madr = madr;
+        mdec_out_left = words;
+        mdec_dma_out();
+        RT_LEAVE();
+        return;
     case 2: /* GPU */
         if (((chcr >> 9) & 3) == 2) {
             u32 a = madr, n = 0;
@@ -217,6 +306,8 @@ u32 port_io_read(u32 addr, int size) {
         case 4:
             return dma_bcr[ch];
         case 8:
+            if (ch < 2 && (dma_done >> ch) & 1) /* polling an MDEC transfer: done once it's due */
+                dma_finish(ch, 0);
             return dma_chcr[ch];
         }
         return 0;
@@ -230,6 +321,16 @@ u32 port_io_read(u32 addr, int size) {
         return i_stat;
     case 0x74:
         return i_mask;
+    case 0x820: /* MDEC0: decoded data */
+        RT_ENTER();
+        v = mdec_read();
+        RT_LEAVE();
+        return v;
+    case 0x824: /* MDEC1: status */
+        RT_ENTER();
+        v = mdec_status();
+        RT_LEAVE();
+        return size == 2 ? (off & 2 ? v >> 16 : v & 0xFFFF) : v;
     case 0x810: /* GPUREAD */
         if (gpu_read_w) {
             u32 lo = gpuread_pixel(), hi = gpuread_pixel();
@@ -284,6 +385,14 @@ void port_io_write(u32 addr, u32 v, int size) {
             dma_bcr[ch] = v;
             break;
         case 8:
+            if (ch < 2) { /* the last MDEC transfer is over (its data has moved), or stopped waiting */
+                dma_finish(ch, 1);
+                if (ch == 1) {
+                    RT_ENTER();
+                    mdec_out_left = 0;
+                    RT_LEAVE();
+                }
+            }
             dma_chcr[ch] = v;
             if (v & 0x01000000)
                 dma_run(ch);
@@ -309,6 +418,17 @@ void port_io_write(u32 addr, u32 v, int size) {
         return;
     case 0x814:
         gp1_write(v);
+        return;
+    case 0x820: /* MDEC0: command or parameter */
+        RT_ENTER();
+        mdec_write(v);
+        mdec_dma_out();
+        RT_LEAVE();
+        return;
+    case 0x824: /* MDEC1: control */
+        RT_ENTER();
+        mdec_control(v);
+        RT_LEAVE();
         return;
     }
     if (off >= 0x100 && off < 0x130) {
