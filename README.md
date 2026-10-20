@@ -55,6 +55,8 @@ Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the b
 
 **A save with everything unlocked:** `tools/make_unlocked_card.py CARD OUT.mcd` takes a card with a save the game made (any progress) and writes a card whose save has all 11 missions available and completed, difficulty 007 (`--difficulty agent` otherwise), and all six bonus cheats unlocked for Options > Cheats (`--cheats-on` also switches them on). Saved as `~/.local/share/twine/card2.mcd` it is the card in slot 2: Options > Memory Card > Load > slot 2, then use CONTINUE (NEW GAME starts over). The script's comments describe the save format.
 
+The title card's lettering is baked from the MGS1 Codec font, © 2025 Andrew Gleeson, licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); the glyph data in `port/src/intro_font.h` is adapted from it and shared under the same license (`port/tools/bake_intro_font.py` re-bakes it).
+
 For testing: `TWINE_HEADLESS=1` runs without a window, `TWINE_SHOT=frames` saves frames as PPM files, `TWINE_TEST_PAD`/`TWINE_TEST_STICK`/`TWINE_TEST_LOOK` stand in for the controls, `TWINE_PROFILE=1` samples where the time goes (`port/tools/profile.py`), `TWINE_FPSLOG=1` logs the frame rate and pacing every ten seconds, `TWINE_CD_LOG`, `TWINE_BIOS_LOG`, `TWINE_SMOOTH_LOG`, `TWINE_PAD_LOG` log more to `port.log` (written in the current directory), and `TWINE_CORE=1` turns a fatal error into a core dump (`2`: also a write where the console has no hardware, the mark of a stray pointer). The source files' header comments describe the rest.
 
 ## Setup
