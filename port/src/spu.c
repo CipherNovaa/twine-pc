@@ -6,12 +6,19 @@
  * Emulated at the SPU's own rate, one tick per 44100 Hz sample: 24 voices (SPU-ADPCM blocks with their
  * loop flags and ENDX, the pitch counter with pitch modulation and 4-point Gaussian interpolation, noise,
  * the ADSR envelope readable as ENVX, fixed or sweeping left/right volume), the main volume and the reverb
- * unit (22050 Hz, its work area in sound RAM, resampled through the documented 39-tap filter).
+ * unit (22050 Hz, its work area in sound RAM, resampled through the documented 39-tap filter), and the CD
+ * audio input (the drive's XA-ADPCM output, xa.c) with its volume, enable and reverb bits.
  *
  * Key on/off take effect when written (the hardware applies them at its next tick).
  *
- * Not emulated: CD-ROM/external audio input and its volumes, the capture buffers (sound RAM 0-0xFFF), the
- * SPU interrupt (IRQA), and the transfer timing (io.c completes transfers at once). */
+ * Not emulated: external audio input, the capture buffers (sound RAM 0-0xFFF), the SPU interrupt (IRQA),
+ * and the transfer timing (io.c completes transfers at once).
+ *
+ * TWINE_XA_WAV=file records the CD audio input as the SPU takes it in (44100 Hz stereo, before the CD
+ * volume), TWINE_SPU_WAV=file the SPU's whole output. */
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <SDL3/SDL.h>
@@ -32,6 +39,7 @@
 #define REG_XADDR 0xD3  /* 0x1F801DA6 */
 #define REG_FIFO 0xD4   /* 0x1F801DA8 */
 #define REG_ATTR 0xD5   /* 0x1F801DAA SPUCNT */
+#define REG_CDVOL 0xD8  /* 0x1F801DB0 CD audio input volume left (right follows) */
 #define REG_MVOLX 0xDC  /* 0x1F801DB8 current main volume left (right follows) */
 #define REG_REVERB 0xE0 /* 0x1F801DC0 reverb configuration */
 #define REG_VOLX 0x100  /* 0x1F801E00 current voice volumes, left/right per voice */
@@ -39,6 +47,8 @@
 #define ATTR_ENABLE 0x8000
 #define ATTR_UNMUTE 0x4000
 #define ATTR_REVERB 0x0080 /* reverb master enable: writes to the work area */
+#define ATTR_CD_REVERB 0x0004
+#define ATTR_CD 0x0001     /* CD audio enable */
 
 /* per voice, at 0x1F801C00 + n * 16 */
 enum { V_VOLL, V_VOLR, V_PITCH, V_SSA, V_ADSR1, V_ADSR2, V_ENVX, V_LSAX };
@@ -81,6 +91,25 @@ static int rv_write_on;
 static int clock_mode;
 static SDL_Mutex *mutex;
 static u64 host_start_ns, host_samples;
+
+/* CD audio input ring: the game thread writes cd_wr, the SPU's thread cd_rd (single producer, single
+ * consumer; the indexes count frames and wrap) */
+#define CD_RING 16384u
+#define CD_PREBUFFER 2048u /* frames queued before the SPU starts taking them (after running dry) */
+static s16 cd_ring[CD_RING][2];
+static atomic_uint cd_wr, cd_rd;
+static atomic_int cd_idle = 1;
+static int cd_running; /* SPU side: taking frames (else waiting for CD_PREBUFFER) */
+
+/* WAV recordings (TWINE_XA_WAV, TWINE_SPU_WAV), written by whichever thread runs the SPU */
+typedef struct {
+    const char *env;
+    FILE *f;
+    int tried;
+    u32 frames, n;
+    s16 buf[4096 * 2];
+} Wav;
+static Wav xa_wav = {"TWINE_XA_WAV"}, spu_wav = {"TWINE_SPU_WAV"};
 
 /* 4-point Gaussian interpolation table (psx-spx "4-Point Gaussian Interpolation") */
 static const s16 gauss[512] = {
@@ -150,9 +179,9 @@ static const s16 gauss[512] = {
     0x5997, 0x599E, 0x59A4, 0x59A9, 0x59AD, 0x59B0, 0x59B2, 0x59B3,
 };
 
-/* ADPCM prediction filters (psx-spx "XA-ADPCM", Pos/neg Tables; SPU-ADPCM has five) */
-static const s32 filter_pos[5] = {0, 60, 115, 98, 122};
-static const s32 filter_neg[5] = {0, 0, -52, -55, -60};
+/* ADPCM prediction filters (psx-spx "XA-ADPCM", Pos/neg Tables; SPU-ADPCM has five, XA-ADPCM four) */
+const s32 adpcm_filter_pos[5] = {0, 60, 115, 98, 122};
+const s32 adpcm_filter_neg[5] = {0, 0, -52, -55, -60};
 
 /* reverb resampling filter (psx-spx "Reverb Buffer Resampling") */
 static const s16 rv_fir[39] = {
@@ -264,8 +293,8 @@ static void decode_block(Voice *v, int n) {
     filter = (b[0] >> 4) & 7;
     if (filter > 4)
         filter = 0; /* undocumented filter values: no prediction */
-    f0 = filter_pos[filter];
-    f1 = filter_neg[filter];
+    f0 = adpcm_filter_pos[filter];
+    f1 = adpcm_filter_neg[filter];
     v->buf[0] = v->buf[28];
     v->buf[1] = v->buf[29];
     v->buf[2] = v->buf[30];
@@ -440,12 +469,99 @@ static void reverb_tick(u16 attr, const s32 *in, s32 *out) {
     rv_pos++;
 }
 
+/* ---- CD audio input ---- */
+
+int spu_cd_queued(void) {
+    return (int)(atomic_load_explicit(&cd_wr, memory_order_relaxed) -
+                 atomic_load_explicit(&cd_rd, memory_order_acquire));
+}
+
+int spu_cd_push(const s16 *lr, int frames) {
+    u32 wr = atomic_load_explicit(&cd_wr, memory_order_relaxed);
+    u32 space = CD_RING - (wr - atomic_load_explicit(&cd_rd, memory_order_acquire)), i;
+    if ((u32)frames > space)
+        frames = (int)space;
+    for (i = 0; i < (u32)frames; i++) {
+        cd_ring[(wr + i) % CD_RING][0] = lr[i * 2];
+        cd_ring[(wr + i) % CD_RING][1] = lr[i * 2 + 1];
+    }
+    atomic_store_explicit(&cd_wr, wr + frames, memory_order_release);
+    return frames;
+}
+
+void spu_cd_idle(int idle) {
+    atomic_store_explicit(&cd_idle, idle, memory_order_release);
+}
+
+/* The next CD input sample; silence while there is none, and after running dry until the drive has queued
+ * CD_PREBUFFER frames again (or has stopped, leaving less). */
+static void cd_input(s32 *lr) {
+    u32 rd = atomic_load_explicit(&cd_rd, memory_order_relaxed);
+    u32 have = atomic_load_explicit(&cd_wr, memory_order_acquire) - rd;
+    lr[0] = lr[1] = 0;
+    if (!cd_running && (have >= CD_PREBUFFER || (have && atomic_load_explicit(&cd_idle, memory_order_acquire))))
+        cd_running = 1;
+    if (!cd_running)
+        return;
+    if (!have) {
+        cd_running = 0;
+        return;
+    }
+    lr[0] = cd_ring[rd % CD_RING][0];
+    lr[1] = cd_ring[rd % CD_RING][1];
+    atomic_store_explicit(&cd_rd, rd + 1, memory_order_release);
+}
+
+/* ---- WAV recording ---- */
+
+static void wav_header(FILE *f, u32 frames) {
+    u8 h[44];
+    u32 bytes = frames * 4;
+    memcpy(h, "RIFF", 4);
+    *(u32 *)(h + 4) = 36 + bytes;
+    memcpy(h + 8, "WAVEfmt ", 8);
+    *(u32 *)(h + 16) = 16;
+    *(u16 *)(h + 20) = 1; /* PCM */
+    *(u16 *)(h + 22) = 2;
+    *(u32 *)(h + 24) = 44100;
+    *(u32 *)(h + 28) = 44100 * 4;
+    *(u16 *)(h + 32) = 4;
+    *(u16 *)(h + 34) = 16;
+    memcpy(h + 36, "data", 4);
+    *(u32 *)(h + 40) = bytes;
+    fseek(f, 0, SEEK_SET);
+    fwrite(h, 1, sizeof(h), f);
+    fseek(f, 0, SEEK_END);
+}
+
+/* Append a frame; every 4096 frames the data goes out and the header is brought up to date, so the file
+ * stays valid however the process ends. */
+static void wav_put(Wav *w, s32 l, s32 r) {
+    if (!w->tried) {
+        const char *path = getenv(w->env);
+        w->tried = 1;
+        if (path && (w->f = fopen(path, "wb")))
+            wav_header(w->f, 0);
+    }
+    if (!w->f)
+        return;
+    w->buf[w->n * 2] = (s16)l;
+    w->buf[w->n * 2 + 1] = (s16)r;
+    if (++w->n < 4096)
+        return;
+    fwrite(w->buf, 4, w->n, w->f);
+    w->frames += w->n;
+    w->n = 0;
+    wav_header(w->f, w->frames);
+    fflush(w->f);
+}
+
 /* ---- mixer ---- */
 
-static void spu_tick(s32 *out) {
+static void spu_tick(s32 *out, const s32 *cd) {
     u16 attr = spu_regs[REG_ATTR];
     u32 pmon = reg32(REG_PMON), non = reg32(REG_NON), eon = reg32(REG_EON);
-    s32 dry[2] = {0, 0}, wet[2] = {0, 0}, rv[2], prev = 0;
+    s32 dry[2] = {0, 0}, wet[2] = {0, 0}, rv[2], prev = 0, cdv[2] = {0, 0};
     int n, c;
     noise_tick(attr);
     for (n = 0; n < 24; n++) {
@@ -481,19 +597,34 @@ static void spu_tick(s32 *out) {
             next_block(v, n);
         }
     }
+    if (attr & ATTR_CD) { /* CD audio: its own volume, then like a voice (reverb if enabled) */
+        for (c = 0; c < 2; c++) {
+            cdv[c] = (cd[c] * (s16)spu_regs[REG_CDVOL + c]) >> 15;
+            if (attr & ATTR_CD_REVERB)
+                wet[c] += cdv[c];
+        }
+    }
     reverb_tick(attr, wet, rv);
     for (c = 0; c < 2; c++) {
         main_vol[c] = volume_tick(spu_regs[REG_MVOLL + c], main_vol[c], &main_vol_counter[c]);
-        out[c] = (attr & ATTR_UNMUTE) ? clamp16((clamp16(dry[c] + rv[c]) * main_vol[c]) >> 15) : 0;
+        /* the mute bit silences the voices and reverb, not the CD input */
+        out[c] = clamp16((clamp16(((attr & ATTR_UNMUTE) ? dry[c] + rv[c] : 0) + cdv[c]) * main_vol[c]) >> 15);
     }
 }
 
 static void render(s16 *out, int frames) {
-    int i;
+    int i, c;
     for (i = 0; i < frames; i++) {
-        s32 o[2] = {0, 0};
-        if (spu_regs[REG_ATTR] & ATTR_ENABLE)
-            spu_tick(o);
+        s32 o[2] = {0, 0}, cd[2];
+        u16 attr = spu_regs[REG_ATTR];
+        cd_input(cd); /* the drive's output keeps time whatever the SPU does with it */
+        wav_put(&xa_wav, cd[0], cd[1]);
+        if (attr & ATTR_ENABLE)
+            spu_tick(o, cd);
+        else if (attr & ATTR_CD) /* in reset, the CD input still plays (at the current main volume) */
+            for (c = 0; c < 2; c++)
+                o[c] = clamp16((clamp16((cd[c] * (s16)spu_regs[REG_CDVOL + c]) >> 15) * main_vol[c]) >> 15);
+        wav_put(&spu_wav, o[0], o[1]);
         if (out) {
             out[i * 2] = (s16)o[0];
             out[i * 2 + 1] = (s16)o[1];
@@ -587,6 +718,16 @@ void spu_render(s16 *out, int frames) {
     unlock();
 }
 
+void spu_sync(void) {
+    if (clock_mode != SPU_CLOCK_HOST)
+        return;
+    RT_ENTER();
+    lock();
+    catch_up();
+    unlock();
+    RT_LEAVE();
+}
+
 /* ---- registers ---- */
 
 u16 spu_read(u32 reg) {
@@ -613,9 +754,15 @@ u16 spu_read(u32 reg) {
 }
 
 void spu_write(u32 reg, u16 v) {
+    static int log_cd = -1;
     u32 bits, n;
     reg &= 0x1FF;
     RT_ENTER();
+    if (log_cd < 0)
+        log_cd = getenv("TWINE_CD_LOG") != NULL;
+    if (log_cd && (((reg == REG_CDVOL || reg == REG_CDVOL + 1) && v != spu_regs[reg]) ||
+                   (reg == REG_ATTR && ((v ^ spu_regs[reg]) & (ATTR_CD | ATTR_CD_REVERB)))))
+        port_log("spu: %s = %04X\n", reg == REG_ATTR ? "SPUCNT" : reg == REG_CDVOL ? "CD volume L" : "CD volume R", v);
     lock();
     catch_up();
     spu_regs[reg] = v;
