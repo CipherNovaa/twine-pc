@@ -1022,6 +1022,15 @@ void port_video_present_draw(int index, s32 x, s32 y) {
 
 /* ---- the intro (intro.c), before the game: its frames don't count as the game's ---- */
 
+/* the refresh rate of the display the window is on (0: no window, or not known) */
+float port_video_refresh(void) {
+    const SDL_DisplayMode *m;
+    if (!window)
+        return 0;
+    m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window));
+    return m ? m->refresh_rate : 0;
+}
+
 int port_video_headless(void) {
     return headless;
 }

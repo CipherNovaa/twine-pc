@@ -40,6 +40,7 @@ Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the b
 | `aspect = fill` | stretch the picture over the whole screen (for a 4:3 CRT driven at 1280x1024); by default it keeps 4:3 |
 | `vsync = 0` | show frames as fast as they come instead of at the display's refresh |
 | `smooth = 0` | no frames between the game's ticks |
+| `fps_max` | frames at most that many a second (`0`: no limit); by default twice the display's refresh rate, so that each refresh gets one drawn at most half a refresh before it |
 | `mouse_sens`, `mouse_invert = 1` | mouse look speed (default 1), inverted up/down |
 | `mouse = 0` | leave the mouse alone (no mouse look; for playing with a gamepad) |
 | `filter` | how the picture is scaled: `sharp` (default: even pixels, no blur), `nearest`, `linear` |

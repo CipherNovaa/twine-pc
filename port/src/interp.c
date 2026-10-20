@@ -7,7 +7,10 @@
  * one too), at the display's rate (SDL vsync) or as fast as they come with TWINE_VSYNC=0.
  *
  * TWINE_SMOOTH=0 turns it off. Headless runs only do it with TWINE_SMOOTH=1; TWINE_SHOT frames then dump each
- * drawing of the tick as shot_NNNN_K.ppm. TWINE_SMOOTH_LOG=1 logs the timing behind each decision. */
+ * drawing of the tick as shot_NNNN_K.ppm. TWINE_SMOOTH_LOG=1 logs the timing behind each decision.
+ * TWINE_FPS_MAX: drawings at most that many a second (0: as many as there is time for); by default twice the
+ * refresh rate of the window's display, so that each refresh gets one drawn at most half a refresh before it
+ * (more would be drawn and never shown). The tick's own frame is never held back. */
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -21,6 +24,7 @@ void libgpu_restore(void);
 void port_mouse_pending(s32 *yaw, s32 *pitch);
 int port_video_headless(void);
 void port_video_present_draw(int index, s32 x, s32 y);
+float port_video_refresh(void);
 
 int port_subframe;        /* while an extra drawing runs */
 int port_smooth_shown;    /* the render step has shown this tick's frame (video.c then doesn't at VSync) */
@@ -31,6 +35,8 @@ static u64 cost = 4000000; /* ns per drawing, a moving average */
 static u64 began;
 static int drawings;       /* extra drawings this tick */
 static u8 ram_copy[PS1_RAM_SIZE], scratch_copy[PS1_SCRATCH_SIZE];
+static u64 shown_at;       /* host time the last drawing was shown */
+static u64 spacing;        /* TWINE_FPS_MAX's time between drawings (0: none) */
 
 #define VBLANK_NS 16683333ull
 
@@ -48,11 +54,25 @@ static int smooth_enabled(void) {
     return enabled;
 }
 
+static u64 fps_spacing(void) {
+    static int fps_max = -2;
+    float hz;
+    if (fps_max == -2) {
+        const char *s = getenv("TWINE_FPS_MAX");
+        fps_max = s ? atoi(s) : -1;
+    }
+    if (fps_max == 0)
+        return 0;
+    hz = fps_max > 0 ? (float)fps_max : 2 * port_video_refresh();
+    return hz > 0 ? (u64)(1e9f / hz) : 0;
+}
+
 /* irq.c: the game's VSync returned; its next tick lasts `vblanks` */
 void port_smooth_tick(u32 vblanks) {
     tick_start = now_ns();
     tick_vblanks = vblanks;
     drawings = 0;
+    spacing = fps_spacing(); /* (the window may have gone to another display) */
 }
 
 /* Before an extra drawing (smooth.c): 1 if there is time for one before the tick ends, keeping room for
@@ -64,6 +84,17 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
         return 0;
     now = now_ns();
     end = tick_start + tick_vblanks * VBLANK_NS;
+    /* TWINE_FPS_MAX: not before its time (if that leaves room for the rest) */
+    if (room >= 0 && spacing && shown_at && now < shown_at + spacing) {
+        u64 at = shown_at + spacing;
+        struct timespec ts;
+        if (at + room * cost + 1000000 > end)
+            return 0;
+        ts.tv_sec = (time_t)(at / 1000000000ull);
+        ts.tv_nsec = (long)(at % 1000000000ull);
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL);
+        now = now_ns();
+    }
     if (getenv("TWINE_SMOOTH_LOG"))
         port_log("smooth: %.2f ms into the tick of %.2f ms, drawing %.2f ms, %d drawn\n", (now - tick_start) / 1e6,
                  (end - tick_start) / 1e6, cost / 1e6, drawings);
@@ -99,6 +130,7 @@ void port_smooth_end(void) {
     RT_LEAVE();
     port_video_present_draw(drawings++, x, y);
     port_smooth_shown = 1;
+    shown_at = now_ns();
 }
 
 /* After the tick's own drawing: show it at once (when smoothing; else VSync shows frames as usual). */
@@ -109,4 +141,5 @@ void port_smooth_present(void) {
     gpu_draw_origin(&x, &y);
     port_video_present_draw(drawings++, x, y);
     port_smooth_shown = 1;
+    shown_at = now_ns();
 }
