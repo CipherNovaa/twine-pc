@@ -8,9 +8,10 @@
  *
  * TWINE_SMOOTH=0 turns it off. Headless runs only do it with TWINE_SMOOTH=1; TWINE_SHOT frames then dump each
  * drawing of the tick as shot_NNNN_K.ppm. TWINE_SMOOTH_LOG=1 logs the timing behind each decision.
- * TWINE_FPS_MAX: drawings at most that many a second (0: as many as there is time for); by default twice the
- * refresh rate of the window's display, so that each refresh gets one drawn at most half a refresh before it
- * (more would be drawn and never shown). The tick's own frame is never held back. */
+ * TWINE_FPS_MAX: drawings at most that many a second (0: as many as there is time for); by default three times
+ * the refresh rate of the window's display, so that each refresh gets one drawn at most a third of a refresh
+ * before it, with room to spare around the ticks (more would be drawn and never shown). The tick's own frame is
+ * never held back. */
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -63,7 +64,7 @@ static u64 fps_spacing(void) {
     }
     if (fps_max == 0)
         return 0;
-    hz = fps_max > 0 ? (float)fps_max : 2 * port_video_refresh();
+    hz = fps_max > 0 ? (float)fps_max : 3 * port_video_refresh();
     return hz > 0 ? (u64)(1e9f / hz) : 0;
 }
 
@@ -84,9 +85,10 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
         return 0;
     now = now_ns();
     end = tick_start + tick_vblanks * VBLANK_NS;
-    /* TWINE_FPS_MAX: not before its time (if that leaves room for the rest) */
-    if (room >= 0 && spacing && shown_at && now < shown_at + spacing) {
-        u64 at = shown_at + spacing;
+    /* TWINE_FPS_MAX: not before its time, so that it is shown `spacing` after the one before (if that leaves
+     * room for the rest) */
+    if (room >= 0 && spacing && shown_at && now + (cost < spacing ? cost : spacing) < shown_at + spacing) {
+        u64 at = shown_at + spacing - (cost < spacing ? cost : spacing);
         struct timespec ts;
         if (at + room * cost + 1000000 > end)
             return 0;
