@@ -35,7 +35,7 @@ static int dither_on;
  * ones drops them, unless one kept after them reads there. TWINE_SW_DEFER=0 (or TWINE_HW_COMPARE) does
  * everything at once; TWINE_SW_DEFER_LOG=1 logs what made them be done. */
 #define DEFER_MAX 8192
-#define DEFER_WORDS 12 /* a gouraud textured quad; longer commands (poly-lines) are drawn at once */
+#define DEFER_WORDS 32 /* a poly-line of up to 15 gouraud points; longer ones are drawn at once */
 typedef struct {
     s16 x1, y1, x2, y2; /* x1 > x2: none */
 } Box;
@@ -692,7 +692,7 @@ static void replay_why(int why) {
         on = getenv("TWINE_SW_DEFER_LOG") != NULL;
     if (on && gpu_stats[0] / 2000 != last) {
         last = gpu_stats[0] / 2000;
-        port_log("defer: done for the card %d, a read %d, no room %d, a poly-line %d, VRAM's edge %d; %d kept\n",
+        port_log("defer: done for the card %d, a read %d, no room %d, a long poly-line %d, VRAM's edge %d; %d kept\n",
                  count[WHY_UPLOAD], count[WHY_READ], count[WHY_FULL], count[WHY_POLY_LINE], count[WHY_EDGE], n_kept);
     }
 }
@@ -868,12 +868,24 @@ static int record(const u32 *w, int avail) {
         return used; /* nothing drawn */
     if (n_kept == DEFER_MAX)
         replay(WHY_FULL);
+    memset(k.u.p.w, 0x55, sizeof(k.u.p.w)); /* (a poly-line cut short ends there when done) */
     memcpy(k.u.p.w, w, used * 4);
     k.draw = rec_draw, k.tex = rec_tex, k.clut = rec_clut;
     k.dropped = 0;
     kept[n_kept++] = k;
     blocks_of(&k.draw, kept_blocks);
     return used;
+}
+
+/* how many words a primitive command takes (a poly-line runs to its terminator) */
+static int command_words(const u32 *w, int avail) {
+    u32 cmd = w[0] >> 24;
+    int k = 2, step = (cmd >> 4) & 1 ? 2 : 1;
+    if (cmd < 0x48 || cmd >= 0x60 || !(cmd & 8))
+        return 1; /* (at most DEFER_WORDS) */
+    while (k < avail && (w[k] & 0xF000F000) != 0x50005000)
+        k += step;
+    return k + 1;
 }
 
 static void gp0(const u32 *w, int n);
@@ -895,8 +907,7 @@ static void gp0(const u32 *w, int n) {
         u32 cmd = w[k] >> 24;
         int used = 1;
         if (cmd >= 0x20 && cmd < 0x80) {
-            /* poly-lines run past what is kept: drawn at once, after the kept ones */
-            if (defer_on() && !(cmd >= 0x48 && cmd < 0x60 && (cmd & 8)))
+            if (defer_on() && command_words(w + k, n - k) <= DEFER_WORDS)
                 used = record(w + k, n - k);
             else {
                 replay(WHY_POLY_LINE);
