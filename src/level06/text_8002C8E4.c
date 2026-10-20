@@ -4239,8 +4239,10 @@ s32 L1_Cheat_CheckCodes(void) {
     s32 hit;
 
     triggered = 0;
-#ifdef MOD_DEVCHEATS
+#if defined(MOD_DEVCHEATS)
     if (1) { /* retail skips the developer cheat codes when running from the CD archive */
+#elif defined(NATIVE_PORT)
+    if (((s8 *)g_Args)[0x1BC] == 0 || port_dev_cheats) { /* the PC port's devcheats setting opens them */
 #else
     if (((s8 *)g_Args)[0x1BC] == 0) {
 #endif

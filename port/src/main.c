@@ -408,10 +408,13 @@ static void load_settings(void) {
     fclose(f);
 }
 
+int port_dev_cheats;
+
 int main(int argc, char **argv) {
     const char *level_env;
     s32 level, r;
     load_settings();
+    port_dev_cheats = getenv("TWINE_DEVCHEATS") && atoi(getenv("TWINE_DEVCHEATS"));
     level_env = getenv("TWINE_LEVEL");
     level = level_env ? atoi(level_env) : 0;
     log_file = fopen("port.log", "w");

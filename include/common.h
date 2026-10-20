@@ -47,6 +47,7 @@ typedef double f64;
 #else
 #define BREAK(code) ((void)0)
 #define GAME_MAIN "game_main"
+extern int port_dev_cheats; /* the developer cheat codes are open (TWINE_DEVCHEATS, port/src/main.c) */
 #endif
 
 #endif

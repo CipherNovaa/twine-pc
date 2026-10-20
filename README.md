@@ -43,6 +43,7 @@ Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the b
 | `mouse_sens`, `mouse_invert = 1` | mouse look speed (default 1), inverted up/down |
 | `rumble = 0` | no gamepad rumble (it follows the game's vibration option otherwise) |
 | `card1`, `card2` | memory card images (raw 128 KB, as emulators use). Slot 1 defaults to `~/.local/share/twine/card1.mcd`, made on first use; slot 2 to `card2.mcd` there if it exists; `none` leaves a slot empty |
+| `devcheats = 1` | the developers' cheat codes work on the pause menu (see Developer cheat codes below; SELECT SELECT CIRCLE CIRCLE then SELECT CIRCLE completes the mission) |
 | `no_intro = 1` | skip the boot animation and title card |
 | `level = N` | start straight in mission folder N (1-11) |
 
