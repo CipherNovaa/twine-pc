@@ -49,7 +49,7 @@ static const struct {
     u16 bit;
 } keymap[] = {
     {SDL_SCANCODE_UP, P_UP}, {SDL_SCANCODE_DOWN, P_DOWN}, {SDL_SCANCODE_LEFT, P_LEFT},
-    {SDL_SCANCODE_RIGHT, P_RIGHT}, {SDL_SCANCODE_RETURN, P_START},
+    {SDL_SCANCODE_RIGHT, P_RIGHT},
     {SDL_SCANCODE_TAB, P_SELECT}, {SDL_SCANCODE_SPACE, P_CROSS}, {SDL_SCANCODE_BACKSPACE, P_TRI},
 };
 
@@ -108,18 +108,27 @@ static const struct {
     {SDL_GAMEPAD_BUTTON_TOUCHPAD, P_SELECT}, {SDL_GAMEPAD_BUTTON_SOUTH, P_CROSS},
 };
 
-/* Bond has the controls: the twin-stick mod says so every game frame it does (no cut scene or menu); a
- * pause or a menu that stops the game's frames counts as not. */
-static int gameplay_on;
-static u32 gameplay_at;
+/* Who has the controls in a mission: the twin-stick mod says every game frame (1 Bond, 0 a menu, 2 a cut
+ * scene); when it hasn't for a while (the game's frames stopped), a menu. */
+static int controls_state;
+static u32 controls_at;
 
-void port_controls_gameplay(int on) {
-    gameplay_on = on;
-    gameplay_at = port_vblank_count();
+void port_controls_state(int state) {
+    controls_state = state;
+    controls_at = port_vblank_count();
+}
+
+static int controls_now(void) {
+    return port_vblank_count() - controls_at < 10 ? controls_state : 0;
 }
 
 static int in_gameplay(void) {
-    return port_module && port_module->level && gameplay_on && port_vblank_count() - gameplay_at < 10;
+    return port_module && port_module->level && controls_now() == 1;
+}
+
+/* a menu inside a mission (the phone's pause menu, ...) */
+static int in_mission_menu(void) {
+    return port_module && port_module->level && controls_now() == 0;
 }
 
 /* the display TWINE_DISPLAY names (its number from 1, or part of its name), else 0 */
@@ -378,6 +387,12 @@ static void mouse_event(const SDL_Event *e) {
         scale = 0.5f * (sens && atof(sens) > 0 ? (float)atof(sens) : 1.0f);
     }
     if (e->type == SDL_EVENT_MOUSE_MOTION && mouse_in_use()) {
+        static int log = -1;
+        /* TWINE_MOUSELOG=1: each movement as it comes (event time, x, y), next to TWINE_YAWLOG's frames */
+        if (log < 0)
+            log = getenv("TWINE_MOUSELOG") && atoi(getenv("TWINE_MOUSELOG"));
+        if (log)
+            port_log("mouse %llu %.2f %.2f\n", (unsigned long long)e->motion.timestamp, e->motion.xrel, e->motion.yrel);
         mouse_moved = SDL_GetTicks();
         look_yaw += e->motion.xrel * scale;
         look_pitch -= e->motion.yrel * scale * (getenv("TWINE_MOUSE_INVERT") && atoi(getenv("TWINE_MOUSE_INVERT")) ? -1 : 1);
@@ -455,9 +470,14 @@ static void poll_input(int tick) {
     /* Space chooses in the menus and uses things (doors, people) while Bond has the controls */
     if (keys[SDL_SCANCODE_SPACE] && in_gameplay())
         down |= action_bits(A_RELOAD);
-    /* Esc goes back in the front end's menus (Triangle) and pauses everywhere else (Start) */
-    if (keys[SDL_SCANCODE_ESCAPE])
-        down |= port_module && !strcmp(port_module->name, "shell") ? P_TRI : P_START;
+    /* Esc goes back in menus (Triangle; from the top of the phone's pause menu that closes it) and pauses or
+     * skips everywhere else (Start); Enter chooses in a mission's menus (Cross) and is Start elsewhere. Esc is
+     * the key the keyboard layout calls Escape (e.g. Caps Lock's with caps:swapescape, where the key marked Esc
+     * is Caps Lock), where the other keys are where they are on the keyboard. */
+    if (keys[SDL_GetScancodeFromKey(SDLK_ESCAPE, NULL)])
+        down |= (port_module && !strcmp(port_module->name, "shell")) || in_mission_menu() ? P_TRI : P_START;
+    if (keys[SDL_SCANCODE_RETURN] && !(SDL_GetModState() & SDL_KMOD_ALT))
+        down |= in_mission_menu() ? P_CROSS : P_START;
     for (i = 0; i < sizeof(actionkeys) / sizeof(actionkeys[0]); i++)
         if (keys[actionkeys[i].key])
             down |= action_bits(actionkeys[i].action);
@@ -514,6 +534,8 @@ static void poll_input(int tick) {
         int r2 = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16000;
         if (modern < 0)
             modern = !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
+        stick(SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, &lx, &ly);
+        stick(SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, &rx, &ry);
         if (modern && in_gameplay()) {
             for (i = 0; i < sizeof(modern_actions) / sizeof(modern_actions[0]); i++)
                 if (SDL_GetGamepadButton(gamepad, modern_actions[i].b))
@@ -523,8 +545,14 @@ static void poll_input(int tick) {
                     down |= modern_pad[i].bit;
             if (r2)
                 down |= action_bits(A_FIRE);
-            if (l2)
+            /* aiming, the game leans with the strafe buttons (as A/D do with the mouse's aim): the stick does */
+            if (l2) {
                 down |= action_bits(A_AIM);
+                if (lx < 0x50)
+                    down |= action_bits(A_STRAFE_LEFT);
+                else if (lx > 0xB0)
+                    down |= action_bits(A_STRAFE_RIGHT);
+            }
         } else {
             for (i = 0; i < sizeof(padmap) / sizeof(padmap[0]); i++)
                 if (SDL_GetGamepadButton(gamepad, padmap[i].b))
@@ -534,8 +562,6 @@ static void poll_input(int tick) {
             if (r2)
                 down |= P_R2;
         }
-        stick(SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, &lx, &ly);
-        stick(SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, &rx, &ry);
     }
     port_pad_buttons[0] = (u16)~down;
     if (gamepad && tick)
@@ -683,8 +709,8 @@ static const char *const help_lines[] = {
     "Wheel, Q / E ..... change weapon",
     "F, R ............. use (doors, people), reload",
     "C, Ctrl .......... crouch",
-    "Enter ............ start, pause",
-    "Esc .............. pause (menus: back)",
+    "Enter ............ pause; in menus: choose",
+    "Esc .............. pause; in menus: back",
     "Space ............ use; in menus: choose (Cross)",
     "Backspace ........ back (Triangle)",
     "Tab .............. Select (messages)",
@@ -850,7 +876,7 @@ int port_video_poll_skip(void) {
     while (SDL_PollEvent(&e)) {
         window_event(&e);
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat &&
-            ((e.key.scancode == SDL_SCANCODE_RETURN && !(e.key.mod & SDL_KMOD_ALT)) || e.key.scancode == SDL_SCANCODE_ESCAPE ||
+            ((e.key.scancode == SDL_SCANCODE_RETURN && !(e.key.mod & SDL_KMOD_ALT)) || e.key.key == SDLK_ESCAPE ||
              e.key.scancode == SDL_SCANCODE_SPACE || e.key.scancode == SDL_SCANCODE_Z))
             skip = 1;
         if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN &&

@@ -36,9 +36,9 @@ static s32 s_MouseYaw = 0;
 static s32 s_MousePitch = 0;
 static s32 s_MouseTicks = 0; /* ticks since the mouse last moved, counting down from 20 */
 extern u8 D_800AC284[]; /* +0x108 set with +0x104 == 1: a menu has the controls (the mapper clears the flags) */
-/* Whether Bond has the controls (no cut scene, no menu): the gamepad's buttons then work through the game's
- * button settings (fire, aim, ...) rather than as the PS1 pad's; port/src/video.c. */
-void port_controls_gameplay(int on);
+/* Who has the controls: 1 Bond (the gamepad's buttons then work through the game's button settings: fire,
+ * aim, ...), 0 a menu (the pause menu is g_CutScene 7), 2 a cut scene; port/src/video.c. */
+void port_controls_state(int state);
 #endif
 
 /* Looking up and down is an offset on the player model's pitch (s16 at model+0x60, signed), which the
@@ -99,8 +99,11 @@ void func_8005D760(void) {
     }
     func_8005D760_orig();
 #ifdef NATIVE_PORT
-    port_controls_gameplay(g_CutScene == 0 && D_8009CD00 == 0 &&
-                           !(D_800AC284[0x108] != 0 && *(s32 *)(D_800AC284 + 0x104) == 1));
+    if (g_CutScene == 7 || (D_800AC284[0x108] != 0 && *(s32 *)(D_800AC284 + 0x104) == 1)) {
+        port_controls_state(0);
+    } else {
+        port_controls_state(g_CutScene != 0 || D_8009CD00 != 0 ? 2 : 1);
+    }
 #endif
     if (D_800B0E54 == 0 || g_CutScene != 0 || D_8009CD00 != 0) {
         return;

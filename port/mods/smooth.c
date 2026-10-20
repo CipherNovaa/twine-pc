@@ -45,11 +45,10 @@ void func_8003BC98(void *rot, void *coord, s32 part);
 void GsSetRefView2(void *view);
 void GsGetLs(void *coord, void *m);
 s32 ratan2(s32 y, s32 x);
-int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch);
+int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room);
 int port_mouse_recent(void);
 void port_smooth_end(void);
 void port_smooth_present(void);
-int port_smooth_drawn(void);
 extern int port_shown_yaw;
 
 #define CAM_ROT ((s16 *)((u8 *)&g_Camera + 0x80))
@@ -418,7 +417,8 @@ void func_8002F7CC(void) {
     }
     keep_poses(s_New);
     mouse = port_mouse_recent() && g_CutScene == 0 && D_8009CD00 == 0;
-    while (port_smooth_begin(&t, &yaw, &pitch)) {
+    /* the drawings in between, leaving time for the tick's own frame (and with the mouse, its turned copy) */
+    while (port_smooth_begin(&t, &yaw, &pitch, mouse ? 3 : 2)) {
         draw_between(&cur, t, yaw, pitch, mouse);
     }
     s_Prev = cur;
@@ -426,11 +426,12 @@ void func_8002F7CC(void) {
     port_shown_yaw = CAM_ROT[1];
     func_8002F7CC_orig();
     /* The tick's own frame. With the mouse in use it lags the drawings before it, which were turned by what
-     * the mouse has moved since the game took it: one turned the same way is shown instead, or when there is
-     * no time for that, the last of them stays up (showing it would step back 20 times a second). */
-    if (mouse && port_smooth_begin(&t, &yaw, &pitch)) {
+     * the mouse has moved since the game took it (showing it would step back 20 times a second): one turned
+     * the same way is drawn and shown instead, whatever the time, so that the display gets a frame here (the
+     * next comes only after the game's next tick; left out, it often missed a refresh while turning). */
+    if (mouse && port_smooth_begin(&t, &yaw, &pitch, -1)) {
         draw_between(&cur, 4096, yaw, pitch, mouse);
-    } else if (!mouse || port_smooth_drawn() == 0) {
+    } else {
         port_smooth_present();
     }
     p = s_Old;

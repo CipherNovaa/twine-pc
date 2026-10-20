@@ -55,10 +55,10 @@ void port_smooth_tick(u32 vblanks) {
     drawings = 0;
 }
 
-/* Before an extra drawing (smooth.c): 1 if there is time for one before the tick ends (keeping room for the
- * tick's own frame), with how far into the tick it is (0-4096) and the mouse's movement the game hasn't
- * taken yet; the machine is saved. */
-int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch) {
+/* Before an extra drawing (smooth.c): 1 if there is time for one before the tick ends, keeping room for
+ * `room` drawings in all (this one and those the tick still has to make; -1: draw whatever the time), with how
+ * far into the tick it is (0-4096) and the mouse's movement the game hasn't taken yet; the machine is saved. */
+int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
     u64 now, end;
     if (port_subframe || !smooth_enabled() || !tick_start)
         return 0;
@@ -67,8 +67,10 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch) {
     if (getenv("TWINE_SMOOTH_LOG"))
         port_log("smooth: %.2f ms into the tick of %.2f ms, drawing %.2f ms, %d drawn\n", (now - tick_start) / 1e6,
                  (end - tick_start) / 1e6, cost / 1e6, drawings);
-    if (now + 2 * cost + 1000000 > end)
+    if (room >= 0 && now + room * cost + 1000000 > end)
         return 0;
+    if (now > end)
+        now = end;
     *t = (s32)((now - tick_start) * 4096 / (end - tick_start));
     port_mouse_pending(yaw, pitch);
     RT_ENTER(); /* holds the vblank interrupt */
@@ -97,11 +99,6 @@ void port_smooth_end(void) {
     RT_LEAVE();
     port_video_present_draw(drawings++, x, y);
     port_smooth_shown = 1;
-}
-
-/* the frames shown so far this tick */
-int port_smooth_drawn(void) {
-    return drawings;
 }
 
 /* After the tick's own drawing: show it at once (when smoothing; else VSync shows frames as usual). */
