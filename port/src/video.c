@@ -795,6 +795,16 @@ extern u32 gpu_stats[8];
 extern int gpu_poly_log;
 extern int port_smooth_shown;
 
+/* The controls between frames: once a vblank while the game waits (irq.c), so how long a key is held reaches
+ * the game as it would from a pad (the front end shows a frame only 15 times a second). */
+void port_poll_input(void) {
+    if (headless)
+        return;
+    RT_ENTER();
+    poll_input(0);
+    RT_LEAVE();
+}
+
 void port_frame_end(void) {
     RT_ENTER();
     frames++;

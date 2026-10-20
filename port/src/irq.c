@@ -99,6 +99,17 @@ u32 port_vblank_count(void) {
     return vblank_count;
 }
 
+void port_poll_input(void);
+
+/* the controls, read once a vblank while the game waits for one (video.c) */
+static void poll_input_once(void) {
+    static u32 polled;
+    if (polled != vblank_count) {
+        polled = vblank_count;
+        port_poll_input();
+    }
+}
+
 /* Sleep until the next vblank has been delivered. */
 void port_wait_vblank(void) {
     u32 v = vblank_count;
@@ -108,6 +119,7 @@ void port_wait_vblank(void) {
         else
             usleep(200);
     }
+    poll_input_once();
 }
 
 /* Code that waits in a loop of fixed length (a timeout counted in passes) runs far faster here than on the
@@ -273,6 +285,8 @@ void port_idle(u32 ns) {
     if (!port_subframe && vblank_count != shown && vblank_count - vsync_last >= 8) {
         shown = vblank_count;
         port_frame_end();
+    } else if (!port_subframe) {
+        poll_input_once();
     }
 }
 
