@@ -45,11 +45,13 @@ Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the b
 | `filter` | how the picture is scaled: `sharp` (default: even pixels, no blur), `nearest`, `linear` |
 | `rumble = 0` | no gamepad rumble (it follows the game's vibration option otherwise) |
 | `card1`, `card2` | memory card images (raw 128 KB, as emulators use). Slot 1 defaults to `~/.local/share/twine/card1.mcd`, made on first use; slot 2 to `card2.mcd` there if it exists; `none` leaves a slot empty |
-| `devcheats = 1` | the developers' cheat codes work on the pause menu (see Developer cheat codes below; SELECT SELECT CIRCLE CIRCLE then SELECT CIRCLE completes the mission) |
+| `devcheats = 1` | the developers' cheat codes work: on the pause menu in the missions (see Developer cheat codes below; SELECT SELECT CIRCLE CIRCLE then SELECT CIRCLE completes the mission), and the front end's own codes, which the retail game never checks (below) |
 | `no_intro = 1` | skip the boot animation and title card |
 | `level = N` | start straight in mission folder N (1-11) |
 
 **Controls.** Keyboard and mouse: WASD move and strafe, the mouse looks (inside missions), left button fires, right button aims, the wheel or Q/E change weapons, R reloads, C or Ctrl crouches, F fires; arrows are the d-pad, Enter or Esc is Start, Tab is Select, Space is Cross, Backspace is Triangle. The actions follow the game's own button settings in the options menu. A gamepad works as a PlayStation pad, with twin-stick controls in the missions (the left stick moves and strafes, the right stick turns and looks).
+
+**A save with everything unlocked:** `tools/make_unlocked_card.py CARD OUT.mcd` takes a card with a save the game made (any progress) and writes a card whose save has all 11 missions available and completed, difficulty 007 (`--difficulty agent` otherwise), and all six bonus cheats unlocked for Options > Cheats (`--cheats-on` also switches them on). Saved as `~/.local/share/twine/card2.mcd` it is the card in slot 2: Options > Memory Card > Load > slot 2, then use CONTINUE (NEW GAME starts over). The script's comments describe the save format.
 
 For testing: `TWINE_HEADLESS=1` runs without a window, `TWINE_SHOT=frames` saves frames as PPM files, `TWINE_TEST_PAD`/`TWINE_TEST_STICK`/`TWINE_TEST_LOOK` stand in for the controls, `TWINE_PROFILE=1` samples where the time goes (`port/tools/profile.py`), and `TWINE_CD_LOG`, `TWINE_BIOS_LOG`, `TWINE_SMOOTH_LOG` log more to `port.log` (written in the current directory). The source files' header comments describe the rest.
 
@@ -112,6 +114,8 @@ Enter these **on the pause menu**. Every code starts with **SELECT SELECT CIRCLE
 | R1 R1 R1 / L1 L1 L1 | object-cycling mode / next object |
 | SQUARE LEFT SQUARE / CIRCLE CIRCLE CIRCLE | visual modes: objects tinted red / drawn as black silhouettes (from the code; not yet seen in game) |
 | UP UP SELECT, DOWN DOWN SELECT, SQUARE RIGHT SQUARE, SQUARE SQUARE SQUARE SELECT, SQUARE CIRCLE SQUARE CIRCLE | not identified yet |
+
+The front end has four codes of its own that the retail game never checks (the native port's `devcheats` setting turns them back on; enter them on the main menu): SELECT SELECT CIRCLE CIRCLE then **L1 L1 R1 R1** makes every mission selectable, **L1 ×7** shows every movie in the Movies menu, **L2 L2 R2 R2** turns on a sprite position editor that prints positions to the log, and **(SELECT R1 L2) ×5** sets a flag that skips ahead in the front end.
 
 Unverified: after every code, the game rewrites the player's `+0xE` field (health?) depending on god mode. Turn invincibility on first if Bond dies right after entering a code.
 
