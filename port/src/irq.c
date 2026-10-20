@@ -27,7 +27,8 @@ typedef struct {
     int open, enabled, delivered;
     const PortModule *owner; /* the executable that opened it */
 } Event;
-static Event events[16];
+#define EVENTS 32
+static Event events[EVENTS];
 static u32 rcnt_running; /* root counters started with StartRCnt (bit n = counter n) */
 static void (*vsync_callback)(void);
 static void (*vsync_callbacks[8])(void); /* VSyncCallbacks' channels */
@@ -42,7 +43,7 @@ static void run_vblank(void) {
      * LEVEL02's handler runs every vblank, the stub's never). Here it did, once for each one it opened, and
      * the game, counting vblanks with both, thought it ran at 5-7 frames a second instead of 20, so every
      * speed it scales by that (movement, enemies, timers) was 3-4 times too great. */
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < EVENTS; i++) {
         Event *e = &events[i];
         if (e->open && e->enabled && e->cls == 0xF2000003 && (rcnt_running & 8) && e->fn && (e->mode & 0x1000) &&
             e->owner == port_module)
@@ -164,9 +165,19 @@ void ExitCriticalSection(void) {
     deliver_pending();
 }
 
+/* An event like one already open (the boot stub opens its vblank event again before each executable it
+ * starts, and libspu its SPU event at each SpuInit, never closing them) is that one: on the console they
+ * don't pile up, here they filled the table after a few missions, and the front end, starting again, got no
+ * vblank event of its own and waited for one forever. */
 s32 OpenEvent(u32 cls, s32 spec, s32 mode, void *fn) {
     int i;
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < EVENTS; i++)
+        if (events[i].open && events[i].cls == cls && events[i].spec == (u32)spec && events[i].mode == (u32)mode &&
+            events[i].fn == (EventFn)fn) {
+            events[i].owner = port_module;
+            return 0xF1000000 | i;
+        }
+    for (i = 0; i < EVENTS; i++) {
         if (!events[i].open) {
             events[i].cls = cls;
             events[i].spec = spec;
@@ -182,7 +193,7 @@ s32 OpenEvent(u32 cls, s32 spec, s32 mode, void *fn) {
 }
 
 static Event *event_of(u32 h) {
-    return (h & 0xFFFF0000) == 0xF1000000 && (h & 0xFFFF) < 16 ? &events[h & 0xFFFF] : NULL;
+    return (h & 0xFFFF0000) == 0xF1000000 && (h & 0xFFFF) < EVENTS ? &events[h & 0xFFFF] : NULL;
 }
 
 s32 EnableEvent(u32 h) {
@@ -203,7 +214,7 @@ s32 DisableEvent(u32 h) {
  * gets it: an EvMdINTR one (1000h) has its handler called, the others TestEvent reports. */
 void port_deliver_event(u32 cls, u32 spec) {
     int i;
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < EVENTS; i++) {
         Event *e = &events[i];
         if (!e->open || !e->enabled || e->cls != cls || (u32)e->spec != spec)
             continue;
