@@ -34,6 +34,9 @@ static inline void ST32(u32 a, u32 v) { if (IS_IO(a)) port_io_write(a, v, 4); el
 static inline void ST16(u32 a, u32 v) { if (IS_IO(a)) port_io_write(a, v, 2); else MU16(RA(a)) = (u16)v; }
 static inline void ST8(u32 a, u32 v) { if (IS_IO(a)) port_io_write(a, v, 1); else MU8(RA(a)) = (u8)v; }
 
+/* a pass of a wait loop, which takes `ns` on the console (irq.c) */
+void port_idle(u32 ns);
+
 /* call a PS1 address (recompiled or native code) from recompiled code */
 void port_rc_call(R3000 *c, u32 addr);
 u32 port_call16(void *fn, const u32 *args);

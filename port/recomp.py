@@ -458,8 +458,29 @@ class Gen:
         out.append("}")
         return "\n".join(out)
 
+    def wait_loop(self, t, pc):
+        """A loop back from the branch at pc to t that only loads, computes and branches (no stores, calls or
+        coprocessor 0) waits for something an interrupt or the hardware changes, or counts out a delay: the time
+        one pass takes on the console (ns, roughly a cycle per instruction and five per load), else 0."""
+        ins = [Insn(a, self.word(a)) for a in range(t, pc + 8, 4)]
+        loads = 0
+        for i in ins:
+            if i.op in (16, 40, 41, 42, 43, 46, 58) or i.kind() in ("jal", "jalr", "bal", "jr") or \
+                    (i.op == 0 and i.funct in (12, 13)):
+                return 0
+            loads += i.op in (32, 33, 34, 35, 36, 37, 38)
+        return (len(ins) + 4 * loads) * 30
+
     def control(self, i, kind, dcode, start, end):
         pc = i.pc
+        if kind in ("branch", "j"):
+            t = i.btarget() if kind == "branch" else i.target
+            wait = self.wait_loop(t, pc) if start <= t <= pc else 0
+            if wait:  # its passes take their time on the console (port_idle)
+                go = f"{{ port_idle({wait}); goto L_{t:08X}; }}"
+                if kind == "branch":
+                    return [f"    {{ int t = {cond(i)}; {dcode} if (t) {go} }}"]
+                return [f"    {dcode} {go}"]
         if kind == "branch":
             t = i.btarget()
             go = f"goto L_{t:08X};" if start <= t < end else f"{{ {self.call(t, pc)} return; }}"

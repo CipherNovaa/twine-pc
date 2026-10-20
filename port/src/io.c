@@ -1,6 +1,7 @@
 /* Hardware registers for recompiled library code (0x1F801000-0x1F802FFF), written from the psx-spx
  * documentation: DMA (GPU/SPU/OTC channels run at once), the GPU ports (into the software GPU), the MDEC
- * (mdec.c) with its DMA channels 0 and 1, root counters (from host time), interrupt registers, and the SPU
+ * (mdec.c) with its DMA channels 0 and 1, the CD-ROM controller's data ports and DMA channel 3 (cdrom.c), root
+ * counters (from host time), interrupt registers, and the SPU
  * register file with its 512 KB sound RAM (the mixer in spu.c reads them). Anything else is stored and read
  * back, and logged once. */
 #include <string.h>
@@ -48,6 +49,15 @@ static void log_once(u32 off, const char *what, u32 v) {
         logged[off / 16] = 1;
         port_log("io: %s %08X = %08X (first access to this register block)\n", what, 0x1F801000 + off, v);
     }
+}
+
+/* An 8- or 16-bit access to a 32-bit register: the bits it covers, and what it reads */
+static u32 lane_mask(u32 off, int size) {
+    return size == 4 ? 0xFFFFFFFFu : (size == 2 ? 0xFFFFu : 0xFFu) << (off & 3) * 8;
+}
+
+static u32 lane(u32 reg, u32 off, int size) {
+    return (reg & lane_mask(off, size)) >> (off & 3) * 8;
 }
 
 static u64 sysclock(void) {
@@ -220,6 +230,10 @@ static void dma_run(int ch) {
         mdec_dma_out();
         RT_LEAVE();
         return;
+    case 3: /* CD-ROM: from the drive's data FIFO; its interrupt (DICR bit 19) runs libcd's data callback */
+        if (!to_dev)
+            port_cd_dma(madr, words, (dma_dicr >> 19) & 1);
+        break;
     case 2: /* GPU */
         if (((chcr >> 9) & 3) == 2) {
             u32 a = madr, n = 0;
@@ -314,9 +328,9 @@ u32 port_io_read(u32 addr, int size) {
     }
     switch (off & ~3u) {
     case 0xF0:
-        return dma_dpcr;
+        return lane(dma_dpcr, off, size);
     case 0xF4:
-        return dma_dicr;
+        return lane(dma_dicr, off, size);
     case 0x70:
         return i_stat;
     case 0x74:
@@ -339,6 +353,8 @@ u32 port_io_read(u32 addr, int size) {
         return 0;
     case 0x814: /* GPUSTAT: ready for commands, VRAM reads and DMA */
         return 0x1C000000 | gpustat_disp | ((port_vblank_count() & 1) << 31);
+    case 0x800: /* CD-ROM controller */
+        return port_cd_reg_read(off & 3);
     }
     if (off >= 0x100 && off < 0x130) {
         int n = (off - 0x100) >> 4;
@@ -402,11 +418,13 @@ void port_io_write(u32 addr, u32 v, int size) {
     }
     switch (off & ~3u) {
     case 0xF0:
-        dma_dpcr = v;
+        dma_dpcr = (dma_dpcr & ~lane_mask(off, size)) | (v << (off & 3) * 8 & lane_mask(off, size));
         return;
-    case 0xF4:
-        dma_dicr = (dma_dicr & 0xFF000000 & ~v) | (v & 0x00FFFFFF);
+    case 0xF4: { /* the interrupt flags (bits 24-30) clear where 1s are written */
+        u32 m = lane_mask(off, size), x = v << (off & 3) * 8 & m;
+        dma_dicr = ((dma_dicr & ~(m & 0x00FFFFFF)) | (x & 0x00FFFFFF)) & ~(x & 0x7F000000);
         return;
+    }
     case 0x70:
         i_stat &= v;
         return;
@@ -429,6 +447,9 @@ void port_io_write(u32 addr, u32 v, int size) {
         RT_ENTER();
         mdec_control(v);
         RT_LEAVE();
+        return;
+    case 0x800: /* CD-ROM controller */
+        port_cd_reg_write(off & 3, v);
         return;
     }
     if (off >= 0x100 && off < 0x130) {

@@ -30,7 +30,7 @@ LDFLAGS := -m32 -no-pie
 RT_SRC := $(wildcard $(ROOT)/port/src/*.c)
 RT_OBJ := $(patsubst $(ROOT)/port/src/%.c,$(RT_OUT)/%.o,$(RT_SRC))
 GEN := gen_native.py psyq_names.txt native_names.txt
-MOD_SRC := $(wildcard $(ROOT)/src/mods/*.c $(ROOT)/port/mods/*.c)
+MOD_SRC := $(wildcard $(ROOT)/src/mods/*.c $(ROOT)/port/mods/*.c $(ROOT)/port/fixes/*.c)
 
 all: $(PB)/twine
 

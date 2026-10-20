@@ -8,7 +8,8 @@
  * sectors that pass the file/channel filter go to the drive's decoder (xa.c), which plays them into the
  * SPU's CD input; other sectors are data: they become the current sector (CdGetSector) and are announced to
  * the CdReadyCallback as DataReady, as libcd's interrupt handler does. GetlocP/GetlocL/Getstat report the
- * head, and CdSync returns the last command's result.
+ * head, and CdSync returns the last command's result. libcd's movie streaming takes the data sectors through
+ * the controller's ports and DMA channel 3 itself (port_cd_reg_read).
  *
  * Reads, pauses and stops are logged; TWINE_CD_LOG=1 logs every command (only every 60th GetlocP) and the
  * SPU's CD volume writes too. */
@@ -18,6 +19,7 @@
 #include <strings.h>
 #include <time.h>
 #include "port.h"
+#include "io.h"
 #include "xa.h"
 
 typedef struct {
@@ -55,6 +57,12 @@ static u32 head_run; /* counts runs, for a ReadyCallback that starts or stops on
 static u8 sector_buf[2340];
 static u32 sector_size, sector_pos;
 static int sector_ready;
+
+/* the controller's ports, for code that reads sectors itself (port_cd_reg_read) */
+static u8 port_index;
+static int fifo_loaded; /* Request register bit 7 (BFRD): the data FIFO holds the current sector */
+static int data_irq;    /* a DMA3 transfer with its interrupt enabled is over: the CdDataCallback is due */
+static void data_done(void);
 
 static const char *disc_path(void) {
     const char *p = getenv("TWINE_DISC");
@@ -226,6 +234,7 @@ static void head_sector(u32 lba, u64 t, int deliver) {
         memset(result, 0, sizeof(result));
         result[0] = status(t);
         ((void (*)(u8, u8 *))ready_callback)(CdlDataReady, result);
+        data_done();
     }
 }
 
@@ -539,6 +548,47 @@ void *CdDataCallback(void *fn) {
     return old;
 }
 
+/* ---- the controller's ports (psx-spx "CDROM Controller I/O Ports") ----
+ * libcd's stream reader (StCdInterrupt, run as the CdReadyCallback) takes each sector itself: it selects
+ * port index 0, asks for the sector (Request register, BFRD), reads the header bytes from the data FIFO and
+ * moves the rest with DMA channel 3 (io.c). With DMA3's interrupt enabled, libcd's DMA handler calls the
+ * CdDataCallback; on the console that interrupt waits until the CD interrupt in progress is over, so here it
+ * comes after the ReadyCallback returns. Commands and interrupts go through libcd on the host instead. */
+u32 port_cd_reg_read(u32 reg) {
+    int data = fifo_loaded && sector_pos < sector_size;
+    switch (reg) {
+    case 0: /* status: index, parameter FIFO empty and not full, data FIFO not empty */
+        return port_index | 0x18 | (data ? 0x40 : 0);
+    case 2: /* data FIFO */
+        return data ? sector_buf[sector_pos++] : 0;
+    }
+    return 0;
+}
+
+void port_cd_reg_write(u32 reg, u32 v) {
+    if (reg == 0)
+        port_index = v & 3;
+    else if (reg == 3 && port_index == 0) { /* Request: BFRD loads the sector into the data FIFO, 0 empties it */
+        fifo_loaded = (v & 0x80) != 0;
+        sector_pos = 0;
+    }
+}
+
+/* DMA channel 3: `words` words from the data FIFO to RAM */
+void port_cd_dma(u32 madr, u32 words, int irq) {
+    CdGetSector((u8 *)PS1_RAM_BASE + (madr & 0x1FFFFC), (s32)words);
+    if (irq)
+        data_irq = 1;
+}
+
+static void data_done(void) {
+    if (data_irq) {
+        data_irq = 0;
+        if (data_callback)
+            ((void (*)(void))data_callback)();
+    }
+}
+
 /* The CD interrupt (run with the vblank): a read issued with CdRead reports completion (CdlComplete) to the
  * CdReadCallback function, like libcd's interrupt handler does when the last sector has arrived. The game's
  * asynchronous loads (weapon models) wait for this. Then the sectors a streaming read has passed since the
@@ -546,6 +596,7 @@ void *CdDataCallback(void *fn) {
 void port_cd_irq(void) {
     static u8 result[8];
     u64 now;
+    data_done();
     if (read_done) {
         read_done = 0;
         result[0] = status(host_ns());

@@ -13,5 +13,8 @@ void port_dma_callback(int ch, void *fn);
 u32 port_io_read(u32 addr, int size);
 void port_io_write(u32 addr, u32 value, int size);
 void port_io_reset(void);        /* GPU/SPU port state back to power-on (after the intro) */
+u32 port_cd_reg_read(u32 reg);   /* cdrom.c: the CD-ROM controller's ports 0-3 */
+void port_cd_reg_write(u32 reg, u32 v);
+void port_cd_dma(u32 madr, u32 words, int irq);
 
 #endif

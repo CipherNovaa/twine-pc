@@ -5,6 +5,7 @@
  * Runtime code that isn't safe to interrupt (stdio, SDL, ...) runs inside RT_ENTER/RT_LEAVE: a vblank that
  * arrives meanwhile is held and delivered when the runtime returns to game code. */
 #define _GNU_SOURCE
+#include <errno.h>
 #include <signal.h>
 #include <string.h>
 #include <sys/time.h>
@@ -103,6 +104,28 @@ void port_wait_vblank(void) {
         else
             usleep(200);
     }
+}
+
+/* Code that waits in a loop of fixed length (a timeout counted in passes) runs far faster here than on the
+ * console. A pass of such a loop can charge what it takes on the console (ns), slept in 1 ms steps; time the
+ * loop spends on other work counts towards it. */
+void port_spin(u32 ns) {
+    static u64 owed, since;
+    struct timespec ts;
+    u64 now, due;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    now = (u64)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+    if (!owed)
+        since = now;
+    owed += ns;
+    if (owed < 1000000)
+        return;
+    due = since + owed;
+    owed = 0;
+    ts.tv_sec = due / 1000000000ull;
+    ts.tv_nsec = due % 1000000000ull;
+    while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL) == EINTR)
+        ;
 }
 
 /* ---- libapi / BIOS ---- */
@@ -210,6 +233,22 @@ s32 VSync(s32 mode) {
     vsync_last = vblank_count;
     port_smooth_tick(mode > 1 ? mode : 1);
     return 0;
+}
+
+/* A pass of a wait loop in recompiled code (recomp.py wait_loop): it takes its time on the console, so the
+ * loop sleeps rather than spins and a delay counted in passes lasts as long as it should. A program that
+ * waits for the vblank its own way, without VSync (the front end flips its buffers from its vblank handler),
+ * gets its frames shown and the controls read here, once per vblank while VSync has gone uncalled for a while
+ * (a game tick takes several). Not from an interrupt handler or runtime code. */
+void port_idle(u32 ns) {
+    static u32 shown;
+    if (in_irq || port_rt_depth)
+        return;
+    port_spin(ns);
+    if (!port_subframe && vblank_count != shown && vblank_count - vsync_last >= 8) {
+        shown = vblank_count;
+        port_frame_end();
+    }
 }
 
 void *VSyncCallback(void (*fn)(void)) {

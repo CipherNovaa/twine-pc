@@ -23,6 +23,7 @@ void port_rt_leave(void);
 void port_irq_start(void);
 u32 port_vblank_count(void);
 void port_wait_vblank(void);
+void port_spin(u32 ns);      /* a pass of a counted wait loop takes this long, as on the console */
 
 void port_pad_vblank(void);  /* pad.c: per-vblank controller update */
 void port_cd_irq(void);      /* cdrom.c: CD completion callbacks */
