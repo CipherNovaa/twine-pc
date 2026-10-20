@@ -11,6 +11,7 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 #include <ucontext.h>
 #include <unistd.h>
 #include "port.h"
@@ -321,10 +322,53 @@ static void boot_start(void) {
     ((void (*)(void))0x80010154)();
 }
 
+/* TWINE_PROFILE=1: where the time goes. The program counter is sampled 1000 times a second of CPU time and
+ * the counts are written to profile.txt when the program ends or is stopped (SIGTERM, SIGINT);
+ * port/tools/profile.py names them. */
+static u32 prof_pc[1 << 20];
+static u32 prof_n;
+
+static void on_prof(int sig, siginfo_t *si, void *ctx) {
+    (void)sig, (void)si;
+    if (prof_n < sizeof(prof_pc) / sizeof(prof_pc[0]))
+        prof_pc[prof_n++] = ((ucontext_t *)ctx)->uc_mcontext.gregs[REG_EIP];
+}
+
+static void prof_write(void) {
+    FILE *f = fopen("profile.txt", "w");
+    u32 i;
+    if (!f)
+        return;
+    for (i = 0; i < prof_n; i++)
+        fprintf(f, "%08x\n", prof_pc[i]);
+    fclose(f);
+}
+
+static void on_stop(int sig) {
+    (void)sig;
+    prof_write();
+    _exit(0);
+}
+
+static void prof_start(void) {
+    struct sigaction sa;
+    struct itimerval it = {{0, 1000}, {0, 1000}};
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = on_prof;
+    sa.sa_flags = SA_SIGINFO | SA_RESTART;
+    sigaction(SIGPROF, &sa, NULL);
+    signal(SIGTERM, on_stop);
+    signal(SIGINT, on_stop);
+    atexit(prof_write);
+    setitimer(ITIMER_PROF, &it, NULL);
+}
+
 int main(int argc, char **argv) {
     const char *level_env = getenv("TWINE_LEVEL");
     s32 level = level_env ? atoi(level_env) : 0, r;
     log_file = fopen("port.log", "w");
+    if (getenv("TWINE_PROFILE"))
+        prof_start();
     {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));

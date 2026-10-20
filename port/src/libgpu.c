@@ -130,6 +130,23 @@ DISPENV *PutDispEnv(DISPENV *env) {
     return env;
 }
 
+/* saved and put back around an extra drawing (interp.c) */
+static DRAWENV saved_drawenv;
+static DISPENV saved_dispenv;
+static void (*saved_drawsync_callback)(void);
+
+void libgpu_save(void) {
+    saved_drawenv = cur_drawenv;
+    saved_dispenv = cur_dispenv;
+    saved_drawsync_callback = drawsync_callback;
+}
+
+void libgpu_restore(void) {
+    cur_drawenv = saved_drawenv;
+    cur_dispenv = saved_dispenv;
+    drawsync_callback = saved_drawsync_callback;
+}
+
 DRAWENV *GetDrawEnv(DRAWENV *env) {
     *env = cur_drawenv;
     return env;

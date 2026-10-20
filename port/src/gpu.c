@@ -38,7 +38,7 @@ typedef struct {
     int dither;
 } Prim;
 
-static u16 tex_fetch(const Prim *p, u32 u, u32 v) {
+static inline __attribute__((always_inline)) u16 tex_fetch(const Prim *p, u32 u, u32 v) {
     u32 tx = (p->tpage & 15) * 64, ty = ((p->tpage >> 4) & 1) * 256;
     u32 depth = (p->tpage >> 7) & 3;
     u = (u & ~(tw_mask_x * 8)) | ((tw_off_x & tw_mask_x) * 8);
@@ -59,7 +59,8 @@ static u16 tex_fetch(const Prim *p, u32 u, u32 v) {
 }
 
 /* Write one pixel: colour (r, g, b 8-bit, 0x80 = neutral for texture modulation), texel if textured. */
-static void plot(const Prim *p, s32 x, s32 y, s32 r, s32 g, s32 b, u32 u, u32 v) {
+static inline __attribute__((always_inline)) void plot(const Prim *p, s32 x, s32 y, s32 r, s32 g, s32 b, u32 u,
+                                                        u32 v) {
     u16 *dst, out;
     s32 cr, cg, cb;
     int semi = p->semi;
@@ -144,8 +145,8 @@ typedef struct {
     s32 u, v;
 } Vtx;
 
-static s64 edge(const Vtx *a, const Vtx *b, s32 x, s32 y) {
-    return (s64)(b->x - a->x) * (y - a->y) - (s64)(b->y - a->y) * (x - a->x);
+static s32 edge(const Vtx *a, const Vtx *b, s32 x, s32 y) {
+    return (b->x - a->x) * (y - a->y) - (b->y - a->y) * (x - a->x);
 }
 
 /* Is the edge a->b a top or left edge of a triangle with positive area (pixels on it are drawn)? */
@@ -154,10 +155,26 @@ static int top_left(const Vtx *a, const Vtx *b) {
     return dy < 0 || (dy == 0 && dx > 0);
 }
 
+/* A vertex attribute across the triangle as a plane, in 16.16 fixed point: its value at (x0, y0) and its
+ * steps per pixel in x and y. */
+typedef struct {
+    s64 at, dx, dy;
+} Plane;
+
+static void plane(Plane *pl, s32 a0, s32 a1, s32 a2, s32 w0, s32 w1, s32 w2, s32 e0x, s32 e1x, s32 e2x, s32 e0y,
+                  s32 e1y, s32 e2y, s32 area) {
+    const s64 most = (s64)256 << 16; /* steeper only in slivers; keeps the steps within 32 bits */
+    pl->at = (((s64)w0 * a0 + (s64)w1 * a1 + (s64)w2 * a2) << 16) / area;
+    pl->dx = (((s64)e0x * a0 + (s64)e1x * a1 + (s64)e2x * a2) << 16) / area;
+    pl->dy = (((s64)e0y * a0 + (s64)e1y * a1 + (s64)e2y * a2) << 16) / area;
+    pl->dx = pl->dx > most ? most : pl->dx < -most ? -most : pl->dx;
+}
+
 static void triangle(const Prim *p, Vtx v0, Vtx v1, Vtx v2) {
-    s64 area = edge(&v0, &v1, v2.x, v2.y);
+    s32 area = edge(&v0, &v1, v2.x, v2.y);
     s32 minx, maxx, miny, maxy, x, y;
-    int b0, b1, b2;
+    s32 b0, b1, b2, e0x, e1x, e2x, e0y, e1y, e2y, w0, w1, w2;
+    Plane pr = {0, 0, 0}, pg = pr, pb = pr, pu = pr, pv = pr;
     if (area == 0)
         return;
     if (area < 0) {
@@ -187,30 +204,59 @@ static void triangle(const Prim *p, Vtx v0, Vtx v1, Vtx v2) {
         miny = area_y1;
     if (maxy > area_y2)
         maxy = area_y2;
+    if (minx > maxx || miny > maxy)
+        return;
     b0 = top_left(&v1, &v2) ? 0 : -1;
     b1 = top_left(&v2, &v0) ? 0 : -1;
     b2 = top_left(&v0, &v1) ? 0 : -1;
+    /* barycentric weights (positive inside: the winding was made to give a positive area) at the top left of
+     * the box, and their steps */
+    w0 = edge(&v1, &v2, minx, miny);
+    w1 = edge(&v2, &v0, minx, miny);
+    w2 = edge(&v0, &v1, minx, miny);
+    e0x = v1.y - v2.y, e1x = v2.y - v0.y, e2x = v0.y - v1.y;
+    e0y = v2.x - v1.x, e1y = v0.x - v2.x, e2y = v1.x - v0.x;
+    if (p->gouraud) {
+        plane(&pr, v0.r, v1.r, v2.r, w0, w1, w2, e0x, e1x, e2x, e0y, e1y, e2y, area);
+        plane(&pg, v0.g, v1.g, v2.g, w0, w1, w2, e0x, e1x, e2x, e0y, e1y, e2y, area);
+        plane(&pb, v0.b, v1.b, v2.b, w0, w1, w2, e0x, e1x, e2x, e0y, e1y, e2y, area);
+    }
+    if (p->textured) {
+        plane(&pu, v0.u, v1.u, v2.u, w0, w1, w2, e0x, e1x, e2x, e0y, e1y, e2y, area);
+        plane(&pv, v0.v, v1.v, v2.v, w0, w1, w2, e0x, e1x, e2x, e0y, e1y, e2y, area);
+    }
     for (y = miny; y <= maxy; y++) {
-        for (x = minx; x <= maxx; x++) {
-            /* barycentric weights: positive inside (the winding was made to give a positive area) */
-            s64 w0 = edge(&v1, &v2, x, y), w1 = edge(&v2, &v0, x, y), w2 = edge(&v0, &v1, x, y);
-            s32 r, g, b, u = 0, v = 0;
-            if (w0 + b0 < 0 || w1 + b1 < 0 || w2 + b2 < 0)
-                continue;
+        s32 r0 = w0, r1 = w1, r2 = w2, r = v0.r, g = v0.g, b = v0.b, u = 0, v = 0, dr = 0, dg = 0, db = 0, du = 0, dv = 0, k;
+        /* the row's first pixel inside the triangle */
+        for (x = minx; x <= maxx && ((r0 + b0) | (r1 + b1) | (r2 + b2)) < 0; x++)
+            r0 += e0x, r1 += e1x, r2 += e2x;
+        if (x <= maxx) {
+            /* the attributes there, then stepped in 32 bits (inside, they stay within 0-255) */
+            k = x - minx;
             if (p->gouraud) {
-                r = (s32)((w0 * v0.r + w1 * v1.r + w2 * v2.r) / area);
-                g = (s32)((w0 * v0.g + w1 * v1.g + w2 * v2.g) / area);
-                b = (s32)((w0 * v0.b + w1 * v1.b + w2 * v2.b) / area);
-            } else {
-                r = v0.r;
-                g = v0.g;
-                b = v0.b;
+                r = (s32)(pr.at + pr.dx * k), dr = (s32)pr.dx;
+                g = (s32)(pg.at + pg.dx * k), dg = (s32)pg.dx;
+                b = (s32)(pb.at + pb.dx * k), db = (s32)pb.dx;
             }
             if (p->textured) {
-                u = (s32)((w0 * v0.u + w1 * v1.u + w2 * v2.u) / area);
-                v = (s32)((w0 * v0.v + w1 * v1.v + w2 * v2.v) / area);
+                u = (s32)(pu.at + pu.dx * k), du = (s32)pu.dx;
+                v = (s32)(pv.at + pv.dx * k), dv = (s32)pv.dx;
             }
-            plot(p, x, y, r, g, b, u, v);
+            for (; x <= maxx && ((r0 + b0) | (r1 + b1) | (r2 + b2)) >= 0; x++) {
+                if (p->gouraud)
+                    plot(p, x, y, r >> 16, g >> 16, b >> 16, (u32)(u >> 16), (u32)(v >> 16));
+                else
+                    plot(p, x, y, r, g, b, (u32)(u >> 16), (u32)(v >> 16));
+                r0 += e0x, r1 += e1x, r2 += e2x;
+                r += dr, g += dg, b += db, u += du, v += dv;
+            }
+        }
+        w0 += e0y, w1 += e1y, w2 += e2y;
+        if (p->gouraud) {
+            pr.at += pr.dy, pg.at += pg.dy, pb.at += pb.dy;
+        }
+        if (p->textured) {
+            pu.at += pu.dy, pv.at += pv.dy;
         }
     }
 }
@@ -476,6 +522,38 @@ void gpu_reset(void) {
     texpage = 0;
     tw_mask_x = tw_mask_y = tw_off_x = tw_off_y = 0;
     mask_set = mask_check = dither_on = 0;
+}
+
+/* The drawing state and the display, saved and put back around an extra drawing (interp.c). */
+static struct {
+    s32 area_x1, area_y1, area_x2, area_y2, off_x, off_y;
+    u32 texpage, tw_mask_x, tw_mask_y, tw_off_x, tw_off_y;
+    int mask_set, mask_check, dither_on;
+    GpuDisplay display;
+} saved;
+
+void gpu_save(void) {
+    saved.area_x1 = area_x1, saved.area_y1 = area_y1, saved.area_x2 = area_x2, saved.area_y2 = area_y2;
+    saved.off_x = off_x, saved.off_y = off_y;
+    saved.texpage = texpage;
+    saved.tw_mask_x = tw_mask_x, saved.tw_mask_y = tw_mask_y, saved.tw_off_x = tw_off_x, saved.tw_off_y = tw_off_y;
+    saved.mask_set = mask_set, saved.mask_check = mask_check, saved.dither_on = dither_on;
+    saved.display = gpu_display;
+}
+
+void gpu_restore(void) {
+    area_x1 = saved.area_x1, area_y1 = saved.area_y1, area_x2 = saved.area_x2, area_y2 = saved.area_y2;
+    off_x = saved.off_x, off_y = saved.off_y;
+    texpage = saved.texpage;
+    tw_mask_x = saved.tw_mask_x, tw_mask_y = saved.tw_mask_y, tw_off_x = saved.tw_off_x, tw_off_y = saved.tw_off_y;
+    mask_set = saved.mask_set, mask_check = saved.mask_check, dither_on = saved.dither_on;
+    gpu_display = saved.display;
+}
+
+/* where the frame being drawn is: the drawing area's top left */
+void gpu_draw_origin(s32 *x, s32 *y) {
+    *x = area_x1;
+    *y = area_y1;
 }
 
 /* drawing environment from libgpu's PutDrawEnv */

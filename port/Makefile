@@ -11,8 +11,9 @@ PB := $(ROOT)/build/port
 RT_OUT := $(PB)/rt
 MODULES ?= boot movie shell level01 level02 level03 level04 level05 level06 level07 level08 level09 level10 \
            level11
-# C mods built into the levels (port/mods.py): twin-stick controls, with the PC's mouse look
-PORT_MODS ?= TWINSTICK
+# C mods built into the levels (port/mods.py): twin-stick controls with the PC's mouse look, and smooth motion
+# between the game's 20 Hz ticks
+PORT_MODS ?= TWINSTICK SMOOTH
 
 CC := gcc
 # gnu89 and -fpermissive: the decompiled C keeps the original's K&R-era idioms. -fwrapv and
@@ -40,6 +41,8 @@ $(RT_OUT)/%.o: $(ROOT)/port/src/%.c $(wildcard $(ROOT)/port/src/*.h) $(wildcard 
 # The title card draws per pixel in floating point: SSE2 (vectorized) instead of the x87 unit 32-bit code
 # defaults to.
 $(RT_OUT)/intro_card.o: RT_CFLAGS += -O3 -msse2 -mfpmath=sse -fno-math-errno
+# The rasterizer: every pixel of every frame
+$(RT_OUT)/gpu.o: RT_CFLAGS += -O3
 
 # One module: $(1) = its name
 define MODULE
@@ -58,7 +61,7 @@ $(PB)/$(1)/game/%.o: $(PB)/$(1)/game/%.c $(wildcard $(ROOT)/include/*.h) Makefil
 	$(CC) $(CFLAGS) $$($(1)_MODFLAGS) -c $$< -o $$@
 
 # the mods' objects, and copies of the game objects whose functions they replace
-$(PB)/$(1)/mods/objs.txt: $$($(1)_OBJ) $(PB)/mods.txt mods.py $(ROOT)/tools/build_cmod.py $(MOD_SRC)
+$(PB)/$(1)/mods/objs.txt: $$($(1)_OBJ) $(PB)/mods.txt mods.py mod_names.txt $(ROOT)/tools/build_cmod.py $(MOD_SRC)
 	python3 mods.py $(1) $(PB)/$(1) "$(PORT_MODS)" "$(CC) $(CFLAGS) $$($(1)_MODFLAGS)" $$($(1)_OBJ)
 
 # MIPS code that has no C yet (PsyQ libraries, hand-written GTE code, the stub) is statically recompiled

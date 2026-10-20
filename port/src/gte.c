@@ -3,6 +3,7 @@
  * registers with GTE_mtc2/mfc2/ctc2/cfc2 and run commands with GTE_cmd, so behaviour follows the
  * hardware: register truncation and extension, 44-bit MAC overflow flags, IR/colour/SZ/SXY saturation,
  * the UNR division used by RTPS/RTPT, and the FIFOs. */
+#include <string.h>
 #include "port.h"
 
 static u32 D[32]; /* data registers as stored (16-bit ones already truncated/extended for reads) */
@@ -34,6 +35,19 @@ static u32 C[32]; /* control registers */
 #define DQB ((s32)C[28])
 #define ZSF3 ((s32)(s16)C[29])
 #define ZSF4 ((s32)(s16)C[30])
+
+/* The registers, saved and put back around an extra drawing (interp.c). */
+static u32 saved_d[32], saved_c[32];
+
+void GTE_save(void) {
+    memcpy(saved_d, D, sizeof(D));
+    memcpy(saved_c, C, sizeof(C));
+}
+
+void GTE_restore(void) {
+    memcpy(D, saved_d, sizeof(D));
+    memcpy(C, saved_c, sizeof(C));
+}
 
 /* Back to the power-on state (all registers zero), after the BIOS boot animation (intro.c). */
 void GTE_reset(void) {

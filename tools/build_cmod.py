@@ -40,9 +40,10 @@ def replaced_functions(sources, native=False):
     return replaces
 
 
-def level_names(level, sources, replaces):
+def level_names(level, sources, replaces, known=None):
     """The mods' LEVEL01 names in LEVEL: (-D flags for compiling the mods, linker aliases, the name of each
-    replaced function's definition)."""
+    replaced function's definition). `known`: LEVEL01 name -> LEVEL's, for what tools/port_symbols.py can't
+    place."""
     used = set()
     for src in sources:
         used |= set(IDENT.findall(src.read_text()))
@@ -56,6 +57,7 @@ def level_names(level, sources, replaces):
             m = re.match(r"(\w+) = (\w+)( [+-] 0x[0-9A-F]+)?;", line)
             if m:
                 mapping[m.group(1)] = (m.group(2), m.group(3) or "")
+        mapping.update({n: (t, "") for n, t in (known or {}).items() if n in used | set(replaces)})
         # Functions this level builds from LEVEL01's or LEVEL02's C (tools/port_level.py) are defined as
         # L1_<name> / L2_<name>, and the level's own name is an alias of that; replace that definition.
         syms = ROOT / f"config/{level}_syms.ld"

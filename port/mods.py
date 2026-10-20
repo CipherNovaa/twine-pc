@@ -47,7 +47,10 @@ def main():
         mods = []
     sources = [source(m) for m in mods]
     replaces = build_cmod.replaced_functions(sources, native=True)
-    defines, aliases, defined_as = build_cmod.level_names(module, sources, replaces) if sources else ([], [], {})
+    # port/mod_names.txt: names the symbol matching can't place
+    known = {n: t for m, n, t in (l.split() for l in (ROOT / "port/mod_names.txt").read_text().splitlines()
+                                  if l.strip() and not l.startswith("#")) if m == module}
+    defines, aliases, defined_as = build_cmod.level_names(module, sources, replaces, known) if sources else ([], [], {})
 
     links, recompiled = list(objs), []
     for f, sym in defined_as.items():

@@ -3,7 +3,7 @@
  * In the native PC build the mouse turns and looks too, on foot and in aim mode.
  *
  * MOD_REPLACES: Pad_StickToSpeed func_8005D760 func_80061DC0
- * MOD_REPLACES_NATIVE: func_80043EE0
+ * MOD_REPLACES_NATIVE: func_80043EE0 func_8004FD3C
  *
  * Names are LEVEL01's; `make cmod` maps them onto each level (tools/port_symbols.py). */
 #include "twine.h"
@@ -28,11 +28,13 @@ extern s32 D_8009CD54; /* aim mode is gliding back out */
 extern s16 D_8009CD5C; /* frames the aim has held still */
 extern u16 D_800B0C5C; /* aim mode's yaw */
 void func_80043EE0_orig(void);
+void func_8004FD3C_orig(s16 *a0, s16 *a1);
 /* The mouse's movement since the last call, in angle units (4096 = 360 degrees; pitch positive is up);
  * port/src/video.c. */
 void port_mouse_look(s32 *yaw, s32 *pitch);
 static s32 s_MouseYaw = 0;
 static s32 s_MousePitch = 0;
+static s32 s_MouseTicks = 0; /* ticks since the mouse last moved, counting down from 20 */
 #endif
 
 /* Looking up and down is an offset on the player model's pitch (s16 at model+0x60, signed), which the
@@ -107,6 +109,11 @@ void func_8005D760(void) {
     D_800DE0DC = (D_800DDCC4 || D_800DDDB8) ? turn : 0;
 #ifdef NATIVE_PORT
     port_mouse_look(&s_MouseYaw, &s_MousePitch);
+    if (s_MouseYaw != 0 || s_MousePitch != 0) {
+        s_MouseTicks = 20;
+    } else if (s_MouseTicks > 0) {
+        s_MouseTicks--;
+    }
 #endif
 
     /* Aim mode drives its own pitch (it starts from the model pitch, offset included): follow it, so the
@@ -183,5 +190,25 @@ void func_80043EE0(void) {
     if (moved) {
         D_8009CD5C = 0; /* not holding still */
     }
+}
+#endif
+
+#ifdef NATIVE_PORT
+/* The camera turns after the player through a spring; while the mouse is in use it turns with them at once,
+ * as aiming with a mouse wants (and as the frames drawn between ticks expect: port/mods/smooth.c). */
+void func_8004FD3C(s16 *a0, s16 *a1) {
+    u8 *c;
+
+    if (s_MouseTicks == 0 || g_CutScene != 0) {
+        func_8004FD3C_orig(a0, a1);
+        return;
+    }
+    c = (u8 *)&g_Camera;
+    *(u16 *)(c + 0x80) = g_Camera.rotX;
+    *(u16 *)(c + 0x82) = g_Camera.rotY;
+    *(u16 *)(c + 0x84) = g_Camera.rotZ;
+    *(s32 *)(c + 0x24) = 0;
+    *(s32 *)(c + 0x28) = 0;
+    *(s32 *)(c + 0x2C) = 0;
 }
 #endif

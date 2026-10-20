@@ -187,6 +187,8 @@ s32 StopRCnt(u32 spec) {
 /* ---- libetc ---- */
 
 static u32 vsync_last;
+extern int port_subframe;
+void port_smooth_tick(u32 vblanks);
 
 /* VSync(0): wait for the next vblank; VSync(n > 1): wait until n vblanks have passed since the last call;
  * VSync(1): don't wait, return the horizontal line count (approximated); VSync(-1): vblank counter. */
@@ -196,6 +198,8 @@ s32 VSync(s32 mode) {
         return vblank_count;
     if (mode == 1)
         return 0;
+    if (port_subframe) /* an extra drawing between ticks (interp.c): nothing to wait for or show */
+        return 0;
     target = vsync_last + (mode > 1 ? mode : 1);
     if (mode == 0)
         target = vblank_count + 1;
@@ -203,6 +207,7 @@ s32 VSync(s32 mode) {
     while ((s32)(vblank_count - target) < 0)
         port_wait_vblank();
     vsync_last = vblank_count;
+    port_smooth_tick(mode > 1 ? mode : 1);
     return 0;
 }
 

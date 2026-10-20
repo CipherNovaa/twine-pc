@@ -1,0 +1,4 @@
+# LEVEL01 names tools/port_symbols.py can't place in a level, for the mods in the native build (port/mods.py):
+# level, LEVEL01 name, the level's name
+# the render step (the same calls in the same order; its world and object drawing functions differ)
+level11 func_8002F7CC func_8002F9A0

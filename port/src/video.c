@@ -3,9 +3,12 @@
  * In a level the mouse is captured: it looks around (port_mouse_look, taken by the twin-stick mod,
  * src/mods/twinstick.c), and its buttons and some keys do the actions of the game's button map, so they follow
  * the options menu. TWINE_MOUSE_SENS (default 1) scales the look, TWINE_MOUSE_INVERT=1 inverts it vertically.
+ * Frames between the game's ticks come from interp.c; the window's title shows the frame rate, and
+ * TWINE_VSYNC=0 shows frames as fast as they come instead of at the display's rate.
  * TWINE_HEADLESS=1 runs without a window; TWINE_SHOT=<frame>[,<frame>...] dumps frames as PPM;
  * TWINE_TEST_LOOK=<yaw>,<pitch> stands in for the mouse there (angle units each game frame), and
- * TWINE_TEST_PAD=<frame>:<hex>[,...] for the pad (from each frame on, the pad bits below are held). */
+ * TWINE_TEST_PAD=<frame>:<hex>[,...] for the pad (from each frame on, the pad bits below are held) and
+ * TWINE_TEST_STICK=<rx>,<ry>,<lx>,<ly> (hex) for its sticks. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,7 +60,10 @@ static const struct {
 };
 
 static int mouse_captured, wheel, wheel_pulse;
+static Uint64 mouse_moved; /* when the mouse last moved (SDL ticks) */
+static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
 static float look_yaw, look_pitch; /* angle units not yet taken */
+static float taken_yaw, taken_pitch; /* (TWINE_TEST_LOOK) taken so far */
 
 static const struct {
     SDL_GamepadButton b;
@@ -81,13 +87,13 @@ void port_video_init(void) {
         port_fatal("SDL_Init: %s\n", SDL_GetError());
     if (!SDL_CreateWindowAndRenderer("TWINE", 1280, 960, SDL_WINDOW_RESIZABLE, &window, &renderer))
         port_fatal("SDL window: %s\n", SDL_GetError());
-    SDL_SetRenderVSync(renderer, 0);
+    SDL_SetRenderVSync(renderer, getenv("TWINE_VSYNC") && !atoi(getenv("TWINE_VSYNC")) ? 0 : 1);
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, 640, 512);
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
     RT_LEAVE();
 }
 
-static void dump_display(const char *path) {
+static void dump_rect(const char *path, s32 rx, s32 ry) {
     FILE *f;
     s32 x, y, w = gpu_display.w, h = gpu_display.h;
     if (getenv("TWINE_SHOT_VRAM")) {
@@ -118,12 +124,16 @@ static void dump_display(const char *path) {
     fprintf(f, "P6\n%d %d\n255\n", w, h);
     for (y = 0; y < h; y++) {
         for (x = 0; x < w; x++) {
-            u16 c = gpu_vram[((gpu_display.y + y) & 511) * 1024 + ((gpu_display.x + x) & 1023)];
+            u16 c = gpu_vram[((ry + y) & 511) * 1024 + ((rx + x) & 1023)];
             u8 rgb[3] = {(u8)((c & 31) << 3), (u8)(((c >> 5) & 31) << 3), (u8)(((c >> 10) & 31) << 3)};
             fwrite(rgb, 1, 3, f);
         }
     }
     fclose(f);
+}
+
+static void dump_display(const char *path) {
+    dump_rect(path, gpu_display.x, gpu_display.y);
 }
 
 static void maybe_shot(void) {
@@ -159,19 +169,55 @@ static u16 action_bits(int action) {
     return (u16)((b << 8) | (b >> 8));
 }
 
+/* TWINE_TEST_LOOK=<yaw>,<pitch> (headless): a mouse moving that much every 50 ms (a game tick), steadily */
+static int test_look(float *yaw, float *pitch) {
+    static Uint64 start;
+    const char *test = getenv("TWINE_TEST_LOOK");
+    float ticks;
+    int y = 0, p = 0;
+    if (!headless || !test)
+        return 0;
+    if (!start)
+        start = SDL_GetTicksNS();
+    sscanf(test, "%d,%d", &y, &p);
+    ticks = (float)(SDL_GetTicksNS() - start) / 50e6f;
+    *yaw = y * ticks;
+    *pitch = p * ticks;
+    return 1;
+}
+
+/* the mouse's movement not taken yet (interp.c turns the camera of frames between ticks by it) */
+void port_mouse_pending(s32 *yaw, s32 *pitch) {
+    float ty, tp;
+    if (test_look(&ty, &tp)) {
+        look_yaw = ty - taken_yaw;
+        look_pitch = tp - taken_pitch;
+    }
+    *yaw = (s32)look_yaw;
+    *pitch = (s32)look_pitch;
+}
+
+/* the mouse has moved in the last second (looking around with it; interp.c then turns the camera of every
+ * frame by its latest movement) */
+int port_mouse_recent(void) {
+    if (headless)
+        return getenv("TWINE_TEST_LOOK") != NULL;
+    return mouse_captured && mouse_moved && SDL_GetTicks() - mouse_moved < 1000;
+}
+
 /* the mouse's movement since the last call, in angle units (4096 = 360 degrees; pitch positive is up) */
 void port_mouse_look(s32 *yaw, s32 *pitch) {
-    const char *test = getenv("TWINE_TEST_LOOK");
-    if (headless && test) {
-        *yaw = 0;
-        *pitch = 0;
-        sscanf(test, "%d,%d", yaw, pitch);
-        return;
+    float ty, tp;
+    if (test_look(&ty, &tp)) {
+        look_yaw = ty - taken_yaw;
+        look_pitch = tp - taken_pitch;
     }
     *yaw = (s32)look_yaw;
     *pitch = (s32)look_pitch;
     look_yaw -= *yaw;
     look_pitch -= *pitch;
+    taken_yaw += *yaw;
+    taken_pitch += *pitch;
 }
 
 static void mouse_event(const SDL_Event *e) {
@@ -183,6 +229,7 @@ static void mouse_event(const SDL_Event *e) {
         scale = 0.5f * (sens && atof(sens) > 0 ? (float)atof(sens) : 1.0f);
     }
     if (e->type == SDL_EVENT_MOUSE_MOTION) {
+        mouse_moved = SDL_GetTicks();
         look_yaw += e->motion.xrel * scale;
         look_pitch -= e->motion.yrel * scale * (getenv("TWINE_MOUSE_INVERT") ? -1 : 1);
     }
@@ -202,7 +249,8 @@ static void window_event(const SDL_Event *e) {
     }
 }
 
-static void poll_input(void) {
+/* `tick`: at the game's frame (VSync), not a frame drawn between ticks */
+static void poll_input(int tick) {
     SDL_Event e;
     const bool *keys;
     u16 down = 0;
@@ -234,13 +282,17 @@ static void poll_input(void) {
         if (mouse & SDL_BUTTON_RMASK)
             down |= action_bits(A_AIM);
         /* each wheel step presses the weapon button for one game frame */
-        if (wheel_pulse)
-            wheel_pulse = 0;
-        else if (wheel) {
-            down |= action_bits(wheel < 0 ? A_PREV_WEAPON : A_NEXT_WEAPON);
-            wheel += wheel < 0 ? 1 : -1;
-            wheel_pulse = 1;
+        if (tick) {
+            wheel_bits = 0;
+            if (wheel_pulse)
+                wheel_pulse = 0;
+            else if (wheel) {
+                wheel_bits = action_bits(wheel < 0 ? A_PREV_WEAPON : A_NEXT_WEAPON);
+                wheel += wheel < 0 ? 1 : -1;
+                wheel_pulse = 1;
+            }
         }
+        down |= wheel_bits;
     }
     if (keys[SDL_SCANCODE_W])
         ly = 0x00;
@@ -292,23 +344,46 @@ static void test_pad(void) {
         s = *end ? end + 1 : end;
     }
     port_pad_buttons[0] = (u16)~bits;
+    s = getenv("TWINE_TEST_STICK"); /* <rx>,<ry>,<lx>,<ly> in hex: held throughout */
+    if (s) {
+        unsigned a[4] = {0x80, 0x80, 0x80, 0x80};
+        sscanf(s, "%x,%x,%x,%x", &a[0], &a[1], &a[2], &a[3]);
+        for (bits = 0; bits < 4; bits++)
+            port_pad_sticks[0][bits] = (u8)a[bits];
+    }
 }
 
-static void present(void) {
+/* the frame rate in the window's title, once a second */
+static void count_frame(void) {
+    static Uint64 since;
+    static int n;
+    Uint64 now = SDL_GetTicks();
+    n++;
+    if (now - since >= 1000) {
+        char title[64];
+        snprintf(title, sizeof(title), "TWINE - %d fps", (int)(n * 1000 / (now - since)));
+        SDL_SetWindowTitle(window, title);
+        since = now;
+        n = 0;
+    }
+}
+
+/* shows the VRAM rectangle at (rx, ry) the size of the display */
+static void present_rect(s32 rx, s32 ry, int rgb24) {
     s32 x, y, w = gpu_display.w, h = gpu_display.h;
     SDL_FRect src;
     if (w <= 0 || h <= 0 || w > 640 || h > 512)
         return;
     for (y = 0; y < h; y++) {
-        const u16 *row = &gpu_vram[((gpu_display.y + y) & 511) * 1024];
+        const u16 *row = &gpu_vram[((ry + y) & 511) * 1024];
         u32 *out = &pixels[y * 640];
-        if (gpu_display.rgb24) {
-            const u8 *b = (const u8 *)row + gpu_display.x * 2;
+        if (rgb24) {
+            const u8 *b = (const u8 *)row + rx * 2;
             for (x = 0; x < w; x++)
                 out[x] = b[x * 3] | (b[x * 3 + 1] << 8) | (b[x * 3 + 2] << 16);
         } else {
             for (x = 0; x < w; x++) {
-                u16 c = row[(gpu_display.x + x) & 1023];
+                u16 c = row[(rx + x) & 1023];
                 out[x] = ((c & 31) << 3) | (((c >> 5) & 31) << 11) | (((c >> 10) & 31) << 19);
             }
         }
@@ -323,6 +398,34 @@ static void present(void) {
     if (!gpu_display.blank)
         SDL_RenderTexture(renderer, texture, &src, NULL);
     SDL_RenderPresent(renderer);
+    count_frame();
+}
+
+static void present(void) {
+    present_rect(gpu_display.x, gpu_display.y, gpu_display.rgb24);
+}
+
+/* A frame interp.c had drawn (the `index`th of this tick) at (x, y): shown at once. */
+void port_video_present_draw(int index, s32 x, s32 y) {
+    const char *shots = getenv("TWINE_SHOT");
+    RT_ENTER();
+    if (headless && shots) {
+        char want[16], list[256], *s;
+        snprintf(want, sizeof(want), "%u", frames);
+        strncpy(list, shots, sizeof(list) - 1);
+        list[sizeof(list) - 1] = 0;
+        for (s = strtok(list, ","); s; s = strtok(NULL, ","))
+            if (!strcmp(s, want)) {
+                char path[64];
+                snprintf(path, sizeof(path), "shot_%04u_%d.ppm", frames, index);
+                dump_rect(path, x, y);
+            }
+    }
+    if (!headless) {
+        poll_input(0);
+        present_rect(x, y, 0);
+    }
+    RT_LEAVE();
 }
 
 /* ---- the intro (intro.c), before the game: its frames don't count as the game's ---- */
@@ -372,6 +475,7 @@ int port_video_poll_skip(void) {
 
 extern u32 gpu_stats[8];
 extern int gpu_poly_log;
+extern int port_smooth_shown;
 
 void port_frame_end(void) {
     RT_ENTER();
@@ -385,9 +489,11 @@ void port_frame_end(void) {
         gpu_poly_log = 40;
     maybe_shot();
     if (!headless) {
-        poll_input();
-        present();
-    } else if (getenv("TWINE_TEST_PAD"))
+        poll_input(1);
+        if (!port_smooth_shown) /* else interp.c has shown it */
+            present();
+    } else if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK"))
         test_pad();
+    port_smooth_shown = 0;
     RT_LEAVE();
 }

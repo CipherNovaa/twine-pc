@@ -19,6 +19,7 @@ static u32 i_stat, i_mask;
 static u32 timer_mode[3], timer_target[3];
 static u64 timer_base[3];
 static void *dma_callback[7];
+extern int port_subframe; /* an extra drawing between ticks (interp.c) */
 
 /* GPU ports */
 static u32 gp0_buf[0x10000];
@@ -152,6 +153,8 @@ static void dma_run(int ch) {
         }
         break;
     case 4: /* SPU */
+        if (port_subframe)
+            break;
         for (i = 0; i < words; i++) {
             u32 a = (spu_xfer_addr + i * 4) & (sizeof(spu_ram) - 4);
             if (to_dev)
@@ -263,6 +266,8 @@ u32 port_io_read(u32 addr, int size) {
 void port_io_write(u32 addr, u32 v, int size) {
     u32 off = (addr & 0x1FFFFFFF) - 0x1F801000;
     if (off >= 0xC00 && off < 0x1000) {
+        if (port_subframe) /* an extra drawing between ticks (interp.c) makes no sound */
+            return;
         u32 r = (off - 0xC00) / 2;
         spu_write(r, v & 0xFFFF);
         if (size == 4)
