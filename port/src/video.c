@@ -7,7 +7,8 @@
  * TWINE_VSYNC=0 shows frames as fast as they come instead of at the display's rate. F11 or Alt+Enter switches
  * between full screen and a window; TWINE_FULLSCREEN=1 starts in full screen, and TWINE_DISPLAY=<number, or part
  * of its name> on that display (the log lists them). The picture keeps the TV's 4:3 shape; TWINE_ASPECT=fill
- * stretches it over the whole window or screen (for a 4:3 CRT driven at 1280x1024).
+ * stretches it over the whole window or screen (for a 4:3 CRT driven at 1280x1024). TWINE_FILTER=sharp
+ * (default), nearest or linear: how it's scaled (draw_picture).
  * TWINE_HEADLESS=1 runs without a window; TWINE_SHOT=<frame>[,<frame>...] dumps frames as PPM;
  * TWINE_TEST_LOOK=<yaw>,<pitch> stands in for the mouse there (angle units each game frame), and
  * TWINE_TEST_PAD=<frame>:<hex>[,...] for the pad (from each frame on, the pad bits below are held) and
@@ -362,8 +363,10 @@ static void poll_input(int tick) {
     SDL_MouseButtonFlags mouse;
     int capture;
     size_t i;
-    /* the mouse looks around in the levels, while the window has the focus */
-    capture = port_module && port_module->level && (SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS);
+    /* the mouse looks around in the levels, while the window has the focus (TWINE_MOUSE=0: never, for playing
+     * with a gamepad only) */
+    capture = port_module && port_module->level && (SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) &&
+              !(getenv("TWINE_MOUSE") && !atoi(getenv("TWINE_MOUSE")));
     if (capture != mouse_captured) {
         SDL_SetWindowRelativeMouseMode(window, capture);
         mouse_captured = capture;
@@ -497,6 +500,44 @@ static SDL_FRect picture_rect(void) {
     return r;
 }
 
+/* The picture (src of the frame texture) scaled into dst. TWINE_FILTER: "sharp" (default) scales it up by
+ * whole multiples with square pixels, then smoothly the rest of the way, so every PS1 pixel comes out the same
+ * size without blurring them; "nearest" uses whole screen pixels only (rows of uneven height when the scale
+ * isn't whole), "linear" blurs. */
+static void draw_picture(const SDL_FRect *src, const SDL_FRect *dst) {
+    static SDL_Texture *big;
+    static int filter = -1, big_w, big_h;
+    int sx, sy;
+    if (filter < 0) {
+        const char *f = getenv("TWINE_FILTER");
+        filter = !f || !SDL_strcasecmp(f, "sharp") ? 2 : !SDL_strcasecmp(f, "linear") ? 1 : 0;
+        SDL_SetTextureScaleMode(texture, filter == 1 ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
+    }
+    sx = (int)(dst->w / src->w);
+    sy = (int)(dst->h / src->h);
+    if (filter != 2 || sx < 1 || sy < 1) {
+        SDL_RenderTexture(renderer, texture, src, dst);
+        return;
+    }
+    if (!big || big_w != (int)src->w * sx || big_h != (int)src->h * sy) {
+        if (big)
+            SDL_DestroyTexture(big);
+        big_w = (int)src->w * sx;
+        big_h = (int)src->h * sy;
+        big = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_TARGET, big_w, big_h);
+        if (!big) {
+            filter = 0;
+            SDL_RenderTexture(renderer, texture, src, dst);
+            return;
+        }
+        SDL_SetTextureScaleMode(big, SDL_SCALEMODE_LINEAR);
+    }
+    SDL_SetRenderTarget(renderer, big);
+    SDL_RenderTexture(renderer, texture, src, NULL);
+    SDL_SetRenderTarget(renderer, NULL);
+    SDL_RenderTexture(renderer, big, NULL, dst);
+}
+
 /* shows the VRAM rectangle at (rx, ry) the size of the display */
 static void present_rect(s32 rx, s32 ry, int rgb24) {
     s32 y, w = gpu_display.w, h = gpu_display.h;
@@ -513,7 +554,7 @@ static void present_rect(s32 rx, s32 ry, int rgb24) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     if (!gpu_display.blank)
-        SDL_RenderTexture(renderer, texture, &src, &dst);
+        draw_picture(&src, &dst);
     SDL_RenderPresent(renderer);
     count_frame();
 }
