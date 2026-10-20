@@ -23,11 +23,12 @@ typedef s32 (*EventFn)(void);
 typedef struct {
     u32 cls, spec, mode;
     EventFn fn;
-    int open, enabled;
+    int open, enabled, delivered;
 } Event;
 static Event events[16];
 static u32 rcnt_running; /* root counters started with StartRCnt (bit n = counter n) */
 static void (*vsync_callback)(void);
+static void (*vsync_callbacks[8])(void); /* VSyncCallbacks' channels */
 
 static void run_vblank(void) {
     int i;
@@ -41,6 +42,9 @@ static void run_vblank(void) {
     }
     if (vsync_callback)
         vsync_callback();
+    for (i = 0; i < 8; i++)
+        if (vsync_callbacks[i])
+            vsync_callbacks[i]();
     port_pad_vblank();
     port_cd_irq();
     port_dma_irq();
@@ -148,7 +152,7 @@ s32 OpenEvent(u32 cls, s32 spec, s32 mode, void *fn) {
             events[i].spec = spec;
             events[i].mode = mode;
             events[i].fn = (EventFn)fn;
-            events[i].enabled = 0;
+            events[i].enabled = events[i].delivered = 0;
             events[i].open = 1;
             return 0xF1000000 | i;
         }
@@ -174,13 +178,34 @@ s32 DisableEvent(u32 h) {
     return e != NULL;
 }
 
-/* TestEvent: transfers and other hardware work complete at once here, so their events have always been
- * delivered; the vblank counter's has once per vblank. */
+/* DeliverEvent (B0:07, and the memory card driver, memcard.c): each open, enabled event of this class and spec
+ * gets it: an EvMdINTR one (1000h) has its handler called, the others TestEvent reports. */
+void port_deliver_event(u32 cls, u32 spec) {
+    int i;
+    for (i = 0; i < 16; i++) {
+        Event *e = &events[i];
+        if (!e->open || !e->enabled || e->cls != cls || (u32)e->spec != spec)
+            continue;
+        if ((e->mode & 0x1000) && e->fn)
+            e->fn();
+        else
+            e->delivered = 1;
+    }
+}
+
+/* TestEvent: the memory card events (SwCARD, HwCARD) when they have been delivered; transfers and other
+ * hardware work complete at once here, so their events have always been delivered; the vblank counter's has
+ * once per vblank. */
 s32 TestEvent(u32 h) {
     static u32 seen[16];
     Event *e = event_of(h);
     if (!e)
         return 0;
+    if (e->cls == 0xF4000001 || e->cls == 0xF0000011) {
+        s32 r = e->delivered;
+        e->delivered = 0;
+        return r;
+    }
     if (e->cls == 0xF2000003) {
         u32 i = h & 0xFFFF;
         if (seen[i] == vblank_count)
@@ -254,5 +279,12 @@ void port_idle(u32 ns) {
 void *VSyncCallback(void (*fn)(void)) {
     void *old = (void *)vsync_callback;
     vsync_callback = fn;
+    return old;
+}
+
+/* VSyncCallbacks: more functions to call every vblank, one per channel (0-7) */
+void *VSyncCallbacks(s32 ch, void (*fn)(void)) {
+    void *old = (void *)vsync_callbacks[ch & 7];
+    vsync_callbacks[ch & 7] = fn;
     return old;
 }

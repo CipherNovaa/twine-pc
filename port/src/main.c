@@ -74,9 +74,18 @@ __attribute__((constructor(101))) static void map_ps1_memory(void) {
 
 /* The kernel's function tables, where GetC0Table/GetB0Table (B0:56/57) point: what PsyQ's set-up code reads
  * from them is the exception handler's address (C0 table entry 6), whose code it then patches. Nothing runs
- * that code here; the patches land in otherwise unused kernel RAM. */
+ * that code here; the patches land in otherwise unused kernel RAM.
+ *
+ * The device table (address at 0x150, size at 0x154, 50h bytes per device): libmcrd looks for the memory card
+ * device "bu" there and puts its own directory reader into its firstfile entry before calling firstfile, which
+ * the memory card driver here (memcard.c) answers itself. */
 static void kernel_tables(void) {
     *(u32 *)(0x80000674u + 6 * 4) = 0x80000C80u;
+    memset((void *)0x8000F000u, 0, 0x60);
+    strcpy((char *)0x8000F050u, "bu");
+    *(u32 *)0x8000F000u = 0x8000F050u; /* the device's name */
+    *(u32 *)0x80000150u = 0x8000F000u;
+    *(u32 *)0x80000154u = 0x50;
 }
 
 /* The PS1 maps RAM at 0x00000000 too (KUSEG); its first 64 KB is kernel workspace, and the game does

@@ -16,11 +16,6 @@ s32 StopCallback(void) {
     return 0;
 }
 
-/* Callbacks resume after StopCallback (not in Level 1's libetc; the front end uses it) */
-s32 RestartCallback(void) {
-    return 0;
-}
-
 static void *irq_callbacks[11];
 
 void *InterruptCallback(s32 irq, void *fn) {

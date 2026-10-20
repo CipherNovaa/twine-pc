@@ -123,14 +123,30 @@ u32 bios_malloc(u32 size);
 void bios_free(u32 p);
 u32 bios_calloc(u32 n, u32 size);
 u32 bios_realloc(u32 p, u32 size);
+void port_deliver_event(u32 cls, u32 spec);
+s32 card_open(const char *name, u32 mode);
+s32 card_lseek(s32 fd, s32 off, s32 whence);
+s32 card_rw(s32 fd, u8 *buf, s32 len, int write);
+s32 card_close(s32 fd);
+u32 card_firstfile(const char *pattern, u32 dir);
+u32 card_nextfile(u32 dir);
+s32 card_erase(const char *name);
+s32 card_info(u32 port);
+s32 card_sector(u32 port, u32 sector, u8 *buf, int write);
 
 #define A(n) c->r[4 + (n)]
 #define STR(n) ((char *)A(n))
 
-/* PS1 BIOS functions (jumps to 0xA0/0xB0/0xC0 with the function number in $t1) */
+/* PS1 BIOS functions (jumps to 0xA0/0xB0/0xC0 with the function number in $t1). TWINE_BIOS_LOG=1 logs the calls
+ * (but TestEvent and the string functions) with their first arguments. */
 static void bios_call(R3000 *c, u32 table) {
+    static int log = -1;
     u32 fn = c->r[9] & 0xFF;
     u32 *v0 = &c->r[2];
+    if (log < 0)
+        log = getenv("TWINE_BIOS_LOG") != NULL;
+    if (log && !(table == 0xB0 && fn == 0x0B) && !(table == 0xA0 && fn < 0x30))
+        port_log("BIOS %02X:%02X (%08X %08X %08X)\n", table, fn, A(0), A(1), A(2));
     switch ((table << 8) | fn) {
     case 0xA013: /* setjmp */
         *v0 = 0;
@@ -202,7 +218,7 @@ static void bios_call(R3000 *c, u32 table) {
         *v0 = port_exec(A(0), A(1), A(2));
         return;
     case 0xA044: /* FlushCache */
-    case 0xA070: /* _bu_init: the BIOS memory card driver (no memory cards yet) */
+    case 0xA070: /* _bu_init: the BIOS memory card driver (memcard.c needs no setup) */
     case 0xA072: /* CdRemove: the BIOS CD driver (libcd here is native) */
     case 0xA09F: /* SetMem: RAM size (mirrors are mapped as for 2 MB, main.c) */
         return;
@@ -210,6 +226,7 @@ static void bios_call(R3000 *c, u32 table) {
         gpu_gp0(&A(0), 1);
         return;
     case 0xB007: /* DeliverEvent */
+        port_deliver_event(A(0), A(1));
         return;
     case 0xB008:
         *v0 = OpenEvent(A(0), A(1), A(2), (void *)A(3));
@@ -247,9 +264,42 @@ static void bios_call(R3000 *c, u32 table) {
     case 0xB057:
         *v0 = 0x80000874u;
         return;
-    case 0xB04A: /* InitCard, StartCard, StopCard: no memory cards yet */
+    /* memory cards (memcard.c) */
+    case 0xB032: /* open */
+        *v0 = card_open(STR(0), A(1));
+        return;
+    case 0xB033: /* lseek */
+        *v0 = card_lseek(A(0), A(1), A(2));
+        return;
+    case 0xB034: /* read */
+    case 0xB035: /* write */
+        *v0 = card_rw(A(0), (u8 *)RA(A(1)), A(2), fn == 0x35);
+        return;
+    case 0xB036: /* close */
+        *v0 = card_close(A(0));
+        return;
+    case 0xB042: /* firstfile */
+        *v0 = card_firstfile(STR(0), A(1));
+        return;
+    case 0xB043: /* nextfile */
+        *v0 = card_nextfile(A(0));
+        return;
+    case 0xB045: /* erase */
+        *v0 = card_erase(STR(0));
+        return;
+    case 0xA0AB: /* _card_info */
+    case 0xA0AC: /* _card_load */
+        *v0 = card_info(A(0));
+        return;
+    case 0xB04E: /* _card_write */
+    case 0xB04F: /* _card_read */
+        *v0 = card_sector(A(0), A(1), (u8 *)RA(A(2)), fn == 0x4E);
+        return;
+    case 0xB04A: /* InitCard, StartCard, StopCard, _new_card, _card_status: nothing to set up, always ready */
     case 0xB04B:
     case 0xB04C:
+    case 0xB050:
+    case 0xB05C:
         *v0 = 1;
         return;
     }
