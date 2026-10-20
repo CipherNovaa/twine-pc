@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 #include <signal.h>
 #include <sys/mman.h>
@@ -372,9 +373,47 @@ static void prof_start(void) {
     setitimer(ITIMER_PROF, &it, NULL);
 }
 
+/* Settings: twine.ini in $XDG_CONFIG_HOME/twine (~/.config/twine), `key = value` lines (# comments) that stand
+ * for the TWINE_<KEY> environment variables (fullscreen = 1, display = NEC, aspect = fill, ...); the
+ * environment wins. */
+static void load_settings(void) {
+    const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
+    char path[1024], line[512];
+    FILE *f;
+    if (xdg && *xdg)
+        snprintf(path, sizeof(path), "%s/twine/twine.ini", xdg);
+    else
+        snprintf(path, sizeof(path), "%s/.config/twine/twine.ini", home ? home : ".");
+    f = fopen(path, "r");
+    if (!f)
+        return;
+    while (fgets(line, sizeof(line), f)) {
+        char name[128] = "TWINE_", *eq = strchr(line, '='), *k = line, *v, *e;
+        size_t n = 6;
+        if (!eq || *line == '#' || *line == ';')
+            continue;
+        *eq = 0;
+        for (v = eq + 1; *v == ' ' || *v == '\t'; v++)
+            ;
+        for (e = v + strlen(v); e > v && (e[-1] == '\n' || e[-1] == '\r' || e[-1] == ' ' || e[-1] == '\t'); e--)
+            ;
+        *e = 0;
+        for (; *k && n < sizeof(name) - 1; k++)
+            if (*k != ' ' && *k != '\t')
+                name[n++] = (char)toupper((unsigned char)*k);
+        name[n] = 0;
+        if (n > 6)
+            setenv(name, v, 0);
+    }
+    fclose(f);
+}
+
 int main(int argc, char **argv) {
-    const char *level_env = getenv("TWINE_LEVEL");
-    s32 level = level_env ? atoi(level_env) : 0, r;
+    const char *level_env;
+    s32 level, r;
+    load_settings();
+    level_env = getenv("TWINE_LEVEL");
+    level = level_env ? atoi(level_env) : 0;
     log_file = fopen("port.log", "w");
     if (getenv("TWINE_PROFILE"))
         prof_start();

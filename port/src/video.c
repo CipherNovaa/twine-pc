@@ -4,7 +4,10 @@
  * src/mods/twinstick.c), and its buttons and some keys do the actions of the game's button map, so they follow
  * the options menu. TWINE_MOUSE_SENS (default 1) scales the look, TWINE_MOUSE_INVERT=1 inverts it vertically.
  * Frames between the game's ticks come from interp.c; the window's title shows the frame rate, and
- * TWINE_VSYNC=0 shows frames as fast as they come instead of at the display's rate.
+ * TWINE_VSYNC=0 shows frames as fast as they come instead of at the display's rate. F11 or Alt+Enter switches
+ * between full screen and a window; TWINE_FULLSCREEN=1 starts in full screen, and TWINE_DISPLAY=<number, or part
+ * of its name> on that display (the log lists them). The picture keeps the TV's 4:3 shape; TWINE_ASPECT=fill
+ * stretches it over the whole window or screen (for a 4:3 CRT driven at 1280x1024).
  * TWINE_HEADLESS=1 runs without a window; TWINE_SHOT=<frame>[,<frame>...] dumps frames as PPM;
  * TWINE_TEST_LOOK=<yaw>,<pitch> stands in for the mouse there (angle units each game frame), and
  * TWINE_TEST_PAD=<frame>:<hex>[,...] for the pad (from each frame on, the pad bits below are held) and
@@ -78,16 +81,70 @@ static const struct {
     {SDL_GAMEPAD_BUTTON_RIGHT_STICK, P_R3},
 };
 
+/* the display TWINE_DISPLAY names (its number from 1, or part of its name), else 0 */
+static SDL_DisplayID chosen_display(void) {
+    const char *want = getenv("TWINE_DISPLAY");
+    SDL_DisplayID *ids, id = 0;
+    int i, n = 0;
+    ids = SDL_GetDisplays(&n);
+    for (i = 0; ids && i < n; i++) {
+        const SDL_DisplayMode *m = SDL_GetDesktopDisplayMode(ids[i]);
+        const char *name = SDL_GetDisplayName(ids[i]);
+        port_log("video: display %d: %s, %dx%d at %.2f Hz\n", i + 1, name ? name : "?", m ? m->w : 0, m ? m->h : 0,
+                 m ? m->refresh_rate : 0.0f);
+        if (want && !id && (atoi(want) == i + 1 || (name && SDL_strcasestr(name, want))))
+            id = ids[i];
+    }
+    SDL_free(ids);
+    if (want && !id)
+        port_log("video: no display matches TWINE_DISPLAY=%s\n", want);
+    return id;
+}
+
+/* full screen on the window's display, or back to the window; the pointer hides in full screen */
+static void set_fullscreen(int on) {
+    SDL_SetWindowFullscreen(window, on);
+    if (on)
+        SDL_HideCursor();
+    else
+        SDL_ShowCursor();
+}
+
 void port_video_init(void) {
+    SDL_PropertiesID props;
+    SDL_DisplayID display;
+    int full;
     headless = getenv("TWINE_HEADLESS") != NULL;
     if (headless)
         return;
     RT_ENTER();
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
         port_fatal("SDL_Init: %s\n", SDL_GetError());
-    if (!SDL_CreateWindowAndRenderer("TWINE", 1280, 960, SDL_WINDOW_RESIZABLE, &window, &renderer))
+    display = chosen_display();
+    full = getenv("TWINE_FULLSCREEN") && atoi(getenv("TWINE_FULLSCREEN"));
+    props = SDL_CreateProperties();
+    SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "TWINE");
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, 1280);
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, 960);
+    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
+    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, full);
+    if (display) {
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+    }
+    window = SDL_CreateWindowWithProperties(props);
+    SDL_DestroyProperties(props);
+    if (!window || !(renderer = SDL_CreateRenderer(window, NULL)))
         port_fatal("SDL window: %s\n", SDL_GetError());
-    SDL_SetRenderVSync(renderer, getenv("TWINE_VSYNC") && !atoi(getenv("TWINE_VSYNC")) ? 0 : 1);
+    if (full)
+        SDL_HideCursor();
+    {
+        int want = getenv("TWINE_VSYNC") && !atoi(getenv("TWINE_VSYNC")) ? 0 : 1, vsync = -2;
+        int ok = SDL_SetRenderVSync(renderer, want);
+        SDL_GetRenderVSync(renderer, &vsync);
+        port_log("video: SDL %s renderer, %s video driver, vsync %d (asked %d%s)\n", SDL_GetRendererName(renderer),
+                 SDL_GetCurrentVideoDriver(), vsync, want, ok ? "" : ", refused");
+    }
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, 640, 512);
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
     RT_LEAVE();
@@ -260,6 +317,10 @@ static void mouse_event(const SDL_Event *e) {
 static void window_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_QUIT)
         exit(0);
+    /* F11 or Alt+Enter: full screen or a window */
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
+        (e->key.scancode == SDL_SCANCODE_F11 || (e->key.scancode == SDL_SCANCODE_RETURN && (e->key.mod & SDL_KMOD_ALT))))
+        set_fullscreen(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));
     mouse_event(e);
     if (e->type == SDL_EVENT_GAMEPAD_ADDED && !gamepad)
         gamepad = SDL_OpenGamepad(e->gdevice.which);
@@ -290,7 +351,7 @@ static void poll_input(int tick) {
         window_event(&e);
     keys = SDL_GetKeyboardState(NULL);
     for (i = 0; i < sizeof(keymap) / sizeof(keymap[0]); i++)
-        if (keys[keymap[i].key])
+        if (keys[keymap[i].key] && !(keymap[i].key == SDL_SCANCODE_RETURN && (SDL_GetModState() & SDL_KMOD_ALT)))
             down |= keymap[i].bit;
     for (i = 0; i < sizeof(actionkeys) / sizeof(actionkeys[0]); i++)
         if (keys[actionkeys[i].key])
@@ -388,10 +449,33 @@ static void count_frame(void) {
     }
 }
 
+/* Where the picture goes in the window: as large as fits at the TV's 4:3 (whatever the PS1's resolution, its
+ * pixels fill a 4:3 screen), or with TWINE_ASPECT=fill the whole window (a CRT shown a 1280x1024 mode is
+ * still a 4:3 tube). */
+static SDL_FRect picture_rect(void) {
+    static int fill = -1;
+    int ww = 0, wh = 0;
+    SDL_FRect r;
+    if (fill < 0)
+        fill = getenv("TWINE_ASPECT") && !SDL_strcasecmp(getenv("TWINE_ASPECT"), "fill");
+    SDL_GetCurrentRenderOutputSize(renderer, &ww, &wh);
+    r.x = r.y = 0;
+    r.w = (float)ww;
+    r.h = (float)wh;
+    if (!fill && ww * 3 > wh * 4) {
+        r.w = wh * 4.0f / 3.0f;
+        r.x = (ww - r.w) / 2;
+    } else if (!fill) {
+        r.h = ww * 3.0f / 4.0f;
+        r.y = (wh - r.h) / 2;
+    }
+    return r;
+}
+
 /* shows the VRAM rectangle at (rx, ry) the size of the display */
 static void present_rect(s32 rx, s32 ry, int rgb24) {
     s32 y, w = gpu_display.w, h = gpu_display.h;
-    SDL_FRect src;
+    SDL_FRect src, dst = picture_rect();
     if (w <= 0 || h <= 0 || w > 640 || h > 512)
         return;
     for (y = 0; y < h; y++)
@@ -404,7 +488,7 @@ static void present_rect(s32 rx, s32 ry, int rgb24) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     if (!gpu_display.blank)
-        SDL_RenderTexture(renderer, texture, &src, NULL);
+        SDL_RenderTexture(renderer, texture, &src, &dst);
     SDL_RenderPresent(renderer);
     count_frame();
 }
@@ -470,7 +554,7 @@ int port_video_poll_skip(void) {
     while (SDL_PollEvent(&e)) {
         window_event(&e);
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat &&
-            (e.key.scancode == SDL_SCANCODE_RETURN || e.key.scancode == SDL_SCANCODE_ESCAPE ||
+            ((e.key.scancode == SDL_SCANCODE_RETURN && !(e.key.mod & SDL_KMOD_ALT)) || e.key.scancode == SDL_SCANCODE_ESCAPE ||
              e.key.scancode == SDL_SCANCODE_SPACE || e.key.scancode == SDL_SCANCODE_Z))
             skip = 1;
         if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN &&
@@ -500,7 +584,8 @@ void port_frame_end(void) {
         poll_input(1);
         if (!port_smooth_shown) /* else interp.c has shown it */
             present();
-    } else if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK"))
+    }
+    if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK"))
         test_pad();
     port_smooth_shown = 0;
     RT_LEAVE();
