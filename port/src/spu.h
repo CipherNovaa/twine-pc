@@ -16,6 +16,7 @@ int spu_set_clock(int mode); /* 0 if the mode can't be used (no mutex for SPU_CL
 /* Run the SPU for `frames` 44100 Hz ticks, writing interleaved stereo (L, R) to out (NULL: discard). */
 void spu_render(s16 *out, int frames);
 void spu_sync(void); /* SPU_CLOCK_HOST: run the samples due by now (else nothing) */
+int spu_take_peak(void); /* the loudest output sample (absolute) run since the last call */
 
 /* ADPCM prediction filters, shared by SPU-ADPCM and XA-ADPCM (which uses the first four) */
 extern const s32 adpcm_filter_pos[5], adpcm_filter_neg[5];

@@ -13,6 +13,7 @@
  * TWINE_TEST_LOOK=<yaw>,<pitch> stands in for the mouse there (angle units each game frame), and
  * TWINE_TEST_PAD=<frame>:<hex>[,...] for the pad (from each frame on, the pad bits below are held) and
  * TWINE_TEST_STICK=<rx>,<ry>,<lx>,<ly> (hex) for its sticks. */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,7 +49,7 @@ static const struct {
     u16 bit;
 } keymap[] = {
     {SDL_SCANCODE_UP, P_UP}, {SDL_SCANCODE_DOWN, P_DOWN}, {SDL_SCANCODE_LEFT, P_LEFT},
-    {SDL_SCANCODE_RIGHT, P_RIGHT}, {SDL_SCANCODE_RETURN, P_START}, {SDL_SCANCODE_ESCAPE, P_START},
+    {SDL_SCANCODE_RIGHT, P_RIGHT}, {SDL_SCANCODE_RETURN, P_START},
     {SDL_SCANCODE_TAB, P_SELECT}, {SDL_SCANCODE_SPACE, P_CROSS}, {SDL_SCANCODE_BACKSPACE, P_TRI},
 };
 
@@ -65,7 +66,9 @@ static const struct {
 };
 
 static int mouse_captured, wheel, wheel_pulse;
+static int help_shown; /* F1 */
 static Uint64 mouse_moved; /* when the mouse last moved (SDL ticks) */
+static Uint64 mouse_taken; /* when the game last took its movement (port_mouse_look) */
 static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
 static float look_yaw, look_pitch; /* angle units not yet taken */
 static float taken_yaw, taken_pitch; /* (TWINE_TEST_LOOK) taken so far */
@@ -237,6 +240,27 @@ static u8 axis(Sint16 v) {
     return (u8)((v + 32768) >> 8);
 }
 
+/* A gamepad stick as the pad's two axes, with a dead zone around the middle (TWINE_DEADZONE, in percent of the
+ * way out, 12 by default; the rest of the travel is spread over the whole range): a stick at rest is never
+ * quite centred, and the game turns and looks by the smallest offsets. 0 while the stick is inside it, so
+ * the keyboard's WASD and IJKL stand. */
+static int stick(SDL_GamepadAxis ax, SDL_GamepadAxis ay, u8 *x, u8 *y) {
+    static float dead = -1;
+    float fx = SDL_GetGamepadAxis(gamepad, ax) / 32767.0f, fy = SDL_GetGamepadAxis(gamepad, ay) / 32767.0f, m, s;
+    if (dead < 0) {
+        const char *d = getenv("TWINE_DEADZONE");
+        dead = d ? (float)atof(d) / 100 : 0.12f;
+        dead = dead < 0 ? 0 : dead > 0.9f ? 0.9f : dead;
+    }
+    m = sqrtf(fx * fx + fy * fy);
+    if (m <= dead)
+        return 0;
+    s = ((m > 1 ? 1 : m) - dead) / (1 - dead) / m;
+    *x = axis((Sint16)SDL_clamp(fx * s * 32767, -32768, 32767));
+    *y = axis((Sint16)SDL_clamp(fy * s * 32767, -32768, 32767));
+    return 1;
+}
+
 /* The pad bits of one of the game's actions: g_Args->buttonMap holds them in the game's bit order, which is
  * libpad's with the bytes swapped. g_Args is the boot stub's (0x8001F158). */
 static u16 action_bits(int action) {
@@ -276,12 +300,18 @@ void port_mouse_pending(s32 *yaw, s32 *pitch) {
     *pitch = (s32)look_pitch;
 }
 
+/* The game takes the mouse's movement every tick while Bond can look around (the twin-stick mod). When it
+ * hasn't for a while (a cut scene, the pause menu), movement is dropped rather than saved up for later. */
+static int mouse_in_use(void) {
+    return mouse_taken && SDL_GetTicks() - mouse_taken < 200;
+}
+
 /* the mouse has moved in the last second (looking around with it; interp.c then turns the camera of every
  * frame by its latest movement) */
 int port_mouse_recent(void) {
     if (headless)
         return getenv("TWINE_TEST_LOOK") != NULL;
-    return mouse_captured && mouse_moved && SDL_GetTicks() - mouse_moved < 1000;
+    return mouse_captured && mouse_in_use() && mouse_moved && SDL_GetTicks() - mouse_moved < 1000;
 }
 
 /* the mouse's movement since the last call, in angle units (4096 = 360 degrees; pitch positive is up) */
@@ -293,6 +323,7 @@ void port_mouse_look(s32 *yaw, s32 *pitch) {
     }
     *yaw = (s32)look_yaw;
     *pitch = (s32)look_pitch;
+    mouse_taken = SDL_GetTicks();
     look_yaw -= *yaw;
     look_pitch -= *pitch;
     taken_yaw += *yaw;
@@ -307,7 +338,7 @@ static void mouse_event(const SDL_Event *e) {
         const char *sens = getenv("TWINE_MOUSE_SENS");
         scale = 0.5f * (sens && atof(sens) > 0 ? (float)atof(sens) : 1.0f);
     }
-    if (e->type == SDL_EVENT_MOUSE_MOTION) {
+    if (e->type == SDL_EVENT_MOUSE_MOTION && mouse_in_use()) {
         mouse_moved = SDL_GetTicks();
         look_yaw += e->motion.xrel * scale;
         look_pitch -= e->motion.yrel * scale * (getenv("TWINE_MOUSE_INVERT") && atoi(getenv("TWINE_MOUSE_INVERT")) ? -1 : 1);
@@ -320,6 +351,8 @@ static void window_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_QUIT)
         exit(0);
     /* F11 or Alt+Enter: full screen or a window */
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode == SDL_SCANCODE_F1)
+        help_shown = !help_shown;
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
         (e->key.scancode == SDL_SCANCODE_F11 || (e->key.scancode == SDL_SCANCODE_RETURN && (e->key.mod & SDL_KMOD_ALT))))
         set_fullscreen(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));
@@ -379,6 +412,9 @@ static void poll_input(int tick) {
     for (i = 0; i < sizeof(keymap) / sizeof(keymap[0]); i++)
         if (keys[keymap[i].key] && !(keymap[i].key == SDL_SCANCODE_RETURN && (SDL_GetModState() & SDL_KMOD_ALT)))
             down |= keymap[i].bit;
+    /* Esc goes back in the front end's menus (Triangle) and pauses everywhere else (Start) */
+    if (keys[SDL_SCANCODE_ESCAPE])
+        down |= port_module && !strcmp(port_module->name, "shell") ? P_TRI : P_START;
     for (i = 0; i < sizeof(actionkeys) / sizeof(actionkeys[0]); i++)
         if (keys[actionkeys[i].key])
             down |= action_bits(actionkeys[i].action);
@@ -400,6 +436,18 @@ static void poll_input(int tick) {
             }
         }
         down |= wheel_bits;
+    }
+    /* In the missions the pad is in analog mode, where the game walks and turns by the sticks alone: the arrows
+     * walk (the left stick) and turn (the right one) there. */
+    if (port_module && port_module->level) {
+        if (keys[SDL_SCANCODE_UP])
+            ly = 0x00;
+        if (keys[SDL_SCANCODE_DOWN])
+            ly = 0xFF;
+        if (keys[SDL_SCANCODE_LEFT])
+            rx = 0x00;
+        if (keys[SDL_SCANCODE_RIGHT])
+            rx = 0xFF;
     }
     if (keys[SDL_SCANCODE_W])
         ly = 0x00;
@@ -425,10 +473,8 @@ static void poll_input(int tick) {
             down |= P_L2;
         if (SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16000)
             down |= P_R2;
-        lx = axis(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX));
-        ly = axis(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY));
-        rx = axis(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX));
-        ry = axis(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY));
+        stick(SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, &lx, &ly);
+        stick(SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, &rx, &ry);
     }
     port_pad_buttons[0] = (u16)~down;
     if (gamepad && tick)
@@ -462,18 +508,41 @@ static void test_pad(void) {
     }
 }
 
-/* the frame rate in the window's title, once a second */
+/* the frame rate in the window's title, once a second; with TWINE_FPSLOG=1 also in the log every ten seconds,
+ * with the longest gap between two frames, how many gaps were over 20 ms (a missed refresh at 75 Hz) and how
+ * long presenting a frame took (waiting for the display's refresh) */
+static Uint64 present_ns; /* time spent in SDL_RenderPresent since the last log line */
+
 static void count_frame(void) {
-    static Uint64 since;
-    static int n;
-    Uint64 now = SDL_GetTicks();
+    static Uint64 since, last, log_since, worst;
+    static int n, log_n, slow, fpslog = -1;
+    Uint64 now = SDL_GetTicksNS();
+    if (fpslog < 0)
+        fpslog = getenv("TWINE_FPSLOG") && atoi(getenv("TWINE_FPSLOG"));
+    if (last) {
+        if (now - last > worst)
+            worst = now - last;
+        if (now - last > 20000000)
+            slow++;
+    }
+    last = now;
     n++;
-    if (now - since >= 1000) {
+    log_n++;
+    if (now - since >= 1000000000) {
         char title[64];
-        snprintf(title, sizeof(title), "TWINE - %d fps", (int)(n * 1000 / (now - since)));
+        snprintf(title, sizeof(title), "TWINE - %d fps", (int)(n * 1000000000ull / (now - since)));
         SDL_SetWindowTitle(window, title);
         since = now;
         n = 0;
+    }
+    if (fpslog && now - log_since >= 10000000000ull) {
+        if (log_since)
+            port_log("fps: %.1f, longest gap %.1f ms, %d gaps over 20 ms, presenting %.1f ms a frame (frame %u)\n",
+                     log_n * 1e9 / (double)(now - log_since), worst / 1e6, slow, present_ns / 1e6 / log_n, frames);
+        present_ns = 0;
+        log_since = now;
+        log_n = slow = 0;
+        worst = 0;
     }
 }
 
@@ -538,6 +607,92 @@ static void draw_picture(const SDL_FRect *src, const SDL_FRect *dst) {
     SDL_RenderTexture(renderer, big, NULL, dst);
 }
 
+/* F1: the controls, over the picture; "F1: controls" in a corner for a while the first time the front end and a
+ * mission show */
+static const char *const help_lines[] = {
+    "CONTROLS                         F1 closes",
+    "",
+    "Mouse ............ look and turn",
+    "W / S ............ walk forward / back",
+    "A / D ............ strafe",
+    "Arrows ........... walk and turn (menus: move)",
+    "Left button, F ... fire",
+    "Right button ..... aim (hold)",
+    "Wheel, Q / E ..... change weapon",
+    "R ................ reload",
+    "C, Ctrl .......... crouch",
+    "Enter ............ start, pause",
+    "Esc .............. pause (menus: back)",
+    "Space ............ choose (Cross)",
+    "Backspace ........ back (Triangle)",
+    "Tab .............. Select (messages)",
+    "F11, Alt+Enter ... full screen or window",
+    "",
+    "Gamepad: the left stick walks and strafes,",
+    "the right stick turns and looks; the buttons",
+    "are the PlayStation pad's.",
+};
+
+static void draw_help(void) {
+    static const PortModule *hinted_shell, *hinted_level;
+    static Uint64 hint_until;
+    int ww = 0, wh = 0, cols = 0, n = sizeof(help_lines) / sizeof(help_lines[0]), i;
+    float scale, x, y, w, h;
+    SDL_FRect r;
+    if (port_module && !strcmp(port_module->name, "shell") && !hinted_shell) {
+        hinted_shell = port_module;
+        hint_until = SDL_GetTicks() + 8000;
+    }
+    if (port_module && port_module->level && !hinted_level) {
+        hinted_level = port_module;
+        hint_until = SDL_GetTicks() + 8000;
+    }
+    SDL_GetCurrentRenderOutputSize(renderer, &ww, &wh);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    if (!help_shown) {
+        if (SDL_GetTicks() >= hint_until)
+            return;
+        scale = (float)(wh / 360 > 1 ? wh / 360 : 1);
+        SDL_SetRenderScale(renderer, scale, scale);
+        r.x = 4;
+        r.y = 4;
+        r.w = 12 * 8 + 8;
+        r.h = 16;
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 170);
+        SDL_RenderFillRect(renderer, &r);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_RenderDebugText(renderer, 8, 8, "F1: controls");
+        SDL_SetRenderScale(renderer, 1, 1);
+        return;
+    }
+    for (i = 0; i < n; i++)
+        if ((int)strlen(help_lines[i]) > cols)
+            cols = (int)strlen(help_lines[i]);
+    /* whole multiples of the 8x8 font, as large as fits */
+    scale = (float)SDL_min(ww * 9 / 10 / ((cols + 4) * 8), wh * 9 / 10 / ((n + 2) * 12));
+    if (scale < 1)
+        scale = 1;
+    w = (float)(cols + 4) * 8;
+    h = (float)(n + 2) * 12;
+    x = (ww / scale - w) / 2;
+    y = (wh / scale - h) / 2;
+    SDL_SetRenderScale(renderer, scale, scale);
+    r.x = x;
+    r.y = y;
+    r.w = w;
+    r.h = h;
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 215);
+    SDL_RenderFillRect(renderer, &r);
+    for (i = 0; i < n; i++) {
+        if (i == 0)
+            SDL_SetRenderDrawColor(renderer, 255, 210, 80, 255);
+        else
+            SDL_SetRenderDrawColor(renderer, 235, 235, 235, 255);
+        SDL_RenderDebugText(renderer, x + 16, y + 12 + i * 12, help_lines[i]);
+    }
+    SDL_SetRenderScale(renderer, 1, 1);
+}
+
 /* shows the VRAM rectangle at (rx, ry) the size of the display */
 static void present_rect(s32 rx, s32 ry, int rgb24) {
     s32 y, w = gpu_display.w, h = gpu_display.h;
@@ -555,7 +710,12 @@ static void present_rect(s32 rx, s32 ry, int rgb24) {
     SDL_RenderClear(renderer);
     if (!gpu_display.blank)
         draw_picture(&src, &dst);
-    SDL_RenderPresent(renderer);
+    draw_help();
+    {
+        Uint64 t = SDL_GetTicksNS();
+        SDL_RenderPresent(renderer);
+        present_ns += SDL_GetTicksNS() - t;
+    }
     count_frame();
 }
 

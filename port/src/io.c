@@ -4,6 +4,7 @@
  * counters (from host time), interrupt registers, and the SPU
  * register file with its 512 KB sound RAM (the mixer in spu.c reads them). Anything else is stored and read
  * back, and logged once. */
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include "port.h"
@@ -44,11 +45,20 @@ static int gp0_have, gp0_need;
 static u32 gpu_read_x, gpu_read_y, gpu_read_w, gpu_read_h, gpu_read_pos;
 static u32 gpustat_disp = 0x00800000;  /* display off until GP1(03) */
 
+/* TWINE_CORE=2: a write where the console has no hardware aborts (for a core dump of a stray pointer's write) */
 static void log_once(u32 off, const char *what, u32 v) {
+    static int core = -1;
     if (!logged[off / 16]) {
         logged[off / 16] = 1;
         port_log("io: %s %08X = %08X (first access to this register block)\n", what, 0x1F801000 + off, v);
     }
+    if (core < 0)
+        core = getenv("TWINE_CORE") ? atoi(getenv("TWINE_CORE")) : 0;
+    /* where the console has no hardware at all */
+    if (core >= 2 && what[0] == 'w' &&
+        ((off >= 0x130 && off < 0x800) || (off >= 0x804 && off < 0x810) || (off >= 0x818 && off < 0x820) ||
+         (off >= 0x828 && off < 0xC00) || off >= 0x1000))
+        abort();
 }
 
 /* An 8- or 16-bit access to a 32-bit register: the bits it covers, and what it reads */

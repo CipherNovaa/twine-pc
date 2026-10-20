@@ -23,11 +23,15 @@
 #include "gte_native.h"
 #include "io.h"
 #include "intro.h"
+#include "spu.h"
 
 #define FRAME_CYCLES 565045u /* 33868800 Hz / 59.94 Hz */
 #define LINE_CYCLES 2152u    /* 263 lines per NTSC field */
 #define VBLANK_LINES 22u
 #define GIVE_UP_FRAMES (60 * 60)
+#define PLAY_OUT_FRAMES (8 * 60) /* the most the boot sound is given to play out after the handover */
+#define QUIET_PEAK 128            /* output this quiet (-48 dB; the chord rings on for some 6 s)... */
+#define QUIET_FRAMES 15           /* ...for this many frames in a row is the end of it */
 
 #define RAM ((u8 *)PS1_RAM_BASE)
 #define SCRATCH ((u8 *)PS1_SCRATCH_BASE)
@@ -1026,6 +1030,31 @@ static void vblank(void) {
     }
 }
 
+/* The BIOS has handed over, but its sound (the PlayStation logo's chord and its echo) is still playing: on the
+ * console it goes on until the game resets the SPU, with the logo up until the game shows a picture. Here the
+ * machine is reset for the game as soon as the BIOS is done, so the logo stays up and the sound runs until it
+ * has died away. */
+static void play_out(void) {
+    u32 n, quiet = 0;
+    u64 samples;
+    spu_take_peak();
+    for (n = 0; n < PLAY_OUT_FRAMES && quiet < QUIET_FRAMES && !skipped; n++) {
+        total_frames++;
+        samples = (u64)total_frames * 4410000 / 5994;
+        if (port_video_headless())
+            intro_audio((int)(samples - samples_done));
+        samples_done = samples;
+        if (!port_video_headless()) {
+            port_video_show_gpu();
+            if (port_video_poll_skip())
+                skipped = 1;
+            pace();
+        }
+        quiet = spu_take_peak() < QUIET_PEAK ? quiet + 1 : 0;
+    }
+    port_log("bios: the boot sound played out in %u more frames\n", n);
+}
+
 static void events(void) {
     if (bios_boot_now >= next_vblank) {
         next_vblank += FRAME_CYCLES;
@@ -1128,5 +1157,7 @@ int bios_boot_run(const u8 *rom_image, u32 entry) {
     port_log("bios: %s after %u frames (%.2f s of console time, %.2f s on the host)\n",
              done == 2 ? "reached the boot executable" : skipped ? "skipped" : "stopped", total_frames,
              (double)bios_boot_now / 33868800.0, (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
+    if (done == 2)
+        play_out();
     return done == 2;
 }

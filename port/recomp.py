@@ -544,8 +544,9 @@ class Gen:
 
 def main():
     level, out, objs = sys.argv[1], sys.argv[2], sys.argv[3:]
-    replaced = []
+    replaced, replaced_c = [], set()
     if objs[:1] == ["--replaced"]:  # port/mods.py's list of the recompiled functions mods replace
+        replaced_c = set(Path(objs[1]).with_name("replaced_c.txt").read_text().split())
         replaced, objs = Path(objs[1]).read_text().split(), objs[2:]
     native = {f[2] for f in nm(objs) if len(f) == 3 and f[1] in "TW"}
     names = psyq_names(level)
@@ -553,8 +554,12 @@ def main():
     funcs, addr_of = functions(level)
     # natively implemented names keep their native version; host libc names use the host's
     native_set = native | (HOST_LIBC & set(addr_of))
-    # start() (BSS clear, jump to main) is done by the runtime
-    todo = [(n, a, s) for n, a, s in funcs if n not in native_set and n != "start"]
+    # start() (BSS clear, jump to main) is done by the runtime. A function a mod replaces whose C goes by another
+    # name at its address is native too (the other levels name code they share with LEVEL01 after it: LEVEL02's
+    # func_8005D7A0 is L1_func_8005D760): calls to it go to that name (name_at), and so to the mod. (Other such
+    # functions stay recompiled for recompiled callers, as before: moving those to their C is its own change.)
+    native_addrs = {a for n, a in addr_of.items() if n in replaced_c}
+    todo = [(n, a, s) for n, a, s in funcs if n not in native_set and a not in native_addrs and n != "start"]
     g = Gen(level, todo, addr_of, {n: True for n in native_set})
     for n in replaced:
         if n not in {t for t, _, _ in todo}:

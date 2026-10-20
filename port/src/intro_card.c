@@ -353,6 +353,7 @@ void intro_card_run(void) {
     int tex_w = 0, tex_h = 0, headless = port_video_headless(), frame = 0;
     float skip_at = -1;
     Uint64 start = 0, last = 0, host_start = SDL_GetTicksNS();
+    int vsync = 1; /* the game's setting (video.c), put back afterwards */
     init_tables();
     if (headless) {
         const char *size = getenv("TWINE_INTRO_SIZE");
@@ -361,6 +362,7 @@ void intro_card_run(void) {
         if (size && (sscanf(size, "%dx%d", &out_w, &out_h) != 2 || out_w < 16 || out_h < 16))
             out_w = 1280, out_h = 960;
     } else {
+        SDL_GetRenderVSync(r, &vsync);
         SDL_SetRenderVSync(r, 1);
         start = SDL_GetTicksNS();
     }
@@ -413,7 +415,7 @@ void intro_card_run(void) {
         SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
         SDL_RenderClear(r);
         SDL_RenderPresent(r);
-        SDL_SetRenderVSync(r, 0);
+        SDL_SetRenderVSync(r, vsync);
         if (tex)
             SDL_DestroyTexture(tex);
     }

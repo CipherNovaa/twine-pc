@@ -1,6 +1,7 @@
 /* libpad on the host: PadInitDirect's receive buffers get the controller state every vblank (from SDL
  * input once the window is in; idle pads until then), mode queries answer for a DualShock, and the motor
  * values the game keeps in its PadSetAct buffer drive a real gamepad's rumble (video.c). */
+#include <stdlib.h>
 #include <string.h>
 #include "port.h"
 
@@ -47,8 +48,11 @@ s32 PadInfoMode(s32 port, s32 term, s32 offs) {
     return 0;
 }
 
+/* the game asks for analog (offs 1) or digital mode; TWINE_PAD_LOG=1 logs it */
 s32 PadSetMainMode(s32 port, s32 offs, s32 lock) {
     (void)lock;
+    if (getenv("TWINE_PAD_LOG"))
+        port_log("pad: PadSetMainMode(%d, %d, %d)\n", port, offs, lock);
     pad_analog[port ? 1 : 0] = offs == 1;
     return 1;
 }

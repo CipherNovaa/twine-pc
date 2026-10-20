@@ -237,6 +237,15 @@ def main():
                     if is_fn(target) or target in HOST_LIBC:
                         aliases[x] = target
                         break
+    # the other way round (func_8005D7A0 = L1_func_8005D760): a name the code uses for a function the module
+    # defines under another name at its address (recomp.py leaves such functions to that definition)
+    defined_at = {}
+    for n, a in ps1.items():
+        if n in mod_defined and is_fn(n):
+            defined_at.setdefault(a, n)
+    for n in undefined:
+        if n not in aliases and n not in rt_defined and n in ps1 and defined_at.get(ps1[n], n) != n:
+            aliases[n] = defined_at[ps1[n]]
 
     syms, stubs = [], []
     for name in sorted(undefined):

@@ -99,6 +99,11 @@ void port_smooth_end(void) {
     port_smooth_shown = 1;
 }
 
+/* the frames shown so far this tick */
+int port_smooth_drawn(void) {
+    return drawings;
+}
+
 /* After the tick's own drawing: show it at once (when smoothing; else VSync shows frames as usual). */
 void port_smooth_present(void) {
     s32 x, y;

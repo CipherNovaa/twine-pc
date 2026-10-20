@@ -44,6 +44,12 @@ $(RT_OUT)/intro_card.o: RT_CFLAGS += -O3 -msse2 -mfpmath=sse -fno-math-errno
 # The rasterizer: every pixel of every frame
 $(RT_OUT)/gpu.o: RT_CFLAGS += -O3
 
+# What the module generators take from the runtime: the names it defines (gen_native.py's symbol types),
+# rewritten only when they change, so a change inside a runtime function only relinks the program.
+$(RT_OUT)/defined.txt: $(RT_OBJ)
+	@nm $(RT_OBJ) | awk 'NF == 3 && $$2 ~ /^[TWVDdBbRrC]$$/ {print $$2, $$3}' | sort -u > $@.new
+	@cmp -s $@.new $@ && rm $@.new || mv $@.new $@
+
 # One module: $(1) = its name
 define MODULE
 $(1)_OUT := $(PB)/$(1)
@@ -65,7 +71,7 @@ $(PB)/$(1)/mods/objs.txt: $$($(1)_OBJ) $(PB)/mods.txt mods.py mod_names.txt $(RO
 	python3 mods.py $(1) $(PB)/$(1) "$(PORT_MODS)" "$(CC) $(CFLAGS) $$($(1)_MODFLAGS)" $$($(1)_OBJ)
 
 # MIPS code that has no C yet (PsyQ libraries, hand-written GTE code, the stub) is statically recompiled
-$(PB)/$(1)/recomp.c: $$($(1)_OBJ) $(RT_OBJ) $$($(1)_DEPS) recomp.py $(PB)/$(1)/mods/objs.txt
+$(PB)/$(1)/recomp.c: $$($(1)_OBJ) $(RT_OUT)/defined.txt $$($(1)_DEPS) recomp.py $(PB)/$(1)/mods/objs.txt
 	@mkdir -p $$(dir $$@)
 	python3 recomp.py $(1) $$@ --replaced $(PB)/$(1)/mods/recompiled.txt $$($(1)_OBJ) $(RT_OBJ)
 
@@ -73,7 +79,7 @@ $(PB)/$(1)/recomp.o: $(PB)/$(1)/recomp.c src/recomp.h
 	$(CC) -m32 -std=gnu11 -fno-builtin -fpermissive -fno-pie -fno-stack-protector -O1 -g -w -DNATIVE_PORT -I$(ROOT)/include -Isrc \
 	    -c $$< -o $$@
 
-$(PB)/$(1)/gen.stamp: $(PB)/$(1)/mods/objs.txt $(RT_OBJ) $(PB)/$(1)/recomp.o $$($(1)_DEPS)
+$(PB)/$(1)/gen.stamp: $(PB)/$(1)/mods/objs.txt $(RT_OUT)/defined.txt $(PB)/$(1)/recomp.o $$($(1)_DEPS)
 	python3 gen_native.py $(1) $(PB)/$(1) $$$$(cat $(PB)/$(1)/mods/objs.txt) $(PB)/$(1)/recomp.o -- $(RT_OBJ)
 	@touch $$@
 

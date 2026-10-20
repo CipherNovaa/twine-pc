@@ -35,12 +35,18 @@ void port_log(const char *fmt, ...) {
     RT_LEAVE();
 }
 
+/* TWINE_CORE=1: abort (for a core dump) rather than exit */
 void port_fatal(const char *fmt, ...) {
     va_list ap;
+    char msg[512];
     va_start(ap, fmt);
-    fputs("fatal: ", stderr);
-    vfprintf(stderr, fmt, ap);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
+    fprintf(stderr, "fatal: %s", msg);
+    if (log_file)
+        fprintf(log_file, "fatal: %s", msg);
+    if (getenv("TWINE_CORE") && atoi(getenv("TWINE_CORE")))
+        abort();
     exit(1);
 }
 

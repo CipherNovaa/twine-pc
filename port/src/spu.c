@@ -612,6 +612,8 @@ static void spu_tick(s32 *out, const s32 *cd) {
     }
 }
 
+static s32 out_peak; /* the loudest sample since spu_take_peak */
+
 static void render(s16 *out, int frames) {
     int i, c;
     for (i = 0; i < frames; i++) {
@@ -625,6 +627,9 @@ static void render(s16 *out, int frames) {
             for (c = 0; c < 2; c++)
                 o[c] = clamp16((clamp16((cd[c] * (s16)spu_regs[REG_CDVOL + c]) >> 15) * main_vol[c]) >> 15);
         wav_put(&spu_wav, o[0], o[1]);
+        for (c = 0; c < 2; c++)
+            if (abs(o[c]) > out_peak)
+                out_peak = abs(o[c]);
         if (out) {
             out[i * 2] = (s16)o[0];
             out[i * 2 + 1] = (s16)o[1];
@@ -716,6 +721,15 @@ void spu_render(s16 *out, int frames) {
     lock();
     render(out, frames);
     unlock();
+}
+
+int spu_take_peak(void) {
+    s32 p;
+    lock();
+    p = out_peak;
+    out_peak = 0;
+    unlock();
+    return p;
 }
 
 void spu_sync(void) {

@@ -49,6 +49,7 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch);
 int port_mouse_recent(void);
 void port_smooth_end(void);
 void port_smooth_present(void);
+int port_smooth_drawn(void);
 
 #define CAM_ROT ((s16 *)((u8 *)&g_Camera + 0x80))
 #define CAM_POS (&g_Camera.posX)
@@ -421,10 +422,12 @@ void func_8002F7CC(void) {
     s_Prev = cur;
     s_HavePrev = 1;
     func_8002F7CC_orig();
-    /* The tick's own frame; with the mouse in use, one turned by what it has moved since is shown instead. */
+    /* The tick's own frame. With the mouse in use it lags the drawings before it, which were turned by what
+     * the mouse has moved since the game took it: one turned the same way is shown instead, or when there is
+     * no time for that, the last of them stays up (showing it would step back 20 times a second). */
     if (mouse && port_smooth_begin(&t, &yaw, &pitch)) {
         draw_between(&cur, 4096, yaw, pitch, mouse);
-    } else {
+    } else if (!mouse || port_smooth_drawn() == 0) {
         port_smooth_present();
     }
     p = s_Old;
