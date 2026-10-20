@@ -38,5 +38,6 @@ int port_video_poll_skip(void);   /* pump window events; 1 = a skip key or butto
 void port_video_show_gpu(void);   /* present the GPU's display (as the game's frames are) */
 void port_video_dump_gpu(const char *path);
 void *port_video_renderer(void);  /* SDL_Renderer (NULL when headless) */
+void port_video_present_mode(void); /* TWINE_PRESENT again, after changing vsync */
 
 #endif

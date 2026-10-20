@@ -44,6 +44,23 @@ $(RT_OUT)/intro_card.o: RT_CFLAGS += -O3 -msse2 -mfpmath=sse -fno-math-errno
 # The rasterizer: every pixel of every frame
 $(RT_OUT)/gpu.o: RT_CFLAGS += -O3
 
+# The hardware renderer's shaders (port/shaders): GLSL compiled to SPIR-V with glslc, built into the program as
+# C arrays (shaders.h: hw_vert_spv, hw_frag_spv, ...)
+SHADER_SRC := $(wildcard $(ROOT)/port/shaders/*.vert $(ROOT)/port/shaders/*.frag)
+SHADER_OUT := $(PB)/shaders
+SHADER_SPV := $(patsubst $(ROOT)/port/shaders/%,$(SHADER_OUT)/%.spv,$(SHADER_SRC))
+
+$(SHADER_OUT)/%.spv: $(ROOT)/port/shaders/%
+	@mkdir -p $(dir $@)
+	glslc -O --target-env=vulkan1.0 $< -o $@
+
+$(SHADER_OUT)/shaders.h: $(SHADER_SPV)
+	( cd $(SHADER_OUT) && for f in $(notdir $(SHADER_SPV)); do xxd -i -n $$(echo $$f | tr . _) $$f; done ) | \
+	    sed 's/^unsigned/static const unsigned/' > $@.new && mv $@.new $@
+
+$(RT_OUT)/gpu_hw.o: $(SHADER_OUT)/shaders.h
+$(RT_OUT)/gpu_hw.o: RT_CFLAGS += -I$(SHADER_OUT)
+
 # What the module generators take from the runtime: the names it defines (gen_native.py's symbol types),
 # rewritten only when they change, so a change inside a runtime function only relinks the program.
 $(RT_OUT)/defined.txt: $(RT_OBJ)
@@ -123,8 +140,15 @@ $(PB)/mdectest: tools/mdectest.c src/mdec.c src/mdec.h
 	@mkdir -p $(dir $@)
 	$(CC) -m32 -std=gnu11 -O2 -g -Wall -DNATIVE_PORT -I$(ROOT)/include -Isrc tools/mdectest.c src/mdec.c -o $@
 
+# Host tool: the hardware renderer against the software GPU on random GPU commands (port/tools/hwtest.c)
+hwtest: $(PB)/hwtest
+$(PB)/hwtest: tools/hwtest.c src/gpu.c src/gpu_hw.c src/gpu.h src/gpu_hw.h $(SHADER_OUT)/shaders.h
+	@mkdir -p $(dir $@)
+	$(CC) -m32 -std=gnu11 -O2 -g -Wall -DNATIVE_PORT -I$(ROOT)/include -Isrc -I$(SHADER_OUT) tools/hwtest.c src/gpu.c \
+	    src/gpu_hw.c -o $@ -lSDL3 -lm
+
 clean:
 	rm -rf $(PB)
 
-.PHONY: all clean mdectest FORCE
+.PHONY: all clean mdectest hwtest FORCE
 .PRECIOUS: $(PB)/%.c

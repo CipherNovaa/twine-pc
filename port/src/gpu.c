@@ -2,10 +2,14 @@
  * command packets (polygons, lines, rectangles, fills, VRAM transfers, drawing environment) rasterized
  * into a 1024x512 15-bit VRAM with the hardware's texture/CLUT lookup, colour modulation,
  * semi-transparency, dithering, mask bit and drawing area. libgpu (libgpu.c) feeds it the game's
- * ordering tables, and the display shows a rectangle of this VRAM like the real video output. */
+ * ordering tables, and the display shows a rectangle of this VRAM like the real video output. With the
+ * hardware renderer on (gpu_hw.c), each primitive and VRAM transfer goes to it too, before it changes VRAM
+ * here; this VRAM stays the one the game sees. Then a vblank waits until both have done a packet or transfer:
+ * its handler may draw too, and both must see the same order. */
 #include <string.h>
 #include "port.h"
 #include "gpu.h"
+#include "gpu_hw.h"
 
 u16 gpu_vram[512 * 1024];
 u32 gpu_stats[8];
@@ -145,6 +149,20 @@ typedef struct {
     s32 u, v;
 } Vtx;
 
+/* the hardware renderer's view of a primitive: its own bits and the drawing environment */
+static void hw_prim(GpuHwPrim *h, const Prim *p) {
+    h->textured = p->textured, h->raw = p->raw, h->semi = p->semi, h->gouraud = p->gouraud, h->dither = p->dither;
+    h->tpage = p->tpage;
+    h->clut_x = p->clut_x, h->clut_y = p->clut_y;
+    h->tw_mask_x = tw_mask_x, h->tw_mask_y = tw_mask_y, h->tw_off_x = tw_off_x, h->tw_off_y = tw_off_y;
+    h->area_x1 = area_x1, h->area_y1 = area_y1, h->area_x2 = area_x2, h->area_y2 = area_y2;
+    h->mask_set = mask_set, h->mask_check = mask_check;
+}
+
+static void hw_vtx(GpuHwVertex *h, const Vtx *v) {
+    h->x = v->x, h->y = v->y, h->r = v->r, h->g = v->g, h->b = v->b, h->u = v->u, h->v = v->v;
+}
+
 static s32 edge(const Vtx *a, const Vtx *b, s32 x, s32 y) {
     return (b->x - a->x) * (y - a->y) - (b->y - a->y) * (x - a->x);
 }
@@ -225,6 +243,17 @@ static void triangle(const Prim *p, Vtx v0, Vtx v1, Vtx v2) {
         plane(&pu, v0.u, v1.u, v2.u, w0, w1, w2, e0x, e1x, e2x, e0y, e1y, e2y, area);
         plane(&pv, v0.v, v1.v, v2.v, w0, w1, w2, e0x, e1x, e2x, e0y, e1y, e2y, area);
     }
+    if (gpu_hw_on) {
+        GpuHwPrim h;
+        GpuHwVertex hv[3];
+        GpuHwPlane hp[5] = {{pr.at, pr.dx, pr.dy}, {pg.at, pg.dx, pg.dy}, {pb.at, pb.dx, pb.dy},
+                            {pu.at, pu.dx, pu.dy}, {pv.at, pv.dx, pv.dy}};
+        hw_prim(&h, p);
+        hw_vtx(&hv[0], &v0);
+        hw_vtx(&hv[1], &v1);
+        hw_vtx(&hv[2], &v2);
+        gpu_hw_triangle(&h, hv, minx, miny, maxx, maxy, hp);
+    }
     for (y = miny; y <= maxy; y++) {
         s32 r0 = w0, r1 = w1, r2 = w2, r = v0.r, g = v0.g, b = v0.b, u = 0, v = 0, dr = 0, dg = 0, db = 0, du = 0, dv = 0, k;
         /* the row's first pixel inside the triangle */
@@ -268,6 +297,11 @@ static void line(const Prim *p, Vtx a, Vtx b) {
     s32 adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
     if (adx > 1023 || ady > 511)
         return;
+    if (gpu_hw_on) {
+        GpuHwPrim h;
+        hw_prim(&h, p);
+        gpu_hw_line(&h, a.x, a.y, b.x, b.y);
+    }
     n = adx > ady ? adx : ady;
     for (i = 0; i <= n; i++) {
         s32 x = n ? a.x + (dx * i + (dx >= 0 ? n / 2 : -(n / 2))) / n : a.x;
@@ -275,6 +309,8 @@ static void line(const Prim *p, Vtx a, Vtx b) {
         s32 r = p->gouraud && n ? a.r + (b.r - a.r) * i / n : a.r;
         s32 g = p->gouraud && n ? a.g + (b.g - a.g) * i / n : a.g;
         s32 bl = p->gouraud && n ? a.b + (b.b - a.b) * i / n : a.b;
+        if (gpu_hw_on)
+            gpu_hw_line_pixel(x, y, r, g, bl);
         plot(p, x, y, r, g, bl, 0, 0);
     }
 }
@@ -394,6 +430,11 @@ static int rect(const u32 *w) {
     }
     x = o.x;
     y = o.y;
+    if (gpu_hw_on) {
+        GpuHwPrim h;
+        hw_prim(&h, &p);
+        gpu_hw_rect(&h, x, y, wd, ht, o.r, o.g, o.b, u0, v0, (texpage >> 12) & 1, (texpage >> 13) & 1);
+    }
     for (j = 0; j < ht; j++) {
         for (i = 0; i < wd; i++) {
             s32 u = (texpage >> 12) & 1 ? u0 - i : u0 + i;
@@ -408,16 +449,29 @@ static void fill(const u32 *w) {
     u16 c = ((w[0] >> 3) & 31) | (((w[0] >> 11) & 31) << 5) | (((w[0] >> 19) & 31) << 10);
     s32 x = w[1] & 0x3F0, y = (w[1] >> 16) & 0x1FF;
     s32 wd = ((w[2] & 0x3FF) + 15) & ~15, ht = (w[2] >> 16) & 0x1FF, i, j;
+    if (gpu_hw_on)
+        gpu_hw_fill(x, y, wd, ht, w[0] & 255, (w[0] >> 8) & 255, (w[0] >> 16) & 255);
     for (j = 0; j < ht; j++)
         for (i = 0; i < wd; i++)
             VRAM(x + i, y + j) = c;
 }
 
-void gpu_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src) {
+static void load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src) {
     s32 i, j;
     for (j = 0; j < h; j++)
         for (i = 0; i < w; i++)
             VRAM(x + i, y + j) = *src++;
+}
+
+void gpu_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src) {
+    if (!gpu_hw_on) {
+        load_image(x, y, w, h, src);
+        return;
+    }
+    RT_ENTER();
+    gpu_hw_load_image(x, y, w, h);
+    load_image(x, y, w, h, src);
+    RT_LEAVE();
 }
 
 void gpu_store_image(s32 x, s32 y, s32 w, s32 h, u16 *dst) {
@@ -429,15 +483,27 @@ void gpu_store_image(s32 x, s32 y, s32 w, s32 h, u16 *dst) {
 
 void gpu_move_image(s32 sx, s32 sy, s32 w, s32 h, s32 dx, s32 dy) {
     static u16 tmp[512 * 1024];
+    if (gpu_hw_on) {
+        RT_ENTER();
+        gpu_hw_move_image(sx, sy, w, h, dx, dy);
+    }
     gpu_store_image(sx, sy, w, h, tmp);
-    gpu_load_image(dx, dy, w, h, tmp);
+    load_image(dx, dy, w, h, tmp);
+    if (gpu_hw_on)
+        RT_LEAVE();
 }
 
 void gpu_fill_rect(s32 x, s32 y, s32 w, s32 h, u16 c) {
     s32 i, j;
+    if (gpu_hw_on) {
+        RT_ENTER();
+        gpu_hw_fill(x, y, w, h, (c & 31) << 3, ((c >> 5) & 31) << 3, ((c >> 10) & 31) << 3);
+    }
     for (j = 0; j < h; j++)
         for (i = 0; i < w; i++)
             VRAM(x + i, y + j) = c;
+    if (gpu_hw_on)
+        RT_LEAVE();
 }
 
 static void env(u32 w) {
@@ -471,8 +537,20 @@ static void env(u32 w) {
     }
 }
 
+static void gp0(const u32 *w, int n);
+
 /* Run `n` GP0 words (one packet's payload; may hold several commands). */
 void gpu_gp0(const u32 *w, int n) {
+    if (!gpu_hw_on) {
+        gp0(w, n);
+        return;
+    }
+    RT_ENTER();
+    gp0(w, n);
+    RT_LEAVE();
+}
+
+static void gp0(const u32 *w, int n) {
     int k = 0;
     while (k < n) {
         u32 cmd = w[k] >> 24;
@@ -512,6 +590,8 @@ void gpu_gp0(const u32 *w, int n) {
 void gpu_reset(void) {
     static const GpuDisplay power_on = {0, 0, 320, 240, 0, 1};
     memset(gpu_vram, 0, sizeof(gpu_vram));
+    if (gpu_hw_on)
+        gpu_hw_reset();
     memset(gpu_stats, 0, sizeof(gpu_stats));
     gpu_poly_log = 0;
     gpu_display = power_on;

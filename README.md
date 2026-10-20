@@ -26,7 +26,7 @@ The 11 levels share one engine. 617 of Level 1's 841 game functions appear uncha
 
 `make -C port` builds `build/port/twine`: the whole game as one native Linux program (32-bit x86). The decompiled C is compiled for the PC; code still in assembly is statically recompiled to C (`port/recomp.py`); the console's hardware and libraries are written anew for the host in `port/src` (software GPU, GTE, SPU with XA streaming audio, MDEC movies, CD reading straight from the disc image, memory cards, SDL3 for the window, input and sound). It plays the game from the PlayStation boot animation through the logos, intro movie, menus and briefings into the missions and back, with saving and loading. Between the game's 20 Hz ticks the camera moves smoothly at the display's refresh rate, and the mouse looks around.
 
-Building needs gcc with 32-bit support, 32-bit SDL3 (`lib32-sdl3`) and the matching builds of all 14 executables (`tools/build_all.sh`, see Setup).
+Building needs gcc with 32-bit support, 32-bit SDL3 (`lib32-sdl3`), `glslc` (`shaderc`) and `xxd` for the hardware renderer's shaders, and the matching builds of all 14 executables (`tools/build_all.sh`, see Setup).
 
 Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the boot animation, your console's BIOS (e.g. `SCPH1001.BIN`; without one only the title card shows). By default the program looks for `workbench/disc/007 - The World Is Not Enough (USA).bin` and a `bios/` folder in the current directory.
 
@@ -43,6 +43,10 @@ Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the b
 | `mouse_sens`, `mouse_invert = 1` | mouse look speed (default 1), inverted up/down |
 | `mouse = 0` | leave the mouse alone (no mouse look; for playing with a gamepad) |
 | `filter` | how the picture is scaled: `sharp` (default: even pixels, no blur), `nearest`, `linear` |
+| `renderer = hw` | draw with the graphics card (Vulkan) instead of in software (`sw`, the default for now): the PlayStation's drawing is done again by the card, at `scale` times its resolution, and shown instead (movies in 24-bit colour still come from the software side) |
+| `scale` | with `renderer = hw`: 1-8 times the PlayStation's resolution (default 1). A picture larger than the window is averaged down to it (supersampling) |
+| `truecolor` | with `renderer = hw`: `1` draws without the PlayStation's 15-bit colour and dithering (the default above scale 1), `0` with them (the default at scale 1, where the picture is then the software renderer's pixel for pixel) |
+| `present` | with `renderer = hw`: how frames reach the display: `vsync` (each waits for the display's refresh), `mailbox` (the newest frame waiting replaces older ones; presenting doesn't wait) or `immediate` (at once, tearing). Unset, `vsync` decides |
 | `rumble = 0` | no gamepad rumble (it follows the game's vibration option otherwise) |
 | `deadzone` | the gamepad sticks' dead zone in percent (default 12) |
 | `controls = original` | the gamepad's buttons as the PlayStation pad's, set in the game's own options (by default they follow a modern layout in the missions, below) |
@@ -57,7 +61,7 @@ Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the b
 
 The title card's lettering is baked from the MGS1 Codec font, © 2025 Andrew Gleeson, licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); the glyph data in `port/src/intro_font.h` is adapted from it and shared under the same license (`port/tools/bake_intro_font.py` re-bakes it).
 
-For testing: `TWINE_HEADLESS=1` runs without a window, `TWINE_SHOT=frames` saves frames as PPM files, `TWINE_TEST_PAD`/`TWINE_TEST_STICK`/`TWINE_TEST_LOOK` stand in for the controls, `TWINE_PROFILE=1` samples where the time goes (`port/tools/profile.py`), `TWINE_FPSLOG=1` logs the frame rate and pacing every ten seconds, `TWINE_CD_LOG`, `TWINE_BIOS_LOG`, `TWINE_SMOOTH_LOG`, `TWINE_PAD_LOG` log more to `port.log` (written in the current directory), and `TWINE_CORE=1` turns a fatal error into a core dump (`2`: also a write where the console has no hardware, the mark of a stray pointer). The source files' header comments describe the rest.
+For testing: `TWINE_HEADLESS=1` runs without a window, `TWINE_SHOT=frames` saves frames as PPM files, `TWINE_TEST_PAD`/`TWINE_TEST_STICK`/`TWINE_TEST_LOOK` stand in for the controls, `TWINE_PROFILE=1` samples where the time goes (`port/tools/profile.py`), `TWINE_FPSLOG=1` logs the frame rate and pacing every ten seconds, `TWINE_CD_LOG`, `TWINE_BIOS_LOG`, `TWINE_SMOOTH_LOG`, `TWINE_PAD_LOG` log more to `port.log` (written in the current directory), and `TWINE_CORE=1` turns a fatal error into a core dump (`2`: also a write where the console has no hardware, the mark of a stray pointer). With `TWINE_RENDERER=hw`, headless runs draw on the graphics card too (SDL's offscreen video driver): `TWINE_SHOT` frames are the card's picture at full resolution plus `screen_NNNN.ppm`, what a 1280x960 window would show; `TWINE_HW_COMPARE=1` (scale 1) compares every shown frame with the software renderer's VRAM and logs how much of it is identical (and writes `cmp_NNNN.ppm` for `TWINE_SHOT` frames: software, card, difference); `TWINE_HW_STATS=1` logs the renderer's work and its CPU and GPU time every 100 frames; `TWINE_HW_PROBE`, `TWINE_HW_LOG` and `TWINE_HW_DEBUG` are described in `port/src/gpu_hw.c`. `make -C port hwtest` builds `build/port/hwtest`, which checks the hardware renderer against the software one on random GPU commands, also those the game never uses (mask bit, texture windows, VRAM copies). The source files' header comments describe the rest.
 
 ## Setup
 

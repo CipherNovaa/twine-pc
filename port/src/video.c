@@ -9,7 +9,14 @@
  * of its name> on that display (the log lists them). The picture keeps the TV's 4:3 shape; TWINE_ASPECT=fill
  * stretches it over the whole window or screen (for a 4:3 CRT driven at 1280x1024). TWINE_FILTER=sharp
  * (default), nearest or linear: how it's scaled (draw_picture).
- * TWINE_HEADLESS=1 runs without a window; TWINE_SHOT=<frame>[,<frame>...] dumps frames as PPM;
+ * TWINE_RENDERER=hw draws with the PC's GPU (gpu_hw.c; Vulkan, through SDL's GPU renderer, which then shows
+ * everything here too) at TWINE_SCALE times VRAM's resolution, and shows that picture instead of VRAM's (but for
+ * 24-bit movie frames, which come from VRAM as before); a picture larger than the window is averaged down to it
+ * (supersampling) before the filter scales it the rest of the way. The default is TWINE_RENDERER=sw. With it,
+ * TWINE_PRESENT=vsync|mailbox|immediate picks how frames reach the display (port_video_present_mode).
+ * TWINE_HEADLESS=1 runs without a window; TWINE_SHOT=<frame>[,<frame>...] dumps frames as PPM (with the hardware
+ * renderer its picture, at its full resolution, and also screen_NNNN.ppm: what a 1280x960 window would show,
+ * drawn by SDL's GPU renderer into a texture the way it draws the window);
  * TWINE_TEST_LOOK=<yaw>,<pitch> stands in for the mouse there (angle units each game frame), and
  * TWINE_TEST_PAD=<frame>:<hex>[,...] for the pad (from each frame on, the pad bits below are held) and
  * TWINE_TEST_STICK=<rx>,<ry>,<lx>,<ly> (hex) for its sticks. */
@@ -20,10 +27,12 @@
 #include <SDL3/SDL.h>
 #include "port.h"
 #include "gpu.h"
+#include "gpu_hw.h"
 #include "intro.h"
 #include "module.h"
 
 extern u16 port_pad_buttons[2];
+extern int port_smooth_shown;
 extern u8 port_pad_sticks[2][4];
 void port_pad_motors(u8 *small, u8 *large);
 
@@ -32,7 +41,11 @@ static int headless;
 static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture;
-static SDL_Gamepad *gamepad;
+static SDL_Texture *screen;      /* headless with the hardware renderer: the window's stand-in */
+static const char *screen_shot;  /* the PPM the next picture of it goes to */
+#define MAX_PADS 8
+static SDL_Gamepad *gamepad;          /* the one read */
+static SDL_Gamepad *pads[MAX_PADS];   /* all connected */
 static u32 pixels[640 * 512];
 
 /* pad bits as libpad delivers them (active low): low byte SELECT L3 R3 START UP RIGHT DOWN LEFT,
@@ -151,6 +164,28 @@ static SDL_DisplayID chosen_display(void) {
     return id;
 }
 
+/* TWINE_PRESENT (hardware renderer, SDL's GPU renderer): vsync (FIFO: presenting waits while the frames before
+ * still wait for their refresh), mailbox (the newest frame replaces one still waiting; presenting doesn't wait)
+ * or immediate (shown at once, tearing). Unset, TWINE_VSYNC decides as for the other renderers. Again after
+ * the title card, which sets vsync for itself. */
+void port_video_present_mode(void) {
+    const char *p = getenv("TWINE_PRESENT");
+    SDL_GPUDevice *dev = gpu_hw_device();
+    SDL_GPUPresentMode mode = SDL_GPU_PRESENTMODE_VSYNC;
+    if (!gpu_hw_on || !window || !p || !dev)
+        return;
+    if (!SDL_strcasecmp(p, "mailbox"))
+        mode = SDL_GPU_PRESENTMODE_MAILBOX;
+    else if (!SDL_strcasecmp(p, "immediate"))
+        mode = SDL_GPU_PRESENTMODE_IMMEDIATE;
+    if (!SDL_WindowSupportsGPUPresentMode(dev, window, mode))
+        port_log("video: present mode %s not supported here\n", p);
+    else if (!SDL_SetGPUSwapchainParameters(dev, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, mode))
+        port_log("video: present mode %s: %s\n", p, SDL_GetError());
+    else
+        port_log("video: present mode %s\n", p);
+}
+
 /* full screen on the window's display, or back to the window; the pointer hides in full screen */
 static void set_fullscreen(int on) {
     SDL_SetWindowFullscreen(window, on);
@@ -160,13 +195,34 @@ static void set_fullscreen(int on) {
         SDL_ShowCursor();
 }
 
+/* TWINE_RENDERER=hw without a window: the GPU device on SDL's offscreen video driver (and Ctrl+C still ends
+ * the program: nothing here reads SDL's quit event) */
+static void headless_hw(void) {
+    RT_ENTER();
+    if (!getenv("SDL_VIDEODRIVER"))
+        SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
+    SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+    if (!SDL_Init(SDL_INIT_VIDEO) || !gpu_hw_init())
+        port_log("video: no hardware renderer (%s); drawing in software\n", SDL_GetError());
+    else if (!(renderer = SDL_CreateGPURenderer(gpu_hw_device(), NULL)) ||
+             !(screen = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_TARGET, 1280, 960)) ||
+             !(texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, 640, 512)))
+        port_log("video: no GPU renderer to stand in for the window: %s\n", SDL_GetError());
+    else
+        SDL_SetRenderTarget(renderer, screen);
+    RT_LEAVE();
+}
+
 void port_video_init(void) {
     SDL_PropertiesID props;
     SDL_DisplayID display;
     int full;
     headless = getenv("TWINE_HEADLESS") != NULL;
-    if (headless)
+    if (headless) {
+        if (gpu_hw_wanted())
+            headless_hw();
         return;
+    }
     RT_ENTER();
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
         port_fatal("SDL_Init: %s\n", SDL_GetError());
@@ -184,8 +240,15 @@ void port_video_init(void) {
     }
     window = SDL_CreateWindowWithProperties(props);
     SDL_DestroyProperties(props);
-    if (!window || !(renderer = SDL_CreateRenderer(window, NULL)))
+    if (!window)
         port_fatal("SDL window: %s\n", SDL_GetError());
+    /* the hardware renderer's device shows the window too (SDL's GPU renderer on it) */
+    if (gpu_hw_wanted() && gpu_hw_init() && !(renderer = SDL_CreateGPURenderer(gpu_hw_device(), window))) {
+        port_log("video: no GPU renderer for the hardware renderer (%s); drawing in software\n", SDL_GetError());
+        gpu_hw_on = 0;
+    }
+    if (!renderer && !(renderer = SDL_CreateRenderer(window, NULL)))
+        port_fatal("SDL renderer: %s\n", SDL_GetError());
     if (full)
         SDL_HideCursor();
     {
@@ -194,6 +257,7 @@ void port_video_init(void) {
         SDL_GetRenderVSync(renderer, &vsync);
         port_log("video: SDL %s renderer, %s video driver, vsync %d (asked %d%s)\n", SDL_GetRendererName(renderer),
                  SDL_GetCurrentVideoDriver(), vsync, want, ok ? "" : ", refused");
+        port_video_present_mode();
     }
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, 640, 512);
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
@@ -263,22 +327,40 @@ static void dump_display(const char *path) {
     dump_rect(path, gpu_display.x, gpu_display.y, gpu_display.rgb24);
 }
 
-static void maybe_shot(void) {
+/* this frame is one TWINE_SHOT names */
+static int shot_wanted(void) {
     const char *shots = getenv("TWINE_SHOT");
     char want[16], list[256], *s;
     if (!shots)
-        return;
+        return 0;
     snprintf(want, sizeof(want), "%u", frames);
     strncpy(list, shots, sizeof(list) - 1);
     list[sizeof(list) - 1] = 0;
     for (s = strtok(list, ","); s; s = strtok(NULL, ","))
-        if (!strcmp(s, want)) {
-            char path[64];
-            snprintf(path, sizeof(path), "shot_%04u.ppm", frames);
-            dump_display(path);
-            port_log("frame %u: wrote %s (%dx%d at %d,%d)\n", frames, path, gpu_display.w, gpu_display.h,
-                     gpu_display.x, gpu_display.y);
-        }
+        if (!strcmp(s, want))
+            return 1;
+    return 0;
+}
+
+/* The frame's shot; with the hardware renderer, also its comparison and statistics (gpu_hw_frame). */
+static void maybe_shot(void) {
+    char path[64];
+    int shot = shot_wanted(), hw = gpu_hw_on && !gpu_display.rgb24;
+    snprintf(path, sizeof(path), "shot_%04u.ppm", frames);
+    if (gpu_hw_on)
+        gpu_hw_frame(frames, gpu_display.x, gpu_display.y, hw ? gpu_display.w : 0, gpu_display.h,
+                     hw && shot ? path : NULL);
+    if (shot && screen && !port_smooth_shown) { /* (else the drawings have been shown, with their own) */
+        static char sp[64];
+        snprintf(sp, sizeof(sp), "screen_%04u.ppm", frames);
+        screen_shot = sp;
+    }
+    if (!shot)
+        return;
+    if (!hw)
+        dump_display(path);
+    port_log("frame %u: wrote %s (%dx%d at %d,%d)\n", frames, path, gpu_display.w, gpu_display.h, gpu_display.x,
+             gpu_display.y);
 }
 
 static u8 axis(Sint16 v) {
@@ -401,6 +483,45 @@ static void mouse_event(const SDL_Event *e) {
         wheel += e->wheel.y > 0 ? -1 : 1; /* up: the previous weapon */
 }
 
+/* Every gamepad connected is opened, and the one last used is read: Steam, for one, can add a virtual
+ * gamepad of its own beside the real one, which stays silent while the game isn't run through Steam. */
+static void pad_added(SDL_JoystickID id) {
+    SDL_Gamepad *g;
+    int i;
+    if (SDL_GetGamepadFromID(id))
+        return;
+    for (i = 0; i < MAX_PADS && pads[i]; i++)
+        ;
+    if (i == MAX_PADS || !(g = SDL_OpenGamepad(id)))
+        return;
+    pads[i] = g;
+    port_log("video: gamepad %s\n", SDL_GetGamepadName(g));
+    if (!gamepad)
+        gamepad = g;
+}
+
+static void pad_removed(SDL_JoystickID id) {
+    int i;
+    for (i = 0; i < MAX_PADS; i++) {
+        if (pads[i] && SDL_GetGamepadID(pads[i]) == id) {
+            if (gamepad == pads[i])
+                gamepad = NULL;
+            SDL_CloseGamepad(pads[i]);
+            pads[i] = NULL;
+        }
+    }
+    for (i = 0; i < MAX_PADS && !gamepad; i++)
+        gamepad = pads[i];
+}
+
+static void pad_used(SDL_JoystickID id) {
+    SDL_Gamepad *g = SDL_GetGamepadFromID(id);
+    if (g && g != gamepad) {
+        gamepad = g;
+        port_log("video: reading gamepad %s\n", SDL_GetGamepadName(g));
+    }
+}
+
 static void window_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_QUIT)
         exit(0);
@@ -411,12 +532,14 @@ static void window_event(const SDL_Event *e) {
         (e->key.scancode == SDL_SCANCODE_F11 || (e->key.scancode == SDL_SCANCODE_RETURN && (e->key.mod & SDL_KMOD_ALT))))
         set_fullscreen(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));
     mouse_event(e);
-    if (e->type == SDL_EVENT_GAMEPAD_ADDED && !gamepad)
-        gamepad = SDL_OpenGamepad(e->gdevice.which);
-    if (e->type == SDL_EVENT_GAMEPAD_REMOVED && gamepad && e->gdevice.which == SDL_GetGamepadID(gamepad)) {
-        SDL_CloseGamepad(gamepad);
-        gamepad = NULL;
-    }
+    if (e->type == SDL_EVENT_GAMEPAD_ADDED)
+        pad_added(e->gdevice.which);
+    if (e->type == SDL_EVENT_GAMEPAD_REMOVED)
+        pad_removed(e->gdevice.which);
+    if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
+        pad_used(e->gbutton.which);
+    if (e->type == SDL_EVENT_GAMEPAD_AXIS_MOTION && (e->gaxis.value > 16000 || e->gaxis.value < -16000))
+        pad_used(e->gaxis.which);
 }
 
 /* The game's motor values on the gamepad: the small motor (on or off) as its high-frequency rumble, the large
@@ -661,15 +784,21 @@ static SDL_FRect picture_rect(void) {
  * whole multiples with square pixels, then smoothly the rest of the way, so every PS1 pixel comes out the same
  * size without blurring them; "nearest" uses whole screen pixels only (rows of uneven height when the scale
  * isn't whole), "linear" blurs. */
-static void draw_picture(const SDL_FRect *src, const SDL_FRect *dst) {
-    static SDL_Texture *big;
-    static int filter = -1, big_w, big_h;
-    int sx, sy;
+static int filter = -1; /* TWINE_FILTER: 0 nearest, 1 linear, 2 sharp */
+
+static void set_filter(SDL_Texture *t) {
     if (filter < 0) {
         const char *f = getenv("TWINE_FILTER");
         filter = !f || !SDL_strcasecmp(f, "sharp") ? 2 : !SDL_strcasecmp(f, "linear") ? 1 : 0;
-        SDL_SetTextureScaleMode(texture, filter == 1 ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
     }
+    SDL_SetTextureScaleMode(t, filter == 1 ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
+}
+
+static void draw_picture(SDL_Texture *texture, const SDL_FRect *src, const SDL_FRect *dst) {
+    static SDL_Texture *big;
+    static int big_w, big_h;
+    int sx, sy;
+    set_filter(texture);
     sx = (int)(dst->w / src->w);
     sy = (int)(dst->h / src->h);
     if (filter != 2 || sx < 1 || sy < 1) {
@@ -691,7 +820,7 @@ static void draw_picture(const SDL_FRect *src, const SDL_FRect *dst) {
     }
     SDL_SetRenderTarget(renderer, big);
     SDL_RenderTexture(renderer, texture, src, NULL);
-    SDL_SetRenderTarget(renderer, NULL);
+    SDL_SetRenderTarget(renderer, screen); /* (NULL: the window) */
     SDL_RenderTexture(renderer, big, NULL, dst);
 }
 
@@ -783,24 +912,68 @@ static void draw_help(void) {
     SDL_SetRenderScale(renderer, 1, 1);
 }
 
+/* The hardware renderer's picture of the VRAM rectangle (rx, ry, w, h) in a texture of the renderer: the size
+ * it is shown at (dst), but no larger than drawn (scale times VRAM's pixels) and no smaller than VRAM's;
+ * `src` is the part of the texture it fills. */
+static SDL_Texture *hw_picture(s32 rx, s32 ry, s32 w, s32 h, const SDL_FRect *dst, SDL_FRect *src) {
+    static SDL_Texture *pic;
+    static int pic_w, pic_h;
+    int s = gpu_hw_scale(), pw = SDL_min(w * s, SDL_max((int)dst->w, w)), ph = SDL_min(h * s, SDL_max((int)dst->h, h));
+    if (!pic || pic_w < pw || pic_h < ph) {
+        if (pic)
+            SDL_DestroyTexture(pic);
+        pic_w = SDL_max(pw, pic_w);
+        pic_h = SDL_max(ph, pic_h);
+        pic = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_TARGET, pic_w, pic_h);
+        if (!pic)
+            port_fatal("video: picture texture %dx%d: %s\n", pic_w, pic_h, SDL_GetError());
+        SDL_SetTextureBlendMode(pic, SDL_BLENDMODE_NONE);
+    }
+    gpu_hw_picture(SDL_GetPointerProperty(SDL_GetTextureProperties(pic), SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, NULL),
+                   pw, ph, rx, ry, w, h);
+    src->x = src->y = 0;
+    src->w = (float)pw;
+    src->h = (float)ph;
+    return pic;
+}
+
 /* shows the VRAM rectangle at (rx, ry) the size of the display */
 static void present_rect(s32 rx, s32 ry, int rgb24) {
     s32 y, w = gpu_display.w, h = gpu_display.h;
     SDL_FRect src, dst = picture_rect();
+    SDL_Texture *pic = texture;
     if (w <= 0 || h <= 0 || w > 640 || h > 512)
         return;
-    for (y = 0; y < h; y++)
-        vram_line(rx, ry, rgb24, y, w, &pixels[y * 640]);
-    SDL_UpdateTexture(texture, NULL, pixels, 640 * 4);
     src.x = 0;
     src.y = 0;
     src.w = (float)w;
     src.h = (float)h;
+    if (gpu_hw_on && !rgb24)
+        pic = hw_picture(rx, ry, w, h, &dst, &src);
+    else {
+        for (y = 0; y < h; y++)
+            vram_line(rx, ry, rgb24, y, w, &pixels[y * 640]);
+        SDL_UpdateTexture(texture, NULL, pixels, 640 * 4);
+    }
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     if (!gpu_display.blank)
-        draw_picture(&src, &dst);
+        draw_picture(pic, &src, &dst);
     draw_help();
+    if (screen_shot) {
+        SDL_Surface *s = SDL_RenderReadPixels(renderer, NULL), *rgb = s ? SDL_ConvertSurface(s, SDL_PIXELFORMAT_RGB24) : NULL;
+        FILE *f = rgb ? fopen(screen_shot, "wb") : NULL;
+        if (f) {
+            int y;
+            fprintf(f, "P6\n%d %d\n255\n", rgb->w, rgb->h);
+            for (y = 0; y < rgb->h; y++)
+                fwrite((u8 *)rgb->pixels + y * rgb->pitch, 1, rgb->w * 3, f);
+            fclose(f);
+        }
+        SDL_DestroySurface(rgb);
+        SDL_DestroySurface(s);
+        screen_shot = NULL;
+    }
     {
         static int yawlog = -1;
         Uint64 t = SDL_GetTicksNS();
@@ -823,17 +996,20 @@ static void present(void) {
 void port_video_present_draw(int index, s32 x, s32 y) {
     const char *shots = getenv("TWINE_SHOT");
     RT_ENTER();
-    if (headless && shots) {
-        char want[16], list[256], *s;
-        snprintf(want, sizeof(want), "%u", frames);
-        strncpy(list, shots, sizeof(list) - 1);
-        list[sizeof(list) - 1] = 0;
-        for (s = strtok(list, ","); s; s = strtok(NULL, ","))
-            if (!strcmp(s, want)) {
-                char path[64];
-                snprintf(path, sizeof(path), "shot_%04u_%d.ppm", frames, index);
-                dump_rect(path, x, y, 0);
-            }
+    if (headless && (shots || gpu_hw_on)) {
+        char path[64];
+        int shot = shots && shot_wanted();
+        snprintf(path, sizeof(path), "shot_%04u_%d.ppm", frames, index);
+        if (gpu_hw_on)
+            gpu_hw_frame(frames, x, y, gpu_display.w, gpu_display.h, shot ? path : NULL);
+        else if (shot)
+            dump_rect(path, x, y, 0);
+        if (screen) {
+            static char sp[64];
+            snprintf(sp, sizeof(sp), "screen_%04u_%d.ppm", frames, index);
+            screen_shot = shot ? sp : NULL;
+            present_rect(x, y, 0);
+        }
     }
     if (!headless) {
         poll_input(0);
@@ -889,7 +1065,6 @@ int port_video_poll_skip(void) {
 
 extern u32 gpu_stats[8];
 extern int gpu_poly_log;
-extern int port_smooth_shown;
 
 /* The controls between frames: once a vblank while the game waits (irq.c), so how long a key is held reaches
  * the game as it would from a pad (the front end shows a frame only 15 times a second). */
@@ -916,7 +1091,8 @@ void port_frame_end(void) {
         poll_input(1);
         if (!port_smooth_shown) /* else interp.c has shown it */
             present();
-    }
+    } else if (screen && !port_smooth_shown)
+        present();
     if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK"))
         test_pad();
     port_smooth_shown = 0;

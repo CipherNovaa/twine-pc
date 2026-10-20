@@ -416,6 +416,7 @@ void intro_card_run(void) {
         SDL_RenderClear(r);
         SDL_RenderPresent(r);
         SDL_SetRenderVSync(r, vsync);
+        port_video_present_mode();
         if (tex)
             SDL_DestroyTexture(tex);
     }
