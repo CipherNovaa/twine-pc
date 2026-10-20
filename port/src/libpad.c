@@ -1,11 +1,12 @@
 /* libpad on the host: PadInitDirect's receive buffers get the controller state every vblank (from SDL
- * input once the window is in; idle pads until then), mode queries answer for a DualShock. */
+ * input once the window is in; idle pads until then), mode queries answer for a DualShock, and the motor
+ * values the game keeps in its PadSetAct buffer drive a real gamepad's rumble (video.c). */
 #include <string.h>
 #include "port.h"
 
 static u8 *pad_buf[2];
 static int pad_analog[2] = {1, 1};
-static u8 pad_motor[2][2];
+static u8 *pad_act[2]; /* PadSetAct: where the game keeps the motor values */
 u16 port_pad_buttons[2] = {0xFFFF, 0xFFFF};          /* active low, PsyQ bit order */
 u8 port_pad_sticks[2][4] = {{0x80, 0x80, 0x80, 0x80}, {0x80, 0x80, 0x80, 0x80}}; /* RX RY LX LY */
 
@@ -58,12 +59,18 @@ s32 PadSetActAlign(s32 port, u8 *data) {
     return 1;
 }
 
+/* The game names a buffer once and changes the values in it; the pad reads them every vblank (byte 0 the
+ * small motor, on or off; byte 1 the large one's strength, per PadSetActAlign's usual 0, 1). */
 void PadSetAct(s32 port, u8 *data, s32 len) {
-    int p = port ? 1 : 0;
-    if (data && len >= 2) {
-        pad_motor[p][0] = data[0];
-        pad_motor[p][1] = data[1];
-    }
+    pad_act[port ? 1 : 0] = data && len >= 2 ? data : NULL;
+}
+
+/* the first pad's motors now: small (0 off) and large (0-255) */
+void port_pad_motors(u8 *small, u8 *large) {
+    u8 *a = pad_act[0];
+    int ok = a && (u32)a >= PS1_RAM_BASE && (u32)a < PS1_RAM_BASE + PS1_RAM_SIZE - 1 && pad_analog[0];
+    *small = ok ? a[0] : 0;
+    *large = ok ? a[1] : 0;
 }
 
 void port_pad_vblank(void) {

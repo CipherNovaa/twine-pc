@@ -22,6 +22,34 @@ You need your own copy of the game. No game data is in this repository.
 
 The 11 levels share one engine. 617 of Level 1's 841 game functions appear unchanged in every other level, in the same link order, so most decompiled code applies to all levels. See `docs/port_plan.md` for the plan for a native PC port.
 
+## Native PC port
+
+`make -C port` builds `build/port/twine`: the whole game as one native Linux program (32-bit x86). The decompiled C is compiled for the PC; code still in assembly is statically recompiled to C (`port/recomp.py`); the console's hardware and libraries are written anew for the host in `port/src` (software GPU, GTE, SPU with XA streaming audio, MDEC movies, CD reading straight from the disc image, memory cards, SDL3 for the window, input and sound). It plays the game from the PlayStation boot animation through the logos, intro movie, menus and briefings into the missions and back, with saving and loading. Between the game's 20 Hz ticks the camera moves smoothly at the display's refresh rate, and the mouse looks around.
+
+Building needs gcc with 32-bit support, 32-bit SDL3 (`lib32-sdl3`) and the matching builds of all 14 executables (`tools/build_all.sh`, see Setup).
+
+Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the boot animation, your console's BIOS (e.g. `SCPH1001.BIN`; without one only the title card shows). By default the program looks for `workbench/disc/007 - The World Is Not Enough (USA).bin` and a `bios/` folder in the current directory.
+
+**Settings** go in `~/.config/twine/twine.ini` (or `$XDG_CONFIG_HOME/twine/twine.ini`), one `key = value` per line; each stands for the environment variable `TWINE_<KEY>`, which wins if both are set:
+
+| key | |
+|---|---|
+| `disc`, `bios` | the disc image; the BIOS file or a folder with it |
+| `fullscreen = 1` | start in full screen (F11 or Alt+Enter switches at any time) |
+| `display` | which display: its number or part of its name (`port.log` lists them), e.g. `display = HDMI-A-1` |
+| `aspect = fill` | stretch the picture over the whole screen (for a 4:3 CRT driven at 1280x1024); by default it keeps 4:3 |
+| `vsync = 0` | show frames as fast as they come instead of at the display's refresh |
+| `smooth = 0` | no frames between the game's ticks |
+| `mouse_sens`, `mouse_invert = 1` | mouse look speed (default 1), inverted up/down |
+| `rumble = 0` | no gamepad rumble (it follows the game's vibration option otherwise) |
+| `card1`, `card2` | memory card images (raw 128 KB, as emulators use). Slot 1 defaults to `~/.local/share/twine/card1.mcd`, made on first use; slot 2 to `card2.mcd` there if it exists; `none` leaves a slot empty |
+| `no_intro = 1` | skip the boot animation and title card |
+| `level = N` | start straight in mission folder N (1-11) |
+
+**Controls.** Keyboard and mouse: WASD move and strafe, the mouse looks (inside missions), left button fires, right button aims, the wheel or Q/E change weapons, R reloads, C or Ctrl crouches, F fires; arrows are the d-pad, Enter or Esc is Start, Tab is Select, Space is Cross, Backspace is Triangle. The actions follow the game's own button settings in the options menu. A gamepad works as a PlayStation pad, with twin-stick controls in the missions (the left stick moves and strafes, the right stick turns and looks).
+
+For testing: `TWINE_HEADLESS=1` runs without a window, `TWINE_SHOT=frames` saves frames as PPM files, `TWINE_TEST_PAD`/`TWINE_TEST_STICK`/`TWINE_TEST_LOOK` stand in for the controls, `TWINE_PROFILE=1` samples where the time goes (`port/tools/profile.py`), and `TWINE_CD_LOG`, `TWINE_BIOS_LOG`, `TWINE_SMOOTH_LOG` log more to `port.log` (written in the current directory). The source files' header comments describe the rest.
+
 ## Setup
 
 Arch/CachyOS packages: `ghidra`, `mips-elf-binutils`, `duckstation-qt-bin` (AUR), plus `cmake`/`gcc`/`python`.

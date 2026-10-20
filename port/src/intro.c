@@ -223,7 +223,7 @@ void port_intro(void) {
     int headless = port_video_headless();
     u8 *rom;
     u32 entry;
-    if (getenv("TWINE_NO_INTRO") || (headless && !getenv("TWINE_INTRO")))
+    if ((getenv("TWINE_NO_INTRO") && atoi(getenv("TWINE_NO_INTRO"))) || (headless && !getenv("TWINE_INTRO")))
         return;
     if (headless) /* the boot's sound runs on console time (bios_boot.c feeds it per frame) */
         spu_set_clock(SPU_CLOCK_MANUAL);

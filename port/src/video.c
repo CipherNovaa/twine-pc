@@ -23,6 +23,7 @@
 
 extern u16 port_pad_buttons[2];
 extern u8 port_pad_sticks[2][4];
+void port_pad_motors(u8 *small, u8 *large);
 
 static u32 frames;
 static int headless;
@@ -308,7 +309,7 @@ static void mouse_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_MOUSE_MOTION) {
         mouse_moved = SDL_GetTicks();
         look_yaw += e->motion.xrel * scale;
-        look_pitch -= e->motion.yrel * scale * (getenv("TWINE_MOUSE_INVERT") ? -1 : 1);
+        look_pitch -= e->motion.yrel * scale * (getenv("TWINE_MOUSE_INVERT") && atoi(getenv("TWINE_MOUSE_INVERT")) ? -1 : 1);
     }
     if (e->type == SDL_EVENT_MOUSE_WHEEL && e->wheel.y != 0)
         wheel += e->wheel.y > 0 ? -1 : 1; /* up: the previous weapon */
@@ -328,6 +329,28 @@ static void window_event(const SDL_Event *e) {
         SDL_CloseGamepad(gamepad);
         gamepad = NULL;
     }
+}
+
+/* The game's motor values on the gamepad: the small motor (on or off) as its high-frequency rumble, the large
+ * one (0-255) as the low-frequency one. Renewed every game frame while on, so they stop when the game stops
+ * asking. TWINE_RUMBLE=0 turns it off. */
+static void rumble(void) {
+    static u8 was_small, was_large;
+    static Uint64 renewed;
+    static int off = -1;
+    u8 small, large;
+    Uint64 now = SDL_GetTicks();
+    if (off < 0)
+        off = getenv("TWINE_RUMBLE") && !atoi(getenv("TWINE_RUMBLE"));
+    port_pad_motors(&small, &large);
+    if (off || (small == was_small && large == was_large && (!(small | large) || now - renewed < 100)))
+        return;
+    SDL_RumbleGamepad(gamepad, (Uint16)(large * 257), small ? 0xC000 : 0, small | large ? 250 : 0);
+    if (getenv("TWINE_RUMBLE_LOG"))
+        port_log("rumble: small %u large %u\n", small, large);
+    was_small = small;
+    was_large = large;
+    renewed = now;
 }
 
 /* `tick`: at the game's frame (VSync), not a frame drawn between ticks */
@@ -405,6 +428,8 @@ static void poll_input(int tick) {
         ry = axis(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY));
     }
     port_pad_buttons[0] = (u16)~down;
+    if (gamepad && tick)
+        rumble();
     port_pad_sticks[0][0] = rx;
     port_pad_sticks[0][1] = ry;
     port_pad_sticks[0][2] = lx;
