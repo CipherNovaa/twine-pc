@@ -77,7 +77,8 @@ enum { P_OPAQUE, P_SEMI = 1, P_CHECK = 5, P_SEMI_CHECK = 6, P_COUNT = 10 };
 #define VBUF_SIZE (16 * 1024 * 1024)
 #define PLANE_SIZE 64 /* bytes */
 #define PBUF_SIZE (2 * PLANES_MAX * PLANE_SIZE)
-#define UPLOAD_SIZE (2 * LIST_MAX * (u32)sizeof(Vertex) + PLANES_MAX * PLANE_SIZE + 1024 * 512 * 2)
+#define IMAGES_SIZE (1024 * 512 * 2)
+#define UPLOAD_SIZE (2 * LIST_MAX * (u32)sizeof(Vertex) + PLANES_MAX * PLANE_SIZE + 1024 * 512 * 2 + IMAGES_SIZE)
 
 static SDL_GPUDevice *dev;
 static int scale = 1, truecolor, exact;
@@ -116,6 +117,15 @@ typedef struct {
     u16 row[32];
 } Blocks;
 static Blocks dirty, sampled;
+/* the images the batch draws, from the game's own pixels (gpu_hw_load_image), uploaded with it */
+#define IMAGES_MAX 256
+static u8 images[IMAGES_SIZE];
+static u32 images_used;
+static struct {
+    s32 x, y, w, h;
+    u32 at;
+} image[IMAGES_MAX];
+static int n_images;
 
 /* the line being recorded */
 static Vertex line_v;
@@ -196,8 +206,18 @@ static void texture_blocks(Blocks *t, const GpuHwPrim *p, s32 umin, s32 umax, s3
     Blocks c;
     s32 tx = (p->tpage & 15) * 64, ty = ((p->tpage >> 4) & 1) * 256, depth_bits = (p->tpage >> 7) & 3, x0, x1;
     s32 us[2][2], vs[2][2];
-    int nu = page_ranges(umin - 1, umax + 1, p->tw_mask_x, us), nv = page_ranges(vmin - 1, vmax + 1, p->tw_mask_y, vs);
-    int i, j, shift = depth_bits == 0 ? 2 : depth_bits == 1 ? 1 : 0;
+    int shift = depth_bits == 0 ? 2 : depth_bits == 1 ? 1 : 0, i, j, nu, nv;
+    /* (A page at VRAM's right edge goes on at its left one, where the picture is drawn. While gpu.c draws
+     * later, the margin alone doesn't take it there, past the far side of the page or past the last texel the
+     * coordinates reach: what the rounding finds there would make gpu.c draw everything, at most a pixel of an
+     * edge each frame then shows an older picture's.) */
+    s32 ulo = umin - 1, uhi = umax + 1, vlo = vmin - 1, vhi = vmax + 1;
+    if (gpu_deferring() && umin == 0 && tx + (255 >> shift) > 1023)
+        ulo = 0;
+    if (gpu_deferring() && umax < 255 && tx + (uhi >> shift) > 1023 && tx + (umax >> shift) <= 1023)
+        uhi = umax;
+    nu = page_ranges(ulo, uhi, p->tw_mask_x, us);
+    nv = page_ranges(vlo, vhi, p->tw_mask_y, vs);
     memset(t, 0, sizeof(*t));
     for (i = 0; i < nu; i++)
         for (j = 0; j < nv; j++) {
@@ -259,6 +279,7 @@ static u32 upload_vram(SDL_GPUCopyPass *copy, u8 *mapped, u32 at) {
         need[r] = dirty.row[r] & sampled.row[r];
         dirty.row[r] &= (u16)~need[r];
     }
+    gpu_sync_blocks(need); /* gpu.c rasterizes what it kept for later there */
     for (r = 0; r < 32; r++) {
         while (need[r]) {
             SDL_GPUTextureTransferInfo src;
@@ -317,7 +338,7 @@ static void flush(void) {
     u8 *mapped;
     u32 bytes = (u32)(n_opaque + n_ordered) * sizeof(Vertex), pbytes = (u32)n_planes * PLANE_SIZE, at;
     int i;
-    if (!n_opaque && !n_ordered && !clear_color && !clear_depth)
+    if (!n_opaque && !n_ordered && !clear_color && !clear_depth && !n_images)
         return;
     begin_commands();
     if (vbuf_used + bytes > VBUF_SIZE || pbuf_used + pbytes > PBUF_SIZE) {
@@ -333,6 +354,25 @@ static void flush(void) {
     copy = SDL_BeginGPUCopyPass(cmd);
     at = bytes + pbytes;
     at += upload_vram(copy, mapped, at);
+    for (i = 0; i < n_images; i++) { /* (after the blocks: they may hold what was there before) */
+        SDL_GPUTextureTransferInfo isrc;
+        SDL_GPUTextureRegion idst;
+        u32 size = (u32)(image[i].w * image[i].h * 2);
+        memcpy(mapped + at, images + image[i].at, size);
+        memset(&isrc, 0, sizeof(isrc));
+        memset(&idst, 0, sizeof(idst));
+        isrc.transfer_buffer = upload;
+        isrc.offset = at;
+        isrc.pixels_per_row = image[i].w;
+        isrc.rows_per_layer = image[i].h;
+        idst.texture = vram;
+        idst.x = image[i].x, idst.y = image[i].y, idst.w = image[i].w, idst.h = image[i].h, idst.d = 1;
+        SDL_UploadToGPUTexture(copy, &isrc, &idst, false);
+        st.upload_bytes += size;
+        at += size;
+    }
+    n_images = 0;
+    images_used = 0;
     SDL_UnmapGPUTransferBuffer(dev, upload);
     if (bytes) {
         src.transfer_buffer = upload;
@@ -730,22 +770,36 @@ void gpu_hw_fill(s32 x, s32 y, s32 w, s32 h, s32 r, s32 g, s32 b) {
     RT_LEAVE();
 }
 
-void gpu_hw_load_image(s32 x, s32 y, s32 w, s32 h) {
+void gpu_hw_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src) {
     Blocks wb;
     Vertex a;
+    u32 size = (u32)(w * h * 2);
+    int direct = x + w <= 1024 && y + h <= 512 && size <= IMAGES_SIZE;
     if (w <= 0 || h <= 0)
         return;
     RT_ENTER();
     probe_vram("image", x, y, w, h, 0, 0);
     blocks_of(&wb, x, y, w, h);
-    will_write(&wb);
+    if (direct) {
+        /* the game's pixels go up with the batch: VRAM's copy there is then right without gpu.c's (which
+         * may do it later); a batch reading what was there before is drawn first */
+        if (blocks_meet(&wb, &sampled) || n_images == IMAGES_MAX || images_used + size > IMAGES_SIZE)
+            flush();
+        image[n_images].x = x, image[n_images].y = y, image[n_images].w = w, image[n_images].h = h;
+        image[n_images].at = images_used;
+        memcpy(images + images_used, src, size);
+        images_used += size;
+        n_images++;
+    } else
+        will_write(&wb); /* round VRAM's edge: uploaded from gpu.c's VRAM, as the blocks it reads */
     memset(&a, 0, sizeof(a));
     a.plane = NO_PLANE;
     a.z = next_prim(24, 0);
     a.w = 1;
     a.mode = M_BLIT;
     a.area1 = 1023 | (511u << 16);
-    blocks_add(&sampled, &wb); /* (after next_prim, which may draw the batch) */
+    if (!direct)
+        blocks_add(&sampled, &wb); /* (after next_prim, which may draw the batch) */
     vram_rect(&a, x, y, w, h);
     RT_LEAVE();
 }
@@ -1177,6 +1231,7 @@ static void compare(u32 frame, s32 x, s32 y, s32 w, s32 h, const char *shot) {
             port_log("gpu_hw: TWINE_HW_COMPARE needs scale 1 in 15-bit colour\n");
         return;
     }
+    gpu_sync(x, y, w, h); /* what gpu.c kept for later */
     rgb = realloc(rgb, w * h * sizeof(u32));
     raw = realloc(raw, w * h * sizeof(u16));
     if (!read_target(x, y, w, h, rgb, raw))

@@ -121,6 +121,7 @@ static void gp0_write(u32 v) {
             gpu_read_w = ((gp0_buf[2] - 1) & 1023) + 1;
             gpu_read_h = (((gp0_buf[2] >> 16) - 1) & 511) + 1;
             gpu_read_pos = 0;
+            gpu_sync(gpu_read_x, gpu_read_y, gpu_read_w, gpu_read_h);
         } else
             gpu_gp0(gp0_buf, gp0_have);
         gp0_have = 0;

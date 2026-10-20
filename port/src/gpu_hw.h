@@ -40,7 +40,7 @@ void gpu_hw_line(const GpuHwPrim *p, s32 x0, s32 y0, s32 x1, s32 y1);
 void gpu_hw_line_pixel(s32 x, s32 y, s32 r, s32 g, s32 b);
 /* VRAM changed outside of drawing: a fill (8-bit colour), an image from the CPU, a copy within VRAM */
 void gpu_hw_fill(s32 x, s32 y, s32 w, s32 h, s32 r, s32 g, s32 b);
-void gpu_hw_load_image(s32 x, s32 y, s32 w, s32 h);
+void gpu_hw_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src);
 void gpu_hw_move_image(s32 sx, s32 sy, s32 w, s32 h, s32 dx, s32 dy);
 void gpu_hw_reset(void);
 

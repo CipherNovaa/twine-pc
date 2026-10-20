@@ -287,6 +287,7 @@ static void vram_line(s32 rx, s32 ry, int rgb24, s32 y, s32 w, u32 *out) {
 static void dump_rect(const char *path, s32 rx, s32 ry, int rgb24) {
     FILE *f;
     s32 x, y, w = gpu_display.w, h = gpu_display.h;
+    gpu_sync(0, 0, 1024, 512);
     if (getenv("TWINE_SHOT_VRAM")) {
         GpuDisplay all = {0, 0, 1024, 512, 0, 0}, keep = gpu_display;
         gpu_display = all;
@@ -951,6 +952,7 @@ static void present_rect(s32 rx, s32 ry, int rgb24) {
     if (gpu_hw_on && !rgb24)
         pic = hw_picture(rx, ry, w, h, &dst, &src);
     else {
+        gpu_sync(rx, ry, rgb24 ? (w * 3 + 1) / 2 : w, h);
         for (y = 0; y < h; y++)
             vram_line(rx, ry, rgb24, y, w, &pixels[y * 640]);
         SDL_UpdateTexture(texture, NULL, pixels, 640 * 4);
