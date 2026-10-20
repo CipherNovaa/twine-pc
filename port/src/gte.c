@@ -396,11 +396,15 @@ void GTE_cmd(u32 op) {
         D[24] = (u32)(s32)mac0_chk((s64)SX(0) * SY(1) + (s64)SX(1) * SY(2) + (s64)SX(2) * SY(0) -
                                    (s64)SX(0) * SY(2) - (s64)SX(1) * SY(0) - (s64)SX(2) * SY(1));
         break;
-    case 0x0C: { /* OP: cross product of IR with the RT diagonal */
+    case 0x0C: { /* OP: cross product of IR with the RT diagonal, all three from IR as it was before */
         s32 d1 = M(0, 0), d2 = M(0, 4), d3 = M(0, 8);
-        set_mac_ir(1, mac_chk(1, (s64)IR(3) * d2 - (s64)IR(2) * d3), shift, lm);
-        set_mac_ir(2, mac_chk(2, (s64)IR(1) * d3 - (s64)IR(3) * d1), shift, lm);
-        set_mac_ir(3, mac_chk(3, (s64)IR(2) * d1 - (s64)IR(1) * d2), shift, lm);
+        s64 ir1 = IR(1), ir2 = IR(2), ir3 = IR(3);
+        s64 m1 = mac_chk(1, ir3 * d2 - ir2 * d3);
+        s64 m2 = mac_chk(2, ir1 * d3 - ir3 * d1);
+        s64 m3 = mac_chk(3, ir2 * d1 - ir1 * d2);
+        set_mac_ir(1, m1, shift, lm);
+        set_mac_ir(2, m2, shift, lm);
+        set_mac_ir(3, m3, shift, lm);
         break;
     }
     case 0x12: { /* MVMVA */

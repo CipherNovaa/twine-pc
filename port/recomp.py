@@ -522,8 +522,8 @@ class Gen:
                 continue
             params = ", ".join(f"u32 a{k}" for k in range(NARGS))
             copies = " ".join(f"M32(sp + {16 + 4 * (k - 4)}) = a{k};" for k in range(4, NARGS))
-            if a in self.replaced:  # the mod calls the original by this name
-                n = f"{n}_orig"
+            if a in self.replaced:  # the mod calls the original by its name for it
+                n = f"{self.replaced[a]}_orig"
             exports.append(f"u32 {n}({params}) {{\n"
                            f"    R3000 ctx; R3000 *c = &ctx; u32 sp = port_rc_enter();\n"
                            f"    R(4) = a0; R(5) = a1; R(6) = a2; R(7) = a3; R(29) = sp; R(31) = 0;\n"
@@ -561,8 +561,10 @@ def main():
     native_addrs = {a for n, a in addr_of.items() if n in replaced_c}
     todo = [(n, a, s) for n, a, s in funcs if n not in native_set and a not in native_addrs and n != "start"]
     g = Gen(level, todo, addr_of, {n: True for n in native_set})
+    # by address: without the level's C, a name like L1_func_8005D760 is only an alias of the function
+    todo_addrs = {a for _, a, _ in todo}
     for n in replaced:
-        if n not in {t for t, _, _ in todo}:
+        if addr_of.get(n) not in todo_addrs:
             sys.exit(f"{level}: {n} is replaced by a mod but not recompiled")
         g.replaced[addr_of[n]] = n
     # aliased names (psyq_names) resolve to the native implementation

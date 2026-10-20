@@ -17025,8 +17025,8 @@ void L1_func_80052B2C(s32 *out, u8 *obj) {
     }
 }
 
-void func_80054E0C(void) {
-    func_8006AA90();
+void func_80054E0C(void *arg0) {
+    func_8006AA90(arg0);
 }
 
 void L2_func_80054E54(void) {
