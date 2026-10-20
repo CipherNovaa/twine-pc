@@ -238,12 +238,16 @@ static void head_sector(u32 lba, u64 t, int deliver) {
     }
 }
 
-/* Handle the sectors read by now. More than half a second behind (interrupts were held off), the oldest
- * are skipped: the drive has moved on. */
+/* Handle the sectors read by now. More than a tenth of a second behind (the program was held up: interrupts
+ * held off, or the PC busy, which a console never is), the drive is taken to have waited for it rather than
+ * moved on: a movie that loses sectors loses a frame, and its player waits for that frame for good (it seeks
+ * back to it, a sector late). */
 static void head_advance(u64 now, int deliver) {
-    u32 n = head_count(now), run = head_run;
-    if (n - head_done > head_rate / 2)
-        head_done = n - head_rate / 2;
+    u32 n = head_count(now), run = head_run, most = head_rate / 10 + 1;
+    if (n - head_done > most) {
+        head_t0 += (u64)(n - head_done - most) * 1000000000ull / head_rate;
+        n = head_count(now);
+    }
     while (head_done < n && head_reading && head_run == run) {
         u32 k = head_done++;
         head_sector(head_lba + k, head_t0 + (u64)(k + 1) * 1000000000ull / head_rate, deliver);
