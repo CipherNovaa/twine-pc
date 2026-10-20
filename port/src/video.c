@@ -53,14 +53,14 @@ static const struct {
     {SDL_SCANCODE_TAB, P_SELECT}, {SDL_SCANCODE_SPACE, P_CROSS}, {SDL_SCANCODE_BACKSPACE, P_TRI},
 };
 
-/* the game's actions (g_Args->buttonMap) */
+/* the game's actions (g_Args->buttonMap); reload is also the button that uses things (doors, people) */
 enum { A_FIRE, A_PREV_WEAPON, A_NEXT_WEAPON, A_RELOAD, A_CROUCH, A_AIM, A_STRAFE_LEFT, A_STRAFE_RIGHT };
 
 static const struct {
     SDL_Scancode key;
     int action;
 } actionkeys[] = {
-    {SDL_SCANCODE_F, A_FIRE}, {SDL_SCANCODE_Q, A_PREV_WEAPON}, {SDL_SCANCODE_E, A_NEXT_WEAPON},
+    {SDL_SCANCODE_F, A_RELOAD}, {SDL_SCANCODE_Q, A_PREV_WEAPON}, {SDL_SCANCODE_E, A_NEXT_WEAPON},
     {SDL_SCANCODE_R, A_RELOAD}, {SDL_SCANCODE_C, A_CROUCH}, {SDL_SCANCODE_LCTRL, A_CROUCH},
     {SDL_SCANCODE_A, A_STRAFE_LEFT}, {SDL_SCANCODE_D, A_STRAFE_RIGHT},
 };
@@ -83,8 +83,44 @@ static const struct {
     {SDL_GAMEPAD_BUTTON_SOUTH, P_CROSS}, {SDL_GAMEPAD_BUTTON_EAST, P_CIRC}, {SDL_GAMEPAD_BUTTON_WEST, P_SQUARE},
     {SDL_GAMEPAD_BUTTON_NORTH, P_TRI}, {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, P_L1},
     {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, P_R1}, {SDL_GAMEPAD_BUTTON_LEFT_STICK, P_L3},
-    {SDL_GAMEPAD_BUTTON_RIGHT_STICK, P_R3},
+    {SDL_GAMEPAD_BUTTON_RIGHT_STICK, P_R3}, {SDL_GAMEPAD_BUTTON_TOUCHPAD, P_SELECT},
 };
+
+/* The gamepad while Bond has the controls, in the modern layout (TWINE_CONTROLS, the default; "original"
+ * keeps the PS1 pad's buttons and the game's own settings for them): the buttons are actions, whichever PS1
+ * buttons the game's settings give them. The triggers fire and aim. Cross and the d-pad stay the pad's, for
+ * the prompts a mission puts up, and Start, Select and the touchpad too. */
+static const struct {
+    SDL_GamepadButton b;
+    int action;
+} modern_actions[] = {
+    {SDL_GAMEPAD_BUTTON_WEST, A_RELOAD},           {SDL_GAMEPAD_BUTTON_EAST, A_CROUCH},
+    {SDL_GAMEPAD_BUTTON_RIGHT_STICK, A_CROUCH},    {SDL_GAMEPAD_BUTTON_NORTH, A_NEXT_WEAPON},
+    {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, A_NEXT_WEAPON}, {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, A_PREV_WEAPON},
+};
+static const struct {
+    SDL_GamepadButton b;
+    u16 bit;
+} modern_pad[] = {
+    {SDL_GAMEPAD_BUTTON_DPAD_UP, P_UP},     {SDL_GAMEPAD_BUTTON_DPAD_DOWN, P_DOWN},
+    {SDL_GAMEPAD_BUTTON_DPAD_LEFT, P_LEFT}, {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, P_RIGHT},
+    {SDL_GAMEPAD_BUTTON_START, P_START},    {SDL_GAMEPAD_BUTTON_BACK, P_SELECT},
+    {SDL_GAMEPAD_BUTTON_TOUCHPAD, P_SELECT}, {SDL_GAMEPAD_BUTTON_SOUTH, P_CROSS},
+};
+
+/* Bond has the controls: the twin-stick mod says so every game frame it does (no cut scene or menu); a
+ * pause or a menu that stops the game's frames counts as not. */
+static int gameplay_on;
+static u32 gameplay_at;
+
+void port_controls_gameplay(int on) {
+    gameplay_on = on;
+    gameplay_at = port_vblank_count();
+}
+
+static int in_gameplay(void) {
+    return port_module && port_module->level && gameplay_on && port_vblank_count() - gameplay_at < 10;
+}
 
 /* the display TWINE_DISPLAY names (its number from 1, or part of its name), else 0 */
 static SDL_DisplayID chosen_display(void) {
@@ -272,13 +308,14 @@ static u16 action_bits(int action) {
     return (u16)((b << 8) | (b >> 8));
 }
 
-/* TWINE_TEST_LOOK=<yaw>,<pitch> (headless): a mouse moving that much every 50 ms (a game tick), steadily */
+/* TWINE_TEST_LOOK=<yaw>,<pitch>: a mouse moving that much every 50 ms (a game tick), steadily (in a window
+ * too, for measuring how smoothly the view turns: TWINE_YAWLOG) */
 static int test_look(float *yaw, float *pitch) {
     static Uint64 start;
     const char *test = getenv("TWINE_TEST_LOOK");
     float ticks;
     int y = 0, p = 0;
-    if (!headless || !test)
+    if (!test)
         return 0;
     if (!start)
         start = SDL_GetTicksNS();
@@ -309,8 +346,10 @@ static int mouse_in_use(void) {
 /* the mouse has moved in the last second (looking around with it; interp.c then turns the camera of every
  * frame by its latest movement) */
 int port_mouse_recent(void) {
+    if (getenv("TWINE_TEST_LOOK"))
+        return 1;
     if (headless)
-        return getenv("TWINE_TEST_LOOK") != NULL;
+        return 0;
     return mouse_captured && mouse_in_use() && mouse_moved && SDL_GetTicks() - mouse_moved < 1000;
 }
 
@@ -410,8 +449,12 @@ static void poll_input(int tick) {
         window_event(&e);
     keys = SDL_GetKeyboardState(NULL);
     for (i = 0; i < sizeof(keymap) / sizeof(keymap[0]); i++)
-        if (keys[keymap[i].key] && !(keymap[i].key == SDL_SCANCODE_RETURN && (SDL_GetModState() & SDL_KMOD_ALT)))
+        if (keys[keymap[i].key] && !(keymap[i].key == SDL_SCANCODE_RETURN && (SDL_GetModState() & SDL_KMOD_ALT)) &&
+            !(keymap[i].key == SDL_SCANCODE_SPACE && in_gameplay()))
             down |= keymap[i].bit;
+    /* Space chooses in the menus and uses things (doors, people) while Bond has the controls */
+    if (keys[SDL_SCANCODE_SPACE] && in_gameplay())
+        down |= action_bits(A_RELOAD);
     /* Esc goes back in the front end's menus (Triangle) and pauses everywhere else (Start) */
     if (keys[SDL_SCANCODE_ESCAPE])
         down |= port_module && !strcmp(port_module->name, "shell") ? P_TRI : P_START;
@@ -466,13 +509,31 @@ static void poll_input(int tick) {
     if (keys[SDL_SCANCODE_L])
         rx = 0xFF;
     if (gamepad) {
-        for (i = 0; i < sizeof(padmap) / sizeof(padmap[0]); i++)
-            if (SDL_GetGamepadButton(gamepad, padmap[i].b))
-                down |= padmap[i].bit;
-        if (SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16000)
-            down |= P_L2;
-        if (SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16000)
-            down |= P_R2;
+        static int modern = -1;
+        int l2 = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16000;
+        int r2 = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16000;
+        if (modern < 0)
+            modern = !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
+        if (modern && in_gameplay()) {
+            for (i = 0; i < sizeof(modern_actions) / sizeof(modern_actions[0]); i++)
+                if (SDL_GetGamepadButton(gamepad, modern_actions[i].b))
+                    down |= action_bits(modern_actions[i].action);
+            for (i = 0; i < sizeof(modern_pad) / sizeof(modern_pad[0]); i++)
+                if (SDL_GetGamepadButton(gamepad, modern_pad[i].b))
+                    down |= modern_pad[i].bit;
+            if (r2)
+                down |= action_bits(A_FIRE);
+            if (l2)
+                down |= action_bits(A_AIM);
+        } else {
+            for (i = 0; i < sizeof(padmap) / sizeof(padmap[0]); i++)
+                if (SDL_GetGamepadButton(gamepad, padmap[i].b))
+                    down |= padmap[i].bit;
+            if (l2)
+                down |= P_L2;
+            if (r2)
+                down |= P_R2;
+        }
         stick(SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, &lx, &ly);
         stick(SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, &rx, &ry);
     }
@@ -512,6 +573,7 @@ static void test_pad(void) {
  * with the longest gap between two frames, how many gaps were over 20 ms (a missed refresh at 75 Hz) and how
  * long presenting a frame took (waiting for the display's refresh) */
 static Uint64 present_ns; /* time spent in SDL_RenderPresent since the last log line */
+int port_shown_yaw; /* the camera's yaw in the frame being shown (smooth.c), for TWINE_YAWLOG */
 
 static void count_frame(void) {
     static Uint64 since, last, log_since, worst;
@@ -616,21 +678,23 @@ static const char *const help_lines[] = {
     "W / S ............ walk forward / back",
     "A / D ............ strafe",
     "Arrows ........... walk and turn (menus: move)",
-    "Left button, F ... fire",
+    "Left button ...... fire",
     "Right button ..... aim (hold)",
     "Wheel, Q / E ..... change weapon",
-    "R ................ reload",
+    "F, R ............. use (doors, people), reload",
     "C, Ctrl .......... crouch",
     "Enter ............ start, pause",
     "Esc .............. pause (menus: back)",
-    "Space ............ choose (Cross)",
+    "Space ............ use; in menus: choose (Cross)",
     "Backspace ........ back (Triangle)",
     "Tab .............. Select (messages)",
     "F11, Alt+Enter ... full screen or window",
     "",
-    "Gamepad: the left stick walks and strafes,",
-    "the right stick turns and looks; the buttons",
-    "are the PlayStation pad's.",
+    "Gamepad: left stick walks and strafes, right",
+    "stick turns and looks, R2 fire, L2 aim, Square",
+    "use / reload, Circle crouch, Triangle / R1 next",
+    "and L1 previous weapon, Options pause, touchpad",
+    "messages; in menus the pad's own buttons.",
 };
 
 static void draw_help(void) {
@@ -712,9 +776,15 @@ static void present_rect(s32 rx, s32 ry, int rgb24) {
         draw_picture(&src, &dst);
     draw_help();
     {
+        static int yawlog = -1;
         Uint64 t = SDL_GetTicksNS();
         SDL_RenderPresent(renderer);
         present_ns += SDL_GetTicksNS() - t;
+        /* TWINE_YAWLOG=1: when each frame was shown and the camera yaw in it */
+        if (yawlog < 0)
+            yawlog = getenv("TWINE_YAWLOG") && atoi(getenv("TWINE_YAWLOG"));
+        if (yawlog)
+            port_log("yaw %llu %d %u\n", (unsigned long long)SDL_GetTicksNS(), port_shown_yaw, frames);
     }
     count_frame();
 }

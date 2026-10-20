@@ -50,6 +50,7 @@ int port_mouse_recent(void);
 void port_smooth_end(void);
 void port_smooth_present(void);
 int port_smooth_drawn(void);
+extern int port_shown_yaw;
 
 #define CAM_ROT ((s16 *)((u8 *)&g_Camera + 0x80))
 #define CAM_POS (&g_Camera.posX)
@@ -394,6 +395,7 @@ static void draw_between(const View *cur, s32 t, s32 yaw, s32 pitch, s32 mouse) 
     D_8009CD30 = (CAM_ROT[1] + ratan2(D_800B0C10[3] - D_800B0C10[0], D_800B0C10[5] - D_800B0C10[2])) & 0xFFF;
     if (t < 4096)
         place_between(t);
+    port_shown_yaw = CAM_ROT[1];
     func_8002F7CC_orig();
     port_smooth_end();
 }
@@ -421,6 +423,7 @@ void func_8002F7CC(void) {
     }
     s_Prev = cur;
     s_HavePrev = 1;
+    port_shown_yaw = CAM_ROT[1];
     func_8002F7CC_orig();
     /* The tick's own frame. With the mouse in use it lags the drawings before it, which were turned by what
      * the mouse has moved since the game took it: one turned the same way is shown instead, or when there is

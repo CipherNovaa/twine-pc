@@ -3459,7 +3459,7 @@ void func_80063E4C(void *arg0) {
 
 void func_80063E70(void *arg0) {
     if (!(M2C_FIELD(M2C_FIELD(arg0, void **, 0xC), s32 *, 0x98) & 0xFFFFFF)) {
-        ((void (*)(void))func_80063E4C)();
+        func_80063E4C(arg0);
     }
 }
 

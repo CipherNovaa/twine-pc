@@ -35,6 +35,10 @@ void port_mouse_look(s32 *yaw, s32 *pitch);
 static s32 s_MouseYaw = 0;
 static s32 s_MousePitch = 0;
 static s32 s_MouseTicks = 0; /* ticks since the mouse last moved, counting down from 20 */
+extern u8 D_800AC284[]; /* +0x108 set with +0x104 == 1: a menu has the controls (the mapper clears the flags) */
+/* Whether Bond has the controls (no cut scene, no menu): the gamepad's buttons then work through the game's
+ * button settings (fire, aim, ...) rather than as the PS1 pad's; port/src/video.c. */
+void port_controls_gameplay(int on);
 #endif
 
 /* Looking up and down is an offset on the player model's pitch (s16 at model+0x60, signed), which the
@@ -94,6 +98,10 @@ void func_8005D760(void) {
         D_800B0E48 = 0;
     }
     func_8005D760_orig();
+#ifdef NATIVE_PORT
+    port_controls_gameplay(g_CutScene == 0 && D_8009CD00 == 0 &&
+                           !(D_800AC284[0x108] != 0 && *(s32 *)(D_800AC284 + 0x104) == 1));
+#endif
     if (D_800B0E54 == 0 || g_CutScene != 0 || D_8009CD00 != 0) {
         return;
     }
