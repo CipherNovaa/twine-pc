@@ -1,12 +1,15 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0
+ * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80031A4C
  */
 #include "common.h"
 
 u32 func_8006CDA8_orig(u32 **addr, u32 **header);
 void func_8002ABF0_orig(void);
+void func_80031A4C_orig(void);
+u32 port_vblank_count(void);
+extern s32 D_800747B0;
 s32 func_8004977C(s32 code);
 void func_80049938(s32 code);
 void port_spin(u32 ns);
@@ -37,4 +40,21 @@ void func_8002ABF0(void) {
             if (func_8004977C(i))
                 func_80049938(i);
     func_8002ABF0_orig();
+}
+
+/* The menus repeat a held direction once a counter (D_800747B0, counted here every menu frame the direction
+ * stays held) passes a limit the game works out from its frame rate: about 0.2 s on the console, whose menus
+ * run at 30 fps. Here they run at 60, so a key held for 0.13 s, a quick tap, already moved twice. The counter
+ * goes up at most once every 2 vblanks now, as on the console. */
+void func_80031A4C(void) {
+    static u32 counted;
+    s32 before = D_800747B0;
+    u32 now = port_vblank_count();
+    func_80031A4C_orig();
+    if (D_800747B0 == before + 1) {
+        if (now - counted < 2)
+            D_800747B0 = before;
+        else
+            counted = now;
+    }
 }
