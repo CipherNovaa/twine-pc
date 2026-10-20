@@ -12,6 +12,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "port.h"
+#include "module.h"
 
 volatile int port_rt_depth;            /* > 0 while runtime code runs */
 static volatile int irq_masked;        /* EnterCriticalSection */
@@ -24,6 +25,7 @@ typedef struct {
     u32 cls, spec, mode;
     EventFn fn;
     int open, enabled, delivered;
+    const PortModule *owner; /* the executable that opened it */
 } Event;
 static Event events[16];
 static u32 rcnt_running; /* root counters started with StartRCnt (bit n = counter n) */
@@ -34,10 +36,16 @@ static void run_vblank(void) {
     int i;
     in_irq = 1;
     vblank_count++;
+    /* RCntCNT3 = the vblank root counter; EvMdINTR (0x1000) = call the handler from the interrupt. Only the
+     * running executable's: on the console the boot stub's vblank event (opened again before each executable
+     * it starts, never closed) doesn't run while the front end or a level does (checked in DuckStation:
+     * LEVEL02's handler runs every vblank, the stub's never). Here it did, once for each one it opened, and
+     * the game, counting vblanks with both, thought it ran at 5-7 frames a second instead of 20, so every
+     * speed it scales by that (movement, enemies, timers) was 3-4 times too great. */
     for (i = 0; i < 16; i++) {
         Event *e = &events[i];
-        /* RCntCNT3 = the vblank root counter; EvMdINTR (0x1000) = call the handler from the interrupt */
-        if (e->open && e->enabled && e->cls == 0xF2000003 && (rcnt_running & 8) && e->fn && (e->mode & 0x1000))
+        if (e->open && e->enabled && e->cls == 0xF2000003 && (rcnt_running & 8) && e->fn && (e->mode & 0x1000) &&
+            e->owner == port_module)
             e->fn();
     }
     if (vsync_callback)
@@ -165,6 +173,7 @@ s32 OpenEvent(u32 cls, s32 spec, s32 mode, void *fn) {
             events[i].mode = mode;
             events[i].fn = (EventFn)fn;
             events[i].enabled = events[i].delivered = 0;
+            events[i].owner = port_module;
             events[i].open = 1;
             return 0xF1000000 | i;
         }
