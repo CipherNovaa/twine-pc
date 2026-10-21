@@ -85,3 +85,16 @@ void port_audio_init(void) {
     }
     RT_LEAVE();
 }
+
+/* The game's sound stopped (1) or going again (0), while something else plays (hdmovie.c); the SPU, on the
+ * device's clock, waits meanwhile. */
+void port_audio_hold(int hold) {
+    if (!stream)
+        return;
+    RT_ENTER();
+    if (hold)
+        SDL_PauseAudioStreamDevice(stream);
+    else
+        SDL_ResumeAudioStreamDevice(stream);
+    RT_LEAVE();
+}

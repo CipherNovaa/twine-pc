@@ -34,5 +34,6 @@ void spu_set_sink(void (*fn)(const s16 *out, int frames)); /* SPU_CLOCK_HOST: wh
 
 void port_audio_init(void); /* audio.c: open the audio device (not with TWINE_HEADLESS) */
 void port_audio_wav(const s16 *samples, int frames); /* audio.c: into TWINE_WAV (headless), if set */
+void port_audio_hold(int hold); /* audio.c: the game's sound stopped (1) or going again (0) */
 
 #endif

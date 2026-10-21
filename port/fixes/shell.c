@@ -1,7 +1,7 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0
+ * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998
  */
 #include "common.h"
 
@@ -40,3 +40,14 @@ void func_8002ABF0(void) {
     func_8002ABF0_orig();
 }
 
+
+void func_80026998_orig(s32 movie);
+int port_hd_movie(const char *name);
+#define D_80070E4C ((char *)0x80070E4Cu) /* the movies' names, 16 bytes each */
+
+/* Plays movie number `movie`, as the movie player's func_80026C2C does (fixes/movie.c): the film's own footage
+ * instead when the user has a clip of it (hdmovie.c). */
+void func_80026998(s32 movie) {
+    if (!port_hd_movie(D_80070E4C + (s16)movie * 16))
+        func_80026998_orig(movie);
+}
