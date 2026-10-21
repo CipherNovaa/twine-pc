@@ -741,6 +741,14 @@ static void sync_rows(const u16 *rows, int why) {
     int r;
     for (r = 0; r < 32; r++)
         if (rows[r] & kept_blocks[r]) {
+            static int logged, on = -1;
+            if (on < 0)
+                on = getenv("TWINE_SW_DEFER_LOG") != NULL;
+            if (on && logged < 100) { /* where (the first hundred times): the first block row that met */
+                logged++;
+                port_log("defer: %s at blocks %04X of row %d (y %d), %d kept\n", why == WHY_UPLOAD ? "the card reads" : "a read",
+                         rows[r] & kept_blocks[r], r, r * 16, n_kept);
+            }
             replay(why);
             return;
         }

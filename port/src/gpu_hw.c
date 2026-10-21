@@ -222,6 +222,12 @@ static void texture_blocks(Blocks *t, const GpuHwPrim *p, s32 umin, s32 umax, s3
     for (i = 0; i < nu; i++)
         for (j = 0; j < nv; j++) {
             x0 = tx + (us[i][0] >> shift), x1 = tx + (us[i][1] >> shift);
+            /* (while gpu.c draws later, nothing reads round VRAM's right edge into its left one either: what a
+             * console finds there is the picture being drawn) */
+            if (gpu_deferring() && x0 > 1023)
+                continue;
+            if (gpu_deferring() && x1 > 1023)
+                x1 = 1023;
             blocks_of(&c, x0, ty + vs[j][0], x1 - x0 + 1, vs[j][1] - vs[j][0] + 1);
             blocks_add(t, &c);
         }
