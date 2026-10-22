@@ -1074,6 +1074,16 @@ int port_video_poll_skip(void) {
     return skip;
 }
 
+/* Whether a key or button that skips (port_video_poll_skip) is still held down */
+int port_video_skip_held(void) {
+    const bool *k = SDL_GetKeyboardState(NULL);
+    int i, held = k[SDL_SCANCODE_RETURN] || k[SDL_SCANCODE_ESCAPE] || k[SDL_SCANCODE_SPACE] || k[SDL_SCANCODE_Z];
+    for (i = 0; i < MAX_PADS && !held; i++)
+        held = pads[i] && (SDL_GetGamepadButton(pads[i], SDL_GAMEPAD_BUTTON_START) ||
+                           SDL_GetGamepadButton(pads[i], SDL_GAMEPAD_BUTTON_SOUTH));
+    return held;
+}
+
 extern u32 gpu_stats[8];
 extern int gpu_poly_log;
 

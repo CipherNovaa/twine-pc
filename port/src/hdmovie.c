@@ -17,12 +17,14 @@
 void *port_video_renderer(void);
 int port_video_headless(void);
 int port_video_poll_skip(void);
+int port_video_skip_held(void);
 
 typedef struct {
     SDL_Renderer *renderer;
     SDL_Texture *texture;
     SDL_AudioStream *audio;
     int zoom;
+    int catching_up; /* after a stall: the sound passed meanwhile is left out */
 } Show;
 
 static void SDLCALL on_video(plm_t *plm, plm_frame_t *f, void *user) {
@@ -56,7 +58,7 @@ static void SDLCALL on_video(plm_t *plm, plm_frame_t *f, void *user) {
 static void SDLCALL on_audio(plm_t *plm, plm_samples_t *samples, void *user) {
     Show *s = user;
     (void)plm;
-    if (s->audio)
+    if (s->audio && !s->catching_up)
         SDL_PutAudioStreamData(s->audio, samples->interleaved, samples->count * 2 * sizeof(float));
 }
 
@@ -67,7 +69,8 @@ int port_hd_movie(const char *name) {
     plm_t *plm;
     Show s = {0};
     SDL_AudioSpec spec;
-    Uint64 last;
+    Uint64 start;
+    double shown = 0;
     int skipped = 0;
     if (!dir) {
         if (xdg && *xdg)
@@ -105,16 +108,25 @@ int port_hd_movie(const char *name) {
         plm_set_audio_enabled(plm, 0);
     plm_set_video_decode_callback(plm, on_video, &s);
     plm_set_audio_decode_callback(plm, on_audio, &s);
-    last = SDL_GetTicksNS();
+    /* the picture keeps to the time since the start, as the sound does; after a stall it catches up */
+    start = SDL_GetTicksNS();
     while (!plm_has_ended(plm) && !(skipped = port_video_poll_skip())) {
-        Uint64 now = SDL_GetTicksNS();
-        double dt = (now - last) / 1e9;
-        last = now;
-        plm_decode(plm, dt > 0.1 ? 0.1 : dt);
+        double now = (SDL_GetTicksNS() - start) / 1e9;
+        s.catching_up = now - shown > 0.25;
+        plm_decode(plm, now - shown);
+        s.catching_up = 0;
+        shown = now;
         SDL_Delay(1);
     }
-    if (skipped)
+    if (skipped) {
+        /* the key or button that skipped is let go before the game reads the controls again */
+        Uint64 until = SDL_GetTicksNS() + 2000000000ull;
         port_log("hd movie: skipped\n");
+        while (port_video_skip_held() && SDL_GetTicksNS() < until) {
+            SDL_PumpEvents();
+            SDL_Delay(5);
+        }
+    }
     if (s.audio)
         SDL_DestroyAudioStream(s.audio);
     port_audio_hold(0);
