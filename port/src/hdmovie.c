@@ -1,6 +1,6 @@
 /* The film's own footage in place of a PS1 movie: hd_movies = <folder> in twine.ini (TWINE_HD_MOVIES) holding
  * <NAME>.mpg clips (MPEG-1 video, MP2 audio), as port/tools/hdmovies.py cuts them from the user's copy of the
- * film (by default $XDG_DATA_HOME/twine/movies, ~/.local/share/twine/movies; hd_movies = 0 turns them off).
+ * film (by default an hdmovies folder next to the game, else $XDG_DATA_HOME/twine/movies, ~/.local/share/twine/movies; hd_movies = 0 turns them off).
  * The movie player asks before it plays a movie (fixes/movie.c); a clip found is shown here, filling
  * the window (hd_fit = zoom, the default: the film's sides cut off; fit: all of it, with black bars) with its
  * own sound, the game's held meanwhile, until it ends or is skipped (Enter, Esc, Space, Z, Start or
@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "port.h"
 #include "spu.h"
 #include "../third_party/pl_mpeg.h"
@@ -73,7 +74,12 @@ int port_hd_movie(const char *name) {
     double shown = 0;
     int skipped = 0;
     if (!dir) {
-        if (xdg && *xdg)
+        /* an hdmovies folder next to the game (make dist), else the user's own */
+        ssize_t n = readlink("/proc/self/exe", def, sizeof(def) - 8);
+        char *slash = n > 0 ? (def[n] = 0, strrchr(def, '/')) : NULL;
+        if (slash && (strcpy(slash + 1, "hdmovies"), access(def, F_OK) == 0))
+            ;
+        else if (xdg && *xdg)
             snprintf(def, sizeof(def), "%s/twine/movies", xdg);
         else
             snprintf(def, sizeof(def), "%s/.local/share/twine/movies", home ? home : ".");

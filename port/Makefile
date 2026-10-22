@@ -132,7 +132,7 @@ $(PB)/modules.o: $(PB)/modules.c src/module.h
 	$(CC) $(RT_CFLAGS) -c $< -o $@
 
 $(PB)/twine: $(RT_OBJ) $(PB)/modules.o $(foreach m,$(MODULES),$(PB)/$(m)/module.o)
-	$(CC) $(LDFLAGS) -o $@ $^ -lSDL3 -lm
+	$(CC) $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/lib' -o $@ $^ -lSDL3 -lm
 
 # Host tool: the MDEC model on its own, decoding movie frames from the disc image (port/tools/mdectest.c)
 mdectest: $(PB)/mdectest
@@ -147,8 +147,24 @@ $(PB)/hwtest: tools/hwtest.c src/gpu.c src/gpu_hw.c src/gpu.h src/gpu_hw.h $(SHA
 	$(CC) -m32 -std=gnu11 -O2 -g -Wall -DNATIVE_PORT -I$(ROOT)/include -Isrc -I$(SHADER_OUT) tools/hwtest.c src/gpu.c \
 	    src/gpu_hw.c -o $@ -lSDL3 -lm
 
+# A folder to copy to another PC as it is (build/dist/twine; build/ is never committed): the game, the SDL3 it
+# was built with (lib/, found before the system's), the film clips (hdmovies/, from HD_MOVIES, by default the
+# user's own; see tools/hdmovies.py), and the user's own disc image and BIOS (disc/, bios/, from WORKBENCH),
+# which the game uses when twine.ini doesn't name others.
+HD_MOVIES ?= $(HOME)/.local/share/twine/movies
+WORKBENCH ?= $(ROOT)/workbench
+DIST := $(ROOT)/build/dist/twine
+dist: $(PB)/twine
+	rm -rf $(DIST) && mkdir -p $(DIST)/lib $(DIST)/hdmovies $(DIST)/disc $(DIST)/bios
+	cp -l $(WORKBENCH)/disc/* $(DIST)/disc/ 2>/dev/null || cp $(WORKBENCH)/disc/* $(DIST)/disc/
+	cp $(WORKBENCH)/bios/* $(DIST)/bios/
+	cp $(PB)/twine $(DIST)/
+	cp -L $$($(CC) -m32 -print-file-name=libSDL3.so.0) $(DIST)/lib/
+	-cp -l $(HD_MOVIES)/*.mpg $(DIST)/hdmovies/ 2>/dev/null || cp $(HD_MOVIES)/*.mpg $(DIST)/hdmovies/
+	@echo "$(DIST): $$(ls $(DIST)/hdmovies | wc -l) HD clips, $$(du -sh $(DIST) | cut -f1)"
+
 clean:
 	rm -rf $(PB)
 
-.PHONY: all clean mdectest hwtest FORCE
+.PHONY: all dist clean mdectest hwtest FORCE
 .PRECIOUS: $(PB)/%.c

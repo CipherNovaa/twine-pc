@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <dirent.h>
 #include <string.h>
 #include <signal.h>
 #include <sys/mman.h>
@@ -414,12 +415,55 @@ static void load_settings(void) {
     fclose(f);
 }
 
+/* The game's folder (where the executable is, as make dist lays it out) can hold what the player supplies: a
+ * disc/ folder with the disc image (the largest .bin in it) and a bios/ folder; they're used when twine.ini and
+ * the environment don't name others. */
+static void game_folder_files(void) {
+    char dir[1024], path[1300], best[1300] = "";
+    long best_size = 0;
+    ssize_t n = readlink("/proc/self/exe", dir, sizeof(dir) - 1);
+    char *slash;
+    DIR *d;
+    struct dirent *e;
+    if (n <= 0)
+        return;
+    dir[n] = 0;
+    if (!(slash = strrchr(dir, '/')))
+        return;
+    *slash = 0;
+    snprintf(path, sizeof(path), "%s/bios", dir);
+    if (!getenv("TWINE_BIOS") && access(path, F_OK) == 0)
+        setenv("TWINE_BIOS", path, 0);
+    snprintf(path, sizeof(path), "%s/disc", dir);
+    if (getenv("TWINE_DISC") || !(d = opendir(path)))
+        return;
+    while ((e = readdir(d))) {
+        size_t len = strlen(e->d_name);
+        FILE *f;
+        if (len < 4 || strcasecmp(e->d_name + len - 4, ".bin"))
+            continue;
+        snprintf(path, sizeof(path), "%s/disc/%s", dir, e->d_name);
+        if ((f = fopen(path, "rb"))) {
+            fseek(f, 0, SEEK_END);
+            if (ftell(f) > best_size) {
+                best_size = ftell(f);
+                strcpy(best, path);
+            }
+            fclose(f);
+        }
+    }
+    closedir(d);
+    if (*best)
+        setenv("TWINE_DISC", best, 0);
+}
+
 int port_dev_cheats;
 
 int main(int argc, char **argv) {
     const char *level_env;
     s32 level, r;
     load_settings();
+    game_folder_files();
     port_dev_cheats = getenv("TWINE_DEVCHEATS") && atoi(getenv("TWINE_DEVCHEATS"));
     level_env = getenv("TWINE_LEVEL");
     level = level_env ? atoi(level_env) : 0;
