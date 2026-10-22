@@ -1,5 +1,5 @@
-/* Quick punch (native PC build only): V, or R3 on a gamepad, throws a punch with Bond's free hand while he keeps
- * the weapon he holds, as the unarmed punch does it: the same blow, sound and animation (mirrored for the left).
+/* Quick punch (native PC build only): F or the mouse's back button, or R3 on a gamepad, throws a punch with Bond's
+ * free hand while he keeps the weapon he holds, as the unarmed punch does it: the same blow, sound and animation (mirrored for the left).
  *
  * The weapon in Bond's hands is an object of its own (D_8009CD98, sub type 10, made by func_80079F84 for the
  * weapon's first-person model g_Weapons[]+0x5B); its model instance (+0x114) carries the animation and, at +0x14,
@@ -18,7 +18,7 @@
  * (the unarmed weapon's numbers lent to the weapon in hand for it: as_fists) and is drawn after the weapon through
  * the fists' view with x turned around: the right fist on the left, its triangles' winding turned too
  * (port_gte_mirror). An item held in the left hand (the disruptor, key cards) leaves the right to punch, as the
- * fists do. With the fists already up, V is the ordinary punch.
+ * fists do. With the fists already up, it is the ordinary punch.
  *
  * MOD_REPLACES: func_800788E0 func_8007545C
  *

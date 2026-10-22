@@ -73,8 +73,8 @@ static const struct {
     SDL_Scancode key;
     int action;
 } actionkeys[] = {
-    {SDL_SCANCODE_F, A_RELOAD}, {SDL_SCANCODE_Q, A_PREV_WEAPON}, {SDL_SCANCODE_E, A_NEXT_WEAPON},
-    {SDL_SCANCODE_R, A_RELOAD}, {SDL_SCANCODE_C, A_CROUCH}, {SDL_SCANCODE_LCTRL, A_CROUCH},
+    {SDL_SCANCODE_E, A_RELOAD}, {SDL_SCANCODE_R, A_RELOAD},
+    {SDL_SCANCODE_Z, A_PREV_WEAPON}, {SDL_SCANCODE_X, A_NEXT_WEAPON}, {SDL_SCANCODE_C, A_CROUCH}, {SDL_SCANCODE_LCTRL, A_CROUCH},
     {SDL_SCANCODE_A, A_STRAFE_LEFT}, {SDL_SCANCODE_D, A_STRAFE_RIGHT},
 };
 
@@ -83,9 +83,9 @@ static int help_shown; /* F1 */
 static Uint64 mouse_moved; /* when the mouse last moved (SDL ticks) */
 static Uint64 mouse_taken; /* when the game last took its movement (port_mouse_look) */
 static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
-static int melee_held, melee_pressed; /* V or R3 (the quick punch mod, port_quick_melee) */
+static int melee_held, melee_pressed; /* F, the mouse's back button or R3 (the quick punch mod, port_quick_melee) */
 static int jump_held, jump_pressed; /* Space (the jump mod, port_jump) */
-static int weapon_key; /* 1-9: the number key last pressed (the weapon keys mod, port_weapon_key) */
+static int weapon_key; /* 1-9: the number key last pressed, -1 Q (the weapon keys mod, port_weapon_key) */
 static float look_yaw, look_pitch; /* angle units not yet taken */
 static float taken_yaw, taken_pitch; /* (TWINE_TEST_LOOK) taken so far */
 
@@ -535,6 +535,8 @@ static void window_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode >= SDL_SCANCODE_1 &&
         e->key.scancode <= SDL_SCANCODE_9 && in_gameplay())
         weapon_key = e->key.scancode - SDL_SCANCODE_1 + 1;
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode == SDL_SCANCODE_Q && in_gameplay())
+        weapon_key = -1;
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
         (e->key.scancode == SDL_SCANCODE_F11 || (e->key.scancode == SDL_SCANCODE_RETURN && (e->key.mod & SDL_KMOD_ALT))))
         set_fullscreen(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));
@@ -697,9 +699,11 @@ static void poll_input(int tick) {
                 down |= P_R2;
         }
     }
-    /* V, or R3 in the modern layout: a quick punch, kept until the game's next tick takes it */
+    /* F or the mouse's back button, or R3 in the modern layout: a quick punch, kept until the game's next tick
+     * takes it */
     {
-        int melee = in_gameplay() && (keys[SDL_SCANCODE_V] || (gamepad && SDL_GetGamepadButton(gamepad,
+        int melee = in_gameplay() && (keys[SDL_SCANCODE_F] ||
+                    (mouse_captured && (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_X1MASK)) || (gamepad && SDL_GetGamepadButton(gamepad,
                     SDL_GAMEPAD_BUTTON_RIGHT_STICK) && !(getenv("TWINE_CONTROLS") &&
                     !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"))));
         if (melee && !melee_held)
@@ -731,7 +735,7 @@ int port_jump(void) {
 }
 
 /* the number key pressed since the game last asked (port/mods/weaponkeys.c, every frame Bond has the controls),
- * else 0 */
+ * -1 for Q, else 0 */
 int port_weapon_key(void) {
     int k = weapon_key;
     weapon_key = 0;
@@ -766,7 +770,7 @@ static void test_pad(void) {
             jump_pressed = 1;
         s = *end ? end + 1 : end;
     }
-    s = getenv("TWINE_TEST_WEAPON"); /* <frame>:<n>[,...]: number key n pressed at these frames */
+    s = getenv("TWINE_TEST_WEAPON"); /* <frame>:<n>[,...]: number key n (-1: Q) pressed at these frames */
     while (s && *s) {
         char *end;
         u32 at = (u32)strtoul(s, &end, 10);
@@ -893,7 +897,7 @@ static void draw_picture(SDL_Texture *texture, const SDL_FRect *src, const SDL_F
 /* F1: the controls, over the picture; "F1: controls" in a corner for a while the first time the front end and a
  * mission show */
 static const char *const help_lines[] = {
-    "CONTROLS                         F1 closes",
+    "CONTROLS",
     "",
     "Mouse ............ look and turn",
     "W / S ............ walk forward / back",
@@ -901,11 +905,12 @@ static const char *const help_lines[] = {
     "Arrows ........... walk and turn (menus: move)",
     "Left button ...... fire",
     "Right button ..... aim (hold)",
-    "Wheel, Q / E ..... change weapon",
+    "Wheel, Z / X ..... change weapon",
     "1 - 6 ............ pick a weapon (in order held)",
-    "F, R ............. use (doors, people), reload",
+    "Q ................ back to the other one picked",
+    "E, R ............. use (doors, people), reload",
+    "F, back button ... quick punch",
     "C, Ctrl .......... crouch",
-    "V ................ quick punch (left hand)",
     "Enter ............ pause; in menus: choose",
     "Esc .............. pause; in menus: back",
     "Space ............ jump; in menus: choose (Cross)",

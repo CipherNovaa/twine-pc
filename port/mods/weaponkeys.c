@@ -6,7 +6,8 @@
  * past the slots Bond doesn't have (func_80079C04 says so of D_800B0DDC), keep the one in hand in D_800B0DD8 and
  * set the weapon's state machine putting it away (func_80079B94); its state 5 then loads and draws the new one.
  * A key goes through the same, with the slot it names; when the game wouldn't change weapons (mid-change, fire
- * held) or Bond has fewer weapons, nothing happens.
+ * held) or Bond has fewer weapons, nothing happens. Q goes back and forth between the last two picked by number
+ * (the gun and the stunner, say), or before any is, back to the weapon held before.
  *
  * MOD_REPLACES_NATIVE: func_800798D4
  *
@@ -28,22 +29,51 @@ void func_8007A17C(s32 state);
 extern s32 D_8009EEC8;
 extern s32 D_8009EED0;
 
+static int picked = -1;  /* the slot last picked by number */
+static int other = -1;   /* the one in hand then */
+static int held = -1;    /* the one in hand last frame, and before it */
+static int held_before = -1;
+static int level;
+
 void func_800798D4(void) {
     int key = port_weapon_key(), slot;
     func_800798D4_orig();
-    if (key < 1 || D_800DDEEC || !func_800794A0())
-        return;
-    /* the key's weapon: the slots Bond has, counted in the order the weapon buttons step through them */
-    D_800B0DD8 = D_800B0DD4;
-    for (slot = 0; slot < 6; slot++) {
-        D_800B0DDC = slot;
-        if (!func_80079C04() && --key == 0)
-            break;
+    if (g_Args->level != level) {
+        level = g_Args->level;
+        picked = other = held = held_before = -1;
     }
-    if (slot == 6 || slot == D_800B0DD4) {
+    if (D_800B0DD4 != held) {
+        held_before = held;
+        held = D_800B0DD4;
+    }
+    if (!key || D_800DDEEC || !func_800794A0())
+        return;
+    D_800B0DD8 = D_800B0DD4;
+    if (key < 0) {
+        /* Q: the other of the last two picked by number (none picked yet: the one held before) */
+        slot = picked < 0 ? held_before : D_800B0DD4 == picked ? other : picked;
+        D_800B0DDC = slot;
+        if (slot < 0 || slot > 5 || func_80079C04())
+            slot = D_800B0DD4;
+    } else {
+        /* the key's weapon: the slots Bond has, counted in the order the weapon buttons step through them */
+        for (slot = 0; slot < 6; slot++) {
+            D_800B0DDC = slot;
+            if (!func_80079C04() && --key == 0)
+                break;
+        }
+        if (slot == 6)
+            slot = D_800B0DD4;
+        else if (slot != D_800B0DD4) {
+            other = D_800B0DD4;
+            picked = slot;
+        }
+    }
+    if (slot == D_800B0DD4) {
         D_800B0DDC = D_800B0DD8;
         return;
     }
+    D_800B0DDC = slot;
     /* as func_80079B94 does it for a weapon button */
     D_800AC38C = 0;
     if (D_800F11F0 - 3 < 2 || D_800F11F0 == 6) {
