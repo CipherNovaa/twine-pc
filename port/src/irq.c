@@ -265,11 +265,21 @@ s32 StopRCnt(u32 spec) {
     return 1;
 }
 
+/* Save states (savestate.c): the runtime's own place now, which a load keeps (put = 1 puts v back) */
+void port_irq_now(int *v, int put) {
+    if (put) {
+        port_rt_depth = v[0], irq_masked = v[1], irq_pending = v[2], in_irq = v[3];
+        return;
+    }
+    v[0] = port_rt_depth, v[1] = irq_masked, v[2] = irq_pending, v[3] = in_irq;
+}
+
 /* ---- libetc ---- */
 
 static u32 vsync_last;
 extern int port_subframe;
 void port_smooth_tick(u32 vblanks);
+void port_state_frame(void);
 
 /* VSync(0): wait for the next vblank; VSync(n > 1): wait until n vblanks have passed since the last call;
  * VSync(1): don't wait, return the horizontal line count (approximated); VSync(-1): vblank counter. */
@@ -284,6 +294,7 @@ s32 VSync(s32 mode) {
     target = vsync_last + (mode > 1 ? mode : 1);
     if (mode == 0)
         target = vblank_count + 1;
+    port_state_frame();
     port_frame_end();
     while ((s32)(vblank_count - target) < 0)
         port_wait_vblank();
@@ -304,6 +315,7 @@ void port_idle(u32 ns) {
     port_spin(ns);
     if (!port_subframe && vblank_count != shown && vblank_count - vsync_last >= 8) {
         shown = vblank_count;
+        port_state_frame();
         port_frame_end();
     } else if (!port_subframe) {
         poll_input_once();

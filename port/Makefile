@@ -13,7 +13,7 @@ MODULES ?= boot movie shell level01 level02 level03 level04 level05 level06 leve
            level11
 # C mods built into the levels (port/mods.py): twin-stick controls with the PC's mouse look, and smooth motion
 # between the game's 20 Hz ticks, and a quick punch with the left hand
-PORT_MODS ?= TWINSTICK SMOOTH QUICKPUNCH QUICKGRENADE WEAPONKEYS
+PORT_MODS ?= TWINSTICK SMOOTH QUICKPUNCH QUICKGRENADE WEAPONKEYS SAVESTATE
 
 CC := gcc
 # gnu89 and -fpermissive: the decompiled C keeps the original's K&R-era idioms. -fwrapv and
@@ -34,9 +34,17 @@ MOD_SRC := $(wildcard $(ROOT)/src/mods/*.c $(ROOT)/port/mods/*.c $(ROOT)/port/fi
 
 all: $(PB)/twine
 
-$(RT_OUT)/%.o: $(ROOT)/port/src/%.c $(wildcard $(ROOT)/port/src/*.h) $(wildcard $(ROOT)/include/*.h)
+# What a save state leaves as it is (port/src/savestate.c): these objects' data and BSS go in the nosave
+# sections, with PORT_NOSAVE variables: the window, input and on-screen text, the audio device, the memory
+# cards, the hardware renderer, the films, the recompiled code's stack, the smooth motion's timing and the
+# runtime's place (main.c), the console's boot animation, save states themselves.
+NOSAVE := video audio memcard gpu_hw hdmovie recomp_rt interp main libpad mdec intro intro_card bios_boot \
+          bios_cdrom savestate
+
+$(RT_OUT)/%.o: $(ROOT)/port/src/%.c $(wildcard $(ROOT)/port/src/*.h) $(wildcard $(ROOT)/include/*.h) Makefile
 	@mkdir -p $(dir $@)
 	$(CC) $(RT_CFLAGS) -c $< -o $@
+	$(if $(filter $*,$(NOSAVE)),objcopy --rename-section .data=nosave_data --rename-section .bss=nosave_bss $@)
 
 # The title card draws per pixel in floating point: SSE2 (vectorized) instead of the x87 unit 32-bit code
 # defaults to.

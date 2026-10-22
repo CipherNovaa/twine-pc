@@ -88,9 +88,9 @@ static u32 rv_pos;
 static int rv_write_on;
 
 /* clocking and the lock that guards all of the above (and spu_regs) against the audio thread */
-static int clock_mode;
-static SDL_Mutex *mutex;
-static u64 host_start_ns, host_samples;
+static int clock_mode PORT_NOSAVE;
+static SDL_Mutex *mutex PORT_NOSAVE;
+static u64 host_start_ns PORT_NOSAVE, host_samples PORT_NOSAVE;
 
 /* CD audio input ring: the game thread writes cd_wr, the SPU's thread cd_rd (single producer, single
  * consumer; the indexes count frames and wrap) */
@@ -109,7 +109,7 @@ typedef struct {
     u32 frames, n;
     s16 buf[4096 * 2];
 } Wav;
-static Wav xa_wav = {"TWINE_XA_WAV"}, spu_wav = {"TWINE_SPU_WAV"};
+static Wav xa_wav PORT_NOSAVE = {"TWINE_XA_WAV"}, spu_wav PORT_NOSAVE = {"TWINE_SPU_WAV"};
 
 /* 4-point Gaussian interpolation table (psx-spx "4-Point Gaussian Interpolation") */
 static const s16 gauss[512] = {
@@ -677,6 +677,14 @@ static void lock(void) {
 static void unlock(void) {
     if (mutex)
         SDL_UnlockMutex(mutex);
+}
+
+/* the sound chip held still (savestate.c) */
+void spu_hold(int on) {
+    if (on)
+        lock();
+    else
+        unlock();
 }
 
 /* play n samples of pcm (kept by the caller) at rate Hz and volume vol (0x7FFF full), over what played before */

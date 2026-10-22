@@ -80,6 +80,9 @@ static const struct {
 
 static int mouse_captured, wheel, wheel_pulse;
 static int help_shown; /* F1 */
+static char message[64]; /* port_video_message's, until message_until */
+static Uint64 message_until;
+void port_state_request(int load);
 static Uint64 mouse_moved; /* when the mouse last moved (SDL ticks) */
 static Uint64 mouse_taken; /* when the game last took its movement (port_mouse_look) */
 static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
@@ -534,6 +537,10 @@ static void window_event(const SDL_Event *e) {
     /* F11 or Alt+Enter: full screen or a window */
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode == SDL_SCANCODE_F1)
         help_shown = !help_shown;
+    /* F5 saves a state, F6 loads it (savestate.c) */
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
+        (e->key.scancode == SDL_SCANCODE_F5 || e->key.scancode == SDL_SCANCODE_F6))
+        port_state_request(e->key.scancode == SDL_SCANCODE_F6);
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode >= SDL_SCANCODE_1 &&
         e->key.scancode <= SDL_SCANCODE_9 && in_gameplay())
         weapon_key = e->key.scancode - SDL_SCANCODE_1 + 1;
@@ -945,6 +952,7 @@ static const char *const help_lines[] = {
     "Space ............ in menus: choose (Cross)",
     "Backspace ........ back (Triangle)",
     "Tab .............. Select (messages)",
+    "F5, F6 ........... save or load a state",
     "F11, Alt+Enter ... full screen or window",
     "",
     "Gamepad: left stick walks and strafes, right",
@@ -973,18 +981,19 @@ static void draw_help(void) {
     SDL_GetCurrentRenderOutputSize(renderer, &ww, &wh);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     if (!help_shown) {
-        if (SDL_GetTicks() >= hint_until)
+        const char *text = SDL_GetTicks() < message_until ? message : "F1: controls";
+        if (SDL_GetTicks() >= hint_until && text != message)
             return;
         scale = (float)(wh / 360 > 1 ? wh / 360 : 1);
         SDL_SetRenderScale(renderer, scale, scale);
         r.x = 4;
         r.y = 4;
-        r.w = 12 * 8 + 8;
+        r.w = (float)strlen(text) * 8 + 8;
         r.h = 16;
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 170);
         SDL_RenderFillRect(renderer, &r);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        SDL_RenderDebugText(renderer, 8, 8, "F1: controls");
+        SDL_RenderDebugText(renderer, 8, 8, text);
         SDL_SetRenderScale(renderer, 1, 1);
         return;
     }
@@ -1198,6 +1207,17 @@ void port_poll_input(void) {
     RT_ENTER();
     poll_input(0);
     RT_LEAVE();
+}
+
+u32 port_video_frames(void) {
+    return frames;
+}
+
+/* a line at the window's top left for a few seconds (the save states' "State saved", ...) */
+void port_video_message(const char *text) {
+    snprintf(message, sizeof(message), "%s", text);
+    message_until = SDL_GetTicks() + 2500;
+    port_log("message: %s\n", text);
 }
 
 void port_frame_end(void) {

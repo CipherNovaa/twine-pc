@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <setjmp.h>
 #include <dirent.h>
 #include <string.h>
 #include <signal.h>
@@ -251,9 +252,47 @@ static const PortModule *find_module(const char *name) {
     port_fatal("this build has no %s\n", name);
 }
 
+extern void *port_state_jump;
+const PortModule *port_state_target(s32 *argc, u32 *argv);
+void port_state_return(void);
+void port_state_started(s32 argc, u32 argv);
+u32 port_rc_sp(void);
+void port_rc_sp_set(u32 sp);
+
+/* Run an executable: make its functions current, clear its BSS as its entry point would and run its main.
+ * A save state of another mission (savestate.c) comes back here to run that one instead; one loaded in the
+ * front end comes back here to return to the boot stub (0). */
+static s32 run_main(const PortModule *m, s32 argc, u32 argv) {
+    sigjmp_buf here;
+    void *outer = port_state_jump;
+    u32 sp = port_rc_sp();
+    s32 r;
+    switch (sigsetjmp(here, 1)) {
+    case 1:
+        port_rt_depth = 0;
+        port_rc_sp_set(sp);
+        m = port_state_target(&argc, &argv);
+        break;
+    case 2:
+        port_rt_depth = 0;
+        port_rc_sp_set(sp);
+        port_state_jump = outer;
+        port_state_return();
+        return 0;
+    }
+    port_state_jump = &here;
+    port_log("Exec %s\n", m->name);
+    port_module = m;
+    install_trampolines(m);
+    memset((void *)m->bss_start, 0, m->bss_end - m->bss_start);
+    port_state_started(argc, argv);
+    r = m->main(argc, (void *)argv);
+    port_state_jump = outer;
+    return r;
+}
+
 /* BIOS Exec(header, argc, argv) (A0:43): the stub has loaded an executable and starts it. Find its native
- * module by entry point and size, make its functions current, clear its BSS as its entry point would and
- * run its main. Returns to the stub when main does. */
+ * module by entry point and size and run it. Returns to the stub when its main does. */
 u32 port_exec(u32 header, s32 argc, u32 argv) {
     const PortModule *prev = port_module, *m = NULL;
     u32 pc0 = *(u32 *)header, t_size = *(u32 *)(header + 0xC);
@@ -264,12 +303,8 @@ u32 port_exec(u32 header, s32 argc, u32 argv) {
             m = port_modules[i];
     if (!m)
         port_fatal("Exec: no native module for the executable at %08X (%X bytes)\n", pc0, t_size);
-    port_log("Exec %s\n", m->name);
-    port_module = m;
-    install_trampolines(m);
-    memset((void *)m->bss_start, 0, m->bss_end - m->bss_start);
-    r = m->main(argc, (void *)argv);
-    port_log("%s returned %d\n", m->name, r);
+    r = run_main(m, argc, argv);
+    port_log("%s returned %d\n", port_module->name, r);
     port_module = prev;
     return 1;
 }
@@ -507,12 +542,9 @@ int main(int argc, char **argv) {
         port_module = find_module(name);
     }
     load_exe(port_module->path);
-    install_trampolines(port_module);
     boot_init_args(level);
-    /* start(): clear the level's BSS */
-    memset((void *)port_module->bss_start, 0, port_module->bss_end - port_module->bss_start);
     port_irq_start();
-    r = port_module->main(1, (void *)ARGS_ADDR);
+    r = run_main(port_module, 1, ARGS_ADDR);
     port_log("game main returned %d\n", r);
     return 0;
 }

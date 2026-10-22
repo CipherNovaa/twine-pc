@@ -20,6 +20,10 @@ void port_rt_leave(void);
 #define RT_ENTER() (port_rt_depth++)
 #define RT_LEAVE() port_rt_leave()
 
+/* Memory a save state leaves as it is (savestate.c): what belongs to the host or to this run, like a pointer to
+ * the heap. (port/Makefile puts whole objects there too.) */
+#define PORT_NOSAVE __attribute__((section("nosave_data")))
+
 void port_irq_start(void);
 u32 port_vblank_count(void);
 void port_wait_vblank(void);

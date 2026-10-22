@@ -34,7 +34,7 @@ typedef struct {
 
 enum { CdlNoIntr, CdlDataReady, CdlComplete, CdlAcknowledge, CdlDataEnd, CdlDiskError };
 
-static FILE *disc;
+static FILE *disc PORT_NOSAVE;
 static u8 cd_mode;
 static int motor = 1;
 static u32 setloc_lba;   /* Setloc target (CdRead reads from here and moves it on) */

@@ -40,6 +40,15 @@ void port_rc_leave(u32 sp) {
     rc_sp += RC_SLICE;
 }
 
+/* where the stack is, and back to it (main.c: a save state's load leaves the calls under way) */
+u32 port_rc_sp(void) {
+    return rc_sp;
+}
+
+void port_rc_sp_set(u32 sp) {
+    rc_sp = sp;
+}
+
 /* Code by PS1 address: the running executable's, else the resident stub's (callbacks it left installed).
  * KSEG1 addresses (0xA0...) are the same code uncached. */
 static RcFunc rc_lookup_in(const PortModule *m, u32 addr) {
