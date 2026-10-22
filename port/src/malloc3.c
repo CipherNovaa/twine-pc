@@ -109,23 +109,35 @@ void InitHeap3(u32 *addr, u32 size) {
     port_log("InitHeap3 %08X, %X bytes\n", (u32)addr, size);
 }
 
+/* A heap of the runtime's own, which malloc3 and co. use instead while port_heap3_own(1) holds: for what a
+ * mod has the game make that the level's heap has no room for (it is sized to the level's own needs). */
+static Heap own_heap, *heap = &heap3;
+static u32 own_arena[0x10000 / 4];
+
+/* on: the own heap from now on (fresh: emptied first), else the level's again */
+void port_heap3_own(int on, int fresh) {
+    if (fresh)
+        heap_init(&own_heap, own_arena, sizeof(own_arena));
+    heap = on ? &own_heap : &heap3;
+}
+
 void *malloc3(u32 size) {
-    return heap_alloc(&heap3, size);
+    return heap_alloc(heap, size);
 }
 
 void free3(void *p) {
-    heap_free(&heap3, p);
+    heap_free(heap, p);
 }
 
 void *calloc3(u32 n, u32 size) {
-    void *p = heap_alloc(&heap3, n * size);
+    void *p = heap_alloc(heap, n * size);
     if (p)
         memset(p, 0, n * size);
     return p;
 }
 
 void *realloc3(void *p, u32 size) {
-    return heap_realloc(&heap3, p, size);
+    return heap_realloc(heap, p, size);
 }
 
 /* BIOS A0:39 InitHeap, A0:33 malloc, A0:34 free, A0:37 calloc, A0:38 realloc (recomp_rt.c bios_call) */

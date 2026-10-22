@@ -706,9 +706,10 @@ static void poll_input(int tick) {
     port_pad_sticks[0][3] = ly;
 }
 
-/* 1 once for each press of the quick punch (port/mods/quickpunch.c asks every game tick) */
+/* 1 while the quick punch is held, and once for a press shorter than a game tick (port/mods/quickpunch.c asks
+ * every tick; held, it punches again whenever it can, as the fists do with fire held) */
 int port_quick_melee(void) {
-    int p = melee_pressed;
+    int p = melee_pressed || melee_held;
     melee_pressed = 0;
     return p;
 }
