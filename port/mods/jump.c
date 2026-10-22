@@ -2,6 +2,9 @@
  * he falls rather than drops where the floor ends below him. He keeps walking, turning, aiming and firing in the
  * air. Not on skis (Cold Reception), crouched, in cut scenes or while the game has the controls.
  *
+ * Off by default (not in PORT_MODS; with it, TWINE_JUMP=1 puts it on Space): it got Bond out of the maps, the
+ * camera went through low ceilings and the invisible walls at ledges still stopped it.
+ *
  * Bond's feet are his model's y (+0x2C of g_Player+0x90; y grows downwards), which func_80060E28 (his step, every
  * frame) sets to the floor below him after moving him: func_80060AC0 asks func_800705A8 for the floor under him
  * nearest his feet' height. The walls he bumps into (func_80061068) are tested from his feet up to his eyes. So in

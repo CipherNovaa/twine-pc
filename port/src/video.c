@@ -599,12 +599,18 @@ static void poll_input(int tick) {
         if (keys[keymap[i].key] && !(keymap[i].key == SDL_SCANCODE_RETURN && (SDL_GetModState() & SDL_KMOD_ALT)) &&
             !(keymap[i].key == SDL_SCANCODE_SPACE && in_gameplay()))
             down |= keymap[i].bit;
-    /* Space chooses in the menus and jumps while Bond has the controls (kept until the game's next tick takes it) */
+    /* Space chooses in the menus and uses things (doors, people) while Bond has the controls; with TWINE_JUMP=1
+     * (and the jump mod built in, PORT_MODS=... JUMP) it jumps instead, kept until the game's next tick takes it */
     {
-        int jump = keys[SDL_SCANCODE_SPACE] && in_gameplay();
-        if (jump && !jump_held)
+        static int jump_on = -1;
+        int space = keys[SDL_SCANCODE_SPACE] && in_gameplay();
+        if (jump_on < 0)
+            jump_on = getenv("TWINE_JUMP") && atoi(getenv("TWINE_JUMP"));
+        if (!jump_on && space)
+            down |= action_bits(A_RELOAD);
+        if (jump_on && space && !jump_held)
             jump_pressed = 1;
-        jump_held = jump;
+        jump_held = jump_on && space;
     }
     /* Esc goes back in menus (Triangle; from the top of the phone's pause menu that closes it) and pauses or
      * skips everywhere else (Start); Enter chooses in a mission's menus (Cross) and is Start elsewhere. Esc is
@@ -913,7 +919,7 @@ static const char *const help_lines[] = {
     "C, Ctrl .......... crouch",
     "Enter ............ pause; in menus: choose",
     "Esc .............. pause; in menus: back",
-    "Space ............ jump; in menus: choose (Cross)",
+    "Space ............ use; in menus: choose (Cross)",
     "Backspace ........ back (Triangle)",
     "Tab .............. Select (messages)",
     "F11, Alt+Enter ... full screen or window",
