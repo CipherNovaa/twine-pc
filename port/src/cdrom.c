@@ -636,3 +636,50 @@ s32 PCcreat(char *name, s32 perms) {
 s32 PCclose(s32 fd) {
     return -1;
 }
+
+/* A file of the disc read straight from the image, past the drive (whose reads it leaves alone): for the runtime's
+ * and mods' own use. name as "L08/DATA08.BIN"; returns its size and a malloc()ed copy, or 0 if it isn't there. */
+u32 port_disc_file(const char *name, u8 **data) {
+    u8 raw[2352], *rec;
+    u32 lba, size, i, off;
+    const char *part = name, *end;
+    if (!read_raw(16, raw))
+        return 0;
+    rec = raw + 24 + 156; /* the volume descriptor's root directory record */
+    lba = rec[2] | rec[3] << 8 | rec[4] << 16 | (u32)rec[5] << 24;
+    size = rec[10] | rec[11] << 8 | rec[12] << 16 | (u32)rec[13] << 24;
+    for (;;) {
+        size_t len;
+        int found = 0;
+        end = strchr(part, '/');
+        len = end ? (size_t)(end - part) : strlen(part);
+        for (i = 0; i < (size + 2047) / 2048 && !found; i++) {
+            if (!read_raw(lba + i, raw))
+                return 0;
+            for (off = 0; off < 2048 && raw[24 + off]; off += raw[24 + off]) {
+                rec = raw + 24 + off;
+                if (rec[32] >= len && !strncasecmp((char *)rec + 33, part, len) &&
+                    (rec[32] == len || rec[33 + len] == ';')) {
+                    lba = rec[2] | rec[3] << 8 | rec[4] << 16 | (u32)rec[5] << 24;
+                    size = rec[10] | rec[11] << 8 | rec[12] << 16 | (u32)rec[13] << 24;
+                    found = 1;
+                    break;
+                }
+            }
+        }
+        if (!found)
+            return 0;
+        if (!end)
+            break;
+        part = end + 1;
+    }
+    *data = malloc(size + 2048);
+    for (i = 0; i < (size + 2047) / 2048; i++) {
+        if (!read_raw(lba + i, raw)) {
+            free(*data);
+            return 0;
+        }
+        memcpy(*data + i * 2048, raw + 24, 2048);
+    }
+    return size;
+}

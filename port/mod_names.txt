@@ -23,3 +23,6 @@ level08 func_80076A8C func_80078858
 level04 func_80076A8C -
 level09 func_80076A8C func_80079758
 level11 func_80076A8C -
+level07 func_800463C8 func_80047518
+level10 func_800463C8 func_800478BC
+level11 func_800463C8 func_8004582C

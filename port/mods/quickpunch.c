@@ -72,6 +72,7 @@ void GsSortUnit(void *, void *, void *);
 void func_80077764(void *obj);
 void func_8007A554(void *);
 void quick_grenade(void);
+void grenades_draw(void);
 void func_8007A580(void *);
 
 #define W(w, off, type) (*(type *)((u8 *)(w) + (off)))
@@ -93,7 +94,7 @@ static s32 fist_frame;    /* the frame counter when last seen: a smaller one is 
 #define FIST_PUNCH 2
 
 /* the swing's sound, the punch's own in each level's state machine (the levels' sound tables differ) */
-static const u8 swing_sound[11] = {0x62, 0x76, 0x6F, 0x64, 0x5B, 0x71, 0x74, 0x6B, 0x6C, 0x71, 0x43};
+const u8 swing_sound[11] = {0x62, 0x76, 0x6F, 0x64, 0x5B, 0x71, 0x74, 0x6B, 0x6C, 0x71, 0x43};
 
 static s16 fist_damage; /* the level's own unarmed weapon's (2000 in some, 700 in others), else 700 */
 
@@ -337,6 +338,9 @@ void func_8007545C(s32 first, s32 last) {
     long h;
     s32 at;
     func_8007545C_orig(first, last);
+#ifdef MOD_QUICKGRENADE
+    grenades_draw();
+#endif
     /* with the weapon, when it is drawn */
     if (!hand || !D_8009CD98 || !D_8009CD98[4] || W(D_8009CD98, 0x7C, s32) < 0)
         return;

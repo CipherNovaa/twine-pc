@@ -22,15 +22,14 @@
  *
  * The HUD shows the grenades Bond has, while he has some and the grenade isn't in hand (when it is, the ammo
  * counter shows them): a small grenade drawn in pixels, and the count in the ammo counter's digits, under the
- * health bar.
- * The ammo counter (func_80045A28, every frame the HUD shows) draws its digits as sprites; the count is one more,
- * copied from its first, and the grenade flat rectangles. The GPU reads them from PS1 memory: the ammo counter's
- * own MIPS code, which only its 5-byte jump to the native function is left of (port_ps1_addr).
+ * health bar. The ammo counter (func_80045A28) draws its digits as sprites; the count is one more, copied from its
+ * first, and the grenade flat rectangles, added to the HUD's (func_800463C8). The GPU reads them from PS1 memory:
+ * the ammo counter's own MIPS code, which only its 5-byte jump to the native function is left of (port_ps1_addr).
  *
  * quick_grenade is called by the quick punch's func_800788E0 (port/mods/quickpunch.c) every tick, after the
  * weapon's state machine.
  *
- * MOD_REPLACES_NATIVE: func_80076A8C func_80045A28
+ * MOD_REPLACES_NATIVE: func_80076A8C func_800463C8
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -56,7 +55,32 @@ u32 port_ps1_addr(void *fn);
 u32 func_8005397C(s32 a, s32 b);
 /* weak: Meltdown has no such function, nor the one using it (port/mod_names.txt) */
 s32 func_80051728(s32 obj, s32 arg1) __attribute__((weak));
-void func_80045A28_orig(s32 ot);
+void func_800463C8_orig(void);
+void func_80045A28(s32 ot);
+extern u32 D_800B8EFC[2][5]; /* the HUD's ordering tables (GsOT: +4 its table) */
+extern s8 D_8009CABF;       /* (the HUD hidden, for these) */
+extern s16 D_8009CAA4;
+extern s32 D_8009CD00;
+static void count_shown(s32 ot);
+u32 port_disc_file(const char *name, u8 **data);
+void gpu_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src);
+u32 GTE_cfc2(int r);
+void GTE_ctc2(int r, u32 v);
+void GsMapModelingData(u32 *p);
+void GsLinkObject4(u32 tmd, void *obj, s32 n);
+void GsGetLs(void *coord, void *m);
+void GsSortObject4(void *obj, void *ot, s32 shift, void *scratch);
+s32 func_80065614(void *obj, u8 life, u8 kind);
+s32 func_80027248(s32 sound, s32 at, s32 arg2);
+s32 func_800746D0(s32 mesh, s32 *from, s32 *to, s16 *normal, s16 *hit, s32 *flags);
+void free(void *p);
+extern s32 D_800E2F2C;      /* the level's shot mesh */
+extern s32 D_800A0370[];    /* sines and cosines (cos << 16 | sin), 4096 a turn */
+extern u8 D_800B8F88[];     /* the frames' ordering tables (0x14 bytes each) */
+extern u32 D_800B087C[];    /* what the objects are sorted with */
+extern s32 g_CamPosX[3];
+extern s32 D_8009CD4C;      /* aiming */
+extern const u8 swing_sound[11]; /* the punch's swing (port/mods/quickpunch.c) */
 int port_quick_grenade(void);
 void func_80026F30(s32 sound, s32 arg1);
 void func_8007A17C(s32 state);
@@ -69,9 +93,11 @@ void PopMatrix(void);
 #define GAP 10          /* ticks between quick throws (half a second) */
 #define START 4         /* the grenades Bond starts the mission with */
 #define BLAST 3250      /* a blast's end radius (2500) */
+#define BLAST_SOUND 0x40 /* the blast's sound (func_800697C8's) */
 #define NOTICE 8000     /* how far off guards notice a live grenade (5000) */
 
 static s32 wait;
+static void own_grenades(s32 pressed, s32 fresh);
 static s32 frame = 0x7FFFFFFF; /* the frame counter when last seen: a smaller one is a new mission */
 
 /* the frag grenades' slot, or -1 */
@@ -93,8 +119,10 @@ void quick_grenade(void) {
         wait--;
     if (W(D_800D31C0, 2, s16) == 2500)
         W(D_800D31C0, 2, s16) = BLAST;
-    if (g_Args->level != 8 || (i = grenades()) < 0)
+    if (g_Args->level != 8 || (i = grenades()) < 0) {
+        own_grenades(pressed, fresh);
         return;
+    }
     w = &g_Weapons[i];
     if (fresh && ((w->flags & 0x1800) != 0x1800 || w->ammo < START)) {
         w->flags |= 0x1800;
@@ -137,16 +165,243 @@ void quick_grenade(void) {
     wait = GAP;
 }
 
-/* as the game's, with guards noticing it further off */
-s32 func_80076A8C(u8 *grenade) {
+/* the guards who can see a live grenade at pos (x, y, z) told to shout and run */
+static void notice(s32 *pos) {
     s32 i = D_800B0DA0;
     u8 *p = D_800AFFC8 + i * 0x124;
-    s32 pos = W(grenade, 0x90, s32) + 0x28;
+    if (!func_80051728)
+        return;
     for (; i <= D_800B07B0; i++, p += 0x124)
-        if (p[4] != 0 && func_8005397C(pos, W(p, 0x90, s32) + 0x28) < (u32)(W(p, 0x2A, u16) + NOTICE) &&
+        if (p[4] != 0 && func_8005397C((s32)pos, W(p, 0x90, s32) + 0x28) < (u32)(W(p, 0x2A, u16) + NOTICE) &&
             W(p, 0x118, s32) != 0 && (func_80051728((s32)p, W(p, 0x5C, s32)) & 0x40))
             **(u32 **)(p + 0x118) |= 0x04000000;
+}
+
+/* as the game's, with guards noticing it further off */
+s32 func_80076A8C(u8 *grenade) {
+    notice((s32 *)(W(grenade, 0x90, u8 *) + 0x28));
     return 0;
+}
+
+/* Grenades of the mod's own, for the missions without frag grenades: King's Ransom's model (L08/DATA08.BIN in
+ * L08/LVL08CD.BIN, the type its frag throws, a TMD of 74 textured triangles) and texture (TIM 32 of
+ * L08/LVL08TIM.BIN), read from the disc (port_disc_file) once, the texture put where no mission has anything (x
+ * 928, y 320; its colours at 0, 508) and the model's texture page, colours and places in it moved there. They fly
+ * and bounce here (through the level's shot mesh, func_800746D0, as projectiles are moved), guards who see one
+ * shout and run, and three seconds after the throw it goes off as the frag does (func_80065614 and the blast
+ * sound, func_80027248, from an object of this mod's own, the blast Bond's). The model is drawn with the
+ * objects (func_8007545C), lit from above. */
+#define FUSE 60         /* ticks from the throw to the blast */
+#define SPEED 500       /* the throw's speed, units a tick (King's Ransom's) */
+#define LOFT 0x100      /* thrown this much above where Bond looks (4096 a turn) */
+#define GRAVITY 30      /* units a tick, a tick */
+#define LIVE 4          /* grenades in the air at once */
+#define MODEL 0x810C     /* the model in DATA08.BIN */
+#define TIM 0xEEC4       /* the texture in LVL08TIM.BIN */
+#define TEX_X 928
+#define TEX_Y 320
+#define CLUT_X 0
+#define CLUT_Y 508
+
+typedef struct { s16 m[3][3]; s32 t[3]; } Mat;
+typedef struct Coord { u32 flg; Mat coord, workm; void *param; struct Coord *super, *sub; } Coord;
+typedef struct { u32 attribute; Coord *coord2; u32 *tmd; u32 id; } DObj;
+
+static u32 model[0xAD0 / 4];
+static u16 clut[16], image[16 * 64];
+static int assets;      /* 1 loaded, -1 not to be had */
+static DObj dobj;
+static Coord coord;
+static struct {
+    s32 on, ticks, pos[3], vel[3];
+} live[LIVE];
+static s32 frags;       /* Bond's, in a mission without frag grenades */
+static s32 tick;        /* the frame counter the grenades were last moved at */
+
+/* the frag's model and texture, from King's Ransom's archive (entries of 0x1C bytes: name, first sector) */
+static void load(void) {
+    u8 *arc, *data = NULL, *tim = NULL, *e, *q, *at;
+    u32 n = port_disc_file("L08/LVL08CD.BIN", &arc), i, k;
+    assets = -1;
+    if (!n)
+        return;
+    for (e = arc; e + 0x1C <= arc + n && *e; e += 0x1C) {
+        at = arc + W(e, 26, u16) * 0x800;
+        if (!strcmp((char *)e, "L08/DATA08.BIN"))
+            data = at;
+        else if (!strcmp((char *)e, "L08/LVL08TIM.BIN"))
+            tim = at;
+    }
+    if (data && tim && W(data + MODEL, 0, u32) == 0x41 && W(tim + TIM, 0, u32) == 0x10 && W(tim + TIM, 4, u32) == 8 &&
+        W(tim + TIM, 0x10, u32) == 0x10010) {
+        memcpy(model, data + MODEL, sizeof(model));
+        q = tim + TIM + 8;
+        memcpy(clut, q + 12, sizeof(clut));
+        q += W(q, 0, u32);
+        memcpy(image, q + 12, sizeof(image));
+        /* each textured primitive's colours, texture page and places in it moved (u by 64, v by -64) */
+        q = (u8 *)model + 12 + model[3 + 4];
+        for (i = 0; i < model[3 + 5]; i++, q += 4 + q[1] * 4)
+            if (q[3] & 4) {
+                W(q, 6, u16) = CLUT_Y << 6 | CLUT_X >> 4;
+                W(q, 10, u16) = (W(q, 10, u16) & ~0x1F) | (TEX_X / 64) | (TEX_Y / 256) << 4;
+                for (k = 0; k < (q[3] & 8 ? 4u : 3u); k++) {
+                    at = q + 4 + (k < 2 ? k * 4 : k == 2 ? 8 : 12);
+                    at[0] += 64;
+                    at[1] -= 64;
+                }
+            }
+        GsMapModelingData(model + 1);
+        GsLinkObject4((u32)(model + 3), &dobj, 0);
+        dobj.coord2 = &coord;
+        assets = 1;
+    }
+    free(arc);
+}
+
+static s32 rsin(s32 a) {
+    return (s16)D_800A0370[a & 0xFFF];
+}
+
+static s32 rcos(s32 a) {
+    return D_800A0370[a & 0xFFF] >> 16;
+}
+
+/* one goes off: the blast and its sound where it is */
+static void blast(s32 *pos) {
+    static u8 obj[0x124], sub[0x80];
+    memset(obj, 0, sizeof(obj));
+    memset(sub, 0, sizeof(sub));
+    W(obj, 0x88, void *) = g_Player;
+    W(obj, 0x90, u8 *) = sub;
+    W(sub, 0x14, s16) = W(sub, 0x1C, s16) = W(sub, 0x24, s16) = 4096;
+    memcpy(sub + 0x28, pos, 12);
+    func_80065614(obj, 1, 5);
+    func_80027248(BLAST_SOUND, (s32)(sub + 0x14), 0);
+}
+
+/* the grenades in the air moved a tick: falling, bouncing off what they hit (at half the speed) */
+static void fly(void) {
+    s32 g, i, from[4], to[4];
+    s16 normal[4], hit[4];
+    s32 flags;
+    for (g = 0; g < LIVE; g++) {
+        if (!live[g].on)
+            continue;
+        if (++live[g].ticks >= FUSE) {
+            live[g].on = 0;
+            blast(live[g].pos);
+            continue;
+        }
+        live[g].vel[1] += GRAVITY;
+        for (i = 0; i < 3; i++) {
+            from[i] = live[g].pos[i];
+            to[i] = from[i] + live[g].vel[i];
+        }
+        if (func_800746D0(D_800E2F2C, from, to, normal, hit, &flags) != 0) {
+            /* off the surface, the speed turned back across it and halved */
+            long long dot = 0, len = 0;
+            s32 n;
+            for (i = 0; i < 3; i++) {
+                dot += (long long)live[g].vel[i] * normal[i];
+                len += (long long)normal[i] * normal[i];
+            }
+            for (n = 1; (long long)n * n < len; n++)
+                ;
+            for (i = 0; i < 3; i++) {
+                live[g].pos[i] = hit[i] + normal[i] * 16 / n;
+                live[g].vel[i] = (s32)(live[g].vel[i] - (len ? 2 * dot * normal[i] / len : 0)) / 2;
+            }
+        } else
+            for (i = 0; i < 3; i++)
+                live[g].pos[i] = to[i];
+        notice(live[g].pos);
+    }
+}
+
+/* one thrown from in front of the camera, where Bond looks and a little above */
+static void throw_own(void) {
+    s32 g, yaw = W(&g_Camera, 0x82, s16), pitch = W(&g_Camera, 0x80, s16) + LOFT, i;
+    s32 dir[3];
+    for (g = 0; g < LIVE && live[g].on; g++)
+        ;
+    if (g == LIVE)
+        return;
+    dir[0] = rsin(yaw) * rcos(pitch) >> 12;
+    dir[1] = -rsin(pitch);
+    dir[2] = rcos(yaw) * rcos(pitch) >> 12;
+    for (i = 0; i < 3; i++) {
+        live[g].pos[i] = g_CamPosX[i] + (dir[i] * 300 >> 12);
+        live[g].vel[i] = dir[i] * SPEED >> 12;
+    }
+    live[g].ticks = 0;
+    live[g].on = 1;
+    frags--;
+    if ((u32)(g_Args->level - 1) < 11)
+        func_80026F30(swing_sound[g_Args->level - 1], 0);
+    /* (again: what the level loads may cover it) */
+    gpu_load_image(TEX_X, TEX_Y, 16, 64, image);
+    gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
+}
+
+/* the mod's grenades: moved each tick, one thrown for the key */
+static void own_grenades(s32 pressed, s32 fresh) {
+    s32 g;
+    if (fresh) {
+        frags = START;
+        for (g = 0; g < LIVE; g++)
+            live[g].on = 0;
+        tick = D_8009CDA8;
+        if (!assets)
+            load();
+    }
+    for (; tick < D_8009CDA8; tick++)
+        fly();
+    if (pressed && assets > 0 && frags > 0 && wait == 0 && D_8009CD4C == 0) {
+        throw_own();
+        wait = GAP;
+    }
+}
+
+/* drawn with the objects, lit from above */
+void grenades_draw(void) {
+    static const s16 light[3] = {0, -4096, 0};
+    Mat ls;
+    u32 keep[13];
+    s32 g, i, j, spin;
+    if (assets <= 0)
+        return;
+    for (g = 0; g < LIVE; g++) {
+        if (!live[g].on)
+            continue;
+        spin = live[g].ticks * 300;
+        memset(&coord, 0, sizeof(coord));
+        coord.coord.m[0][0] = 4096;
+        coord.coord.m[1][1] = coord.coord.m[2][2] = rcos(spin);
+        coord.coord.m[1][2] = -rsin(spin);
+        coord.coord.m[2][1] = rsin(spin);
+        for (i = 0; i < 3; i++)
+            coord.coord.t[i] = live[g].pos[i];
+        GsGetLs(&coord, &ls);
+        for (i = 0; i < 13; i++)
+            keep[i] = GTE_cfc2(i);
+        gte_SetRotMatrix(&ls);
+        gte_SetTransMatrix(&ls);
+        /* the light's direction in the model's own axes: its rotation's columns */
+        for (j = 0; j < 3; j++) {
+            s32 l = 0;
+            for (i = 0; i < 3; i++)
+                l += light[i] * coord.coord.m[i][j];
+            W(&ls, j * 2, s16) = l >> 12;
+        }
+        GTE_ctc2(8, (u16)W(&ls, 0, s16) | (u32)W(&ls, 2, s16) << 16);
+        GTE_ctc2(9, (u16)W(&ls, 4, s16));
+        for (i = 10; i < 13; i++)
+            GTE_ctc2(i, 0);
+        GsSortObject4(&dobj, &D_800B8F88[D_800B8F24 * 0x14], 2, D_800B087C);
+        for (i = 0; i < 13; i++)
+            GTE_ctc2(i, keep[i]);
+    }
 }
 
 /* the grenade, a row of pixels at a time, in these colours: Spoon (the lever), Keyline, Green, Light, White */
@@ -213,17 +468,27 @@ static u8 *count(u32 *ot, u8 *sprite, s32 x, s32 y, s32 n, u8 r, u8 g, u8 b) {
     return sprite + 0x28;
 }
 
-void func_80045A28(s32 ot) {
+/* with the rest of the HUD (its ordering table D_800B8EFC[]'s, func_800463C8), when the ammo counter could show */
+void func_800463C8(void) {
+    func_800463C8_orig();
+    if (D_8009CABF == 0 && D_8009CAA4 == 0 && g_CutScene == 0 && D_8009CD00 == 0)
+        count_shown(D_800B8EFC[D_800B8F24][1]);
+}
+
+static void count_shown(s32 ot) {
     static const u8 shadow[3] = {SHADOW, SHADOW, SHADOW};
     u8 *mem;
     Tile *t;
     s32 i, x, y, row, col, end, n;
     Weapon *w;
-    func_80045A28_orig(ot);
-    if (g_Args->level != 8 || (i = grenades()) < 0)
-        return;
-    w = &g_Weapons[i];
-    if ((w->flags & 0x1800) != 0x1800 || w->ammo <= 0 || D_800B0DDC == i)
+    if (g_Args->level == 8 && (i = grenades()) >= 0) {
+        w = &g_Weapons[i];
+        if ((w->flags & 0x1800) != 0x1800 || w->ammo <= 0 || D_800B0DDC == i)
+            return;
+        n = w->ammo;
+    } else if (assets > 0 && frags > 0)
+        n = frags;
+    else
         return;
     mem = (u8 *)port_ps1_addr((void *)func_80045A28);
     if (!mem)
@@ -234,7 +499,7 @@ void func_80045A28(s32 ot) {
      * y 41, the first zero x 60-68, y 42-51) */
     x = 30;
     y = 44;
-    n = w->ammo > 9 ? 9 : w->ammo;
+    n = n > 9 ? 9 : n;
     /* gold, as the 007 is */
     t = (Tile *)count((u32 *)ot, (u8 *)t, x + ICON_W + 2, y, n, 150, 124, 64);
     /* the grenade, a rectangle for each run of one colour in a row */
