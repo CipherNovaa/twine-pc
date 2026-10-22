@@ -69,8 +69,12 @@ def level_names(level, sources, replaces, known=None):
             if f not in mapping or mapping[f][1]:
                 sys.exit(f"{level}: no clean match for replaced function {f}")
         for name, (target, off) in sorted(mapping.items()):
-            if off:  # an offset can't be a C name: go through a unique linker alias
-                aliases.append(f"cmod_{name} = {target}{off};")
+            # an offset can't be a C name, and a name that is another mapped name would be mapped again by the
+            # preprocessor: go through a unique linker alias
+            if off or (target in mapping and target != name and name not in replaces):
+                # (a data name is its address, which the link may not define a symbol for)
+                at = f"0x{target[2:]}" if re.fullmatch(r"D_[0-9A-F]{8}", target) else target
+                aliases.append(f"cmod_{name} = {at}{off};")
                 defines.append(f"-D{name}=cmod_{name}")
             else:
                 defines.append(f"-D{name}={target}")

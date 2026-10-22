@@ -83,6 +83,7 @@ static int help_shown; /* F1 */
 static Uint64 mouse_moved; /* when the mouse last moved (SDL ticks) */
 static Uint64 mouse_taken; /* when the game last took its movement (port_mouse_look) */
 static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
+static int melee_held, melee_pressed; /* V or R3 (the quick punch mod, port_quick_melee) */
 static float look_yaw, look_pitch; /* angle units not yet taken */
 static float taken_yaw, taken_pitch; /* (TWINE_TEST_LOOK) taken so far */
 
@@ -108,7 +109,7 @@ static const struct {
     int action;
 } modern_actions[] = {
     {SDL_GAMEPAD_BUTTON_WEST, A_RELOAD},           {SDL_GAMEPAD_BUTTON_EAST, A_CROUCH},
-    {SDL_GAMEPAD_BUTTON_RIGHT_STICK, A_CROUCH},    {SDL_GAMEPAD_BUTTON_NORTH, A_NEXT_WEAPON},
+    {SDL_GAMEPAD_BUTTON_NORTH, A_NEXT_WEAPON},
     {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, A_NEXT_WEAPON}, {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, A_PREV_WEAPON},
 };
 static const struct {
@@ -687,6 +688,15 @@ static void poll_input(int tick) {
                 down |= P_R2;
         }
     }
+    /* V, or R3 in the modern layout: a quick punch, kept until the game's next tick takes it */
+    {
+        int melee = in_gameplay() && (keys[SDL_SCANCODE_V] || (gamepad && SDL_GetGamepadButton(gamepad,
+                    SDL_GAMEPAD_BUTTON_RIGHT_STICK) && !(getenv("TWINE_CONTROLS") &&
+                    !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"))));
+        if (melee && !melee_held)
+            melee_pressed = 1;
+        melee_held = melee;
+    }
     port_pad_buttons[0] = (u16)~down;
     if (gamepad && tick)
         rumble();
@@ -694,6 +704,13 @@ static void poll_input(int tick) {
     port_pad_sticks[0][1] = ry;
     port_pad_sticks[0][2] = lx;
     port_pad_sticks[0][3] = ly;
+}
+
+/* 1 once for each press of the quick punch (port/mods/quickpunch.c asks every game tick) */
+int port_quick_melee(void) {
+    int p = melee_pressed;
+    melee_pressed = 0;
+    return p;
 }
 
 /* headless: the pad bits TWINE_TEST_PAD holds at this frame */
@@ -710,6 +727,13 @@ static void test_pad(void) {
         s = *end ? end + 1 : end;
     }
     port_pad_buttons[0] = (u16)~bits;
+    s = getenv("TWINE_TEST_MELEE"); /* <frame>[,...]: the quick punch pressed at these frames */
+    while (s && *s) {
+        char *end;
+        if ((u32)strtoul(s, &end, 10) == frames)
+            melee_pressed = 1;
+        s = *end ? end + 1 : end;
+    }
     s = getenv("TWINE_TEST_STICK"); /* <rx>,<ry>,<lx>,<ly> in hex: held throughout */
     if (s) {
         unsigned a[4] = {0x80, 0x80, 0x80, 0x80};
@@ -839,6 +863,7 @@ static const char *const help_lines[] = {
     "Wheel, Q / E ..... change weapon",
     "F, R ............. use (doors, people), reload",
     "C, Ctrl .......... crouch",
+    "V ................ quick punch (left hand)",
     "Enter ............ pause; in menus: choose",
     "Esc .............. pause; in menus: back",
     "Space ............ use; in menus: choose (Cross)",
@@ -848,9 +873,10 @@ static const char *const help_lines[] = {
     "",
     "Gamepad: left stick walks and strafes, right",
     "stick turns and looks, R2 fire, L2 aim, Square",
-    "use / reload, Circle crouch, Triangle / R1 next",
-    "and L1 previous weapon, Options pause, touchpad",
-    "messages; in menus the pad's own buttons.",
+    "use / reload, Circle crouch, R3 quick punch,",
+    "Triangle / R1 next and L1 previous weapon,",
+    "Options pause, touchpad messages; in menus the",
+    "pad's own buttons.",
 };
 
 static void draw_help(void) {
@@ -1114,7 +1140,7 @@ void port_frame_end(void) {
             present();
     } else if (screen && !port_smooth_shown)
         present();
-    if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK"))
+    if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK") || getenv("TWINE_TEST_MELEE"))
         test_pad();
     port_smooth_shown = 0;
     RT_LEAVE();

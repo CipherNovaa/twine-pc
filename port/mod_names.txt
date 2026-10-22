@@ -2,3 +2,15 @@
 # level, LEVEL01 name, the level's name
 # the render step (the same calls in the same order; its world and object drawing functions differ)
 level11 func_8002F7CC func_8002F9A0
+# the weapon's state machine (Meltdown's has more states) and the punch's blow (port/mods/quickpunch.c)
+level11 func_800788E0 func_80077C4C
+level02 func_80038AA4 func_80039A40
+level03 func_80038AA4 func_800392A8
+level04 func_80038AA4 func_80038F14
+level05 func_80038AA4 func_800396B8
+level06 func_80038AA4 func_8003990C
+level07 func_80038AA4 func_80039A30
+level08 func_80038AA4 func_80039B08
+level09 func_80038AA4 func_80039AC4
+level10 func_80038AA4 func_800393A8
+level11 func_80038AA4 func_8003844C

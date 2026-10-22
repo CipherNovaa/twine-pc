@@ -7,6 +7,7 @@
 #include "port.h"
 
 static u32 D[32]; /* data registers as stored (16-bit ones already truncated/extended for reads) */
+int port_gte_mirror; /* NCLIP gives the other sign: a model drawn mirrored (the quick punch's left hand) */
 static u32 C[32]; /* control registers */
 #define FLAG C[31]
 
@@ -392,9 +393,9 @@ void GTE_cmd(u32 op) {
         rtp(1, sf, lm, 0);
         rtp(2, sf, lm, 1);
         break;
-    case 0x06: /* NCLIP */
-        D[24] = (u32)(s32)mac0_chk((s64)SX(0) * SY(1) + (s64)SX(1) * SY(2) + (s64)SX(2) * SY(0) -
-                                   (s64)SX(0) * SY(2) - (s64)SX(1) * SY(0) - (s64)SX(2) * SY(1));
+    case 0x06: /* NCLIP (mirrored: the other way round, port_gte_mirror) */
+        D[24] = (u32)(s32)mac0_chk((port_gte_mirror ? -1 : 1) * ((s64)SX(0) * SY(1) + (s64)SX(1) * SY(2) + (s64)SX(2) * SY(0) -
+                                   (s64)SX(0) * SY(2) - (s64)SX(1) * SY(0) - (s64)SX(2) * SY(1)));
         break;
     case 0x0C: { /* OP: cross product of IR with the RT diagonal, all three from IR as it was before */
         s32 d1 = M(0, 0), d2 = M(0, 4), d3 = M(0, 8);

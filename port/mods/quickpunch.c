@@ -1,0 +1,291 @@
+/* Quick punch (native PC build only): V, or R3 on a gamepad, throws a punch with Bond's left hand while he keeps
+ * the weapon he holds in his right, as the unarmed punch does it: the same blow, sound and animation, mirrored.
+ *
+ * The weapon in Bond's hands is an object of its own (D_8009CD98, sub type 10, made by func_80079F84 for the
+ * weapon's first-person model g_Weapons[]+0x5B); its model instance (+0x114) carries the animation and, at +0x14,
+ * the coordinate system it hangs from (at the camera). The weapon's state machine (func_800788E0, its state in
+ * D_800F11F0) plays the animations; firing unarmed (func_80038954) sets state 0x2F, which plays the punch
+ * (g_Weapons[]+0x7C), lands the blow seven frames in (func_80038AA4: an invisible projectile from the camera with
+ * the weapon's damage) and goes back to idle. The render step draws the object through its own view (D_800F11D0,
+ * from the weapon's +0x64 offset and +0x6C angles, func_8007A040), with the weapon's projection (+0xAA).
+ *
+ * First-person models are loaded from the disc into one buffer (D_800E2F5C) when the weapon changes, and the
+ * level's heap has no room for another, so the fists' model (<level>/FIST.HMD, in every level's table, also where
+ * Bond has no fists to switch to) is loaded here once a mission into a buffer of this mod's (drawing animates it in
+ * place: smooth motion keeps it as it keeps PS1 RAM), with an instance of its own from the game's two (D_800F0F80;
+ * the weapon only ever has one, the old one freed before the new one is made). For a punch, the hand plays the
+ * punch on that instance, as an object copied from the weapon's every frame (so lit as it is), lands the same blow
+ * (the unarmed weapon's numbers lent to the weapon in hand for it: as_fists) and is drawn after the weapon through
+ * the fists' view with x turned around: the right fist on the left, its triangles' winding turned too
+ * (port_gte_mirror). With the fists already up, V is the ordinary punch.
+ *
+ * MOD_REPLACES: func_800788E0 func_8007545C
+ *
+ * Names are LEVEL01's; port/mods.py maps them onto each level. */
+#include "twine.h"
+#include "gte.h"
+#include <string.h>
+
+extern u8 *D_8009CD98;      /* the weapon in Bond's hands (an object) */
+extern s16 D_800B0DD4;      /* its slot in g_Weapons */
+extern u32 D_800F11F0;      /* the weapon's state */
+extern s32 D_800F11D0[8];   /* its view (GsRVIEW2) */
+extern s32 D_800B0C10[];    /* the camera's view */
+extern s32 g_CamPosX[3];
+extern u8 *D_800AFFC8;      /* the objects */
+extern void *g_Player;
+extern s16 D_8009CF48;      /* frames since a shot */
+extern s32 D_8009CA9C;
+extern s32 D_8009CAA0;
+extern u8 g_CutScene;
+extern s32 D_800B8F24;
+extern u8 D_800D2AFC[][0x14];
+extern s32 D_800B0808[];
+extern u8 D_800F0F80[];     /* the first-person models' instances (two, 0x94 bytes each) */
+extern s32 D_800F0F5C;      /* a first-person model is being loaded */
+extern char *D_8009DB50[];  /* the first-person models' files */
+extern u8 *D_8009D0FC;      /* the first-person models' animation tables (0x70 bytes each) */
+extern s32 D_8009CDA8;      /* the frame counter */
+extern int port_gte_mirror;
+int port_quick_melee(void);
+void port_smooth_keep(void *at, u32 size);
+void func_800788E0_orig(void);
+void func_8007545C_orig(s32 first, s32 last);
+s32 func_8002C168(char *name, s32 buf);
+void func_80075920(void *inst);
+void func_80075E9C(void *inst);
+void func_8007A040(s32 slot);
+void func_800757C0(u8 *inst, s32 anim, s32 arg2);
+void func_800758F0(u8 *coord);
+void func_800755BC(u8 *inst);
+void func_80026F30(s32 sound, s32 arg1);
+void func_80038AA4(void);
+void func_8007A17C(s32 state);
+void func_8008D2EC(void *view);
+void GsSetRefView2(void *view);
+void GsGetLsUnit(void *, void *);
+void GsGetLwUnit(void *, void *);
+void GsSortUnit(void *, void *, void *);
+void func_80077764(void *obj);
+void func_8007A554(void *);
+void func_8007A580(void *);
+
+#define W(w, off, type) (*(type *)((u8 *)(w) + (off)))
+
+static u8 *hand;          /* the left hand's object while it punches (record), else NULL */
+static u8 record[0x124];  /* the hand's object: a copy of the weapon's with the hand's model */
+static s32 view[8];       /* its view */
+static u8 *fist;          /* the unarmed model, loaded for this mission (into fist_data) */
+static u32 fist_data[0xE000 / 4]; /* as big as the game's buffer (the level's heap has no room for it) */
+static u8 *fist_inst;     /* its instance, made once (the model is mapped where it lies) */
+static s32 fist_frame;    /* the frame counter when last seen: a smaller one is a new mission (a new heap) */
+
+/* the unarmed weapon's numbers, the same in every mission that has it (some don't: the fists are in their model
+ * tables all the same): the projection, offset and angles the fist is seen with, its punch, and the blow's */
+#define FIST_PROJECTION 1140
+#define FIST_PUNCH 2
+
+static void as_fists(Weapon *w) {
+    W(w, 0x38, u32) = 0x08001FC0;
+    W(w, 0x5A, s8) = -1;   /* no sound for the blow (the swing has one) */
+    W(w, 0x5C, u32) = 0x64; /* no rumble */
+    W(w, 0x64, s16) = 365;
+    W(w, 0x66, s16) = 330;
+    W(w, 0x68, s16) = 785;
+    W(w, 0x6C, s16) = 0;
+    W(w, 0x6E, s16) = -30;
+    W(w, 0x70, s16) = 0;
+    W(w, 0xAC, s16) = 2000;
+    W(w, 0xB2, u16) = 1000;
+    W(w, 0xB4, s32) = 4;
+}
+
+/* the weapon in hand is the fists */
+static int fists_up(void) {
+    return !strcmp((char *)&g_Weapons[D_800B0DD4], "UNARMED");
+}
+
+/* the fists' first-person model: <level>/FIST.HMD */
+static s32 fist_model(void) {
+    s32 i;
+    for (i = 1; i < 32; i++) {
+        u32 p = (u32)D_8009DB50[i];
+        if (p >= 0x80000000u && p < 0x80200000u && strstr((char *)p, "/FIST.HMD"))
+            return i;
+    }
+    return -1;
+}
+
+/* the fist's model and instance, as func_800752E8 makes the weapon's but from a model of its own: the weapon in
+ * hand has the one buffer the game loads first-person models into (D_800E2F5C) */
+static u8 *fist_ready(void) {
+    s32 model = fist_model();
+    u8 *p = D_800F0F80;
+    s32 i;
+    if (D_8009CDA8 < fist_frame || (fist_inst && (fist_inst[0x92] != 1 || W(fist_inst, 0, u8 *) != fist))) {
+        fist = fist_inst = hand = NULL;
+    }
+    fist_frame = D_8009CDA8;
+    if (fist_inst)
+        return fist_inst;
+    if (model < 0)
+        return NULL;
+    if (!fist) {
+        if (D_800F0F5C != 0) /* the game is loading the weapon's */
+            return NULL;
+        if (func_8002C168(D_8009DB50[model], (s32)fist_data) <= 0)
+            return NULL;
+        /* drawing animates it: smooth motion's extra drawings put it back after them */
+        port_smooth_keep(fist_data, sizeof(fist_data));
+        fist = (u8 *)fist_data;
+    }
+    for (i = 0; i < 2; i++, p += 0x94) {
+        if (p[0x92] == 0) {
+            p[0x92] = 1;
+            W(p, 0, u8 *) = fist;
+            W(p, 0x90, u16) = W(D_8009D0FC + model * 0x70, 0x6C, u16);
+            W(p, 0x74, s32) = W(D_8009D0FC + model * 0x70, 0x68, s32);
+            func_80075920(p);
+            func_80075E9C(p);
+            return fist_inst = p;
+        }
+    }
+    return NULL;
+}
+
+static void hand_away(void) {
+    hand = NULL;
+}
+
+/* the hand's view: the fists', from the hand's coordinate system (func_8007A040 makes it from the weapon in hand's
+ * numbers, lent the fists' meanwhile) */
+static void hand_view(void) {
+    Weapon held = g_Weapons[D_800B0DD4];
+    s32 kept[8];
+    s32 i;
+    for (i = 0; i < 8; i++)
+        kept[i] = D_800F11D0[i];
+    as_fists(&g_Weapons[D_800B0DD4]);
+    func_8007A040(D_800B0DD4);
+    g_Weapons[D_800B0DD4] = held;
+    for (i = 0; i < 8; i++) {
+        view[i] = D_800F11D0[i];
+        D_800F11D0[i] = kept[i];
+    }
+    view[7] = (s32)(W(hand, 0x114, u8 *) + 0x14);
+}
+
+static void punch(void) {
+    u8 *inst = fist_ready();
+    if (!inst)
+        return;
+    memcpy(record, D_8009CD98, sizeof(record));
+    W(record, 0x114, u8 *) = inst;
+    hand = record;
+    hand_view();
+    func_800757C0(inst, FIST_PUNCH, 1);
+}
+
+/* the blow: the punch's own (func_80038AA4), from the hand as the weapon in hand with the fists' numbers, the
+ * weapon's state and muzzle flash left as they were */
+static void blow(void) {
+    u8 *weapon = D_8009CD98;
+    Weapon held = g_Weapons[D_800B0DD4];
+    s16 shot = D_8009CF48;
+    u32 state = D_800F11F0;
+    D_8009CD98 = hand;
+    as_fists(&g_Weapons[D_800B0DD4]);
+    func_80038AA4();
+    g_Weapons[D_800B0DD4] = held;
+    D_8009CD98 = weapon;
+    D_8009CF48 = shot;
+    D_800F11F0 = state;
+}
+
+void func_800788E0(void) {
+    int pressed = port_quick_melee();
+    u8 *inst, *coord;
+    s32 left;
+    func_800788E0_orig();
+    if (!D_8009CD98 || g_CutScene != 0) {
+        hand_away();
+        return;
+    }
+    if (pressed && !hand) {
+        if (fists_up()) {
+            if (D_800F11F0 == 1 || D_800F11F0 == 2)
+                func_8007A17C(0x2F);
+        } else
+            punch();
+    }
+    if (!hand)
+        return;
+    inst = W(hand, 0x114, u8 *);
+    /* lit as the weapon is */
+    memcpy(record, D_8009CD98, sizeof(record));
+    W(record, 0x114, u8 *) = inst;
+    /* as the weapon's: at the camera, square to the world (the view does the rest) */
+    coord = inst + 0x14;
+    W(coord, 0x18, s32) = g_CamPosX[0];
+    W(coord, 0x1C, s32) = g_CamPosX[1];
+    W(coord, 0x20, s32) = g_CamPosX[2];
+    W(coord, 0x44, s16) = W(coord, 0x46, s16) = W(coord, 0x48, s16) = 0;
+    func_800758F0(coord);
+    left = W(inst, 0x74, u8 *)[W(inst, 0x78, s32)] - W(inst, 0x80, s32);
+    if (W(inst, 0x80, s32) == 0x14)
+        func_80026F30(0x62, 0);
+    if (left == 7)
+        blow();
+    else if (W(inst, 0x80, s32) < 2) {
+        hand_away();
+        return;
+    }
+    func_800755BC(inst);
+}
+
+/* the hand's parts as func_8007567C draws an object's, with x turned around */
+static void draw_hand(void) {
+    u8 *model = W(hand, 0x114, u8 *);
+    s32 *unit = W(model, 4, s32 *);
+    u8 *flags = W(model, 8, u8 *);
+    u32 i;
+    func_80077764(hand);
+    port_gte_mirror = 1;
+    for (i = 0; i < W(model, 0xC, u32); i++, unit += 2, flags++) {
+        if (unit[1] == 0 || (i == 0 && (D_8009CA9C != 0 || D_8009CAA0 != 0)))
+            continue;
+        if (unit[0] != 0) {
+            s16 *m = (s16 *)D_800B0808;
+            if (*flags == 1)
+                continue;
+            GsGetLwUnit((void *)unit[0], D_800B0808);
+            func_8007A580(D_800B0808);
+            GsGetLsUnit((void *)unit[0], D_800B0808);
+            m[0] = -m[0];
+            m[1] = -m[1];
+            m[2] = -m[2];
+            D_800B0808[5] = -D_800B0808[5];
+            func_8007A554(D_800B0808);
+        }
+        GsSortUnit(unit, D_800D2AFC[D_800B8F24], (void *)0x1F800000);
+    }
+    port_gte_mirror = 0;
+}
+
+void func_8007545C(s32 first, s32 last) {
+    long h;
+    s32 at;
+    func_8007545C_orig(first, last);
+    /* with the weapon, when it is drawn */
+    if (!hand || !D_8009CD98 || !D_8009CD98[4] || W(D_8009CD98, 0x7C, s32) < 0)
+        return;
+    at = (D_8009CD98 - D_800AFFC8) / 0x124;
+    if (at < first || at > last)
+        return;
+    gte_ReadGeomScreen(&h);
+    func_8008D2EC(view);
+    gte_SetGeomScreen(FIST_PROJECTION);
+    draw_hand();
+    GsSetRefView2(D_800B0C10);
+    gte_SetGeomScreen((u16)h);
+}

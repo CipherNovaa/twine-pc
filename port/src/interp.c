@@ -41,6 +41,25 @@ static u64 spacing;        /* TWINE_FPS_MAX's time between drawings (0: none) */
 
 #define VBLANK_NS 16683333ull
 
+/* memory of the game's outside PS1 RAM (a mod's), put back after each extra drawing as RAM is */
+static struct {
+    void *at;
+    u32 size;
+    void *copy;
+} kept[4];
+
+void port_smooth_keep(void *at, u32 size) {
+    int i;
+    for (i = 0; i < 4; i++)
+        if (kept[i].at == at || !kept[i].at) {
+            if (kept[i].at != at)
+                kept[i].copy = malloc(size);
+            kept[i].at = at;
+            kept[i].size = size;
+            return;
+        }
+}
+
 static u64 now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -81,6 +100,7 @@ void port_smooth_tick(u32 vblanks) {
  * far into the tick it is (0-4096) and the mouse's movement the game hasn't taken yet; the machine is saved. */
 int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
     u64 now, end;
+    int i;
     if (port_subframe || !smooth_enabled() || !tick_start)
         return 0;
     now = now_ns();
@@ -109,6 +129,8 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
     RT_ENTER(); /* holds the vblank interrupt */
     memcpy(ram_copy, (void *)PS1_RAM_BASE, PS1_RAM_SIZE);
     memcpy(scratch_copy, (void *)PS1_SCRATCH_BASE, PS1_SCRATCH_SIZE);
+    for (i = 0; i < 4 && kept[i].at; i++)
+        memcpy(kept[i].copy, kept[i].at, kept[i].size);
     GTE_save();
     gpu_save();
     libgpu_save();
@@ -121,10 +143,13 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
 void port_smooth_end(void) {
     u64 now = now_ns();
     s32 x, y;
+    int i;
     cost = (cost * 3 + (now - began)) / 4;
     gpu_draw_origin(&x, &y);
     memcpy((void *)PS1_RAM_BASE, ram_copy, PS1_RAM_SIZE);
     memcpy((void *)PS1_SCRATCH_BASE, scratch_copy, PS1_SCRATCH_SIZE);
+    for (i = 0; i < 4 && kept[i].at; i++)
+        memcpy(kept[i].at, kept[i].copy, kept[i].size);
     GTE_restore();
     gpu_restore();
     libgpu_restore();
