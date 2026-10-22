@@ -50,6 +50,7 @@ Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the b
 | `present` | with `renderer = hw`: how frames reach the display: `vsync` (each waits for the display's refresh), `mailbox` (the newest frame waiting replaces older ones; presenting doesn't wait) or `immediate` (at once, tearing). Unset, `vsync` decides |
 | `rumble = 0` | no gamepad rumble (it follows the game's vibration option otherwise) |
 | `deadzone` | the gamepad sticks' dead zone in percent (default 12) |
+| `gamecontrollerdb.txt` | not a setting: a file next to `twine.ini` in SDL's gamepad mapping format (as the community's gamecontrollerdb.txt), for gamepads SDL doesn't know |
 | `controls = original` | the gamepad's buttons as the PlayStation pad's, set in the game's own options (by default they follow a modern layout in the missions, below) |
 | `card1`, `card2` | memory card images (raw 128 KB, as emulators use). Slot 1 defaults to `~/.local/share/twine/card1.mcd`, made on first use; slot 2 to `card2.mcd` there if it exists; `none` leaves a slot empty |
 | `autoload` | the memory card slot whose save the front end loads after the title screen (`1`, the default, or `2`; `off`): CONTINUE then goes straight to the missions |

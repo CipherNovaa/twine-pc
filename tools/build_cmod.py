@@ -101,7 +101,10 @@ def main():
     run(["make", f"LEVEL={level}", f"CMODS={' '.join(mods)}", "-j8", "cmod-objs"])
 
     replaces = replaced_functions(sources)
-    defines, aliases, defined_as = level_names(level, sources, replaces)
+    # port/mod_names.txt: names tools/port_symbols.py can't place (the native build's mods.py reads it too)
+    known = {n: t for m, n, t in (l.split() for l in (ROOT / "port/mod_names.txt").read_text().splitlines()
+                                  if l.strip() and not l.startswith("#")) if m == level}
+    defines, aliases, defined_as = level_names(level, sources, replaces, known)
 
     # Compile the mods.
     mod_objs = []

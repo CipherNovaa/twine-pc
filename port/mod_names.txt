@@ -26,3 +26,25 @@ level11 func_80076A8C -
 level07 func_800463C8 func_80047518
 level10 func_800463C8 func_800478BC
 level11 func_800463C8 func_8004582C
+# the ground's slope under the player's pitch (src/mods/twinstick.c): the on-foot update's second-last call
+level02 func_800617AC func_80061A24
+level03 func_800617AC func_800615EC
+level04 func_800617AC func_80061024
+level05 func_800617AC func_8006161C
+level06 func_800617AC func_80061920
+level07 func_800617AC func_80061EA4
+level08 func_800617AC func_800619D4
+level09 func_800617AC func_80061B0C
+level10 func_800617AC func_80064244
+level11 func_800617AC func_8005E908
+# walking's step (src/mods/twinstick.c): the on-foot update's last call
+level02 func_80061B70 func_80061CE8
+level03 func_80061B70 func_800618B0
+level04 func_80061B70 func_800612E8
+level05 func_80061B70 func_800618E0
+level06 func_80061B70 func_80061BE4
+level07 func_80061B70 func_80062174
+level08 func_80061B70 func_80061CA4
+level09 func_80061B70 func_80061DD0
+level10 func_80061B70 func_80064508
+level11 func_80061B70 func_8005EBCC

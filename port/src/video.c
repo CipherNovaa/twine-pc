@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <SDL3/SDL.h>
 #include "port.h"
 #include "gpu.h"
@@ -232,6 +233,17 @@ void port_video_init(void) {
         return;
     }
     RT_ENTER();
+    /* more gamepads than SDL knows: a gamecontrollerdb.txt (SDL's mapping format) next to twine.ini */
+    {
+        const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
+        char db[1024];
+        if (xdg && *xdg)
+            snprintf(db, sizeof(db), "%s/twine/gamecontrollerdb.txt", xdg);
+        else
+            snprintf(db, sizeof(db), "%s/.config/twine/gamecontrollerdb.txt", home ? home : ".");
+        if (access(db, R_OK) == 0)
+            SDL_SetHint(SDL_HINT_GAMECONTROLLERCONFIG_FILE, db);
+    }
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
         port_fatal("SDL_Init: %s\n", SDL_GetError());
     display = chosen_display();
@@ -748,6 +760,15 @@ int port_quick_melee(void) {
     return p;
 }
 
+/* 1 while Bond should sprint: Shift held (src/mods/twinstick.c asks every tick) */
+int port_sprint(void) {
+    const bool *keys;
+    if (headless) /* tests: TWINE_TEST_SPRINT=1 holds it */
+        return getenv("TWINE_TEST_SPRINT") != NULL;
+    keys = SDL_GetKeyboardState(NULL);
+    return keys && in_gameplay() && (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]);
+}
+
 /* 1 once for each press of the quick grenade (port/mods/quickgrenade.c asks every tick) */
 int port_quick_grenade(void) {
     int p = grenade_pressed;
@@ -935,17 +956,18 @@ static const char *const help_lines[] = {
     "CONTROLS",
     "",
     "Mouse ............ look",
-    "W A S D .......... move",
+    "@W @A @S @D .......... move",
     "Arrows ........... move and turn; menus: move",
     "Left button ...... fire",
     "Right button ..... aim",
-    "Wheel, Z, X ...... change weapon",
+    "Wheel, @Z, @X ...... change weapon",
     "1 - 9 ............ pick a weapon",
-    "Q ................ last weapon",
-    "E, F, R .......... use, reload",
+    "@Q ................ last weapon",
+    "@E, @F, @R .......... use, reload",
     "Space, Mouse 4 ... punch",
-    "G ................ grenade",
-    "C, Ctrl .......... crouch",
+    "@G ................ grenade",
+    "Shift ............ sprint",
+    "@C, Ctrl .......... crouch",
     "Enter ............ pause; menus: choose",
     "Esc .............. pause; menus: back",
     "Space ............ menus: choose",
@@ -970,6 +992,35 @@ static const char *const help_lines[] = {
     "Start ............ pause",
     "Back, touchpad ... messages",
 };
+
+/* A help line as this keyboard's layout names its keys: "@W" is the key in W's place (keys are read by their
+ * place), and the dots between the keys and what they do are fitted to the names. */
+static const char *help_line(int i) {
+    static char out[96];
+    const char *s = help_lines[i], *dots = strstr(s, " ..");
+    char keys[64];
+    int n = 0;
+    if (!dots)
+        return s;
+    for (; s < dots && n < (int)sizeof(keys) - 8; s++)
+        if (*s == '@' && s[1] >= 'A' && s[1] <= 'Z') {
+            const char *name = SDL_GetKeyName(SDL_GetKeyFromScancode((SDL_Scancode)(SDL_SCANCODE_A + s[1] - 'A'),
+                                                                     SDL_KMOD_NONE, false));
+            if (!name || !*name || strlen(name) > 6)
+                name = (char[2]){s[1], 0};
+            n += snprintf(keys + n, sizeof(keys) - n, "%s", name);
+            s++;
+        } else
+            keys[n++] = *s;
+    keys[n] = 0;
+    while (*dots == ' ' || *dots == '.')
+        dots++;
+    n = snprintf(out, sizeof(out), "%s ", keys);
+    while (n < 18 && n < (int)sizeof(out) - 2)
+        out[n++] = '.';
+    snprintf(out + n, sizeof(out) - n, " %s", dots);
+    return out;
+}
 
 static void draw_help(void) {
     static const PortModule *hinted_shell, *hinted_level;
@@ -1005,8 +1056,8 @@ static void draw_help(void) {
         return;
     }
     for (i = 0; i < n; i++)
-        if ((int)strlen(help_lines[i]) > cols)
-            cols = (int)strlen(help_lines[i]);
+        if ((int)strlen(help_line(i)) > cols)
+            cols = (int)strlen(help_line(i));
     /* whole multiples of the 8x8 font, as large as fits */
     scale = (float)SDL_min(ww * 9 / 10 / ((cols + 4) * 8), wh * 9 / 10 / ((n + 2) * 12));
     if (scale < 1)
@@ -1027,7 +1078,7 @@ static void draw_help(void) {
             SDL_SetRenderDrawColor(renderer, 255, 210, 80, 255);
         else
             SDL_SetRenderDrawColor(renderer, 235, 235, 235, 255);
-        SDL_RenderDebugText(renderer, x + 16, y + 12 + i * 12, help_lines[i]);
+        SDL_RenderDebugText(renderer, x + 16, y + 12 + i * 12, help_line(i));
     }
     SDL_SetRenderScale(renderer, 1, 1);
 }

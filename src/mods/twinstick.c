@@ -2,7 +2,7 @@
  * looks up and down (no need to hold the aim button to look). Analog mode is switched on automatically.
  * In the native PC build the mouse turns and looks too, on foot and in aim mode.
  *
- * MOD_REPLACES: Pad_StickToSpeed func_8005D760 func_80061DC0
+ * MOD_REPLACES: Pad_StickToSpeed func_8005D760 func_80061DC0 func_800617AC func_80061B70
  * MOD_REPLACES_NATIVE: func_80043EE0 func_8004FD3C
  *
  * Names are LEVEL01's; `make cmod` maps them onto each level (tools/port_symbols.py). */
@@ -21,6 +21,12 @@ extern s32 D_8009CD4C;  /* aim mode (aim button held): func_80043EE0 runs instea
 extern s32 D_800B0C64;  /* aim mode's pitch, -0x280 (down) to 0x320 (up); 4096 = 360 degrees */
 void func_8005D760_orig(void);
 void func_80061DC0_orig(void);
+void func_800617AC_orig(void *obj);
+void func_80061B70_orig(u8 *obj);
+static s16 s_Slope = 0; /* the ground's pitch, as the game set it (func_800617AC) */
+#ifdef NATIVE_PORT
+int port_sprint(void);
+#endif
 
 #ifdef NATIVE_PORT
 extern s32 g_PadHeld;
@@ -132,6 +138,38 @@ void func_8005D760(void) {
     if (D_8009CD4C != 0) {
         s_LookOffset = D_800B0C64 + 0x17 - s_BasePitch;
     }
+}
+
+/* Walking, the game points the model (and with it the camera and the aim) along the ground: its pitch is the
+ * slope 500 units ahead, set every frame here (with the turning). With the sticks looking, it is level ground's
+ * instead, so the view stays where the player put it whatever the ground does, as in PC shooters. */
+void func_800617AC(void *obj) {
+    s16 *pitch = (s16 *)((u8 *)M2C_FIELD(g_Player, void **, 0x90) + 0x60);
+    func_800617AC_orig(obj);
+    s_Slope = *pitch;
+    if (D_800B0E54 != 0) {
+        *pitch = 0; /* level ground: the look (func_80061DC0's offset) is then the pitch itself */
+    }
+}
+
+/* Walking: the step along the ground, which the game shortens by the model's pitch (the slope's). That is
+ * the slope's here too, not where the player looks. In the native build Shift sprints. */
+void func_80061B70(u8 *obj) {
+    s16 *pitch = (s16 *)(*(u8 **)(obj + 0x90) + 0x60);
+    s16 keep = *pitch;
+    if (D_800B0E54 != 0) {
+        *pitch = s_Slope;
+    }
+    func_80061B70_orig(obj);
+    *pitch = keep;
+#ifdef NATIVE_PORT
+    /* Sprint (hold): half as fast again, on foot */
+    if (port_sprint() && g_CutScene == 0 && D_8009CD00 == 0) {
+        s16 *v = (s16 *)((u8 *)g_Player + 0x98);
+        v[0] = v[0] * 3 / 2;
+        v[2] = v[2] * 3 / 2;
+    }
+#endif
 }
 
 /* On-foot update, then the right stick Y looks up and down on top of the game's pitch. */
