@@ -558,6 +558,11 @@ static void wav_put(Wav *w, s32 l, s32 r) {
 
 /* ---- mixer ---- */
 
+/* A sound of the runtime's own (port_sfx): PCM mixed in like a voice, at its own rate */
+static const s16 *sfx_pcm;
+static u32 sfx_len, sfx_pos, sfx_step; /* (16.16 samples) */
+static s32 sfx_vol;
+
 static void spu_tick(s32 *out, const s32 *cd) {
     u16 attr = spu_regs[REG_ATTR];
     u32 pmon = reg32(REG_PMON), non = reg32(REG_NON), eon = reg32(REG_EON);
@@ -595,6 +600,16 @@ static void spu_tick(s32 *out, const s32 *cd) {
         while (v->counter >= 28u << 12) {
             v->counter -= 28u << 12;
             next_block(v, n);
+        }
+    }
+    if (sfx_pcm) {
+        if ((sfx_pos >> 16) >= sfx_len)
+            sfx_pcm = NULL;
+        else {
+            s32 o = (sfx_pcm[sfx_pos >> 16] * sfx_vol) >> 15;
+            dry[0] += o;
+            dry[1] += o;
+            sfx_pos += sfx_step;
         }
     }
     if (attr & ATTR_CD) { /* CD audio: its own volume, then like a voice (reverb if enabled) */
@@ -662,6 +677,17 @@ static void lock(void) {
 static void unlock(void) {
     if (mutex)
         SDL_UnlockMutex(mutex);
+}
+
+/* play n samples of pcm (kept by the caller) at rate Hz and volume vol (0x7FFF full), over what played before */
+void port_sfx(const s16 *pcm, u32 n, u32 rate, s32 vol) {
+    lock();
+    sfx_pcm = pcm;
+    sfx_len = n;
+    sfx_pos = 0;
+    sfx_step = (u32)(((u64)rate << 16) / 44100);
+    sfx_vol = vol;
+    unlock();
 }
 
 static void (*sink)(const s16 *out, int frames);

@@ -73,7 +73,7 @@ static const struct {
     SDL_Scancode key;
     int action;
 } actionkeys[] = {
-    {SDL_SCANCODE_E, A_RELOAD}, {SDL_SCANCODE_R, A_RELOAD},
+    {SDL_SCANCODE_E, A_RELOAD}, {SDL_SCANCODE_F, A_RELOAD}, {SDL_SCANCODE_R, A_RELOAD},
     {SDL_SCANCODE_Z, A_PREV_WEAPON}, {SDL_SCANCODE_X, A_NEXT_WEAPON}, {SDL_SCANCODE_C, A_CROUCH}, {SDL_SCANCODE_LCTRL, A_CROUCH},
     {SDL_SCANCODE_A, A_STRAFE_LEFT}, {SDL_SCANCODE_D, A_STRAFE_RIGHT},
 };
@@ -83,7 +83,8 @@ static int help_shown; /* F1 */
 static Uint64 mouse_moved; /* when the mouse last moved (SDL ticks) */
 static Uint64 mouse_taken; /* when the game last took its movement (port_mouse_look) */
 static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
-static int melee_held, melee_pressed; /* F, the mouse's back button or R3 (the quick punch mod, port_quick_melee) */
+static int jump_on = -1; /* TWINE_JUMP: Space jumps (else it punches) */
+static int melee_held, melee_pressed; /* Space, the mouse's back button or R3 (the quick punch mod, port_quick_melee) */
 static int grenade_held, grenade_pressed; /* G or L3 (the quick grenade mod, port_quick_grenade) */
 static int jump_held, jump_pressed; /* Space (the jump mod, port_jump) */
 static int weapon_key; /* 1-9: the number key last pressed, -1 Q (the weapon keys mod, port_weapon_key) */
@@ -600,15 +601,12 @@ static void poll_input(int tick) {
         if (keys[keymap[i].key] && !(keymap[i].key == SDL_SCANCODE_RETURN && (SDL_GetModState() & SDL_KMOD_ALT)) &&
             !(keymap[i].key == SDL_SCANCODE_SPACE && in_gameplay()))
             down |= keymap[i].bit;
-    /* Space chooses in the menus and uses things (doors, people) while Bond has the controls; with TWINE_JUMP=1
-     * (and the jump mod built in, PORT_MODS=... JUMP) it jumps instead, kept until the game's next tick takes it */
+    /* Space chooses in the menus and punches (below) while Bond has the controls; with TWINE_JUMP=1 (and the jump
+     * mod built in, PORT_MODS=... JUMP) it jumps instead, kept until the game's next tick takes it */
+    if (jump_on < 0)
+        jump_on = getenv("TWINE_JUMP") && atoi(getenv("TWINE_JUMP"));
     {
-        static int jump_on = -1;
         int space = keys[SDL_SCANCODE_SPACE] && in_gameplay();
-        if (jump_on < 0)
-            jump_on = getenv("TWINE_JUMP") && atoi(getenv("TWINE_JUMP"));
-        if (!jump_on && space)
-            down |= action_bits(A_RELOAD);
         if (jump_on && space && !jump_held)
             jump_pressed = 1;
         jump_held = jump_on && space;
@@ -706,10 +704,10 @@ static void poll_input(int tick) {
                 down |= P_R2;
         }
     }
-    /* F or the mouse's back button, or R3 in the modern layout: a quick punch, kept until the game's next tick
-     * takes it */
+    /* Space (but for the jump) or the mouse's back button, or R3 in the modern layout: a quick punch, kept until the
+     * game's next tick takes it */
     {
-        int melee = in_gameplay() && (keys[SDL_SCANCODE_F] ||
+        int melee = in_gameplay() && ((keys[SDL_SCANCODE_SPACE] && !jump_on) ||
                     (mouse_captured && (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_X1MASK)) || (gamepad && SDL_GetGamepadButton(gamepad,
                     SDL_GAMEPAD_BUTTON_RIGHT_STICK) && !(getenv("TWINE_CONTROLS") &&
                     !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"))));
@@ -938,13 +936,13 @@ static const char *const help_lines[] = {
     "Wheel, Z / X ..... change weapon",
     "1 - 6 ............ pick a weapon (in order held)",
     "Q ................ back to the other one picked",
-    "E, R ............. use (doors, people), reload",
-    "F, back button ... quick punch",
+    "E, F, R .......... use (doors, people), reload",
+    "Space, back button  quick punch",
     "G ................ throw a grenade (keeps the gun)",
     "C, Ctrl .......... crouch",
     "Enter ............ pause; in menus: choose",
     "Esc .............. pause; in menus: back",
-    "Space ............ use; in menus: choose (Cross)",
+    "Space ............ in menus: choose (Cross)",
     "Backspace ........ back (Triangle)",
     "Tab .............. Select (messages)",
     "F11, Alt+Enter ... full screen or window",

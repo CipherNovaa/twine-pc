@@ -27,6 +27,7 @@ extern const s32 adpcm_filter_pos[5], adpcm_filter_neg[5];
 #define SPU_CD_TARGET 4096                  /* frames the drive keeps queued at most */
 int spu_cd_queued(void);                    /* frames waiting */
 int spu_cd_push(const s16 *lr, int frames); /* interleaved L, R; returns the frames that fit */
+void port_sfx(const s16 *pcm, u32 n, u32 rate, s32 vol); /* a sound of the runtime's own */
 void spu_cd_idle(int idle);                 /* the drive has stopped sending: play out what's left */
 
 void spu_reset(void);       /* power-on state (after the intro) */

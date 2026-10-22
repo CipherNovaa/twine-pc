@@ -61,6 +61,8 @@ extern u32 D_800B8EFC[2][5]; /* the HUD's ordering tables (GsOT: +4 its table) *
 extern s8 D_8009CABF;       /* (the HUD hidden, for these) */
 extern s16 D_8009CAA4;
 extern s32 D_8009CD00;
+/* the health bar's sprites (weak: Meltdown's HUD has none like them, and its count doesn't slide) */
+extern u8 D_800D7AB8[] __attribute__((weak));
 static void count_shown(s32 ot);
 u32 port_disc_file(const char *name, u8 **data);
 void gpu_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src);
@@ -80,6 +82,7 @@ extern u8 D_800B8F88[];     /* the frames' ordering tables (0x14 bytes each) */
 extern u32 D_800B087C[];    /* what the objects are sorted with */
 extern s32 g_CamPosX[3];
 extern s32 D_8009CD4C;      /* aiming */
+void port_sfx(const s16 *pcm, u32 n, u32 rate, s32 vol);
 extern const u8 swing_sound[11]; /* the punch's swing (port/mods/quickpunch.c) */
 int port_quick_grenade(void);
 void func_80026F30(s32 sound, s32 arg1);
@@ -187,10 +190,12 @@ s32 func_80076A8C(u8 *grenade) {
  * L08/LVL08CD.BIN, the type its frag throws, a TMD of 74 textured triangles) and texture (TIM 32 of
  * L08/LVL08TIM.BIN), read from the disc (port_disc_file) once, the texture put where no mission has anything (x
  * 928, y 320; its colours at 0, 508) and the model's texture page, colours and places in it moved there. They fly
- * and bounce here (through the level's shot mesh, func_800746D0, as projectiles are moved), guards who see one
+ * and bounce, losing most of their speed, here (through the level's shot mesh, func_800746D0, as projectiles are moved), guards who see one
  * shout and run, and three seconds after the throw it goes off as the frag does (func_80065614 and the blast
  * sound, func_80027248, from an object of this mod's own, the blast Bond's). The model is drawn with the
- * objects (func_8007545C), lit from above. */
+ * objects (func_8007545C), lit from above. The throw sounds as King's Ransom's does: its sample is only in that
+ * level's sound bank (and the gas grenade's level's), so it is decoded from there (SOUNDFX/L8FX.VH and .VB) and
+ * played by the runtime (port_sfx, spu.c), after the punch's swing. */
 #define FUSE 60         /* ticks from the throw to the blast */
 #define SPEED 500       /* the throw's speed, units a tick (King's Ransom's) */
 #define LOFT 0x100      /* thrown this much above where Bond looks (4096 a turn) */
@@ -198,6 +203,10 @@ s32 func_80076A8C(u8 *grenade) {
 #define LIVE 4          /* grenades in the air at once */
 #define MODEL 0x810C     /* the model in DATA08.BIN */
 #define TIM 0xEEC4       /* the texture in LVL08TIM.BIN */
+#define TOSS 3          /* ticks from the swing's sound to the toss's */
+#define THROW_PROGRAM 7
+#define THROW_TONE 0
+#define THROW_RATE 15198 /* its note (10) 18 below the tone's centre (28, less 57/128): 44100 Hz * 2^(-18.45/12) */
 #define TEX_X 928
 #define TEX_Y 320
 #define CLUT_X 0
@@ -216,11 +225,44 @@ static struct {
     s32 on, ticks, pos[3], vel[3];
 } live[LIVE];
 static s32 frags;       /* Bond's, in a mission without frag grenades */
+static s16 throw_pcm[4096]; /* the throw's sound */
+static u32 throw_len;
+static s32 toss;        /* ticks to the toss's sound */
 static s32 tick;        /* the frame counter the grenades were last moved at */
+
+/* the throw's sound, King's Ransom's (its sound 0x52: program 7, tone 0 of its bank), decoded from the bank's
+ * ADPCM: blocks of 16 bytes, a shift and filter, flags, and 28 four-bit samples */
+static void load_sound(const u8 *vh, const u8 *vb) {
+    static const s32 pos[5] = {0, 60, 115, 98, 122}, neg[5] = {0, 0, -52, -55, -60};
+    u32 programs = W(vh, 0x12, u16), tones = 0x20 + 0x800, vag, i, off = 0, size, b, k;
+    const u16 *sizes = (const u16 *)(vh + tones + programs * 16 * 32);
+    s32 s1 = 0, s2 = 0, sample, filter, shift;
+    if (W(vh, 0, u32) != 0x56414270) /* "pBAV" */
+        return;
+    vag = W(vh, tones + (THROW_PROGRAM * 16 + THROW_TONE) * 32 + 0x16, u16);
+    for (i = 1; i < vag; i++)
+        off += sizes[i] * 8;
+    size = sizes[vag] * 8;
+    for (b = 0; b < size / 16 && throw_len + 28 <= sizeof(throw_pcm) / 2; b++) {
+        const u8 *blk = vb + off + b * 16;
+        shift = blk[0] & 15;
+        filter = blk[0] >> 4 > 4 ? 0 : blk[0] >> 4;
+        for (k = 0; k < 28; k++) {
+            sample = (s16)((blk[2 + k / 2] >> (k & 1) * 4 & 15) << 12) >> shift;
+            sample += (s1 * pos[filter] + s2 * neg[filter] + 32) >> 6;
+            sample = sample > 32767 ? 32767 : sample < -32768 ? -32768 : sample;
+            s2 = s1;
+            s1 = sample;
+            throw_pcm[throw_len++] = sample;
+        }
+        if (blk[1] & 1)
+            break;
+    }
+}
 
 /* the frag's model and texture, from King's Ransom's archive (entries of 0x1C bytes: name, first sector) */
 static void load(void) {
-    u8 *arc, *data = NULL, *tim = NULL, *e, *q, *at;
+    u8 *arc, *data = NULL, *tim = NULL, *vh = NULL, *vb = NULL, *e, *q, *at;
     u32 n = port_disc_file("L08/LVL08CD.BIN", &arc), i, k;
     assets = -1;
     if (!n)
@@ -231,7 +273,13 @@ static void load(void) {
             data = at;
         else if (!strcmp((char *)e, "L08/LVL08TIM.BIN"))
             tim = at;
+        else if (!strcmp((char *)e, "SOUNDFX/L8FX.VH"))
+            vh = at;
+        else if (!strcmp((char *)e, "SOUNDFX/L8FX.VB"))
+            vb = at;
     }
+    if (vh && vb)
+        load_sound(vh, vb);
     if (data && tim && W(data + MODEL, 0, u32) == 0x41 && W(tim + TIM, 0, u32) == 0x10 && W(tim + TIM, 4, u32) == 8 &&
         W(tim + TIM, 0x10, u32) == 0x10010) {
         memcpy(model, data + MODEL, sizeof(model));
@@ -285,6 +333,8 @@ static void fly(void) {
     s32 g, i, from[4], to[4];
     s16 normal[4], hit[4];
     s32 flags;
+    if (toss > 0 && --toss == 0 && throw_len)
+        port_sfx(throw_pcm, throw_len, THROW_RATE, 0x6000);
     for (g = 0; g < LIVE; g++) {
         if (!live[g].on)
             continue;
@@ -299,7 +349,8 @@ static void fly(void) {
             to[i] = from[i] + live[g].vel[i];
         }
         if (func_800746D0(D_800E2F2C, from, to, normal, hit, &flags) != 0) {
-            /* off the surface, the speed turned back across it and halved */
+            /* off the surface: the speed across it turned back at a quarter, along it a third kept (it lands
+             * near where it comes down, not skidding on) */
             long long dot = 0, len = 0;
             s32 n;
             for (i = 0; i < 3; i++) {
@@ -310,7 +361,8 @@ static void fly(void) {
                 ;
             for (i = 0; i < 3; i++) {
                 live[g].pos[i] = hit[i] + normal[i] * 16 / n;
-                live[g].vel[i] = (s32)(live[g].vel[i] - (len ? 2 * dot * normal[i] / len : 0)) / 2;
+                s32 across = len ? (s32)(dot * normal[i] / len) : 0;
+                live[g].vel[i] = (live[g].vel[i] - across) / 3 - across / 4;
             }
         } else
             for (i = 0; i < 3; i++)
@@ -337,8 +389,10 @@ static void throw_own(void) {
     live[g].ticks = 0;
     live[g].on = 1;
     frags--;
+    /* the punch's swing, then the frag's toss */
     if ((u32)(g_Args->level - 1) < 11)
         func_80026F30(swing_sound[g_Args->level - 1], 0);
+    toss = TOSS;
     /* (again: what the level loads may cover it) */
     gpu_load_image(TEX_X, TEX_Y, 16, 64, image);
     gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
@@ -499,6 +553,9 @@ static void count_shown(s32 ot) {
      * y 41, the first zero x 60-68, y 42-51) */
     x = 30;
     y = 44;
+    /* and as the health bar is, sliding in when the mission starts (its sprite's top at y 25 when in place) */
+    if (D_800D7AB8)
+        y += W(D_800D7AB8 + D_800B8F24 * 0x28, 0xA, s16) - 25;
     n = n > 9 ? 9 : n;
     /* gold, as the 007 is */
     t = (Tile *)count((u32 *)ot, (u8 *)t, x + ICON_W + 2, y, n, 150, 124, 64);

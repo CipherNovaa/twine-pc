@@ -1,4 +1,4 @@
-/* Quick punch (native PC build only): F or the mouse's back button, or R3 on a gamepad, throws a punch with Bond's
+/* Quick punch (native PC build only): Space or the mouse's back button, or R3 on a gamepad, throws a punch with Bond's
  * free hand while he keeps the weapon he holds, as the unarmed punch does it: the same blow, sound and animation (mirrored for the left).
  *
  * The weapon in Bond's hands is an object of its own (D_8009CD98, sub type 10, made by func_80079F84 for the
@@ -92,6 +92,9 @@ static s32 fist_frame;    /* the frame counter when last seen: a smaller one is 
  * with, its punch, and the blow's */
 #define FIST_PROJECTION 1140
 #define FIST_PUNCH 2
+/* how long the blow flies (ticks; its speed is the +0xB2's): the game's 4 has Bond very close to punch, a little
+ * further for the fists too (the unarmed weapon's own, every tick) */
+#define FIST_REACH 6
 
 /* the swing's sound, the punch's own in each level's state machine (the levels' sound tables differ) */
 const u8 swing_sound[11] = {0x62, 0x76, 0x6F, 0x64, 0x5B, 0x71, 0x74, 0x6B, 0x6C, 0x71, 0x43};
@@ -110,10 +113,17 @@ static void as_fists(Weapon *w) {
     W(w, 0x70, s16) = 0;
     W(w, 0xAC, s16) = fist_damage;
     W(w, 0xB2, u16) = 1000;
-    W(w, 0xB4, s32) = 4;
+    W(w, 0xB4, s32) = FIST_REACH;
 }
 
 /* the fists' damage: the level's unarmed weapon's, where it has one */
+static void fists_reach(void) {
+    s32 i;
+    for (i = 0; i < 6; i++)
+        if (W(&g_Weapons[i], 0xB4, s32) == 4 && !strcmp((char *)&g_Weapons[i], "UNARMED"))
+            W(&g_Weapons[i], 0xB4, s32) = FIST_REACH;
+}
+
 static void find_fist_damage(void) {
     s32 i;
     fist_damage = 700;
@@ -236,6 +246,7 @@ void func_800788E0(void) {
     int pressed = port_quick_melee();
     u8 *inst, *coord;
     s32 left;
+    fists_reach();
     func_800788E0_orig();
 #ifdef MOD_QUICKGRENADE
     if (D_8009CD98 && g_CutScene == 0)
