@@ -1,4 +1,4 @@
-/* Quick grenade (native PC build only): G, or L3 on a gamepad, throws a frag grenade while Bond keeps the weapon he
+/* Quick grenade (native PC build only): G, or R1 on a gamepad, throws a frag grenade while Bond keeps the weapon he
  * holds: the same grenade, sound and ammo as throwing it from the hand, without the grenade drawn.
  *
  * Only King's Ransom has frag grenades (a slot named FRAG GRENADE, owned when its flags have 0x1800). Firing it

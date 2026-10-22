@@ -89,7 +89,8 @@ static Uint64 mouse_taken; /* when the game last took its movement (port_mouse_l
 static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
 static int jump_on = -1; /* TWINE_JUMP: Space jumps (else it punches) */
 static int melee_held, melee_pressed; /* Space, the mouse's back button or R3 (the quick punch mod, port_quick_melee) */
-static int grenade_held, grenade_pressed; /* G or L3 (the quick grenade mod, port_quick_grenade) */
+static int grenade_held, grenade_pressed; /* G or R1 (the quick grenade mod, port_quick_grenade) */
+static int sprint_held, sprint_on; /* L3 switches sprinting on until Bond stops (port_sprint) */
 static int jump_held, jump_pressed; /* Space (the jump mod, port_jump) */
 static int weapon_key; /* 1-9: the number key last pressed, -1 Q (the weapon keys mod, port_weapon_key) */
 static float look_yaw, look_pitch; /* angle units not yet taken */
@@ -118,7 +119,7 @@ static const struct {
 } modern_actions[] = {
     {SDL_GAMEPAD_BUTTON_WEST, A_RELOAD},           {SDL_GAMEPAD_BUTTON_EAST, A_CROUCH},
     {SDL_GAMEPAD_BUTTON_NORTH, A_NEXT_WEAPON},
-    {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, A_NEXT_WEAPON}, {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, A_PREV_WEAPON},
+    {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, A_PREV_WEAPON},
 };
 static const struct {
     SDL_GamepadButton b;
@@ -734,14 +735,25 @@ static void poll_input(int tick) {
             melee_pressed = 1;
         melee_held = melee;
     }
-    /* G, or L3 in the modern layout: a quick grenade, once for each press */
+    /* G, or R1 in the modern layout: a quick grenade, once for each press */
     {
         int grenade = in_gameplay() && (keys[SDL_SCANCODE_G] || (gamepad && SDL_GetGamepadButton(gamepad,
-                      SDL_GAMEPAD_BUTTON_LEFT_STICK) && !(getenv("TWINE_CONTROLS") &&
+                      SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) && !(getenv("TWINE_CONTROLS") &&
                       !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"))));
         if (grenade && !grenade_held)
             grenade_pressed = 1;
         grenade_held = grenade;
+    }
+    /* L3 in the modern layout switches sprinting on; it goes off when the left stick lets go (or Bond hasn't the
+     * controls) */
+    {
+        int l3 = in_gameplay() && gamepad && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_STICK) &&
+                 !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
+        if (l3 && !sprint_held)
+            sprint_on = !sprint_on;
+        sprint_held = l3;
+        if (!in_gameplay() || (abs(lx - 0x80) < 0x30 && abs(ly - 0x80) < 0x30))
+            sprint_on = 0;
     }
     port_pad_buttons[0] = (u16)~down;
     if (gamepad && tick)
@@ -760,13 +772,13 @@ int port_quick_melee(void) {
     return p;
 }
 
-/* 1 while Bond should sprint: Shift held (src/mods/twinstick.c asks every tick) */
+/* 1 while Bond should sprint: Shift held, or L3's sprint on (src/mods/twinstick.c asks every tick) */
 int port_sprint(void) {
     const bool *keys;
     if (headless) /* tests: TWINE_TEST_SPRINT=1 holds it */
         return getenv("TWINE_TEST_SPRINT") != NULL;
     keys = SDL_GetKeyboardState(NULL);
-    return keys && in_gameplay() && (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]);
+    return keys && in_gameplay() && (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT] || sprint_on);
 }
 
 /* 1 once for each press of the quick grenade (port/mods/quickgrenade.c asks every tick) */
@@ -985,9 +997,9 @@ static const char *const help_lines[] = {
     "Square / X ....... use, reload",
     "Circle / B ....... crouch",
     "R3 ............... punch",
-    "L3 ............... grenade",
+    "L3 ............... sprint (on / off)",
+    "R1 / RB .......... grenade",
     "Triangle / Y ..... next weapon",
-    "R1 / RB .......... next weapon",
     "L1 / LB .......... previous weapon",
     "Start ............ pause",
     "Back, touchpad ... messages",
