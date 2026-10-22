@@ -84,6 +84,7 @@ static Uint64 mouse_moved; /* when the mouse last moved (SDL ticks) */
 static Uint64 mouse_taken; /* when the game last took its movement (port_mouse_look) */
 static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
 static int melee_held, melee_pressed; /* F, the mouse's back button or R3 (the quick punch mod, port_quick_melee) */
+static int grenade_held, grenade_pressed; /* G or L3 (the quick grenade mod, port_quick_grenade) */
 static int jump_held, jump_pressed; /* Space (the jump mod, port_jump) */
 static int weapon_key; /* 1-9: the number key last pressed, -1 Q (the weapon keys mod, port_weapon_key) */
 static float look_yaw, look_pitch; /* angle units not yet taken */
@@ -716,6 +717,15 @@ static void poll_input(int tick) {
             melee_pressed = 1;
         melee_held = melee;
     }
+    /* G, or L3 in the modern layout: a quick grenade, once for each press */
+    {
+        int grenade = in_gameplay() && (keys[SDL_SCANCODE_G] || (gamepad && SDL_GetGamepadButton(gamepad,
+                      SDL_GAMEPAD_BUTTON_LEFT_STICK) && !(getenv("TWINE_CONTROLS") &&
+                      !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"))));
+        if (grenade && !grenade_held)
+            grenade_pressed = 1;
+        grenade_held = grenade;
+    }
     port_pad_buttons[0] = (u16)~down;
     if (gamepad && tick)
         rumble();
@@ -730,6 +740,13 @@ static void poll_input(int tick) {
 int port_quick_melee(void) {
     int p = melee_pressed || melee_held;
     melee_pressed = 0;
+    return p;
+}
+
+/* 1 once for each press of the quick grenade (port/mods/quickgrenade.c asks every tick) */
+int port_quick_grenade(void) {
+    int p = grenade_pressed;
+    grenade_pressed = 0;
     return p;
 }
 
@@ -767,6 +784,13 @@ static void test_pad(void) {
         char *end;
         if ((u32)strtoul(s, &end, 10) == frames)
             melee_pressed = 1;
+        s = *end ? end + 1 : end;
+    }
+    s = getenv("TWINE_TEST_GRENADE"); /* <frame>[,...]: the quick grenade pressed at these frames */
+    while (s && *s) {
+        char *end;
+        if ((u32)strtoul(s, &end, 10) == frames)
+            grenade_pressed = 1;
         s = *end ? end + 1 : end;
     }
     s = getenv("TWINE_TEST_JUMP"); /* <frame>[,...]: jump at these frames */
@@ -916,6 +940,7 @@ static const char *const help_lines[] = {
     "Q ................ back to the other one picked",
     "E, R ............. use (doors, people), reload",
     "F, back button ... quick punch",
+    "G ................ throw a grenade (keeps the gun)",
     "C, Ctrl .......... crouch",
     "Enter ............ pause; in menus: choose",
     "Esc .............. pause; in menus: back",
@@ -927,6 +952,7 @@ static const char *const help_lines[] = {
     "Gamepad: left stick walks and strafes, right",
     "stick turns and looks, R2 fire, L2 aim, Square",
     "use / reload, Circle crouch, R3 quick punch,",
+    "L3 grenade,",
     "Triangle / R1 next and L1 previous weapon,",
     "Options pause, touchpad messages; in menus the",
     "pad's own buttons.",
@@ -1193,7 +1219,7 @@ void port_frame_end(void) {
             present();
     } else if (screen && !port_smooth_shown)
         present();
-    if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK") || getenv("TWINE_TEST_MELEE") ||
+    if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK") || getenv("TWINE_TEST_MELEE") || getenv("TWINE_TEST_GRENADE") ||
         getenv("TWINE_TEST_WEAPON") || getenv("TWINE_TEST_JUMP"))
         test_pad();
     port_smooth_shown = 0;

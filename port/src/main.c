@@ -223,6 +223,16 @@ static void load_exe(const char *name) {
     port_log("loaded %s at %08X (%X bytes)\n", name, addr, size);
 }
 
+/* The PS1 address of a function of the executable running now (0: none). Past its 5-byte jump (below) the bytes
+ * of its MIPS code are neither run nor read: what a mod may use for PS1 memory of its own (GPU primitives). */
+u32 port_ps1_addr(void *fn) {
+    int i;
+    for (i = 0; port_module && i < port_module->func_count; i++)
+        if (port_module->funcs[i].fn == fn)
+            return port_module->funcs[i].addr;
+    return 0;
+}
+
 /* A 5-byte `jmp native` at each of the executable's function addresses. */
 static void install_trampolines(const PortModule *m) {
     int i;

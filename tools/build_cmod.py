@@ -43,7 +43,7 @@ def replaced_functions(sources, native=False):
 def level_names(level, sources, replaces, known=None):
     """The mods' LEVEL01 names in LEVEL: (-D flags for compiling the mods, linker aliases, the name of each
     replaced function's definition). `known`: LEVEL01 name -> LEVEL's, for what tools/port_symbols.py can't
-    place."""
+    place; "-" for a replaced function the level doesn't have, which the mod's version then replaces nothing in."""
     used = set()
     for src in sources:
         used |= set(IDENT.findall(src.read_text()))
@@ -65,6 +65,11 @@ def level_names(level, sources, replaces, known=None):
         for name, (target, off) in list(mapping.items()):
             if not off and target in alias:
                 mapping[name] = (alias[target], "")
+        absent = {f for f in replaces if mapping.get(f, ("",))[0] == "-"}
+        for f in absent:
+            del mapping[f]
+            defines.append(f"-D{f}=cmod_absent_{f}")
+        replaces = [f for f in replaces if f not in absent]
         for f in replaces:
             if f not in mapping or mapping[f][1]:
                 sys.exit(f"{level}: no clean match for replaced function {f}")

@@ -71,6 +71,7 @@ void GsGetLwUnit(void *, void *);
 void GsSortUnit(void *, void *, void *);
 void func_80077764(void *obj);
 void func_8007A554(void *);
+void quick_grenade(void);
 void func_8007A580(void *);
 
 #define W(w, off, type) (*(type *)((u8 *)(w) + (off)))
@@ -235,6 +236,10 @@ void func_800788E0(void) {
     u8 *inst, *coord;
     s32 left;
     func_800788E0_orig();
+#ifdef MOD_QUICKGRENADE
+    if (D_8009CD98 && g_CutScene == 0)
+        quick_grenade();
+#endif
     /* not in a cut scene, nor aiming (through a scope, a camera, or down the sights: the view zoomed) */
     if (!D_8009CD98 || g_CutScene != 0 || D_8009CD4C != 0) {
         hand_away();
