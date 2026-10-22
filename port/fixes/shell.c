@@ -1,8 +1,10 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998
+ * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400
  */
+#include <stdlib.h>
+#include <string.h>
 #include "common.h"
 
 u32 func_8006CDA8_orig(u32 **addr, u32 **header);
@@ -50,4 +52,51 @@ int port_hd_movie(const char *name);
 void func_80026998(s32 movie) {
     if (!port_hd_movie(D_80070E4C + (s16)movie * 16))
         func_80026998_orig(movie);
+}
+
+void func_8002A400_orig(void);
+s32 func_80043CAC(void);
+void func_8004DABC(void);
+s32 card_open(const char *name, u32 mode);
+s32 card_lseek(s32 fd, s32 off, s32 whence);
+s32 card_rw(s32 fd, u8 *buf, s32 len, int write);
+s32 card_close(s32 fd);
+void port_log(const char *fmt, ...);
+#define G_ARGS (*(u8 **)0x80161040u)
+#define SAVE_DATA ((u8 *)0x80153880u) /* what the load unpacks (func_80043CAC) */
+
+/* The autoload setting (TWINE_AUTOLOAD: 1, the default, or 2, a card slot; off): the game's save on that card,
+ * loaded after the title screen as the memory card menu's LOAD would (func_80042B94, there over libmcrd frame by
+ * frame): the save's file, BASLUS-01272 (one a card), the second 0x200 bytes of its first 0x400 unpacked into
+ * g_Args (func_80043CAC: the missions open, the settings, ...), the difficulty's flag, and the missions counted
+ * again (func_8004DABC). A card without the save, or a save that won't unpack, leaves the game as it was. */
+static void autoload(void) {
+    const char *s = getenv("TWINE_AUTOLOAD");
+    int slot = !s ? 0 : !strcmp(s, "1") ? 0 : !strcmp(s, "2") ? 1 : -1;
+    u8 *a = G_ARGS, kept[0xDB * 4];
+    s32 fd, n;
+    if (slot < 0 || !a || (fd = card_open(slot ? "bu10:BASLUS-01272" : "bu00:BASLUS-01272", 1)) < 0)
+        return;
+    card_lseek(fd, 0x200, 0);
+    n = card_rw(fd, SAVE_DATA, 0x200, 0);
+    card_close(fd);
+    memcpy(kept, a, sizeof(kept));
+    if (n != 0x200 || SAVE_DATA[0] != 4 || !func_80043CAC() || (a[0x12A] != 1 && a[0x12A] != 2)) {
+        memcpy(a, kept, sizeof(kept));
+        port_log("autoload: no save on the card in slot %d\n", slot + 1);
+        return;
+    }
+    if (a[0x12A] == 1)
+        *(u32 *)(a + 4) |= 0x10;
+    else
+        *(u32 *)(a + 4) &= ~0x10u;
+    *(u32 *)(a + 4) |= 0x40;
+    func_8004DABC();
+    port_log("autoload: loaded the save on the card in slot %d\n", slot + 1);
+}
+
+/* The title screen; after it, the main menu */
+void func_8002A400(void) {
+    func_8002A400_orig();
+    autoload();
 }

@@ -1,12 +1,12 @@
 /* The port's title card: "PORT BY" over "CipherNovaa", on black, after the BIOS boot animation and before
  * the game. It is drawn on the CPU at the window's own pixel size from the signed distance fields in
  * intro_font.h (port/tools/bake_intro_font.py), so the lettering is sharp at any resolution: smooth edges,
- * a soft bloom, a hairline rule. Light is mixed as light (gamma 2), faded evenly on screen and dithered
+ * a soft bloom, a gold rule like the game's HUD bar under its 007. Light is mixed as light (gamma 2), faded evenly on screen and dithered
  * so the fades and the bloom don't band. Only the box around the text is drawn; it goes to the window 1:1
  * through video.c's SDL_Renderer.
  *
  * Timeline (s): the label fades in from 0.3 while its letter-spacing settles, the name from 0.55, the rule
- * draws out from 0.9; everything holds, fades out from 3.65 and the card ends at 4.9; a very slow push-in
+ * draws out from the left from 0.9; everything holds, fades out from 3.65 and the card ends at 4.9; a very slow push-in
  * runs throughout. Start, Cross, Enter or Esc fades it out at once (a second press cuts it).
  *
  * Headless (TWINE_INTRO=1) it runs on a 60 Hz clock at TWINE_INTRO_SIZE=<w>x<h> (default 1280x960) and
@@ -30,6 +30,7 @@ typedef struct {
 
 static u8 *fields;   /* decoded distance fields */
 static float *lum;   /* the text box: light of the lettering, linear, relative to the ink colour */
+static float *gold;  /* the rule's light (linear RGB, 3 floats a pixel) */
 static u32 *pix;     /* the box's pixels */
 static int lum_cap;
 static int box_x, box_y, box_w, box_h, out_w, out_h;
@@ -152,23 +153,29 @@ static void draw_line(const IntroLine *L, float x, float baseline, float em, flo
     }
 }
 
-/* A hairline centred on (cx, y), half-width hw, brightest in the middle and fading towards its ends. */
-static void draw_rule(float cx, float y, float hw, float thick, float level) {
-    int sx, sy;
-    if (hw < 1)
+/* The rule: a gold bar from x0 to x1, its top edge at y, `thick` high, lit like the bar under the HUD's 007
+ * (a bright top edge, the gold below it darkening towards the bottom edge); square ends, smoothed to the pixel. */
+static void draw_rule(float x0, float x1, float y, float thick, float level) {
+    static const float top[3] = {255, 244, 178}, mid[3] = {226, 182, 74}, low[3] = {128, 90, 26};
+    int sx, sy, c;
+    if (x1 - x0 < 0.5f || level <= 0)
         return;
-    for (sy = (int)floorf(y - thick / 2); sy <= (int)ceilf(y + thick / 2); sy++) {
-        float cover = clamp01(fminf(sy + 1, y + thick / 2) - fmaxf(sy, y - thick / 2));
+    for (sy = (int)floorf(y); sy < (int)ceilf(y + thick); sy++) {
+        float cover = clamp01(fminf(sy + 1, y + thick) - fmaxf(sy, y)), v, col[3];
         if (cover <= 0 || sy < box_y || sy >= box_y + box_h)
             continue;
-        for (sx = (int)floorf(cx - hw); sx <= (int)ceilf(cx + hw); sx++) {
-            float a = 1 - clamp01((fabsf(sx + 0.5f - cx) / hw - 0.15f) / 0.85f), *p;
+        v = clamp01((sy + 0.5f - y) / thick); /* 0 the top edge, 1 the bottom */
+        for (c = 0; c < 3; c++) {
+            float a = v < 0.3f ? top[c] + (mid[c] - top[c]) * (v / 0.3f) : mid[c] + (low[c] - mid[c]) * ((v - 0.3f) / 0.7f);
+            col[c] = LIN(a) * cover * level;
+        }
+        for (sx = (int)floorf(x0); sx < (int)ceilf(x1); sx++) {
+            float h = clamp01(fminf(sx + 1, x1) - fmaxf(sx, x0));
+            float *p = gold + 3 * ((sy - box_y) * box_w + (sx - box_x));
             if (sx < box_x || sx >= box_x + box_w)
                 continue;
-            p = lum + (sy - box_y) * box_w + (sx - box_x);
-            a = a * a * (3 - 2 * a) * cover * level;
-            if (a > *p)
-                *p = a;
+            for (c = 0; c < 3; c++)
+                p[c] = col[c] * h;
         }
     }
 }
@@ -245,7 +252,7 @@ static void render(float t, float fade) {
     float title_w = line_width(&intro_title, title_em, title_track);
     float label_w = line_width(&intro_label, label_em, track);
     float cap_t = intro_title.cap_height * title_em, cap_l = intro_label.cap_height * label_em;
-    float gap = 0.44f * title_em, rule_gap = 0.50f * title_em;
+    float gap = 0.44f * title_em, rule_gap = 0.30f * title_em;
     float group = cap_l + gap + cap_t + rule_gap;
     float cx = out_w / 2.0f, top = out_h / 2.0f - group / 2 - 0.02f * out_h;
     float label_base = top + cap_l, title_base = label_base + gap + cap_t, rule_y = title_base + rule_gap;
@@ -275,14 +282,17 @@ static void render(float t, float fade) {
     need = box_w * box_h;
     if (need > lum_cap) {
         lum = realloc(lum, need * sizeof(float));
+        gold = realloc(gold, need * 3 * sizeof(float));
         pix = realloc(pix, need * sizeof(u32));
         lum_cap = need;
     }
     memset(lum, 0, need * sizeof(float));
+    memset(gold, 0, need * 3 * sizeof(float));
     /* fades are applied as light (squared), so they look even on screen */
     draw_line(&intro_label, cx - label_w / 2, label_base, label_em, track, 0.49f * a_label * a_label);
     draw_line(&intro_title, cx - title_w / 2, title_base, title_em, title_track, a_title * a_title);
-    draw_rule(cx, rule_y, title_w * 0.30f * grow, fmaxf(1.0f, 1.4f * u), 0.39f * grow * out * grow * out);
+    draw_rule(cx - title_w / 2, cx - title_w / 2 + title_w * grow, rule_y, fmaxf(2.0f, 7.0f * u * push),
+              out * out);
     bloom(glow_r);
 }
 
@@ -296,7 +306,7 @@ static void encode(void) {
         nrow = realloc(nrow, row_cap * sizeof(float));
     }
     for (y = 0; y < box_h; y++) {
-        const float *l = lum + y * box_w, *n = noise + ((box_y + y) & 63) * 64;
+        const float *l = lum + y * box_w, *n = noise + ((box_y + y) & 63) * 64, *gl = gold + y * box_w * 3;
         u32 *o = pix + y * box_w;
         float ir = ink.r, ig = ink.g, ib = ink.b, hr = halo.r, hg = halo.g, hb = halo.b;
         if (bl_w) {
@@ -313,8 +323,8 @@ static void encode(void) {
             nrow[x] = n[(box_x + x) & 63] + 0.5f;
         for (x = 0; x < box_w; x++) {
             float t = l[x], b = brow[x], e = nrow[x];
-            float r = sqrtf(t * ir + b * hr) * 255 + e, g = sqrtf(t * ig + b * hg) * 255 + e;
-            float u = sqrtf(t * ib + b * hb) * 255 + e;
+            float r = sqrtf(t * ir + b * hr + gl[3 * x]) * 255 + e, g = sqrtf(t * ig + b * hg + gl[3 * x + 1]) * 255 + e;
+            float u = sqrtf(t * ib + b * hb + gl[3 * x + 2]) * 255 + e;
             r = r > 255 ? 255 : r;
             g = g > 255 ? 255 : g;
             u = u > 255 ? 255 : u;
