@@ -84,6 +84,7 @@ static Uint64 mouse_moved; /* when the mouse last moved (SDL ticks) */
 static Uint64 mouse_taken; /* when the game last took its movement (port_mouse_look) */
 static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
 static int melee_held, melee_pressed; /* V or R3 (the quick punch mod, port_quick_melee) */
+static int jump_held, jump_pressed; /* Space (the jump mod, port_jump) */
 static int weapon_key; /* 1-9: the number key last pressed (the weapon keys mod, port_weapon_key) */
 static float look_yaw, look_pitch; /* angle units not yet taken */
 static float taken_yaw, taken_pitch; /* (TWINE_TEST_LOOK) taken so far */
@@ -596,9 +597,13 @@ static void poll_input(int tick) {
         if (keys[keymap[i].key] && !(keymap[i].key == SDL_SCANCODE_RETURN && (SDL_GetModState() & SDL_KMOD_ALT)) &&
             !(keymap[i].key == SDL_SCANCODE_SPACE && in_gameplay()))
             down |= keymap[i].bit;
-    /* Space chooses in the menus and uses things (doors, people) while Bond has the controls */
-    if (keys[SDL_SCANCODE_SPACE] && in_gameplay())
-        down |= action_bits(A_RELOAD);
+    /* Space chooses in the menus and jumps while Bond has the controls (kept until the game's next tick takes it) */
+    {
+        int jump = keys[SDL_SCANCODE_SPACE] && in_gameplay();
+        if (jump && !jump_held)
+            jump_pressed = 1;
+        jump_held = jump;
+    }
     /* Esc goes back in menus (Triangle; from the top of the phone's pause menu that closes it) and pauses or
      * skips everywhere else (Start); Enter chooses in a mission's menus (Cross) and is Start elsewhere. Esc is
      * the key the keyboard layout calls Escape (e.g. Caps Lock's with caps:swapescape, where the key marked Esc
@@ -718,6 +723,13 @@ int port_quick_melee(void) {
     return p;
 }
 
+/* 1 once for each press of the jump key (port/mods/jump.c asks every tick) */
+int port_jump(void) {
+    int p = jump_pressed;
+    jump_pressed = 0;
+    return p;
+}
+
 /* the number key pressed since the game last asked (port/mods/weaponkeys.c, every frame Bond has the controls),
  * else 0 */
 int port_weapon_key(void) {
@@ -745,6 +757,13 @@ static void test_pad(void) {
         char *end;
         if ((u32)strtoul(s, &end, 10) == frames)
             melee_pressed = 1;
+        s = *end ? end + 1 : end;
+    }
+    s = getenv("TWINE_TEST_JUMP"); /* <frame>[,...]: jump at these frames */
+    while (s && *s) {
+        char *end;
+        if ((u32)strtoul(s, &end, 10) == frames)
+            jump_pressed = 1;
         s = *end ? end + 1 : end;
     }
     s = getenv("TWINE_TEST_WEAPON"); /* <frame>:<n>[,...]: number key n pressed at these frames */
@@ -889,7 +908,7 @@ static const char *const help_lines[] = {
     "V ................ quick punch (left hand)",
     "Enter ............ pause; in menus: choose",
     "Esc .............. pause; in menus: back",
-    "Space ............ use; in menus: choose (Cross)",
+    "Space ............ jump; in menus: choose (Cross)",
     "Backspace ........ back (Triangle)",
     "Tab .............. Select (messages)",
     "F11, Alt+Enter ... full screen or window",
@@ -1164,7 +1183,7 @@ void port_frame_end(void) {
     } else if (screen && !port_smooth_shown)
         present();
     if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK") || getenv("TWINE_TEST_MELEE") ||
-        getenv("TWINE_TEST_WEAPON"))
+        getenv("TWINE_TEST_WEAPON") || getenv("TWINE_TEST_JUMP"))
         test_pad();
     port_smooth_shown = 0;
     RT_LEAVE();
