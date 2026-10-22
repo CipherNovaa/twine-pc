@@ -84,6 +84,7 @@ static Uint64 mouse_moved; /* when the mouse last moved (SDL ticks) */
 static Uint64 mouse_taken; /* when the game last took its movement (port_mouse_look) */
 static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
 static int melee_held, melee_pressed; /* V or R3 (the quick punch mod, port_quick_melee) */
+static int weapon_key; /* 1-9: the number key last pressed (the weapon keys mod, port_weapon_key) */
 static float look_yaw, look_pitch; /* angle units not yet taken */
 static float taken_yaw, taken_pitch; /* (TWINE_TEST_LOOK) taken so far */
 
@@ -530,6 +531,9 @@ static void window_event(const SDL_Event *e) {
     /* F11 or Alt+Enter: full screen or a window */
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode == SDL_SCANCODE_F1)
         help_shown = !help_shown;
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode >= SDL_SCANCODE_1 &&
+        e->key.scancode <= SDL_SCANCODE_9 && in_gameplay())
+        weapon_key = e->key.scancode - SDL_SCANCODE_1 + 1;
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
         (e->key.scancode == SDL_SCANCODE_F11 || (e->key.scancode == SDL_SCANCODE_RETURN && (e->key.mod & SDL_KMOD_ALT))))
         set_fullscreen(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));
@@ -714,6 +718,14 @@ int port_quick_melee(void) {
     return p;
 }
 
+/* the number key pressed since the game last asked (port/mods/weaponkeys.c, every frame Bond has the controls),
+ * else 0 */
+int port_weapon_key(void) {
+    int k = weapon_key;
+    weapon_key = 0;
+    return k;
+}
+
 /* headless: the pad bits TWINE_TEST_PAD holds at this frame */
 static void test_pad(void) {
     const char *s = getenv("TWINE_TEST_PAD");
@@ -733,6 +745,15 @@ static void test_pad(void) {
         char *end;
         if ((u32)strtoul(s, &end, 10) == frames)
             melee_pressed = 1;
+        s = *end ? end + 1 : end;
+    }
+    s = getenv("TWINE_TEST_WEAPON"); /* <frame>:<n>[,...]: number key n pressed at these frames */
+    while (s && *s) {
+        char *end;
+        u32 at = (u32)strtoul(s, &end, 10);
+        int n = *end == ':' ? (int)strtol(end + 1, &end, 10) : 0;
+        if (at == frames)
+            weapon_key = n;
         s = *end ? end + 1 : end;
     }
     s = getenv("TWINE_TEST_STICK"); /* <rx>,<ry>,<lx>,<ly> in hex: held throughout */
@@ -862,6 +883,7 @@ static const char *const help_lines[] = {
     "Left button ...... fire",
     "Right button ..... aim (hold)",
     "Wheel, Q / E ..... change weapon",
+    "1 - 6 ............ pick a weapon (in order held)",
     "F, R ............. use (doors, people), reload",
     "C, Ctrl .......... crouch",
     "V ................ quick punch (left hand)",
@@ -1141,7 +1163,8 @@ void port_frame_end(void) {
             present();
     } else if (screen && !port_smooth_shown)
         present();
-    if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK") || getenv("TWINE_TEST_MELEE"))
+    if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK") || getenv("TWINE_TEST_MELEE") ||
+        getenv("TWINE_TEST_WEAPON"))
         test_pad();
     port_smooth_shown = 0;
     RT_LEAVE();
