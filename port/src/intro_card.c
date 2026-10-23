@@ -1,7 +1,7 @@
 /* The port's title card: "PORT BY" over "CipherNovaa", on black, after the BIOS boot animation and before
  * the game. It is drawn on the CPU at the window's own pixel size from the signed distance fields in
  * intro_font.h (port/tools/bake_intro_font.py), so the lettering is sharp at any resolution: smooth edges,
- * a soft bloom, a gold rule like the game's HUD bar under its 007. Light is mixed as light (gamma 2), faded evenly on screen and dithered
+ * a soft bloom, a rule shaped like the game's HUD bar under its 007, in the lettering's ivory. Light is mixed as light (gamma 2), faded evenly on screen and dithered
  * so the fades and the bloom don't band. Only the box around the text is drawn; it goes to the window 1:1
  * through video.c's SDL_Renderer.
  *
@@ -153,10 +153,10 @@ static void draw_line(const IntroLine *L, float x, float baseline, float em, flo
     }
 }
 
-/* The rule: a gold bar from x0 to x1, its top edge at y, `thick` high, lit like the bar under the HUD's 007
- * (a bright top edge, the gold below it darkening towards the bottom edge); square ends, smoothed to the pixel. */
+/* The rule: a bar from x0 to x1, its top edge at y, `thick` high, lit like the bar under the HUD's 007 (a bright
+ * top edge, darkening towards the bottom edge) in the lettering's ivory; square ends, smoothed to the pixel. */
 static void draw_rule(float x0, float x1, float y, float thick, float level) {
-    static const float top[3] = {255, 244, 178}, mid[3] = {226, 182, 74}, low[3] = {128, 90, 26};
+    static const float top[3] = {255, 255, 255}, mid[3] = {236, 232, 224}, low[3] = {150, 146, 140};
     int sx, sy, c;
     if (x1 - x0 < 0.5f || level <= 0)
         return;
