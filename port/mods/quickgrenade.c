@@ -126,6 +126,8 @@ void quick_grenade(void) {
     u8 type;
     s32 i, pressed = port_quick_grenade(), fresh = D_8009CDA8 < frame;
     frame = D_8009CDA8;
+    if (g_Args->level == 11)
+        return; /* none in the casino mission (Russian Roulette: its blackjack table) */
     if (wait > 0)
         wait--;
     if (W(D_800D31C0, 2, s16) == 2500)
@@ -560,6 +562,8 @@ static void count_shown(s32 ot) {
     static const u8 shadow[3] = {SHADOW, SHADOW, SHADOW};
     u8 *mem;
     Tile *t;
+    if (g_Args->level == 11)
+        return;
     s32 i, x, y, row, col, end, n;
     Weapon *w;
     if (g_Args->level == 8 && (i = grenades()) >= 0) {

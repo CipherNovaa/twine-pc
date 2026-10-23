@@ -274,6 +274,18 @@ void port_irq_now(int *v, int put) {
     v[0] = port_rt_depth, v[1] = irq_masked, v[2] = irq_pending, v[3] = in_irq;
 }
 
+/* An executable left without its own ending (main.c, port_exe_leave): the callbacks into its code forgotten
+ * and its events closed */
+void port_irq_forget(const PortModule *m) {
+    int i;
+    vsync_callback = NULL;
+    for (i = 0; i < 8; i++)
+        vsync_callbacks[i] = NULL;
+    for (i = 0; i < EVENTS; i++)
+        if (events[i].owner == m)
+            events[i].open = events[i].enabled = 0;
+}
+
 /* ---- libetc ---- */
 
 static u32 vsync_last;

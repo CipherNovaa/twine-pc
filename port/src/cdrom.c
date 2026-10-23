@@ -44,6 +44,11 @@ static int muted;
 static u8 last_result[8];  /* what CdSync hands back */
 static u8 last_header[8];  /* GetlocL: header and subheader of the last sector read */
 static void *ready_callback, *sync_callback, *read_callback, *data_callback;
+
+/* (main.c, port_exe_leave) */
+void port_cd_forget(void) {
+    ready_callback = sync_callback = read_callback = data_callback = NULL;
+}
 static int cd_log = -1;
 
 /* the read head: idle at head_lba, or reading from head_lba on (sector k of the run is read by

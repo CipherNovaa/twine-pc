@@ -67,6 +67,27 @@ static const struct {
     {SDL_SCANCODE_TAB, P_SELECT}, {SDL_SCANCODE_SPACE, P_CROSS}, {SDL_SCANCODE_BACKSPACE, P_TRI},
 };
 
+/* the blackjack table's extra keys (F1 lists them there) */
+extern int port_blackjack;
+static const struct {
+    SDL_Scancode key;
+    u16 bit;
+} bj_keys[] = {
+    {SDL_SCANCODE_W, P_R1}, {SDL_SCANCODE_S, P_L1}, {SDL_SCANCODE_D, P_R2}, {SDL_SCANCODE_A, P_L2},
+    {SDL_SCANCODE_C, P_CIRC}, {SDL_SCANCODE_R, P_SQUARE},
+};
+static const char *const bj_help[] = {
+    "BLACKJACK",
+    "",
+    "Space, Enter ..... X (bet, hit)",
+    "C ................ Circle",
+    "R ................ Square",
+    "Esc, Backspace ... Triangle (exit)",
+    "@W / @S .......... R1 / L1 (bet +/- 1000)",
+    "@D / @A .......... R2 / L2 (bet +/- 100)",
+    "F5, F6 ........... save state, load state",
+};
+
 /* the game's actions (g_Args->buttonMap); reload is also the button that uses things (doors, people) */
 enum { A_FIRE, A_PREV_WEAPON, A_NEXT_WEAPON, A_RELOAD, A_CROUCH, A_AIM, A_STRAFE_LEFT, A_STRAFE_RIGHT };
 
@@ -621,6 +642,11 @@ static void poll_input(int tick) {
         if (keys[keymap[i].key] && !(keymap[i].key == SDL_SCANCODE_RETURN && (SDL_GetModState() & SDL_KMOD_ALT)) &&
             !(keymap[i].key == SDL_SCANCODE_SPACE && in_gameplay()))
             down |= keymap[i].bit;
+    /* at the blackjack table (the front end's BLACKJACK): the pad's buttons its prompts show */
+    if (port_blackjack && !in_gameplay())
+        for (i = 0; i < sizeof(bj_keys) / sizeof(bj_keys[0]); i++)
+            if (keys[bj_keys[i].key])
+                down |= bj_keys[i].bit;
     /* Space chooses in the menus and punches (below) while Bond has the controls; with TWINE_JUMP=1 (and the jump
      * mod built in, PORT_MODS=... JUMP) it jumps instead, kept until the game's next tick takes it */
     if (jump_on < 0)
@@ -635,10 +661,14 @@ static void poll_input(int tick) {
      * skips everywhere else (Start); Enter chooses in a mission's menus (Cross) and is Start elsewhere. Esc is
      * the key the keyboard layout calls Escape (e.g. Caps Lock's with caps:swapescape, where the key marked Esc
      * is Caps Lock), where the other keys are where they are on the keyboard. */
-    if (keys[SDL_GetScancodeFromKey(SDLK_ESCAPE, NULL)])
-        down |= (port_module && !strcmp(port_module->name, "shell")) || in_mission_menu() ? P_TRI : P_START;
-    if (keys[SDL_SCANCODE_RETURN] && !(SDL_GetModState() & SDL_KMOD_ALT))
-        down |= in_mission_menu() ? P_CROSS : P_START;
+    {
+        /* at the blackjack table (the front end's BLACKJACK) Esc is its EXIT and Enter its X, not the pause */
+        int table = port_blackjack && !in_gameplay() && !in_mission_menu();
+        if (keys[SDL_GetScancodeFromKey(SDLK_ESCAPE, NULL)])
+            down |= (port_module && !strcmp(port_module->name, "shell")) || in_mission_menu() || table ? P_TRI : P_START;
+        if (keys[SDL_SCANCODE_RETURN] && !(SDL_GetModState() & SDL_KMOD_ALT))
+            down |= in_mission_menu() || table ? P_CROSS : P_START;
+    }
     for (i = 0; i < sizeof(actionkeys) / sizeof(actionkeys[0]); i++)
         if (keys[actionkeys[i].key])
             down |= action_bits(actionkeys[i].action);
@@ -1035,9 +1065,19 @@ static const char *const help_lines[] = {
 
 /* A help line as this keyboard's layout names its keys: "@W" is the key in W's place (keys are read by their
  * place), and the dots between the keys and what they do are fitted to the names. */
+static const char *const *help_list(int *n) {
+    if (port_blackjack) {
+        *n = sizeof(bj_help) / sizeof(bj_help[0]);
+        return bj_help;
+    }
+    *n = sizeof(help_lines) / sizeof(help_lines[0]);
+    return help_lines;
+}
+
 static const char *help_line(int i) {
     static char out[96];
-    const char *s = help_lines[i], *dots = strstr(s, " ..");
+    int count;
+    const char *s = help_list(&count)[i], *dots = strstr(s, " ..");
     char keys[64];
     int n = 0;
     if (!dots)
@@ -1065,7 +1105,8 @@ static const char *help_line(int i) {
 static void draw_help(void) {
     static const PortModule *hinted_shell, *hinted_level;
     static Uint64 hint_until;
-    int ww = 0, wh = 0, cols = 0, n = sizeof(help_lines) / sizeof(help_lines[0]), i;
+    int ww = 0, wh = 0, cols = 0, n, i;
+    const char *const *list = help_list(&n);
     float scale, x, y, w, h;
     SDL_FRect r;
     if (port_module && !strcmp(port_module->name, "shell") && !hinted_shell) {
@@ -1114,7 +1155,7 @@ static void draw_help(void) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 215);
     SDL_RenderFillRect(renderer, &r);
     for (i = 0; i < n; i++) {
-        if (i == 0 || !strcmp(help_lines[i], "GAMEPAD"))
+        if (i == 0 || !strcmp(list[i], "GAMEPAD"))
             SDL_SetRenderDrawColor(renderer, 255, 210, 80, 255);
         else
             SDL_SetRenderDrawColor(renderer, 235, 235, 235, 255);

@@ -258,6 +258,9 @@ const PortModule *port_state_target(s32 *argc, u32 *argv);
 void port_state_return(void);
 void port_state_started(s32 argc, u32 argv);
 u32 port_rc_sp(void);
+void port_irq_forget(const PortModule *m);
+void port_io_forget(void);
+void port_cd_forget(void);
 void port_rc_sp_set(u32 sp);
 
 /* Run an executable: make its functions current, clear its BSS as its entry point would and run its main.
@@ -279,6 +282,14 @@ static s32 run_main(const PortModule *m, s32 argc, u32 argv) {
         port_rc_sp_set(sp);
         port_state_jump = outer;
         port_state_return();
+        return 0;
+    case 3: /* port_exe_leave: as if its main had returned, its callbacks forgotten */
+        port_rt_depth = 0;
+        port_rc_sp_set(sp);
+        port_state_jump = outer;
+        port_irq_forget(port_module);
+        port_io_forget();
+        port_cd_forget();
         return 0;
     }
     port_state_jump = &here;
@@ -551,6 +562,7 @@ static void game_folder_files(void) {
 }
 
 int port_dev_cheats;
+int port_blackjack; /* the front end's BLACKJACK: the casino mission at its table (fixes/shell.c, fixes/level11.c) */
 
 int main(int argc, char **argv) {
     const char *level_env;
@@ -558,6 +570,7 @@ int main(int argc, char **argv) {
     load_settings();
     game_folder_files();
     port_dev_cheats = getenv("TWINE_DEVCHEATS") && atoi(getenv("TWINE_DEVCHEATS"));
+    port_blackjack = getenv("TWINE_BLACKJACK") && atoi(getenv("TWINE_BLACKJACK")); /* (with level = 11, for tests) */
     level_env = getenv("TWINE_LEVEL");
     level = level_env ? atoi(level_env) : 0;
     log_file = fopen("port.log", "w");

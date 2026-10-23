@@ -1,7 +1,7 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C
+ * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768
  */
 #include <stdlib.h>
 #include <string.h>
@@ -119,6 +119,7 @@ void func_8002A400(void) {
  * again over the first one's glyphs. */
 s32 func_8005133C(char *text, s32 x, s32 y);
 void func_80051768(s32 item, s32 cx, s32 cy);
+void func_80051768_orig(s32 item, s32 cx, s32 cy);
 void func_80029B1C_orig(void);
 s32 func_800293C0_orig(void);
 s32 func_8003277C_orig(void);
@@ -130,7 +131,7 @@ void port_setting_save(const char *key, const char *value);
 #define NEXT_GLYPH (*(s32 *)0x800DFEECu)
 #define ITEM_X (*(s32 *)0x800DFDF4u)
 #define FIRST_GLYPH (*(u16 *)0x800DF0B0u) /* item 0's */
-static int in_options, on_page;
+static int in_options, on_page, in_main, main_made;
 static char item_text[16][32];
 
 static int env_on(const char *name, int dflt) {
@@ -267,6 +268,47 @@ void func_80029B1C(void) {
     func_80051768(3, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
 }
 
+/* BLACKJACK on the main menu, after MOVIES: the casino mission (folder 11, mission 3) started at its blackjack
+ * table (port_blackjack: port/fixes/level11.c seats Bond). The main menu (func_8003A7A8) makes its four items
+ * (colouring each as it goes: func_80051768) and then slides its panel in, so the item is made as MOVIES is
+ * coloured; choosing it (in the menu step) leaves the front end
+ * at once (port_exe_leave) with g_Args naming the mission, and the boot stub starts it. */
+s32 func_8003A7A8_orig(void);
+void port_exe_leave(void);
+extern int port_blackjack;
+static char blackjack_text[] = "BLACKJACK";
+
+s32 func_8003A7A8(void) {
+    s32 r;
+    port_blackjack = 0;
+    in_main = 1;
+    main_made = 0;
+    r = func_8003A7A8_orig();
+    in_main = 0;
+    return r;
+}
+
+void func_80051768(s32 item, s32 cx, s32 cy) {
+    func_80051768_orig(item, cx, cy);
+    if (in_main && !main_made && item == 3) {
+        main_made = 1;
+        func_8005133C(blackjack_text, ITEM_X, *(s32 *)0x800DFE20u + 4 * *(s32 *)0x80174F68u);
+        func_80051768_orig(4, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
+        CURSOR_END = 5;
+    }
+}
+
+static void main_step(s32 r) {
+    u8 *a = G_ARGS;
+    if (CURSOR == 4 && r == 2 && a) {
+        *(s16 *)(a + 0x188) = 11;
+        *(s16 *)(a + 0x18A) = 3;
+        port_blackjack = 1;
+        port_log("blackjack: the casino mission at its table\n");
+        port_exe_leave();
+    }
+}
+
 s32 func_800293C0(void) {
     s32 r;
     in_options = 1;
@@ -282,6 +324,10 @@ s32 func_800293C0(void) {
 s32 func_8003277C(void) {
     s32 at = CURSOR, r = func_8003277C_orig(), d = 0, c;
     u32 now = *(u32 *)0x80151A1Cu, was = *(u32 *)0x800DFDE0u;
+    if (in_main && !in_options) {
+        main_step(r);
+        return r;
+    }
     if (!in_options)
         return r;
     if (!on_page) {

@@ -23,6 +23,11 @@ static u32 i_stat, i_mask;
 static u32 timer_mode[3], timer_target[3];
 static u64 timer_base[3];
 static void *dma_callback[7];
+
+/* (main.c, port_exe_leave) */
+void port_io_forget(void) {
+    memset(dma_callback, 0, sizeof(dma_callback));
+}
 extern int port_subframe; /* an extra drawing between ticks (interp.c) */
 
 /* MDEC transfers (channels 0 and 1) move their data at once but finish later, as on the console, where the

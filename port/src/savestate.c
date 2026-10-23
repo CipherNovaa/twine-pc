@@ -356,6 +356,13 @@ void port_state_frame(void) {
     leave();
 }
 
+/* Leave the running executable at once, as if its main had returned (the front end's BLACKJACK: the boot stub
+ * then starts the mission g_Args names) */
+void port_exe_leave(void) {
+    if (port_state_jump)
+        siglongjmp(*(sigjmp_buf *)port_state_jump, 3);
+}
+
 /* main.c, back from the front end for a load: the state put back, and the boot stub carries on from there */
 void port_state_return(void) {
     put_all(pending, 0);
