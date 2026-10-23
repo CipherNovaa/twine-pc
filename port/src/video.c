@@ -924,6 +924,8 @@ static void test_pad(void) {
 static Uint64 present_ns; /* time spent in SDL_RenderPresent since the last log line */
 int port_shown_yaw; /* the camera's yaw in the frame being shown (smooth.c), for TWINE_YAWLOG */
 
+int port_shown_fps; /* frames shown in the last second (the debug menu's FRAMERATE INFO) */
+
 static void count_frame(void) {
     static Uint64 since, last, log_since, worst;
     static int n, log_n, slow, fpslog = -1;
@@ -941,7 +943,8 @@ static void count_frame(void) {
     log_n++;
     if (now - since >= 1000000000) {
         char title[64];
-        snprintf(title, sizeof(title), "TWINE - %d fps", (int)(n * 1000000000ull / (now - since)));
+        port_shown_fps = (int)(n * 1000000000ull / (now - since));
+        snprintf(title, sizeof(title), "TWINE - %d fps", port_shown_fps);
         SDL_SetWindowTitle(window, title);
         since = now;
         n = 0;
@@ -1130,29 +1133,54 @@ void port_fnt_flush(void) {
     dbg_until = SDL_GetTicks() + 200;
 }
 
-/* where the game's FntOpen puts it (func_8004BDE4: x 32, y 24 of the PS1's screen), in its 8x8 capitals */
+/* where the game's FntOpen puts it (func_8004BDE4: x 32, y 24 of the PS1's screen), in the game's own debug font
+ * (FntLoad's: 4-bit glyphs at VRAM 832,256, 16 a row from the space, its colours at 832,384) */
 static void draw_debug_text(void) {
+    static SDL_Texture *font;
+    static Uint64 made_for;
     SDL_FRect dst = picture_rect();
     const char *p = dbg_shown;
     float sx, sy;
     int col = 0, row = 0;
     if (SDL_GetTicks() >= dbg_until || gpu_display.w <= 0 || gpu_display.h <= 0)
         return;
+    if (!font || made_for + 1000 < SDL_GetTicks()) { /* again when the menu opens again */
+        static u32 px[128 * 32];
+        u16 clut[16];
+        int x, y;
+        gpu_sync(832, 256, 32, 32);
+        gpu_sync(832, 384, 16, 1);
+        memcpy(clut, &gpu_vram[384 * 1024 + 832], sizeof(clut));
+        for (y = 0; y < 32; y++)
+            for (x = 0; x < 128; x++) {
+                u16 c = clut[(gpu_vram[(256 + y) * 1024 + 832 + x / 4] >> ((x & 3) * 4)) & 15];
+                px[y * 128 + x] = !c ? 0 : 0xFF000000u | (u32)((c & 31) << 3) << 16 | (u32)((c >> 5 & 31) << 3) << 8 |
+                                               (u32)((c >> 10 & 31) << 3);
+            }
+        if (!font) {
+            font = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, 128, 32);
+            SDL_SetTextureBlendMode(font, SDL_BLENDMODE_BLEND);
+            SDL_SetTextureScaleMode(font, SDL_SCALEMODE_NEAREST);
+        }
+        SDL_UpdateTexture(font, NULL, px, 128 * 4);
+    }
+    made_for = SDL_GetTicks();
     sx = dst.w / gpu_display.w;
     sy = dst.h / gpu_display.h;
-    SDL_SetRenderScale(renderer, sx, sy);
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     for (; *p; p++) {
-        char c[2] = {(char)SDL_toupper((unsigned char)*p), 0};
+        int c = SDL_toupper((unsigned char)*p) - 0x20;
         if (*p == '\n') {
             col = 0;
             row++;
             continue;
         }
-        SDL_RenderDebugText(renderer, dst.x / sx + 32 + col * 8, dst.y / sy + 24 + row * 8, c);
+        if (c > 0 && c < 64) {
+            SDL_FRect s = {(float)(c % 16 * 8), (float)(c / 16 * 8), 8, 8};
+            SDL_FRect d = {dst.x + (32 + col * 8) * sx, dst.y + (24 + row * 8) * sy, 8 * sx, 8 * sy};
+            SDL_RenderTexture(renderer, font, &s, &d);
+        }
         col++;
     }
-    SDL_SetRenderScale(renderer, 1, 1);
 }
 
 static void draw_help(void) {

@@ -18,7 +18,10 @@ extern int port_debug_key;
 
 /* F9 (video.c) opens the developers' debug menu, as the game's own menu code does (g_DevMenu, then its page). */
 s32 Pad_Update(void) {
+    static int calls;
     port_state_point(__builtin_frame_address(0));
+    if (getenv("TWINE_TEST_DEBUG_MENU") && ++calls == atoi(getenv("TWINE_TEST_DEBUG_MENU")))
+        port_debug_key = 1;
     if (port_debug_key) {
         port_debug_key = 0;
         g_DevMenu = 1;
@@ -27,17 +30,30 @@ s32 Pad_Update(void) {
     return Pad_Update_orig();
 }
 
-/* The debug menu's text (FntPrint, FntFlush) goes to the port's own overlay (video.c): the game's debug font
- * doesn't show on the PC. */
+/* The debug menu's text (FntPrint, FntFlush) goes to the port's overlay (video.c), which draws it in the game's
+ * own debug font: the hardware renderer draws the font's sprites before the frame's clear, which wipes them. */
 #include <stdarg.h>
 int vsnprintf(char *s, unsigned n, const char *fmt, va_list ap);
 void port_fnt_print(const char *text);
 void port_fnt_flush(void);
 
+extern int port_shown_fps;
+extern s16 g_DebugTextY; /* the page's lines (its box: func_80033010) */
+int strncmp(const char *a, const char *b, unsigned n);
+int snprintf(char *s, unsigned n, const char *fmt, ...);
+
 int FntPrint(char *fmt, ...) {
     char buf[256];
     va_list ap;
     va_start(ap, fmt);
+    if (!strncmp(fmt, "FR %2d - FR CAP %2d", 19)) { /* FRAMERATE INFO: the game's rate, and the frames shown */
+        s32 rate = va_arg(ap, s32), cap = va_arg(ap, s32);
+        va_end(ap);
+        g_DebugTextY = 2;
+        snprintf(buf, sizeof(buf), "FR %2d - FR CAP %2d\nSHOWN %d FPS\n", rate, cap, port_shown_fps);
+        port_fnt_print(buf);
+        return 0;
+    }
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
     port_fnt_print(buf);
