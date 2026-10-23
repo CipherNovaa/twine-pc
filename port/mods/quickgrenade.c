@@ -112,7 +112,15 @@ static s32 grenades(void) {
     return -1;
 }
 
+/* the cheat (infinite_grenades = 1, the front end's PORT SETTINGS): a throw leaves as many as there were */
+char *getenv(const char *name);
+static int infinite(void) {
+    const char *s = getenv("TWINE_INFINITE_GRENADES");
+    return s && *s == '1';
+}
+
 void quick_grenade(void) {
+    s16 ammo, clip, reserve;
     Weapon *w;
     s16 held, range;
     u8 type;
@@ -147,6 +155,7 @@ void quick_grenade(void) {
     if (wait > 0 || (D_800F11F0 >= 3 && D_800F11F0 <= 6))
         return;
     held = D_800B0DD4;
+    ammo = w->ammo, clip = w->clip, reserve = w->reserve;
     type = D_8009CD98[0x3A];
     range = W(D_8009CD98, 0x38, s16);
     D_800B0DD4 = i;
@@ -158,6 +167,11 @@ void quick_grenade(void) {
     D_8009CD98[0x3A] = type;
     W(D_8009CD98, 0x38, s16) = range;
     D_800B0DD4 = held;
+    if (infinite()) { /* the cheat: as many as before */
+        w->ammo = ammo, w->clip = clip, w->reserve = reserve;
+        wait = GAP;
+        return;
+    }
     /* the next one to hand, as the throw's reload does, or none left */
     if (w->clip == 0 && w->reserve > 0) {
         w->clip = 1;
@@ -388,7 +402,8 @@ static void throw_own(void) {
     }
     live[g].ticks = 0;
     live[g].on = 1;
-    frags--;
+    if (!infinite())
+        frags--;
     /* the punch's swing, then the frag's toss */
     if ((u32)(g_Args->level - 1) < 11)
         func_80026F30(swing_sound[g_Args->level - 1], 0);
@@ -502,6 +517,18 @@ static Tile *tile(u32 *ot, Tile *t, s32 x, s32 y, s32 w, const u8 *rgb) {
     return t + 1;
 }
 
+/* with the cheat, an infinity sign instead of the count: two rings side by side, 9 x 5, of rectangles */
+static Tile *infinity(u32 *ot, Tile *t, s32 x, s32 y, const u8 *rgb) {
+    static const s8 r[7][4] = {{1, 0, 3, 1}, {1, 4, 3, 1}, {0, 1, 1, 3}, {4, 1, 1, 3},
+                               {5, 0, 3, 1}, {5, 4, 3, 1}, {8, 1, 1, 3}};
+    s32 i;
+    for (i = 0; i < 7; i++) {
+        t = tile(ot, t, x + r[i][0], y + r[i][1], r[i][2], rgb);
+        t[-1].h = r[i][3];
+    }
+    return t;
+}
+
 /* the count, one of the ammo counter's digits (its first sprite has the texture and so on), in a colour */
 static u8 *count(u32 *ot, u8 *sprite, s32 x, s32 y, s32 n, u8 r, u8 g, u8 b) {
     u8 *digit = D_800AE9C0 + n * 8;
@@ -558,7 +585,11 @@ static void count_shown(s32 ot) {
         y += W(D_800D7AB8 + D_800B8F24 * 0x28, 0xA, s16) - 25;
     n = n > 9 ? 9 : n;
     /* gold, as the 007 is */
-    t = (Tile *)count((u32 *)ot, (u8 *)t, x + ICON_W + 2, y, n, 150, 124, 64);
+    if (infinite()) {
+        static const u8 gold[3] = {216, 176, 80};
+        t = infinity((u32 *)ot, t, x + ICON_W + 2, y + 2, gold);
+    } else
+        t = (Tile *)count((u32 *)ot, (u8 *)t, x + ICON_W + 2, y, n, 150, 124, 64);
     /* the grenade, a rectangle for each run of one colour in a row */
     for (row = 0; row < ICON_H; row++)
         for (col = 0; col < ICON_W; col = end) {
@@ -568,7 +599,10 @@ static void count_shown(s32 ot) {
                 t = tile((u32 *)ot, t, x + col, y + row, end - col, colour[strchr(keys, icon[row][col]) - keys]);
         }
     /* under them, a drop shadow a pixel down and right, as the 007 has */
-    t = (Tile *)count((u32 *)ot, (u8 *)t, x + ICON_W + 3, y + 1, n, SHADOW, SHADOW, SHADOW);
+    if (infinite())
+        t = infinity((u32 *)ot, t, x + ICON_W + 3, y + 3, shadow);
+    else
+        t = (Tile *)count((u32 *)ot, (u8 *)t, x + ICON_W + 3, y + 1, n, SHADOW, SHADOW, SHADOW);
     for (row = 0; row < ICON_H; row++) {
         for (col = 0; icon[row][col] == '.'; col++)
             ;

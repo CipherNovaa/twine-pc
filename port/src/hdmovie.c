@@ -73,6 +73,8 @@ int port_hd_movie(const char *name) {
     Uint64 start;
     double shown = 0;
     int skipped = 0;
+    if (getenv("TWINE_HD") && !atoi(getenv("TWINE_HD")))
+        return 0; /* hd = 0: the PS1's movies (the front end's PORT SETTINGS) */
     if (!dir) {
         /* an hdmovies folder next to the game (make dist), else the user's own */
         ssize_t n = readlink("/proc/self/exe", def, sizeof(def) - 8);

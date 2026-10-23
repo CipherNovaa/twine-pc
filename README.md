@@ -30,7 +30,7 @@ Building needs gcc with 32-bit support, 32-bit SDL3 (`lib32-sdl3`), `glslc` (`sh
 
 Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the boot animation, your console's BIOS (e.g. `SCPH1001.BIN`; without one only the title card shows). By default the program looks for `workbench/disc/007 - The World Is Not Enough (USA).bin` and a `bios/` folder in the current directory.
 
-**Settings** go in `~/.config/twine/twine.ini` (or `$XDG_CONFIG_HOME/twine/twine.ini`), one `key = value` per line; each stands for the environment variable `TWINE_<KEY>`, which wins if both are set:
+**Settings** go in `~/.config/twine/twine.ini` (or `$XDG_CONFIG_HOME/twine/twine.ini`), one `key = value` per line; each stands for the environment variable `TWINE_<KEY>`, which wins if both are set. The most used are also on the front end's OPTIONS screen, under PORT SETTINGS (mouse speed, invert mouse, pad layout, smooth motion, HD movies, vibration, infinite grenades, autoload), which writes them here:
 
 | key | |
 |---|---|
@@ -54,6 +54,8 @@ Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the b
 | `controls = original` | the gamepad's buttons as the PlayStation pad's, set in the game's own options (by default they follow a modern layout in the missions, below) |
 | `card1`, `card2` | memory card images (raw 128 KB, as emulators use). Slot 1 defaults to `~/.local/share/twine/card1.mcd`, made on first use; slot 2 to `card2.mcd` there if it exists; `none` leaves a slot empty |
 | `autoload` | the memory card slot whose save the front end loads after the title screen (`1`, the default, or `2`; `off`): CONTINUE then goes straight to the missions |
+| `hd = 0` | the PS1's own movies even where an HD clip is there |
+| `infinite_grenades = 1` | a cheat: throwing a grenade leaves as many as there were |
 | `devcheats = 1` | the developers' cheat codes work: on the pause menu in the missions (see Developer cheat codes below; SELECT SELECT CIRCLE CIRCLE then SELECT CIRCLE completes the mission), and the front end's own codes, which the retail game never checks (below) |
 | `no_intro = 1` | skip the boot animation and title card |
 | `level = N` | start straight in mission folder N (1-11) |

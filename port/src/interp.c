@@ -67,10 +67,8 @@ static u64 now_ns(void) {
 }
 
 static int smooth_enabled(void) {
-    if (enabled < 0) {
-        const char *s = getenv("TWINE_SMOOTH");
-        enabled = s ? atoi(s) != 0 : !port_video_headless();
-    }
+    const char *s = getenv("TWINE_SMOOTH"); /* (read each time: the front end's PORT SETTINGS change it) */
+    enabled = s ? atoi(s) != 0 : !port_video_headless();
     return enabled;
 }
 

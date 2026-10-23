@@ -484,13 +484,10 @@ void port_mouse_look(s32 *yaw, s32 *pitch) {
 }
 
 static void mouse_event(const SDL_Event *e) {
-    static float scale;
+    const char *sens = getenv("TWINE_MOUSE_SENS"); /* (read each time: the front end's PORT SETTINGS change it) */
+    float scale = 0.5f * (sens && atof(sens) > 0 ? (float)atof(sens) : 1.0f);
     if (!mouse_captured)
         return;
-    if (!scale) {
-        const char *sens = getenv("TWINE_MOUSE_SENS");
-        scale = 0.5f * (sens && atof(sens) > 0 ? (float)atof(sens) : 1.0f);
-    }
     if (e->type == SDL_EVENT_MOUSE_MOTION && mouse_in_use()) {
         static int log = -1;
         /* TWINE_MOUSELOG=1: each movement as it comes (event time, x, y), next to TWINE_YAWLOG's frames */
@@ -584,11 +581,9 @@ static void window_event(const SDL_Event *e) {
 static void rumble(void) {
     static u8 was_small, was_large;
     static Uint64 renewed;
-    static int off = -1;
+    int off = getenv("TWINE_RUMBLE") && !atoi(getenv("TWINE_RUMBLE"));
     u8 small, large;
     Uint64 now = SDL_GetTicks();
-    if (off < 0)
-        off = getenv("TWINE_RUMBLE") && !atoi(getenv("TWINE_RUMBLE"));
     port_pad_motors(&small, &large);
     if (off || (small == was_small && large == was_large && (!(small | large) || now - renewed < 100)))
         return;
@@ -698,11 +693,10 @@ static void poll_input(int tick) {
     if (keys[SDL_SCANCODE_L])
         rx = 0xFF;
     if (gamepad) {
-        static int modern = -1;
+        int modern;
         int l2 = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16000;
         int r2 = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16000;
-        if (modern < 0)
-            modern = !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
+        modern = !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
         stick(SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, &lx, &ly);
         stick(SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, &rx, &ry);
         if (modern && in_gameplay()) {
