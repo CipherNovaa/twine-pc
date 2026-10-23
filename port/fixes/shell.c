@@ -132,7 +132,7 @@ void port_setting_save(const char *key, const char *value);
 #define ITEM_X (*(s32 *)0x800DFDF4u)
 #define FIRST_GLYPH (*(u16 *)0x800DF0B0u) /* item 0's */
 static int in_options, on_page, in_main, main_made;
-static char item_text[16][32];
+static char item_text[20][32];
 
 static int env_on(const char *name, int dflt) {
     const char *s = getenv(name);
@@ -206,18 +206,13 @@ static void setting(int i, int d, char *label, char *value) {
         strcpy(label, "infinite grenades");
         strcpy(value, onoff[on]);
         return;
-    default: {
-        static const char *const values[] = {"1", "2", "off"};
-        int s = autoload_slot();
-        s = s < 0 ? 2 : s;
-        if (d) {
-            s = (s + (d > 0 ? 1 : 2)) % 3;
-            port_setting_save("autoload", values[s]);
-        }
-        strcpy(label, "autoload");
-        strcpy(value, s == 2 ? "off" : s ? "slot 2" : "slot 1");
+    default: /* F9 opens the developers' debug menu in a mission (mods/savestate.c) */
+        on = env_on("TWINE_DEBUG_MENU", 0) ^ (d != 0);
+        if (d)
+            port_setting_save("debug_menu", on ? "1" : "0");
+        strcpy(label, "debug menu");
+        strcpy(value, onoff[on]);
         return;
-    }
     }
 }
 
@@ -235,9 +230,16 @@ static void colour_items(int n, int at) {
  * D_80073F05, which func_8005133C otherwise capitalizes with), which draws as the small capitals; each line a
  * label at x 0x94 and its value 0x140 further on, 0x10 apart from y 0x45; the cursor on the labels (items 2i).
  * page = 0: the OPTIONS screen's own items again and PORT SETTINGS. `at` is the cursor's item. */
+/* AUTOLOAD on the OPTIONS screen, a fifth item under PORT SETTINGS: Cross, left or right steps it */
+static char *autoload_name(void) {
+    static char *const names[] = {"AUTOLOAD SLOT 1", "AUTOLOAD SLOT 2", "AUTOLOAD OFF"};
+    int v = autoload_slot();
+    return names[v < 0 ? 2 : v];
+}
+
 static void make_items(int page, int at) {
     static char *const own[] = {(char *)0x8008E0FCu, (char *)0x8008E108u, (char *)0x8008E114u};
-    int i, n = page ? SETTINGS : 4;
+    int i, n = page ? SETTINGS : 5;
     ITEMS = 0;
     NEXT_GLYPH = FIRST_GLYPH;
     on_page = page;
@@ -252,7 +254,7 @@ static void make_items(int page, int at) {
         n *= 2;
     } else
         for (i = 0; i < n; i++) {
-            strcpy(item_text[i], i < 3 ? own[i] : "PORT SETTINGS");
+            strcpy(item_text[i], i < 3 ? own[i] : i == 3 ? "PORT SETTINGS" : autoload_name());
             func_8005133C(item_text[i], ITEM_X, 0x46 + i * 0x1C);
         }
     colour_items(n, at);
@@ -266,6 +268,9 @@ void func_80029B1C(void) {
     strcpy(item_text[3], "PORT SETTINGS");
     func_8005133C(item_text[3], ITEM_X, 0x9A);
     func_80051768(3, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
+    strcpy(item_text[4], autoload_name());
+    func_8005133C(item_text[4], ITEM_X, 0x9A + 0x1C);
+    func_80051768(4, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
 }
 
 /* BLACKJACK on the main menu, after MOVIES: the casino mission (folder 11, mission 3) started at its blackjack
@@ -334,6 +339,14 @@ s32 func_8003277C(void) {
         if (CURSOR == 3 && r == 2) {
             make_items(1, 0);
             return 1;
+        }
+        if (CURSOR == 4 && (r == 2 || ((now & 0xA000) & ~was))) {
+            static const char *const values[] = {"1", "2", "off"};
+            int v = autoload_slot();
+            v = ((v < 0 ? 2 : v) + ((now & 0x8000) & ~was ? 2 : 1)) % 3;
+            port_setting_save("autoload", values[v]);
+            make_items(0, 4);
+            return r == 2 ? 1 : r;
         }
         return r;
     }

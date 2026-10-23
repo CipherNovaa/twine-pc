@@ -49,6 +49,8 @@ static SDL_Gamepad *gamepad;          /* the one read */
 static SDL_Gamepad *pads[MAX_PADS];   /* all connected */
 static u32 pixels[640 * 512];
 
+int port_debug_key; /* F9 was pressed, for the debug menu */
+
 /* pad bits as libpad delivers them (active low): low byte SELECT L3 R3 START UP RIGHT DOWN LEFT,
  * high byte L2 R2 L1 R1 TRIANGLE CIRCLE CROSS SQUARE */
 enum {
@@ -573,6 +575,10 @@ static void window_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
         (e->key.scancode == SDL_SCANCODE_F5 || e->key.scancode == SDL_SCANCODE_F6))
         port_state_request(e->key.scancode == SDL_SCANCODE_F6);
+    /* F9 opens the developers' debug menu (mods/savestate.c), with PORT SETTINGS' debug menu on */
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode == SDL_SCANCODE_F9 &&
+        getenv("TWINE_DEBUG_MENU") && atoi(getenv("TWINE_DEBUG_MENU")))
+        port_debug_key = 1;
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode >= SDL_SCANCODE_1 &&
         e->key.scancode <= SDL_SCANCODE_9 && in_gameplay())
         weapon_key = e->key.scancode - SDL_SCANCODE_1 + 1;
@@ -1102,6 +1108,53 @@ static const char *help_line(int i) {
     return out;
 }
 
+/* The game's debug-font text (FntPrint, FntFlush: mods/savestate.c), drawn here instead of with its font */
+static char dbg_text[2048], dbg_shown[2048];
+static Uint64 dbg_until;
+
+void port_fnt_print(const char *text) {
+    size_t n = strlen(dbg_text);
+    for (; *text && n < sizeof(dbg_text) - 1; text++)
+        if (*text == '~' && text[1] == 'c' && text[2] && text[3] && text[4])
+            text += 4; /* a colour, ~cRGB */
+        else
+            dbg_text[n++] = *text;
+    dbg_text[n] = 0;
+}
+
+void port_fnt_flush(void) {
+    if (!dbg_text[0])
+        return;
+    memcpy(dbg_shown, dbg_text, sizeof(dbg_shown));
+    dbg_text[0] = 0;
+    dbg_until = SDL_GetTicks() + 200;
+}
+
+/* where the game's FntOpen puts it (func_8004BDE4: x 32, y 24 of the PS1's screen), in its 8x8 capitals */
+static void draw_debug_text(void) {
+    SDL_FRect dst = picture_rect();
+    const char *p = dbg_shown;
+    float sx, sy;
+    int col = 0, row = 0;
+    if (SDL_GetTicks() >= dbg_until || gpu_display.w <= 0 || gpu_display.h <= 0)
+        return;
+    sx = dst.w / gpu_display.w;
+    sy = dst.h / gpu_display.h;
+    SDL_SetRenderScale(renderer, sx, sy);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    for (; *p; p++) {
+        char c[2] = {(char)SDL_toupper((unsigned char)*p), 0};
+        if (*p == '\n') {
+            col = 0;
+            row++;
+            continue;
+        }
+        SDL_RenderDebugText(renderer, dst.x / sx + 32 + col * 8, dst.y / sy + 24 + row * 8, c);
+        col++;
+    }
+    SDL_SetRenderScale(renderer, 1, 1);
+}
+
 static void draw_help(void) {
     static const PortModule *hinted_shell, *hinted_level;
     static Uint64 hint_until;
@@ -1212,6 +1265,7 @@ static void present_rect(s32 rx, s32 ry, int rgb24) {
     SDL_RenderClear(renderer);
     if (!gpu_display.blank)
         draw_picture(pic, &src, &dst);
+    draw_debug_text();
     draw_help();
     if (screen_shot) {
         SDL_Surface *s = SDL_RenderReadPixels(renderer, NULL), *rgb = s ? SDL_ConvertSurface(s, SDL_PIXELFORMAT_RGB24) : NULL;
