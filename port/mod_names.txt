@@ -48,3 +48,14 @@ level08 func_80061B70 func_80061CA4
 level09 func_80061B70 func_80061DD0
 level10 func_80061B70 func_80064508
 level11 func_80061B70 func_8005EBCC
+# using things on the reload button's press (src/mods/twinstick.c)
+level02 func_80051AE0 func_80053DF0
+level03 func_80051AE0 func_800538DC
+level04 func_80051AE0 func_80053200
+level05 func_80051AE0 func_80053A3C
+level06 func_80051AE0 func_80053CD8
+level07 func_80051AE0 func_800541D8
+level08 func_80051AE0 func_80053E00
+level09 func_80051AE0 func_80053E0C
+level10 func_80051AE0 func_80054570
+level11 func_80051AE0 func_8004F09C

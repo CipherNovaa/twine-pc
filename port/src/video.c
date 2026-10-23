@@ -74,7 +74,7 @@ static const struct {
     SDL_Scancode key;
     int action;
 } actionkeys[] = {
-    {SDL_SCANCODE_E, A_RELOAD}, {SDL_SCANCODE_F, A_RELOAD}, {SDL_SCANCODE_R, A_RELOAD},
+    {SDL_SCANCODE_E, A_RELOAD}, {SDL_SCANCODE_F, A_RELOAD}, {SDL_SCANCODE_R, A_RELOAD}, /* port_use_kind */
     {SDL_SCANCODE_Z, A_PREV_WEAPON}, {SDL_SCANCODE_X, A_NEXT_WEAPON}, {SDL_SCANCODE_C, A_CROUCH}, {SDL_SCANCODE_LCTRL, A_CROUCH},
     {SDL_SCANCODE_A, A_STRAFE_LEFT}, {SDL_SCANCODE_D, A_STRAFE_RIGHT},
 };
@@ -119,7 +119,7 @@ static const struct {
     int action;
 } modern_actions[] = {
     {SDL_GAMEPAD_BUTTON_WEST, A_RELOAD},           {SDL_GAMEPAD_BUTTON_EAST, A_CROUCH},
-    {SDL_GAMEPAD_BUTTON_NORTH, A_NEXT_WEAPON},
+    {SDL_GAMEPAD_BUTTON_NORTH, A_RELOAD},
     {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, A_NEXT_WEAPON}, {SDL_GAMEPAD_BUTTON_DPAD_LEFT, A_PREV_WEAPON},
 };
 static const struct {
@@ -776,6 +776,26 @@ int port_quick_melee(void) {
     return p;
 }
 
+/* The game's reload button both reloads and uses things; here E and F (and Triangle in the modern layout) use,
+ * R (Square) reloads: bit 0 while a use key is down, bit 1 a reload one (both when it is some other way, as the
+ * original layout). TWINE_TEST_USE=1 or 2 for headless tests. */
+int port_use_kind(void) {
+    const bool *keys;
+    int k = 0, modern = !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
+    if (headless)
+        return getenv("TWINE_TEST_USE") ? atoi(getenv("TWINE_TEST_USE")) : 3;
+    keys = SDL_GetKeyboardState(NULL);
+    if (keys && (keys[SDL_SCANCODE_E] || keys[SDL_SCANCODE_F]))
+        k |= 1;
+    if (keys && keys[SDL_SCANCODE_R])
+        k |= 2;
+    if (gamepad && modern && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH))
+        k |= 1;
+    if (gamepad && modern && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_WEST))
+        k |= 2;
+    return k ? k : 3;
+}
+
 /* 1 while Bond should sprint: Shift held, or L3's sprint on (src/mods/twinstick.c asks every tick) */
 int port_sprint(void) {
     const bool *keys;
@@ -979,7 +999,8 @@ static const char *const help_lines[] = {
     "Wheel, @Z, @X ...... change weapon",
     "1 - 9 ............ pick a weapon",
     "@Q ................ last weapon",
-    "@E, @F, @R .......... use, reload",
+    "@E, @F ............ use",
+    "@R ................ reload",
     "Space, Mouse 4 ... punch",
     "@G ................ grenade",
     "Shift ............ sprint",
@@ -998,13 +1019,13 @@ static const char *const help_lines[] = {
     "Right stick ...... look",
     "R2 / RT .......... fire",
     "L2 / LT .......... aim",
-    "Square / X ....... use, reload",
+    "Square / X ....... reload",
+    "Triangle / Y ..... use",
     "Circle / B ....... crouch",
     "R3 ............... punch",
     "L3 ............... sprint (on / off)",
     "R1 / RB .......... grenade",
     "D-pad left/right . change weapon",
-    "Triangle / Y ..... next weapon",
     "L1 / LB .......... last weapon",
     "Start ............ pause",
     "Back, touchpad ... messages",
