@@ -14,6 +14,7 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <ucontext.h>
 #include <unistd.h>
@@ -458,6 +459,53 @@ static void load_settings(void) {
             setenv(name, v, 0);
     }
     fclose(f);
+}
+
+/* A setting changed in the game (the front end's OPTIONS): its line in twine.ini rewritten, or added, and the
+ * environment variable it stands for set to it. */
+void port_setting_save(const char *key, const char *value) {
+    const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
+    char path[1024], tmp[1100], line[512], name[128] = "TWINE_";
+    FILE *in, *out;
+    int done = 0;
+    size_t i, n = 6;
+    RT_ENTER();
+    for (i = 0; key[i] && n < sizeof(name) - 1; i++)
+        name[n++] = (char)toupper((unsigned char)key[i]);
+    name[n] = 0;
+    setenv(name, value, 1);
+    if (xdg && *xdg)
+        snprintf(path, sizeof(path), "%s/twine", xdg);
+    else
+        snprintf(path, sizeof(path), "%s/.config/twine", home ? home : ".");
+    mkdir(path, 0755);
+    strcat(path, "/twine.ini");
+    snprintf(tmp, sizeof(tmp), "%s.new", path);
+    in = fopen(path, "r");
+    if (!(out = fopen(tmp, "w"))) {
+        if (in)
+            fclose(in);
+        RT_LEAVE();
+        return;
+    }
+    while (in && fgets(line, sizeof(line), in)) {
+        const char *k = line;
+        while (*k == ' ' || *k == '\t')
+            k++;
+        if (!done && !strncasecmp(k, key, strlen(key)) && strchr(" \t=", k[strlen(key)])) {
+            fprintf(out, "%s = %s\n", key, value);
+            done = 1;
+        } else
+            fputs(line, out);
+    }
+    if (!done)
+        fprintf(out, "%s = %s\n", key, value);
+    if (in)
+        fclose(in);
+    if (fclose(out) == 0)
+        rename(tmp, path);
+    port_log("settings: %s = %s\n", key, value);
+    RT_LEAVE();
 }
 
 /* The game's folder (where the executable is, as make dist lays it out) can hold what the player supplies: a

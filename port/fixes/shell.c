@@ -1,7 +1,7 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400
+ * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C
  */
 #include <stdlib.h>
 #include <string.h>
@@ -70,9 +70,14 @@ void port_log(const char *fmt, ...);
  * frame): the save's file, BASLUS-01272 (one a card), the second 0x200 bytes of its first 0x400 unpacked into
  * g_Args (func_80043CAC: the missions open, the settings, ...), the difficulty's flag, and the missions counted
  * again (func_8004DABC). A card without the save, or a save that won't unpack, leaves the game as it was. */
-static void autoload(void) {
+/* the setting: 0 slot 1, 1 slot 2, -1 off */
+static int autoload_slot(void) {
     const char *s = getenv("TWINE_AUTOLOAD");
-    int slot = !s ? 0 : !strcmp(s, "1") ? 0 : !strcmp(s, "2") ? 1 : -1;
+    return !s ? 0 : !strcmp(s, "1") ? 0 : !strcmp(s, "2") ? 1 : -1;
+}
+
+static void autoload(void) {
+    int slot = autoload_slot();
     u8 *a = G_ARGS, kept[0xDB * 4];
     s32 fd, n;
     if (slot < 0 || !a || (fd = card_open(slot ? "bu10:BASLUS-01272" : "bu00:BASLUS-01272", 1)) < 0)
@@ -99,4 +104,73 @@ static void autoload(void) {
 void func_8002A400(void) {
     func_8002A400_orig();
     autoload();
+}
+
+/* The autoload setting on the OPTIONS screen, a fourth item under CONTROLLER, MEMORY CARD and CHEATS:
+ * "AUTOLOAD SLOT 1" / "SLOT 2" / "OFF", changed with Cross or left and right, kept in twine.ini.
+ *
+ * The screen (func_800293C0) makes its items as text (func_8005133C: left edge, line; each item's glyphs in a
+ * table of 20, 0x60 bytes each, glyphs from a pool whose next free one is D_800DFEEC) and draws them in two
+ * palettes (func_80051768: the item, the palette's place; D_80098C12/14 normal, D_80153E08/0A chosen). The
+ * cursor (D_801628D8) goes over as many items as were made (D_801510B4), and Cross on one past the third stays
+ * on the screen, so the item only has to be made and answer its keys (in the menus' step, func_8003277C:
+ * D_80151A1C this frame's buttons, D_800DFDE0 the last's). */
+s32 func_8005133C(char *text, s32 x, s32 y);
+void func_80051768(s32 item, s32 cx, s32 cy);
+void func_80029B1C_orig(void);
+s32 func_800293C0_orig(void);
+s32 func_8003277C_orig(void);
+void port_setting_save(const char *key, const char *value);
+#define CURSOR (*(s32 *)0x801628D8u)
+#define ITEMS (*(s32 *)0x801510B4u)
+#define NEXT_GLYPH (*(s32 *)0x800DFEECu)
+#define ITEM_X (*(s32 *)0x800DFDF4u)
+#define AUTOLOAD_Y 0x9A
+static int in_options;
+static char autoload_text[32];
+
+static void autoload_item(void) {
+    static const char *const names[] = {"AUTOLOAD SLOT 1", "AUTOLOAD SLOT 2", "AUTOLOAD OFF"};
+    int v = autoload_slot();
+    strcpy(autoload_text, names[v < 0 ? 2 : v]);
+    func_8005133C(autoload_text, ITEM_X, AUTOLOAD_Y);
+}
+
+/* The OPTIONS screen's items: the fourth after the others */
+void func_80029B1C(void) {
+    func_80029B1C_orig();
+    autoload_item();
+    func_80051768(3, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
+}
+
+s32 func_800293C0(void) {
+    s32 r;
+    in_options = 1;
+    r = func_800293C0_orig();
+    in_options = 0;
+    return r;
+}
+
+/* The menus' step: on the OPTIONS screen, Cross, left or right on the autoload item changes it (made again
+ * over its own glyphs, in the chosen palette) */
+s32 func_8003277C(void) {
+    s32 r = func_8003277C_orig(), step = 0, v;
+    u32 now = *(u32 *)0x80151A1Cu, was = *(u32 *)0x800DFDE0u;
+    static const char *const values[] = {"1", "2", "off"};
+    if (!in_options || CURSOR != 3)
+        return r;
+    if (r == 2 || ((now & 0x2000) && !(was & 0x2000)))
+        step = 1;
+    else if ((now & 0x8000) && !(was & 0x8000))
+        step = 2;
+    if (!step)
+        return r;
+    v = autoload_slot();
+    v = ((v < 0 ? 2 : v) + step) % 3;
+    port_setting_save("autoload", values[v]);
+    ITEMS = 3;
+    NEXT_GLYPH = *(u16 *)(0x800DF0B0u + 3 * 0x60);
+    autoload_item();
+    func_80051768(3, *(s16 *)0x80153E08u, *(s16 *)0x80153E0Au);
+    return r;
 }
