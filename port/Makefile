@@ -13,7 +13,7 @@ MODULES ?= boot movie shell level01 level02 level03 level04 level05 level06 leve
            level11
 # C mods built into the levels (port/mods.py): twin-stick controls with the PC's mouse look, and smooth motion
 # between the game's 20 Hz ticks, and a quick punch with the left hand
-PORT_MODS ?= TWINSTICK SMOOTH QUICKPUNCH QUICKGRENADE WEAPONKEYS SAVESTATE
+PORT_MODS ?= TWINSTICK SMOOTH QUICKPUNCH QUICKGRENADE WEAPONKEYS SAVESTATE DEBUGMENU
 
 CC := gcc
 # gnu89 and -fpermissive: the decompiled C keeps the original's K&R-era idioms. -fwrapv and

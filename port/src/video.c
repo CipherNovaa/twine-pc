@@ -50,6 +50,7 @@ static SDL_Gamepad *pads[MAX_PADS];   /* all connected */
 static u32 pixels[640 * 512];
 
 int port_debug_key; /* F9 was pressed, for the debug menu */
+int port_debug_step; /* Page Up / Page Down: the debug menu's COLLBOX INFO steps (mods/debugmenu.c) */
 
 /* pad bits as libpad delivers them (active low): low byte SELECT L3 R3 START UP RIGHT DOWN LEFT,
  * high byte L2 R2 L1 R1 TRIANGLE CIRCLE CROSS SQUARE */
@@ -579,6 +580,8 @@ static void window_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode == SDL_SCANCODE_F9 &&
         getenv("TWINE_DEBUG_MENU") && atoi(getenv("TWINE_DEBUG_MENU")))
         port_debug_key = 1;
+    if (e->type == SDL_EVENT_KEY_DOWN && (e->key.scancode == SDL_SCANCODE_PAGEUP || e->key.scancode == SDL_SCANCODE_PAGEDOWN))
+        port_debug_step += e->key.scancode == SDL_SCANCODE_PAGEDOWN ? 1 : -1;
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode >= SDL_SCANCODE_1 &&
         e->key.scancode <= SDL_SCANCODE_9 && in_gameplay())
         weapon_key = e->key.scancode - SDL_SCANCODE_1 + 1;
@@ -1125,12 +1128,28 @@ void port_fnt_print(const char *text) {
     dbg_text[n] = 0;
 }
 
+static int dbg_flushed;
+
 void port_fnt_flush(void) {
     if (!dbg_text[0])
         return;
     memcpy(dbg_shown, dbg_text, sizeof(dbg_shown));
     dbg_text[0] = 0;
-    dbg_until = SDL_GetTicks() + 200;
+    dbg_until = SDL_GetTicks() + 1000;
+    dbg_flushed = 1;
+    if (getenv("TWINE_TEST_DEBUG_PAGE")) { /* headless tests: the page's text in the log, now and then */
+        static int n;
+        if (n++ % 100 == 50)
+            port_log("debug text:\n%s", dbg_shown);
+    }
+}
+
+/* A game frame starts (mods/savestate.c): the text goes with the frame that stopped printing it, as the game's
+ * box does. */
+void port_fnt_frame(void) {
+    if (!dbg_flushed)
+        dbg_until = 0;
+    dbg_flushed = 0;
 }
 
 /* where the game's FntOpen puts it (func_8004BDE4: x 32, y 24 of the PS1's screen), in the game's own debug font
