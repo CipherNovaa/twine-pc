@@ -3,7 +3,7 @@
  * In the native PC build the mouse turns and looks too, on foot and in aim mode.
  *
  * MOD_REPLACES: Pad_StickToSpeed func_8005D760 func_80061DC0 func_800617AC func_80061B70
- * MOD_REPLACES_NATIVE: func_80043EE0 func_8004FD3C func_80051AE0
+ * MOD_REPLACES_NATIVE: func_80043EE0 func_8004FD3C
  *
  * Names are LEVEL01's; `make cmod` maps them onto each level (tools/port_symbols.py). */
 #include "twine.h"
@@ -30,11 +30,10 @@ int port_sprint(void);
 
 #ifdef NATIVE_PORT
 extern s32 g_PadHeld;
-extern s32 g_PadPressed;
 extern s32 D_800DDCC8; /* the reload button pressed, held (the button mapper's) */
 extern s32 D_800DDD98;
-int port_use_kind(void);
-void func_80051AE0_orig(u8 **obj);
+int port_reload(void);
+static s32 s_ReloadPrev = 0;
 extern s32 D_8009CD54; /* aim mode is gliding back out */
 extern s16 D_8009CD5C; /* frames the aim has held still */
 extern u16 D_800B0C5C; /* aim mode's yaw */
@@ -110,11 +109,19 @@ void func_8005D760(void) {
     }
     func_8005D760_orig();
 #ifdef NATIVE_PORT
-    /* The game's reload button also uses things; the PC's keys and the gamepad have one of each (port_use_kind):
-     * the weapon's reload reads these flags, the use func_80051AE0 */
-    if (!(port_use_kind() & 2)) {
-        D_800DDCC8 = 0;
-        D_800DDD98 = 0;
+    /* The game's reload button also uses things. The PC has a reload key and use keys (port_reload): the
+     * reload key sets the flags the weapon's reload reads (func_800798D4: held, and not held the tick before)
+     * without the button, which the use keys press with these flags cleared. */
+    {
+        s32 r = port_reload(), b3 = g_Args->buttonMap[3];
+        if (r & 1) {
+            D_800DDD98 = b3;
+            D_800DDCC8 = s_ReloadPrev ? b3 : 0;
+        } else if (r & 2) {
+            D_800DDD98 = 0;
+            D_800DDCC8 = 0;
+        }
+        s_ReloadPrev = r & 1;
     }
     if (g_CutScene == 7 || (D_800AC284[0x108] != 0 && *(s32 *)(D_800AC284 + 0x104) == 1)) {
         port_controls_state(0);
@@ -226,17 +233,6 @@ void func_80061DC0(void) {
 }
 
 #ifdef NATIVE_PORT
-/* Using things (doors, people, ...), on the reload button's press: not when only the reload key or button is
- * down (port_use_kind) */
-void func_80051AE0(u8 **obj) {
-    s32 pressed = g_PadPressed;
-    if (!(port_use_kind() & 1)) {
-        g_PadPressed &= ~g_Args->buttonMap[3];
-    }
-    func_80051AE0_orig(obj);
-    g_PadPressed = pressed;
-}
-
 /* Aim mode (the aim button held): the mouse moves the aim like the stick does, within the same limits. */
 void func_80043EE0(void) {
     s32 moved;

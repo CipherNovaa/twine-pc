@@ -74,7 +74,7 @@ static const struct {
     SDL_Scancode key;
     int action;
 } actionkeys[] = {
-    {SDL_SCANCODE_E, A_RELOAD}, {SDL_SCANCODE_F, A_RELOAD}, {SDL_SCANCODE_R, A_RELOAD}, /* port_use_kind */
+    {SDL_SCANCODE_E, A_RELOAD}, {SDL_SCANCODE_F, A_RELOAD}, /* use (R reloads: port_reload) */
     {SDL_SCANCODE_Z, A_PREV_WEAPON}, {SDL_SCANCODE_X, A_NEXT_WEAPON}, {SDL_SCANCODE_C, A_CROUCH}, {SDL_SCANCODE_LCTRL, A_CROUCH},
     {SDL_SCANCODE_A, A_STRAFE_LEFT}, {SDL_SCANCODE_D, A_STRAFE_RIGHT},
 };
@@ -90,6 +90,7 @@ static u16 wheel_bits; /* the weapon button a wheel step holds until the game's 
 static int jump_on = -1; /* TWINE_JUMP: Space jumps (else it punches) */
 static int melee_held, melee_pressed; /* Space, the mouse's back button or R3 (the quick punch mod, port_quick_melee) */
 static int grenade_held, grenade_pressed; /* G or R1 (the quick grenade mod, port_quick_grenade) */
+static int reload_tap; /* R or Square seen since the game last asked (port_reload) */
 static int sprint_held, sprint_on; /* L3 switches sprinting on until Bond stops (port_sprint) */
 static int jump_held, jump_pressed; /* Space (the jump mod, port_jump) */
 static int weapon_key; /* 1-9: the number key last pressed, -1 Q (the weapon keys mod, port_weapon_key) */
@@ -118,7 +119,7 @@ static const struct {
     SDL_GamepadButton b;
     int action;
 } modern_actions[] = {
-    {SDL_GAMEPAD_BUTTON_WEST, A_RELOAD},           {SDL_GAMEPAD_BUTTON_EAST, A_CROUCH},
+    {SDL_GAMEPAD_BUTTON_EAST, A_CROUCH}, /* (Square reloads: port_reload) */
     {SDL_GAMEPAD_BUTTON_NORTH, A_RELOAD},
     {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, A_NEXT_WEAPON}, {SDL_GAMEPAD_BUTTON_DPAD_LEFT, A_PREV_WEAPON},
 };
@@ -646,6 +647,9 @@ static void poll_input(int tick) {
     for (i = 0; i < sizeof(actionkeys) / sizeof(actionkeys[0]); i++)
         if (keys[actionkeys[i].key])
             down |= action_bits(actionkeys[i].action);
+    if (keys[SDL_SCANCODE_R] || (gamepad && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_WEST) &&
+                                  !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"))))
+        reload_tap = 1;
     if (mouse_captured) {
         mouse = SDL_GetMouseState(NULL, NULL);
         if (mouse & SDL_BUTTON_LMASK)
@@ -776,24 +780,28 @@ int port_quick_melee(void) {
     return p;
 }
 
-/* The game's reload button both reloads and uses things; here E and F (and Triangle in the modern layout) use,
- * R (Square) reloads: bit 0 while a use key is down, bit 1 a reload one (both when it is some other way, as the
- * original layout). TWINE_TEST_USE=1 or 2 for headless tests. */
-int port_use_kind(void) {
+/* The game's reload button both reloads and uses things (doors, people, alarms: whatever reads it). Here R and,
+ * in the modern layout, Square reload without pressing it (the twin-stick mod sets the game's reload flags);
+ * E, F and Triangle press it and the mod clears those flags. Bit 0: a reload key is down (or was tapped since
+ * the last call, once a tick); bit 1: a use key is. TWINE_TEST_RELOAD=frame (a tap) for headless tests. */
+int port_reload(void) {
     const bool *keys;
-    int k = 0, modern = !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
+    int r = 0, modern = !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
     if (headless)
-        return getenv("TWINE_TEST_USE") ? atoi(getenv("TWINE_TEST_USE")) : 3;
+        return getenv("TWINE_TEST_RELOAD") && frames >= (u32)atoi(getenv("TWINE_TEST_RELOAD")) &&
+               frames < (u32)atoi(getenv("TWINE_TEST_RELOAD")) + 2;
     keys = SDL_GetKeyboardState(NULL);
-    if (keys && (keys[SDL_SCANCODE_E] || keys[SDL_SCANCODE_F]))
-        k |= 1;
     if (keys && keys[SDL_SCANCODE_R])
-        k |= 2;
-    if (gamepad && modern && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH))
-        k |= 1;
+        r |= 1;
     if (gamepad && modern && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_WEST))
-        k |= 2;
-    return k ? k : 3;
+        r |= 1;
+    if (keys && (keys[SDL_SCANCODE_E] || keys[SDL_SCANCODE_F]))
+        r |= 2;
+    if (gamepad && modern && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH))
+        r |= 2;
+    r |= reload_tap;
+    reload_tap = 0;
+    return r;
 }
 
 /* 1 while Bond should sprint: Shift held, or L3's sprint on (src/mods/twinstick.c asks every tick) */

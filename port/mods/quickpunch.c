@@ -257,6 +257,11 @@ void func_800788E0(void) {
         hand_away();
         return;
     }
+    /* nor with the grappling hook watch on the wrist (its hand is the one that would punch) */
+    if (!strcmp((char *)&g_Weapons[D_800B0DD4], "GRAPPLING HOOK WATCH")) {
+        hand_away();
+        return;
+    }
     if (pressed) {
         if (fists_up()) {
             /* as fire does, where it can (idle, or the blow landed) */
