@@ -111,22 +111,22 @@ static const struct {
 
 /* The gamepad while Bond has the controls, in the modern layout (TWINE_CONTROLS, the default; "original"
  * keeps the PS1 pad's buttons and the game's own settings for them): the buttons are actions, whichever PS1
- * buttons the game's settings give them. The triggers fire and aim. Cross and the d-pad stay the pad's, for
- * the prompts a mission puts up, and Start, Select and the touchpad too. */
+ * buttons the game's settings give them. The triggers fire and aim, the d-pad's left and right change weapons
+ * and L1 goes back to the last one (as Q). Cross and the d-pad's up and down stay the pad's, for the prompts a
+ * mission puts up, and Start, Select and the touchpad too. */
 static const struct {
     SDL_GamepadButton b;
     int action;
 } modern_actions[] = {
     {SDL_GAMEPAD_BUTTON_WEST, A_RELOAD},           {SDL_GAMEPAD_BUTTON_EAST, A_CROUCH},
     {SDL_GAMEPAD_BUTTON_NORTH, A_NEXT_WEAPON},
-    {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, A_PREV_WEAPON},
+    {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, A_NEXT_WEAPON}, {SDL_GAMEPAD_BUTTON_DPAD_LEFT, A_PREV_WEAPON},
 };
 static const struct {
     SDL_GamepadButton b;
     u16 bit;
 } modern_pad[] = {
     {SDL_GAMEPAD_BUTTON_DPAD_UP, P_UP},     {SDL_GAMEPAD_BUTTON_DPAD_DOWN, P_DOWN},
-    {SDL_GAMEPAD_BUTTON_DPAD_LEFT, P_LEFT}, {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, P_RIGHT},
     {SDL_GAMEPAD_BUTTON_START, P_START},    {SDL_GAMEPAD_BUTTON_BACK, P_SELECT},
     {SDL_GAMEPAD_BUTTON_TOUCHPAD, P_SELECT}, {SDL_GAMEPAD_BUTTON_SOUTH, P_CROSS},
 };
@@ -569,6 +569,10 @@ static void window_event(const SDL_Event *e) {
         pad_removed(e->gdevice.which);
     if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
         pad_used(e->gbutton.which);
+    /* L1 in the modern layout: back to the weapon held before, as Q */
+    if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && e->gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER &&
+        in_gameplay() && !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original")))
+        weapon_key = -1;
     if (e->type == SDL_EVENT_GAMEPAD_AXIS_MOTION && (e->gaxis.value > 16000 || e->gaxis.value < -16000))
         pad_used(e->gaxis.which);
 }
@@ -999,8 +1003,9 @@ static const char *const help_lines[] = {
     "R3 ............... punch",
     "L3 ............... sprint (on / off)",
     "R1 / RB .......... grenade",
+    "D-pad left/right . change weapon",
     "Triangle / Y ..... next weapon",
-    "L1 / LB .......... previous weapon",
+    "L1 / LB .......... last weapon",
     "Start ............ pause",
     "Back, touchpad ... messages",
 };
