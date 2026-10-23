@@ -131,7 +131,7 @@ void port_setting_save(const char *key, const char *value);
 #define ITEM_X (*(s32 *)0x800DFDF4u)
 #define FIRST_GLYPH (*(u16 *)0x800DF0B0u) /* item 0's */
 static int in_options, on_page;
-static char item_text[10][32];
+static char item_text[16][32];
 
 static int env_on(const char *name, int dflt) {
     const char *s = getenv(name);
@@ -146,9 +146,9 @@ static int mouse_steps(void) { /* mouse speed in quarters, 1-12 */
 
 #define SETTINGS 8
 
-/* the page's line i, and step it by d (1 on, -1 back) when d */
-static void setting(int i, int d, char *out) {
-    static const char *const onoff[] = {"OFF", "ON"};
+/* the page's line i, as its label and value, and stepped by d (1 on, -1 back) when d */
+static void setting(int i, int d, char *label, char *value) {
+    static const char *const onoff[] = {"off", "on"};
     char v[8];
     int on;
     switch (i) {
@@ -159,44 +159,51 @@ static void setting(int i, int d, char *out) {
             snprintf(v, sizeof(v), "%g", n / 4.0);
             port_setting_save("mouse_sens", v);
         }
-        sprintf(out, "MOUSE SPEED %d", n);
+        strcpy(label, "mouse speed");
+        sprintf(value, "%d", n);
         return;
     }
     case 1:
         on = env_on("TWINE_MOUSE_INVERT", 0) ^ (d != 0);
         if (d)
             port_setting_save("mouse_invert", on ? "1" : "0");
-        sprintf(out, "INVERT MOUSE %s", onoff[on]);
+        strcpy(label, "invert mouse");
+        strcpy(value, onoff[on]);
         return;
     case 2:
         on = !(getenv("TWINE_CONTROLS") && !strcasecmp(getenv("TWINE_CONTROLS"), "original")) ^ (d != 0);
         if (d)
             port_setting_save("controls", on ? "modern" : "original");
-        sprintf(out, "PAD LAYOUT %s", on ? "MODERN" : "CLASSIC");
+        strcpy(label, "pad layout");
+        strcpy(value, on ? "modern" : "classic");
         return;
     case 3:
         on = env_on("TWINE_SMOOTH", 1) ^ (d != 0);
         if (d)
             port_setting_save("smooth", on ? "1" : "0");
-        sprintf(out, "SMOOTH MOTION %s", onoff[on]);
+        strcpy(label, "smooth motion");
+        strcpy(value, onoff[on]);
         return;
     case 4:
         on = env_on("TWINE_HD", 1) ^ (d != 0);
         if (d)
             port_setting_save("hd", on ? "1" : "0");
-        sprintf(out, "HD MOVIES %s", onoff[on]);
+        strcpy(label, "hd movies");
+        strcpy(value, onoff[on]);
         return;
     case 5:
         on = env_on("TWINE_RUMBLE", 1) ^ (d != 0);
         if (d)
             port_setting_save("rumble", on ? "1" : "0");
-        sprintf(out, "VIBRATION %s", onoff[on]);
+        strcpy(label, "vibration");
+        strcpy(value, onoff[on]);
         return;
     case 6:
         on = env_on("TWINE_INFINITE_GRENADES", 0) ^ (d != 0);
         if (d)
             port_setting_save("infinite_grenades", on ? "1" : "0");
-        sprintf(out, "INFINITE GRENADES %s", onoff[on]);
+        strcpy(label, "infinite grenades");
+        strcpy(value, onoff[on]);
         return;
     default: {
         static const char *const values[] = {"1", "2", "off"};
@@ -206,33 +213,50 @@ static void setting(int i, int d, char *out) {
             s = (s + (d > 0 ? 1 : 2)) % 3;
             port_setting_save("autoload", values[s]);
         }
-        sprintf(out, "AUTOLOAD %s", s == 2 ? "OFF" : s ? "SLOT 2" : "SLOT 1");
+        strcpy(label, "autoload");
+        strcpy(value, s == 2 ? "off" : s ? "slot 2" : "slot 1");
         return;
     }
     }
 }
 
-/* the page (or, page = 0, the OPTIONS screen's own items and PORT SETTINGS) made again, the cursor at `at` */
+/* the items coloured: the chosen one (on the page, its line's label and value) in the chosen palette */
+static void colour_items(int n, int at) {
+    int i;
+    for (i = 0; i < n; i++)
+        if (on_page ? i / 2 == at / 2 : i == at)
+            func_80051768(i, *(s16 *)0x80153E08u, *(s16 *)0x80153E0Au);
+        else
+            func_80051768(i, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
+}
+
+/* The page as the CHEATS screen lays its lines out (func_80046DC4): the text left in lower case (the flag
+ * D_80073F05, which func_8005133C otherwise capitalizes with), which draws as the small capitals; each line a
+ * label at x 0x94 and its value 0x140 further on, 0x10 apart from y 0x45; the cursor on the labels (items 2i).
+ * page = 0: the OPTIONS screen's own items again and PORT SETTINGS. `at` is the cursor's item. */
 static void make_items(int page, int at) {
     static char *const own[] = {(char *)0x8008E0FCu, (char *)0x8008E108u, (char *)0x8008E114u};
     int i, n = page ? SETTINGS : 4;
     ITEMS = 0;
     NEXT_GLYPH = FIRST_GLYPH;
-    for (i = 0; i < n; i++) {
-        if (page)
-            setting(i, 0, item_text[i]);
-        else
+    on_page = page;
+    if (page) {
+        *(u8 *)0x80073F05u = 1;
+        for (i = 0; i < n; i++) {
+            setting(i, 0, item_text[2 * i], item_text[2 * i + 1]);
+            func_8005133C(item_text[2 * i], 0x94, 0x45 + i * 0x10);
+            func_8005133C(item_text[2 * i + 1], 0x94 + 0x140, 0x45 + i * 0x10);
+        }
+        *(u8 *)0x80073F05u = 0;
+        n *= 2;
+    } else
+        for (i = 0; i < n; i++) {
             strcpy(item_text[i], i < 3 ? own[i] : "PORT SETTINGS");
-        func_8005133C(item_text[i], page ? ITEM_X - 48 : ITEM_X, page ? 0x40 + i * 0x12 : 0x46 + i * 0x1C);
-    }
-    for (i = 0; i < n; i++)
-        if (i == at)
-            func_80051768(i, *(s16 *)0x80153E08u, *(s16 *)0x80153E0Au);
-        else
-            func_80051768(i, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
+            func_8005133C(item_text[i], ITEM_X, 0x46 + i * 0x1C);
+        }
+    colour_items(n, at);
     CURSOR_END = n;
     CURSOR = CURSOR_WAS = at;
-    on_page = page;
 }
 
 /* The OPTIONS screen's items: PORT SETTINGS after the others */
@@ -252,15 +276,16 @@ s32 func_800293C0(void) {
     return r;
 }
 
-/* The menus' step, on the OPTIONS screen: Cross on PORT SETTINGS opens the page; on the page Cross, left and
- * right change the line chosen and Triangle goes back, none of them leaving the screen */
+/* The menus' step, on the OPTIONS screen: Cross on PORT SETTINGS opens the page; on the page the cursor goes a
+ * line (two items) at a time, Cross, left and right change the line chosen and Triangle goes back, none of them
+ * leaving the screen */
 s32 func_8003277C(void) {
-    s32 r = func_8003277C_orig(), d = 0, at = CURSOR;
+    s32 at = CURSOR, r = func_8003277C_orig(), d = 0, c;
     u32 now = *(u32 *)0x80151A1Cu, was = *(u32 *)0x800DFDE0u;
     if (!in_options)
         return r;
     if (!on_page) {
-        if (at == 3 && r == 2) {
+        if (CURSOR == 3 && r == 2) {
             make_items(1, 0);
             return 1;
         }
@@ -270,13 +295,21 @@ s32 func_8003277C(void) {
         make_items(0, 3);
         return 1;
     }
+    c = CURSOR;
+    if (c != at) { /* moved one item: on to the next line's label (wrapping) */
+        int n = SETTINGS * 2, up = (c == at - 1) || (at == 0 && c == n - 1);
+        c = up ? ((at / 2 + SETTINGS - 1) % SETTINGS) * 2 : ((at / 2 + 1) % SETTINGS) * 2;
+        CURSOR = CURSOR_WAS = c;
+        colour_items(n, c);
+        return r == 2 ? 1 : r;
+    }
     if (r == 2 || ((now & 0x2000) && !(was & 0x2000)))
         d = 1;
     else if ((now & 0x8000) && !(was & 0x8000))
         d = -1;
     if (d) {
-        char scratch[32];
-        setting(at, d, scratch);
+        char l[32], v[32];
+        setting(at / 2, d, l, v);
         make_items(1, at);
     }
     return r == 2 ? 1 : r;
