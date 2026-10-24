@@ -48,3 +48,14 @@ level08 func_80061B70 func_80061CA4
 level09 func_80061B70 func_80061DD0
 level10 func_80061B70 func_80064508
 level11 func_80061B70 func_8005EBCC
+# the start point and load points (port/mods/endless.c): the data its loader reads (func_80032074) less 0x14
+level06 D_8009E9C4 D_800A1584
+level07 D_8009E9C4 D_800A4C3C
+level08 D_8009E9C4 D_800A198C
+# the section loaded: the word before the loading's state (D_800D2F90), as in every other level
+level06 D_800D2F8C D_800D69CC
+level07 D_800D2F8C D_800D9C34
+level08 D_800D2F8C D_800D6594
+# the mission failed (port/mods/endless.c): the frame loop's GAME OVER call
+level04 func_8002D4E4 func_8002D4E4
+level07 func_8002D4E4 func_8002D4E4

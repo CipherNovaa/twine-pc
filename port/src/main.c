@@ -253,6 +253,8 @@ static const PortModule *find_module(const char *name) {
     port_fatal("this build has no %s\n", name);
 }
 
+#define ARGS_ADDR 0x8001F164u
+
 extern void *port_state_jump;
 const PortModule *port_state_target(s32 *argc, u32 *argv);
 void port_state_return(void);
@@ -262,6 +264,11 @@ void port_irq_forget(const PortModule *m);
 void port_io_forget(void);
 void port_cd_forget(void);
 void port_rc_sp_set(u32 sp);
+void port_endless_level(const PortModule *m);
+int port_endless_start(void);
+int port_endless_after(void);
+void port_endless_returned(const PortModule *m, u8 *args);
+extern int port_endless_stats;
 
 /* Run an executable: make its functions current, clear its BSS as its entry point would and run its main.
  * A save state of another mission (savestate.c) comes back here to run that one instead; one loaded in the
@@ -298,7 +305,9 @@ static s32 run_main(const PortModule *m, s32 argc, u32 argv) {
     install_trampolines(m);
     memset((void *)m->bss_start, 0, m->bss_end - m->bss_start);
     port_state_started(argc, argv);
+    port_endless_level(m);
     r = m->main(argc, (void *)argv);
+    port_endless_returned(m, (u8 *)ARGS_ADDR);
     port_state_jump = outer;
     return r;
 }
@@ -321,7 +330,6 @@ u32 port_exec(u32 header, s32 argc, u32 argv) {
     return 1;
 }
 
-#define ARGS_ADDR 0x8001F164u
 
 /* The mission each level folder holds (0 = Courier ... 10 = Meltdown), which the front end stores next to
  * the level number: the level opens its mission's speech and music stream, \Lnn\XA<mission + 1>.STR. */
@@ -574,6 +582,8 @@ int main(int argc, char **argv) {
     level_env = getenv("TWINE_LEVEL");
     level = level_env ? atoi(level_env) : 0;
     log_file = fopen("port.log", "w");
+    if ((r = port_endless_start())) /* (TWINE_ENDLESS: straight into a run) */
+        level = r;
     if (getenv("TWINE_PROFILE"))
         prof_start();
     {
@@ -607,6 +617,23 @@ int main(int argc, char **argv) {
     port_irq_start();
     r = run_main(port_module, 1, ARGS_ADDR);
     port_log("game main returned %d\n", r);
+    /* endless mode, with no boot stub running: the next room's level in this one's place, as the stub would
+     * (g_Args kept: the level named it) */
+    while ((level = port_endless_after())) {
+        char name[32];
+        snprintf(name, sizeof(name), "level%02d", level);
+        port_module = find_module(name);
+        load_exe(port_module->path);
+        r = run_main(port_module, 1, ARGS_ADDR);
+        port_log("game main returned %d\n", r);
+    }
+    if (port_endless_stats) { /* a run straight from the start is over: the front end, for its stats */
+        port_module = find_module("shell");
+        load_exe(port_module->path);
+        *(u32 *)ARGS_ADDR |= 1;
+        r = run_main(port_module, 1, ARGS_ADDR);
+        port_log("shell returned %d\n", r);
+    }
     return 0;
 }
 

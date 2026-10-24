@@ -1,7 +1,7 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768
+ * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8
  */
 #include <stdlib.h>
 #include <string.h>
@@ -48,8 +48,12 @@ int port_hd_movie(const char *name);
 #define D_80070E4C ((char *)0x80070E4Cu) /* the movies' names, 16 bytes each */
 
 /* Plays movie number `movie`, as the movie player's func_80026C2C does (fixes/movie.c): the film's own footage
- * instead when the user has a clip of it (hdmovie.c). */
+ * instead when the user has a clip of it (hdmovie.c). Not as endless mode starts: its rooms are no mission's. */
+extern int port_endless;
+
 void func_80026998(s32 movie) {
+    if (port_endless) /* (endless mode: no mission's film before its rooms) */
+        return;
     if (!port_hd_movie(D_80070E4C + (s16)movie * 16))
         func_80026998_orig(movie);
 }
@@ -118,6 +122,7 @@ void func_8002A400(void) {
  * screen); D_80151A1C has this frame's buttons, D_800DFDE0 the last's. A page is made by making the items
  * again over the first one's glyphs. */
 s32 func_8005133C(char *text, s32 x, s32 y);
+s32 func_8005133C_orig(char *text, s32 x, s32 y);
 void func_80051768(s32 item, s32 cx, s32 cy);
 void func_80051768_orig(s32 item, s32 cx, s32 cy);
 void func_80029B1C_orig(void);
@@ -372,4 +377,551 @@ s32 func_8003277C(void) {
         make_items(1, at);
     }
     return r == 2 ? 1 : r;
+}
+
+/* Endless mode's end (port/src/endless.c): the run's stats on the mission stats screen, as a mission completed's
+ * (func_80028644, after a mission: its debriefing, the stats (func_800350F4) and the hi-score table). The
+ * campaign is left as it was: its progress and hi-scores in g_Args are put back afterwards (what the screen makes
+ * of a mission completed: the mission done, the next one open, the table's new entry). Meanwhile the table of the
+ * mission named (the last room's) holds endless mode's best three, and its new entry is kept (port_endless_keep).
+ * A run made unranked (a save state loaded) goes in as a cheated mission's does: the cheat flag 9 set, which keeps
+ * it off the table.
+ *
+ * The stats' lines (made as text: func_8005133C) say what the run did: rooms cleared and waves in place of
+ * efficiency and health, the enemies eliminated in full, and the score endless mode gives instead of the
+ * mission's (D_80160FE8, which the table then takes). */
+extern int port_endless_stats, port_endless_unranked;
+typedef struct {
+    int rooms, kills, headshots, shots, hits, time, score, unranked;
+} EndlessRunStats; /* (port/src/endless.h's EndlessRun) */
+extern EndlessRunStats port_endless_run;
+void port_endless_best(char names[3][4], u32 scores[3]);
+void port_endless_keep(const char *name);
+void func_80028644_orig(void);
+#define MISSION_SCORE (*(s32 *)0x80160FE8u)
+static int in_endless_stats;
+
+s32 func_8005133C(char *text, s32 x, s32 y) {
+    static char line[48];
+    EndlessRunStats *r = &port_endless_run;
+    if (in_endless_stats && text) {
+        if (y == 56 && x > 89 && *text >= 'A' && *text <= 'Z') { /* the mission's name, centred over the lines */
+            x += ((s32)strlen(text) - 7) * 15 / 4;
+            strcpy(text = line, "ENDLESS"); /* (in a buffer: the text is written over, capitalized) */
+        } else if (!strncmp(text, "enemies eliminated", 18))
+            snprintf(text = line, sizeof(line), "enemies eliminated...%d", r->kills);
+        else if (!strncmp(text, "efficiency", 10))
+            snprintf(text = line, sizeof(line), "rooms cleared.%d", r->rooms);
+        else if (!strncmp(text, "health", 6))
+            snprintf(text = line, sizeof(line), "waves.........%d", r->rooms + 1);
+        else if (!strncmp(text, "mission score:", 14)) {
+            MISSION_SCORE = r->score;
+            snprintf(text = line, sizeof(line), "endless score:%d", r->score);
+        }
+    }
+    return func_8005133C_orig(text, x, y);
+}
+
+static u8 kept[0xDB * 4]; /* the campaign's g_Args, while the run's stats show */
+void func_800439E0_orig(void);
+
+/* A save made from the stats screen (SAVE GAME: func_800439E0 packs g_Args for the card) saves the campaign as it
+ * was, not the run's stand-in mission */
+void func_800439E0(void) {
+    static u8 now[0xDB * 4];
+    u8 *a = G_ARGS;
+    if (!in_endless_stats || !a) {
+        func_800439E0_orig();
+        return;
+    }
+    memcpy(now, a, sizeof(now));
+    memcpy(a, kept, sizeof(kept));
+    func_800439E0_orig();
+    memcpy(a, now, sizeof(now));
+}
+
+void func_80028644(void) {
+    u8 *a = G_ARGS, *table;
+    char names[3][4], name[4] = "";
+    u32 scores[3];
+    int i, m;
+    if (!port_endless_stats || !a) {
+        func_80028644_orig();
+        return;
+    }
+    port_endless_stats = 0;
+    memcpy(kept, a, sizeof(kept));
+    m = *(s16 *)(a + 0x18A);
+    table = a + 0xC + m * 24; /* the mission's three: initials (4 bytes), score */
+    port_endless_best(names, scores);
+    for (i = 0; i < 3; i++) {
+        memcpy(table + i * 8, names[i], 4);
+        *(u32 *)(table + i * 8 + 4) = scores[i];
+    }
+    if (port_endless_unranked)
+        *(u32 *)(a + 4) |= 1 << 9;
+    a[0x114] = 1; /* the stats as a mission completed's */
+    a[0x115] = 0;
+    in_endless_stats = 1;
+    func_80028644_orig();
+    in_endless_stats = 0;
+    for (i = 0; i < 3; i++) /* the run's entry, if it made the table */
+        if (port_endless_run.score > 0 && *(u32 *)(table + i * 8 + 4) == (u32)port_endless_run.score &&
+            memcmp(table + i * 8, names[i], 4)) {
+            memcpy(name, table + i * 8, 3);
+            break;
+        }
+    port_endless_keep(name);
+    memcpy(a, kept, sizeof(kept));
+    if (getenv("TWINE_TEST_UNLOCK")) /* (headless tests: every mission open on mission select) */
+        memset(a + 0x170, 1, 11);
+    port_log("endless: the run's stats shown (initials \"%s\")\n", name);
+}
+
+/* ENDLESS on mission select: a twelfth tile at the end of the middle row, which becomes four like the others
+ * (4/4/4: the row's three missions move left under the rows' columns). Choosing it starts endless mode
+ * (port/src/endless.c), the front end left at once as for the BLACKJACK item.
+ *
+ * Mission select is func_8003C14C, here in C with the twelfth tile: each mission's tile is a POLY_FT4 per buffer
+ * (D_801516A8[11][2]) of its thumbnail (one of TIM99.BIN's, put in VRAM when the screen opens), made from tables
+ * of 12 (the last never used: D_80073C9C its x on the screen, D_80073CB4 its y; the thumbnail's place in VRAM, its
+ * CLUT's). Over the chosen one the highlight (D_800DDF18[2]) pulses; the chosen mission's name is the text item
+ * under the tiles (func_80051420, from the names D_80073A94). The tiles are drawn by the frame (func_8002ABF0:
+ * the eleven added to the ordering table one after the other); ENDLESS's own tile goes in the chain right after
+ * the last of them, as the frame draws the text items (func_80051824 or func_800519D8, while the screen's text
+ * shows: D_80073960). Its prims are in PS1 memory: the MIPS code of func_80028644 (replaced above) past the jump
+ * that leads to its native code. The cursor (func_80033818, here in C too) goes over the twelve as a 4x3 grid.
+ *
+ * ENDLESS's thumbnail is a collage of six missions' thumbnails, in slanting strips, made in 15-bit colour from
+ * their TIMs in RAM and put in VRAM (640, 208), free on this screen. */
+s32 func_80055244(s32 pad);
+void func_80031754(void);
+void func_800548B0(char *name, u32 to);
+void func_800316D4(u8 a, u8 b, u8 c);
+void func_80039DE8(void *panel, s32 a, s32 b, s32 c);
+void func_8003A2C4(void *panel, s32 a, s32 b, s32 c);
+void func_8004A574(u32 tim);
+void func_80051420(char *text, s32 y);
+void func_80051C34(void);
+void func_8005550C(s32 sound, s32 arg1);
+s32 func_8004E55C(void);
+void func_80049B2C(void);
+s32 func_80031B54(void);
+s32 func_80031C2C(void);
+s32 func_80031EAC(void);
+s32 func_80031F74(void);
+void func_80031A4C(void);
+void func_8002A66C(void);
+void func_80051824_orig(u32 ot, s32 buf);
+void func_800519D8_orig(u32 ot, s32 buf);
+void gpu_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src);
+void port_endless_begin(u8 *args);
+
+#define U8(a) (*(u8 *)(a))
+#define S16(a) (*(s16 *)(a))
+#define U16(a) (*(u16 *)(a))
+#define S32(a) (*(s32 *)(a))
+#define TILES ((u8 *)0x801516A8u)     /* [11][2] POLY_FT4, 0x28 bytes each */
+#define HIGHLIGHT ((u8 *)0x800DDF18u) /* [2] POLY_FT4 */
+#define PANEL_TOP ((u8 *)0x80154368u) /* the screen's two title bars ([2] each) */
+#define PANEL_BAR ((u8 *)0x801543B8u)
+#define TAB_X ((s16 *)0x80073C9Cu)    /* the tiles' tables, 12 each */
+#define TAB_Y ((s16 *)0x80073CB4u)
+#define TAB_U ((s16 *)0x80073C6Cu)
+#define TAB_V ((s16 *)0x80073C84u)
+#define TAB_VX ((s16 *)0x80073CCCu)
+#define TAB_VY ((s16 *)0x80073CE4u)
+#define TAB_CX ((s16 *)0x80073CFCu)
+#define TAB_CY ((s16 *)0x80073D14u)
+#define NAMES ((char **)0x80073A94u)
+#define LEVEL_OF ((u8 *)0x800710D0u)  /* each mission's level */
+#define STATE (*(s32 *)0x80073E8Cu)   /* 1 choosing, 2 chosen, 3 back, 5 options */
+#define NAME_Y (*(s32 *)0x800DFE20u)
+#define PAD_NOW (*(s32 *)0x80151A1Cu)
+#define PAD_WAS (*(s32 *)0x800DFDE0u)
+#define ANY_MISSION (*(s32 *)0x80073E30u) /* the developers' code: every mission may be chosen */
+#define SINE ((s32 *)0x800893BCu)     /* (the high half of each word) */
+#define REPEAT (*(u32 *)0x800747B0u)  /* frames a direction has been held */
+#define ENDLESS 11
+#define OWN ((u8 *)0x80028650u)       /* ENDLESS's tile, [2] POLY_FT4 (func_80028644's dead MIPS code) */
+#define COLLAGE_X 640
+#define COLLAGE_Y 208
+
+static int in_mission_select, endless_briefing;
+static char endless_name[] = "ENDLESS";
+
+static u8 *tile(int m, int buf) {
+    return m == ENDLESS ? OWN + buf * 0x28 : TILES + m * 0x50 + buf * 0x28;
+}
+
+static int open_mission(int m) {
+    return m == ENDLESS || G_ARGS[0x170 + m] || ANY_MISSION;
+}
+
+/* a POLY_FT4 over (x, y), 116x40, of the texture at (u, v) */
+static void quad(u8 *p, s32 x, s32 y, u32 u, u32 v, u16 clut, u16 tpage) {
+    U8(p + 3) = 9;
+    U8(p + 7) = 0x2C;
+    U8(p + 4) = U8(p + 5) = U8(p + 6) = 0x80;
+    U16(p + 0x16) = tpage;
+    U16(p + 0xE) = clut;
+    U8(p + 0xC) = u, U8(p + 0xD) = v;
+    U8(p + 0x14) = u + 0x74, U8(p + 0x15) = v;
+    U8(p + 0x1C) = u, U8(p + 0x1D) = v + 0x28;
+    U8(p + 0x24) = u + 0x74, U8(p + 0x25) = v + 0x28;
+    S16(p + 8) = x, S16(p + 0xA) = y;
+    S16(p + 0x10) = x + 0x74, S16(p + 0x12) = y;
+    S16(p + 0x18) = x, S16(p + 0x1A) = y + 0x28;
+    S16(p + 0x20) = x + 0x74, S16(p + 0x22) = y + 0x28;
+}
+
+/* the collage: six thumbnails' strips (their TIMs at 0x8017ECD0, 0x1440 bytes each: CLUT, then 116x40 at 8 bits) */
+static void make_collage(void) {
+    static const int from[6] = {0, 1, 4, 5, 8, 10};
+    static u16 img[116 * 40];
+    int x, y;
+    for (y = 0; y < 40; y++)
+        for (x = 0; x < 116; x++) {
+            int at = x + (39 - y) / 3, k = at * 6 / (116 + 13), edge = (at * 6) % (116 + 13);
+            u8 *tim = (u8 *)0x8017ECD0u + from[k] * 0x1440;
+            u16 *clut = (u16 *)(tim + 0x14);
+            u8 *pix = tim + 8 + S32(tim + 8) + 12;
+            img[y * 116 + x] = k && edge < 6 ? 0x8000 | (6 << 10) | (20 << 5) | 25 : clut[pix[y * 116 + x]];
+        }
+    gpu_load_image(COLLAGE_X, COLLAGE_Y, 116, 40, img);
+}
+
+/* the frame's text items, drawn after the tiles: ENDLESS's tile chained after the last mission's */
+static void link_own(s32 buf) {
+    u8 *last = TILES + 10 * 0x50 + buf * 0x28, *own = OWN + buf * 0x28;
+    if (!in_mission_select)
+        return;
+    S32(own) = (S32(own) & 0xFF000000) | (S32(last) & 0xFFFFFF);
+    S32(last) = (S32(last) & 0xFF000000) | ((u32)own & 0xFFFFFF);
+}
+
+void func_80051824(u32 ot, s32 buf) {
+    link_own(buf);
+    func_80051824_orig(ot, buf);
+}
+
+void func_800519D8(u32 ot, s32 buf) {
+    link_own(buf);
+    func_800519D8_orig(ot, buf);
+}
+
+/* the chosen tile's corners for the highlight (buffer buf) */
+static void highlight(int buf) {
+    u8 *h = HIGHLIGHT + buf * 0x28, *t = tile(CURSOR, buf);
+    S32(h + 8) = S32(t + 8);
+    S32(h + 0x10) = S32(t + 0x10);
+    S32(h + 0x18) = S32(t + 0x18);
+    S32(h + 0x20) = S32(t + 0x20);
+}
+
+/* one of the title bars' two halves: w wide from texel u, 20 high */
+static void panel(u8 *p, s32 x, s32 y, s32 w, u32 u, u16 tpage) {
+    quad(p, x, y, u, 0, 0x7968, tpage);
+    U8(p + 0x14) = U8(p + 0x24) = u + w;
+    U8(p + 0x1D) = U8(p + 0x25) = 0x14;
+    S16(p + 0x10) = S16(p + 0x20) = x + w;
+    S16(p + 0x1A) = S16(p + 0x22) = y + 0x14;
+}
+
+static void shade(int buf) {
+    int m;
+    for (m = 0; m <= ENDLESS; m++) {
+        u8 *t = tile(m, buf), c = !open_mission(m) ? 0x32 : m == CURSOR ? 0xC0 : 0xA0;
+        U8(t + 4) = U8(t + 5) = U8(t + 6) = c;
+    }
+}
+
+static void show_name(void) {
+    func_80051420(CURSOR == ENDLESS ? endless_name : NAMES[CURSOR], NAME_Y);
+    func_80051768(0, *(s16 *)0x80153E08u, *(s16 *)0x80153E0Au);
+}
+
+void func_8003C14C(void) {
+    u8 *a = G_ARGS;
+    s32 b, m, frame = 0;
+    func_8002A66C();
+    func_800548B0((char *)0x8008E344u, 0x801A9A44u); /* MSSNSEL.TIM */
+    func_80031754();
+    *(s32 *)0x80073924u = 1;
+    PAD_WAS = func_80055244(0);
+    PAD_NOW = PAD_WAS;
+    if (*(s16 *)0x80073E68u > 0)
+        CURSOR = *(s16 *)0x80073E68u;
+    CURSOR = (a[0] & 1) ? *(s16 *)0x80073E60u : 0;
+    a[0x170] = 1;
+    if (CURSOR < ENDLESS)
+        a[0x170 + CURSOR] = 1;
+    CURSOR_END = ENDLESS + 1;
+    CURSOR_WAS = CURSOR;
+    /* the middle row under the others' columns, and ENDLESS at its end */
+    TAB_X[4] = TAB_X[0], TAB_X[5] = TAB_X[1], TAB_X[6] = TAB_X[2];
+    for (b = 0; b < 2; b++) {
+        s32 y0 = *(s16 *)(a + 0x18E) * (1 - b); /* (the display's offset in the buffer) */
+        panel(PANEL_TOP + b * 0x28, 0x32, y0 + 0x17, 0x7F, 0x80, 0x1C);
+        panel(PANEL_BAR + b * 0x28, 0xB1, y0 + 0x17, 0x73, 0, 0x1D);
+        for (m = 0; m < ENDLESS; m++) {
+            u8 *t = tile(m, b);
+            quad(t, TAB_X[m], TAB_Y[m] + y0, (u8)TAB_U[m], (u8)TAB_V[m], (TAB_CY[m] << 6) | ((TAB_CX[m] >> 4) & 0x3F),
+                 ((TAB_VY[m] & 0x100) >> 4) | ((TAB_VX[m] & 0x3FF) >> 6) | 0x80 | ((TAB_VY[m] & 0x200) * 4));
+            if (m & 1) /* (as the screen makes them: the odd ones a texel narrower) */
+                U8(t + 0x14) -= 1, U8(t + 0x24) -= 1;
+        }
+        quad(tile(ENDLESS, b), TAB_X[3], TAB_Y[4] + y0, 0, COLLAGE_Y & 0xFF, 0, (2 << 7) | (COLLAGE_X >> 6));
+        quad(HIGHLIGHT + b * 0x28, 0, 0, 0, 0x16, 0x7AE8, 0x1C);
+        U8(HIGHLIGHT + b * 0x28 + 0x14) = U8(HIGHLIGHT + b * 0x28 + 0x24) = 0x78;
+        U8(HIGHLIGHT + b * 0x28 + 0x1D) = U8(HIGHLIGHT + b * 0x28 + 0x25) = 0x40;
+        highlight(b);
+    }
+    func_8004A574(0x801789D8u);
+    *(s32 *)0x80073984u = 1;
+    for (m = 0; m < ENDLESS; m++) /* the thumbnails */
+        func_8004A574(0x8017ECD0u + m * 0x1440);
+    make_collage();
+    *(s32 *)0x800739D4u = 1;
+    func_8004A574(0x801793A0u);
+    *(s32 *)0x800739D8u = 1;
+    func_8004A574(0x8018CCD0u);
+    func_8004A574(0x8018EA30u);
+    func_8004A574(0x8018CB90u);
+    func_8004A574(0x8018EB74u);
+    func_8004A574(0x801987C0u);
+    func_8004A574(0x80198900u);
+    *(s32 *)0x800739F4u = 1;
+    *(s32 *)0x800739FCu = 1;
+    *(s32 *)0x800739F8u = 1;
+    *(s32 *)0x8017399Cu = 0;
+    NAME_Y = 0xBE;
+    *(s32 *)0x80174F68u = 0x16;
+    show_name();
+    *(s32 *)0x80073960u = 1;
+    *(s32 *)0x800739DCu = 2;
+    *(s32 *)0x800739E0u = 1;
+    STATE = 1;
+    func_800316D4(0, 0, 0);
+    *(s32 *)0x80073914u = 0;
+    shade(0);
+    shade(1);
+    in_mission_select = 1;
+    func_80039DE8(PANEL_TOP, 2, 0x32, 0xF3);
+    *(u8 *)0x80073E3Fu = 1;
+    while (STATE == 1) {
+        s32 buf = *(s32 *)(a + 0x118), pulse;
+        u8 *h = HIGHLIGHT + buf * 0x28;
+        func_8002ABF0();
+        func_80032048();
+        STATE = func_80033818();
+        if (CURSOR != CURSOR_WAS) {
+            func_80051C34();
+            show_name();
+            frame = 0;
+        }
+        highlight(buf);
+        pulse = (((s16)(SINE[(frame << 6) & 0xFFF] >> 16) * 100) >> 12) + 100;
+        U8(h + 4) = U8(h + 5) = U8(h + 6) = pulse;
+        shade(buf);
+        if (STATE == 2) {
+            if (!open_mission(CURSOR))
+                STATE = 1;
+            else if (CURSOR != ENDLESS) {
+                *(s16 *)(a + 0x188) = LEVEL_OF[CURSOR];
+                *(s16 *)(a + 0x18A) = CURSOR;
+            }
+        }
+        frame++;
+    }
+    *(u8 *)0x80073E3Fu = 0;
+    highlight(0);
+    highlight(1);
+    shade(0);
+    shade(1);
+    func_8003A2C4(PANEL_TOP, 2, 0x32, 0xF3);
+    func_80031754();
+    in_mission_select = 0;
+    if (STATE == 2 && CURSOR == ENDLESS) { /* endless mode: its first room's mission, after its briefing */
+        port_endless_begin(a);
+        endless_briefing = 1;
+        port_log("endless: chosen on mission select\n");
+    }
+}
+
+/* The cursor on mission select: as the screen's own step (its sounds, Cross or Start to choose, Triangle back,
+ * Square options; a direction held repeats), over the 4x3 grid with ENDLESS at the middle row's end */
+static void step(int dir) {
+    /* the grid: rows 0 1 2 3 / 4 5 6 11 / 7 8 9 10 */
+    static const s8 next[4][12] = {
+        {1, 2, 3, 4, 5, 6, 11, 8, 9, 10, 0, 7},  /* right */
+        {10, 0, 1, 2, 3, 4, 5, 11, 7, 8, 9, 6},  /* left */
+        {4, 5, 6, 11, 7, 8, 9, 0, 1, 2, 3, 10},  /* down */
+        {7, 8, 9, 10, 0, 1, 2, 4, 5, 6, 11, 3},  /* up */
+    };
+    int i;
+    REPEAT = 0;
+    for (i = 0; i < 12; i++) { /* on to the next open one that way */
+        CURSOR = next[dir][CURSOR];
+        if (open_mission(CURSOR))
+            break;
+    }
+}
+
+s32 func_80033818(void) {
+    if (func_8004E55C())
+        return 4;
+    if (*(s32 *)0x80073E28u) {
+        func_80049B2C();
+        return 1;
+    }
+    CURSOR_WAS = CURSOR;
+    if (func_80031B54())
+        return 3;
+    if (func_80031C2C() || func_80031EAC())
+        return 2;
+    if (func_80031F74())
+        return 5;
+    func_80031A4C();
+    {
+        u32 held = (u32)(S32(G_ARGS + 0x11C) >> 2) < REPEAT; /* held long enough to repeat */
+        if (*(s16 *)0x80160FB2u && (held || !*(s16 *)0x800DEBF4u))
+            step(0);
+        if (*(s16 *)0x80153CFCu && (held || !*(s16 *)0x80097E44u))
+            step(1);
+        if (*(s16 *)0x80153D62u && (held || !*(s16 *)0x80098C10u))
+            step(2);
+        if (*(s16 *)0x800DFDF8u && (held || !*(s16 *)0x80160FE0u))
+            step(3);
+    }
+    if (CURSOR != CURSOR_WAS)
+        func_8005550C(1, 0);
+    if (CURSOR < 0)
+        CURSOR = 0;
+    if (CURSOR > ENDLESS)
+        CURSOR = ENDLESS;
+    return 1;
+}
+
+/* Endless mode's briefing, after ENDLESS is chosen: the mission briefing screen (func_800443D8) with the mode's
+ * rules, in C: its title bar and the three portraits, each a page (the cursor goes over them: func_80032CA0) with
+ * a heading and lines of text (made as text items, as the screen's own: func_8005133C), but no film of M and no
+ * gadgets. NEXT starts the run (the front end leaves for its first room's mission, as for a mission briefed);
+ * BACK gives it up and goes back to mission select. */
+void func_800443D8_orig(void);
+void func_800512FC(s32 on);
+void func_8002A6C0(void);
+void func_800540DC(s32 arg0);
+void func_800540A8(void);
+s32 func_80032CA0(void);
+void port_endless_cancel(void);
+#define TEXT_X (*(s32 *)0x800DFDF4u)
+#define TEXT_Y (*(s32 *)0x800DFE20u)
+#define LINE_H (*(s32 *)0x80174F68u)
+
+static char brief_text[3][6][40];
+static const char *const brief_src[3][6] = {
+    {"m's briefing", "survive. that is all", "rooms from every mission", "fight to open each exit",
+     "the enemy keeps coming", 0},
+    {"r's gadgets", "your weapons carry over", "guards drop armor, ammo", "no medical kits",
+     "take the heavy armor", 0},
+    {"moneypenny's advice", "keep moving, james", "quick kills score double", "camping costs points",
+     "no cheats on the table", 0},
+};
+
+static void brief_item(char *text, s32 x, s32 y) {
+    func_8005133C(text, x, y);
+    func_80051768(ITEMS - 1, *(s16 *)0x80153E08u, *(s16 *)0x80153E0Au);
+}
+
+static void brief_page(int page) {
+    static char name[] = "ENDLESS", dash[5][2];
+    int i;
+    func_80051C34();
+    func_8005133C(name, TEXT_X - 0x18, TEXT_Y);
+    func_80051768(0, *(s16 *)0x80153E08u, *(s16 *)0x80153E0Au);
+    *(s32 *)0x800739A4u = page == 0;
+    *(s32 *)0x800739A8u = page == 1;
+    *(s32 *)0x800739ACu = page == 2;
+    *(s32 *)0x800739B0u = 0;
+    strcpy(brief_text[page][0], brief_src[page][0]);
+    brief_item(brief_text[page][0], TEXT_X - 0x54, TEXT_Y + 0x10);
+    for (i = 1; brief_src[page][i]; i++) {
+        s32 y = i * LINE_H + TEXT_Y + 0x46;
+        strcpy(dash[i - 1], "-");
+        brief_item(dash[i - 1], TEXT_X - 0x60, y);
+        strcpy(brief_text[page][i], brief_src[page][i]);
+        brief_item(brief_text[page][i], TEXT_X - 0x54, y);
+    }
+}
+
+/* a POLY_FT4 of the screen's: texture (u0, v0)-(u1, v1), on the screen (x0, y0)-(x1, y1) */
+static void brief_quad(u8 *p, u16 tpage, u16 clut, u32 u0, u32 v0, u32 u1, u32 v1, s32 x0, s32 y0, s32 x1, s32 y1) {
+    quad(p, x0, y0, u0, v0, clut, tpage);
+    U8(p + 0x14) = U8(p + 0x24) = u1;
+    U8(p + 0x1D) = U8(p + 0x25) = v1;
+    S16(p + 0x10) = S16(p + 0x20) = x1;
+    S16(p + 0x1A) = S16(p + 0x22) = y1;
+}
+
+void func_800443D8(void) {
+    u8 *a = G_ARGS;
+    s32 b, y0;
+    if (!endless_briefing) {
+        func_800443D8_orig();
+        return;
+    }
+    endless_briefing = 0;
+    func_800548B0((char *)0x8008EA10u, 0x801A9A44u); /* BRIEFBG.TIM */
+    func_80031754();
+    *(s32 *)0x80073924u = 1;
+    PAD_WAS = func_80055244(0);
+    PAD_NOW = PAD_WAS;
+    CURSOR = 0;
+    CURSOR_END = 3;
+    CURSOR_WAS = CURSOR;
+    func_800512FC(1);
+    for (b = 0; b < 2; b++) {
+        y0 = S16(a + 0x18E) * (1 - b);
+        brief_quad((u8 *)0x80097DF0u + b * 0x28, 0x1D, 0x796C, 0x40, 0xA6, 0xDC, 0xBA, 0x32, y0 + 0x17, 0xCE, y0 + 0x2B);
+        brief_quad((u8 *)0x80097E48u + b * 0x28, 0x9F, 0x7C28, 0, 0, 0x58, 0x32, 0x63, y0 + 0x35, 0xBB, y0 + 0x67);
+        brief_quad((u8 *)0x800DEC00u + b * 0x28, 0x9F, 0x7CE8, 0, 0x96, 0x58, 0xC8, 0x63, y0 + 0x35, 0xBB, y0 + 0x67);
+        brief_quad((u8 *)0x80098BB8u + b * 0x28, 0x9F, 0x7C68, 0, 0x32, 0x58, 0x64, 0x63, y0 + 0x6A, 0xBB, y0 + 0x9C);
+        brief_quad((u8 *)0x800DEFA0u + b * 0x28, 0x9F, 0x7CA8, 0, 0x64, 0x58, 0x96, 0x63, y0 + 0x9F, 0xBB, y0 + 0xD1);
+    }
+    func_8004A574(0x8019ADBCu);
+    *(s32 *)0x800739A0u = 1;
+    *(s32 *)0x800739DCu = 2;
+    *(s32 *)0x800739E0u = 1;
+    *(s32 *)0x800739F4u = 1;
+    *(s32 *)0x800739FCu = 1;
+    *(s32 *)0x8017399Cu = 0;
+    TEXT_X = 0x12E;
+    TEXT_Y = 0x39;
+    LINE_H = 0xD;
+    *(s32 *)0x80073960u = 1;
+    STATE = 1;
+    *(s32 *)0x800747ACu = 0;
+    func_8004A574(0x8019BB5Cu); /* the portraits */
+    func_8004A574(0x8019CEACu);
+    func_8004A574(0x8019F54Cu);
+    brief_page(0);
+    func_80039DE8((void *)0x80097DF0u, 1, 0x32, 0x9C);
+    func_8002A6C0();
+    func_800540DC(*(s32 *)0x80074774u);
+    while (STATE == 1) {
+        func_8002ABF0();
+        func_80032048();
+        STATE = func_80032CA0();
+        if (CURSOR != CURSOR_WAS)
+            brief_page(CURSOR);
+    }
+    func_800540A8();
+    func_8003A2C4((void *)0x80097DF0u, 1, 0x32, 0x84);
+    func_800512FC(0);
+    func_80031754();
+    if (STATE == 3) { /* BACK: no run */
+        port_endless_cancel();
+        port_log("endless: briefing left: no run\n");
+    }
 }
