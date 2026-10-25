@@ -119,6 +119,17 @@ void port_endless_begin(u8 *args) {
     port_endless_logf(-1, "the run starts in level %d point %d", rooms[room].level, rooms[room].point);
 }
 
+/* the level's mod: RESTART MISSION in a run: the whole run again, fresh (a new first room, the starting kit, its
+ * heavy armour); the restarted mission's main returns at once for it */
+void port_endless_restart(void) {
+    int was = rooms[room].level;
+    begin();
+    next_room = room;
+    room = -1;
+    port_endless_logf(-1, "restart: a fresh run from level %d point %d (from level %d)", rooms[next_room].level,
+                      rooms[next_room].point, was);
+}
+
 /* fixes/shell.c: the run given up at its briefing */
 void port_endless_cancel(void) {
     port_endless = 0;
@@ -148,7 +159,7 @@ int port_endless_start(void) {
 /* main.c, before a level's main runs: in a run, the room's point copied over the level's start point */
 void port_endless_level(const PortModule *m) {
     s16 *start;
-    if (!port_endless || !m->level || room < 0)
+    if (!port_endless || !m->level || (room < 0 && next_room < 0))
         return;
     if (next_room >= 0) {
         room = next_room;
@@ -373,6 +384,14 @@ void port_endless_returned(const PortModule *m, u8 *args) {
     int l;
     if (!port_endless || !m->level)
         return;
+    if (room < 0 && next_room >= 0) { /* (RESTART MISSION: a fresh run, the first room next; nothing counted) */
+        l = rooms[next_room].level;
+        *(u32 *)args |= 0x40;
+        *(s16 *)(args + 0x188) = l;
+        *(s16 *)(args + 0x18A) = level_mission[l];
+        sprintf((char *)(args + 0x234), "\\L%02d\\LEVEL%02d.EXE;1", l, l);
+        return;
+    }
     /* the mission's counts (cleared as each starts: kills, head shots, shots, hits; its time) */
     port_endless_run.kills += *(u16 *)(args + 0x2C4);
     port_endless_run.headshots += *(u16 *)(args + 0x2C6);

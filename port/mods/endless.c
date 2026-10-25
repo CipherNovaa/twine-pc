@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020
+ * MOD_REPLACES_NATIVE: func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -73,6 +73,7 @@ extern s16 D_8009CAA4;   /* a menu over the mission (its frame loop runs the men
 extern s32 g_DevMenu[];
 extern u32 g_PadPressed; /* the buttons pressed this frame */
 u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z); /* makes a placed thing from its record */
+u8 *func_8003C1BC_orig(s32 *rec, s32 x, s32 y, s32 z);
 u8 *func_80039A9C(s32 arg0, u8 type, s32 kind);  /* makes an object of a kind (4: a pickup) at MAKE_AT */
 void func_800395E8(u8 *o);                       /* takes an object out of the game */
 void func_8005E020(u8 *o);                       /* a person hit: hurt, or falls */
@@ -102,6 +103,7 @@ void port_endless_unrank(const char *why);
 int port_endless_room_started(void);
 void port_endless_score(int points);
 void port_endless_ungate(int level);
+void port_endless_restart(void);
 void quick_grenade_give(void);
 
 #define OBJ(i) ((u8 *)D_800AFFC8 + (i) * 0x124)
@@ -291,18 +293,34 @@ static void draw_weapon(void) {
     EndlessCarry *c = &port_endless_carry;
     const char *want = c->valid ? c->in_hand : "WOLFRAM P2K";
     int i;
+    static const char *const guns[] = {"ROCKET LAUNCHER", "GRENADE LAUNCHER", "IAC DEFENDER", "KAZAKOVICH KA-57",
+                                       "FRINESI AUTO", "MEYER TMP", "INGALLS TYPE 20", "AR36 SNIPER",
+                                       "FRINESI SHOTGUN", "KOFFLER KS5", "BELGIQUE PS100", "WOLFRAM P2K", 0};
+    int g;
     for (i = 0; i < SLOTS; i++) {
         Weapon *w = &g_Weapons[i];
         if (!strncmp((char *)w->pad0, want, 23)) {
             if (!c->valid) /* (the run's first room: the pistol his) */
                 w->flags |= 0x1800;
-            if ((w->flags & 0x1800) == 0x1800 && i != D_800B0DD4) {
-                draw_slot = i;
-                ELOG("weapon: %s to be drawn", want);
+            if ((w->flags & 0x1800) == 0x1800) {
+                if (i != D_800B0DD4)
+                    draw_slot = i;
+                ELOG("weapon: %s drawn", want);
+                return;
             }
-            return;
         }
     }
+    /* the mission hasn't his (or he hasn't it here): its best gun he has, with ammo */
+    for (g = 0; guns[g]; g++)
+        for (i = 0; i < SLOTS; i++) {
+            Weapon *w = &g_Weapons[i];
+            if (!strncmp((char *)w->pad0, guns[g], 23) && (w->flags & 0x1800) == 0x1800 && w->ammo > 0) {
+                if (i != D_800B0DD4)
+                    draw_slot = i;
+                ELOG("weapon: %s drawn (no %s here)", guns[g], want);
+                return;
+            }
+        }
 }
 
 /* the section's floor's height under (x, z) (-0x7FFF: none of it there) */
@@ -394,11 +412,30 @@ static int flood(void) {
     return n;
 }
 
-/* One of the mission's story people, not a guard: a kind it places only once (an ally, a target, a boss), or not
- * of the guards' sort (the people types' +8: 0 the guards and Bond; 1 and 2 civilians, women, scientists, the
- * assassin) */
-static int story_person(u32 t, s32 *counts) {
-    return t && TYPE_DEF(t)[1] == 6 && t != ((u8 *)g_Player)[6] && (counts[t] < 2 || TYPE_DEF(t)[8] != 0);
+/* The fighters among the mission's people (workbench/research/STAGE2_REPORT.md, Q5): a guard's AI script (each
+ * level's scripts by their index, (w4 >> 20) & 7 in a record, +0xA7 in a person: GOON, HEADGOON, KYLE, VGOON,
+ * BGOON, GUARD, GOONCH, COREGOON, SNIPER, PILOT), a guard's health (the story's people have 7000-50000), and
+ * hittable (hit mask +0x28 in the type, +0xE in a person, not 0x7FFF; not passed by explosions, +0x4C & 0x400).
+ * Guards that may not be killed (+0x4C & 0x40000000: Night Watch's, Courier's bank guards) fight in a run. */
+static const u8 guard_scripts[12] = {
+    0, 0x07 /* L01 GOON PILOT SNIPER */, 0x43 /* L02 HEADGOON GOON1 KYLE */, 0x11 /* L03 GOON SNIPER */,
+    0x01 /* L04 VGOON */, 0x01 /* L05 GOON05 */, 0x01 /* L06 GOON */, 0xE1 /* L07 GOON1B BGOON BGOON2 GUARD */,
+    0x0E /* L08 GOONCH BGOON2 SNIPER */, 0x01 /* L09 GOON */, 0x21 /* L10 GOON COREGOON */, 0x01 /* L11 GOON */,
+};
+
+static int fighter_type(u32 t, int script) {
+    u8 *def = TYPE_DEF(t);
+    return t && def[1] == 6 && t != ((u8 *)g_Player)[6] && (guard_scripts[g_Args->level % 12] >> script & 1) &&
+           *(s32 *)(def + 0x20) <= 5000 && *(u16 *)(def + 0x28) != 0x7FFF && !(*(s32 *)(def + 0x40) & 0x400);
+}
+
+static int fighter(u8 *o) { /* (a person now: scripts change these as they go) */
+    return fighter_type(o[6], o[0xA7]) && *(u16 *)(o + 0xE) != 0x7FFF && !(*(u16 *)(o + 0xE) & 0x800) &&
+           !(*(s32 *)(o + 0x4C) & 0x400);
+}
+
+static int story_person(u32 t, s32 *rec) { /* (a placed person who isn't a fighter) */
+    return t && TYPE_DEF(t)[1] == 6 && t != ((u8 *)g_Player)[6] && !fighter_type(t, (rec[4] >> 20) & 7);
 }
 
 /* The mission's story people, out: those of a kind it places only once (counts: how many of each kind it places),
@@ -409,14 +446,14 @@ static void no_story_people(s32 *counts) {
         for (j = 0; j < D_8009CF6C[i]; j++) {
             s32 *p = D_8009CF70[i] + j * 6;
             u32 t = p[3] & 0xFF;
-            if (story_person(t, counts)) {
+            if (story_person(t, p)) {
                 ELOG("room: story person (type %d) left out of the section", t);
                 p[3] = (p[3] & ~0xFF) | 0x100; /* (no kind, and made) */
             }
         }
     for (i = D_800B0DA0; i <= D_800B07B0; i++) {
         u8 *o = OBJ(i);
-        if (o != g_Player && o[4] && story_person(o[6], counts) && !is_copy(o)) {
+        if (o != g_Player && o[4] && o[5] == 6 && !fighter(o) && !is_copy(o)) {
             ELOG("room: story person (type %d) taken out", o[6]);
             func_800395E8(o);
         }
@@ -450,7 +487,7 @@ static void room_start(void) {
                 doors[door_count][2] = p[2] + D_800D2FB0[2];
                 door_count++;
             }
-            if (!t || TYPE_DEF(t)[1] != 6 || story_person(t, counts) || t == ((u8 *)g_Player)[6] || kind_count == KINDS)
+            if (!t || TYPE_DEF(t)[1] != 6 || story_person(t, p) || kind_count == KINDS)
                 continue;
             for (k = 0; k < kind_count && (kinds[k][3] & 0xFF) != t; k++)
                 ;
@@ -458,11 +495,32 @@ static void room_start(void) {
                 memcpy(kinds[kind_count++], p, sizeof(kinds[0]));
         }
     no_story_people(counts);
+    /* nobody standing where Bond arrives: one there is moved a step aside (a reversed entry may be a guard's post) */
+    for (i = D_800B0DA0; i <= D_800B07B0; i++) {
+        u8 *o = OBJ(i);
+        if (o != g_Player && o[4] && dist2(POS(o)[0], POS(o)[2], entry[2], entry[4]) < 700 &&
+            POS(o)[1] - entry[3] < 1500 && entry[3] - POS(o)[1] < 1500) {
+            s32 k, d[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+            for (k = 0; k < 4; k++) {
+                s32 x = entry[2] + d[k][0] * 900, z = entry[4] + d[k][1] * 900, h = floor_at(x, POS(o)[1] - 400, z);
+                if (h != -0x7FFF && h - POS(o)[1] < 300 && POS(o)[1] - h < 300) {
+                    POS(o)[0] = x, POS(o)[2] = z, POS(o)[1] = h;
+                    break;
+                }
+            }
+            ELOG("room: person type %d at Bond's arrival moved %s", o[6], k < 4 ? "aside" : "nowhere: taken out");
+            if (k == 4)
+                func_800395E8(o);
+        }
+    }
     read_floor();
     if (!segment)
         carry_in(); /* (Bond as he left the last room, before the room's first frame) */
-    if (port_endless_room_started() > 1)
-        port_endless_unrank("room restarted");
+    if (port_endless_room_started() > 1) { /* RESTART MISSION: the whole run again, fresh */
+        ELOG("restart: the run begins again");
+        port_endless_restart();
+        g_Args->flags |= 0x40;
+    }
     ELOG("room start: level %d section %d at %d %d %d, wave %d: %d kinds of guards, %d floor polygons, %d doorways, "
          "people slots %d-%d", g_Args->level, D_800D2F8C, entry[2], entry[3], entry[4], port_endless_wave(),
          kind_count, faces, door_count, D_800B0DA0, D_800B07B0);
@@ -650,6 +708,7 @@ static void spawn(const char *why) {
     rec[2] = mid[i][2] - D_800D2FB0[2];
     rec[3] &= ~0x300;           /* not made yet; not asleep */
     rec[4] &= ~(0x1F << 7);     /* no path to walk (the kind's was in its own section) */
+    rec[4] &= ~(0xFF << 12);    /* nor the pose it was placed in (a seated guard's, at a desk) */
     o = func_8003C1BC(rec, mid[i][0], mid[i][1], mid[i][2]);
     for (h = 0; !o && h < kind_count; h++) { /* (the kinds in turn, a slot freed for each) */
         rec[3] = (rec[3] & ~0x3FF) | (kinds[h][3] & 0xFF);
@@ -834,7 +893,17 @@ void endless_frame(void) {
     n = alive(&own);
     for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
         u8 *o = OBJ(i);
-        s32 h = o[4] ? HEALTH(o) : 0;
+        s32 h;
+        if (o != g_Player && o[4] && o[5] == 6) {
+            if (!fighter(o)) { /* (made a story person by its script since: Electra's hit mask, say) */
+                ELOG("room: person type %d (script %d, hit mask %04X) no fighter: taken out", o[6], o[0xA7],
+                     *(u16 *)(o + 0xE));
+                func_800395E8(o);
+                continue;
+            }
+            *(s32 *)(o + 0x4C) &= ~0x40000000; /* (a guard who may not be killed: he may in a run) */
+        }
+        h = o[4] ? HEALTH(o) : 0;
         if (o != g_Player && was_alive[i] > 0 && h <= 0 && o[4]) {
             s32 *src = *(s32 **)(o + 0x60);
             int k;
@@ -1012,6 +1081,20 @@ void RestartPrompt_Open(void) {
     ELOG("run end: Bond is dead");
     D_8009CAA4 = 0;
     g_Args->flags |= 0x80;
+}
+
+/* A placed thing made as Bond nears it (the section's spawner): in a run, never a person who isn't a fighter (the
+ * story's people: not even for the fade-in's frames) */
+u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z) {
+    s16 e[5];
+    u32 t = rec[3] & 0xFF;
+    if (port_endless_room(e) && g_Args && t && story_person(t, rec)) {
+        if (!port_subframe)
+            ELOG("room: story person (type %d, script %d) not made", t, (rec[4] >> 20) & 7);
+        rec[3] |= 0x100; /* (made, as far as the spawner knows) */
+        return 0;
+    }
+    return func_8003C1BC_orig(rec, x, y, z);
 }
 
 /* A person hit: one that is hit again and again without being hurt (a story person the game won't let die,

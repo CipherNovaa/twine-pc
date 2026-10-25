@@ -411,6 +411,8 @@ s32 func_8005133C(char *text, s32 x, s32 y) {
     static char line[48];
     EndlessRunStats *r = &port_endless_run;
     if (in_endless_stats && text) {
+        if (getenv("TWINE_ENDLESS_DUMP"))
+            port_endless_logf(-1, "stats text \"%s\" at %d %d (unranked %d)", text, x, y, port_endless_unranked);
         if (y == 56 && x > 89 && *text >= 'A' && *text <= 'Z') { /* the mission's name, centred over the lines */
             x += ((s32)strlen(text) - 7) * 15 / 4;
             strcpy(text = line, "ENDLESS"); /* (in a buffer: the text is written over, capitalized) */
@@ -420,7 +422,11 @@ s32 func_8005133C(char *text, s32 x, s32 y) {
             snprintf(text = line, sizeof(line), "rooms cleared.%d", r->rooms);
         else if (!strncmp(text, "health", 6))
             snprintf(text = line, sizeof(line), "waves.........%d", r->rooms + 1);
-        else if (!strncmp(text, "mission score:", 14)) {
+        else if (port_endless_unranked && strstr(text, "hi-score")) { /* (why it takes no place in the table) */
+            s32 was = (s32)strlen(text);
+            snprintf(text = line, sizeof(line), "unranked: %s", port_endless_unranked_why);
+            x -= ((s32)strlen(line) - was) * 15 / 4; /* (centred as the heading was) */
+        } else if (!strncmp(text, "mission score:", 14)) {
             MISSION_SCORE = r->score;
             snprintf(text = line, sizeof(line), "endless score:%d", r->score);
         }
