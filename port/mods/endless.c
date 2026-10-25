@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114
+ * MOD_REPLACES_NATIVE: func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -166,6 +166,7 @@ static AiEvent hunt_ev[64];
 static s32 last_seen_at = -1, bond_still_since, nav_goal[8][3], drive_rest[64], spread_until[64], shots_held, shots_fired;
 static u8 driving[64], seen_for[64], react[64];
 static u8 *cover_state_ptr(void);
+static void nav_reset(void);
 
 /* the room's own fixed guards (snipers, grenade throwers, posts: those of the game's standing AIs, 2-5) that fell,
  * to come back to their places half a minute later */
@@ -636,6 +637,7 @@ static void room_start(void) {
     for (i = 0; i < 64; i++)
         hunt_ev[i].type = 0x1C, driving[i] = 0, seen_for[i] = 0, drive_rest[i] = spread_until[i] = 0; /* (none yet) */
     memset(cover_state_ptr(), 0, 64);
+    nav_reset();
     memset(nav_goal, 0, sizeof(nav_goal));
     last_seen_at = -1, bond_still_since = 0;
     memset(hunters, 0, sizeof(hunters));
@@ -929,6 +931,7 @@ static void spawn(const char *why) {
     rec[4] &= ~(0x1F << 7);     /* no path to walk (the kind's was in its own section) */
     rec[4] &= ~(0xFF << 12);    /* nor the pose it was placed in (a seated guard's, at a desk: */
     rec[4] &= ~(7 << 24);       /* its start pose and state, w4's bits 12-19 and 24-26, and the flags' 14-26) */
+    rec[4] &= ~(3u << 27);      /* (and bits 27-28: Meltdown's kinds walk a set line with them, every copy to one spot) */
     rec[3] &= ~(0x1FFF << 14);
     rec[3] &= ~0x400;           /* (and the pose's flag) */
     making = 1;
@@ -1163,6 +1166,14 @@ static u16 navd[8][FACES];
 static s32 way[64][3], drive_moved[64][3], drive_check[64], on_floor[64][3], on_floor_at[64];
 static u8 drive_unstick[64], idle[64], seen_sight[64], spread_tries[64];
 static s32 ring_off[64];
+static s32 nav_blocked[FACES]; /* (until when a polygon is left out of paths: guards wedged on it) */
+static s16 drive_anim[64];
+static s32 hold_ground[64];
+static void nav_reset(void) {
+    memset(nav_blocked, 0, sizeof(nav_blocked));
+    memset(drive_anim, 0xFF, sizeof(drive_anim));
+    memset(hold_ground, 0, sizeof(hold_ground));
+}
 /* COVER: a guard in a fight who is hit, or finds Bond's gun on him, runs to a place close by out of Bond's sight,
  * holds there a moment, steps back out to where he could see him and shoots a while, and so on: never more than two
  * at once in cover (the others keep him pinned) */
@@ -1241,7 +1252,8 @@ static void nav_build(int h, s32 x, s32 y, s32 z) { /* (distances in polygons to
                 continue;
             for (j = vfirst[f[k]]; j < vfirst[f[k] + 1]; j++) {
                 int n = vfaces[j];
-                if (navd[h][n] == 0xFFFF && !shut[n] && mid[n][1] - mid[c][1] < 700 && mid[c][1] - mid[n][1] < 700) {
+                if (navd[h][n] == 0xFFFF && !shut[n] && mid[n][1] - mid[c][1] < 700 && mid[c][1] - mid[n][1] < 700 &&
+                    nav_blocked[n] <= room_frames) {
                     navd[h][n] = navd[h][c] + 1;
                     queue[tail++] = n;
                 }
@@ -1392,6 +1404,16 @@ static void drive_frame(void) {
         if (!o[4] || o[5] != 6)
             continue;
         learn_run(i, o);
+        if (room_frames < hold_ground[i] && *(u8 **)(o + 0x118)) { /* (wedged: standing, not walked back into it by his
+                                                                    * script; he fights when he sees Bond) */
+            if (!react[i]) {
+                u8 *an3 = *(u8 **)(o + 0x94);
+                *(s32 *)(*(u8 **)(o + 0x118) + 0x1C4) = 2;
+                if (an3 && drive_anim[i] >= 0 && *(s16 *)(an3 + 0x10) != drive_anim[i])
+                    *(s16 *)(an3 + 0x10) = *(s16 *)(an3 + 0x12) = drive_anim[i], an3[0x14] = 0, an3[0x16] = 1;
+            }
+            continue;
+        }
         if (!(room_frames & 3) || driving[i] || cover_state[i] != COVER_NONE) { /* (walked by the port: kept on
                                                                                   * the floor) */
             if (floor_at(POS(o)[0], POS(o)[1] - 500, POS(o)[2]) == -0x7FFF) {
@@ -1454,24 +1476,44 @@ static void drive_frame(void) {
             }
         }
         if (!driving[i]) {
+            if (*(s16 *)(an + 0x10) != run)
+                drive_anim[i] = *(s16 *)(an + 0x10);
             ELOG("ai: type %d walked from %d %d toward %d %d (animation %d)", o[6], POS(o)[0], POS(o)[2], goal[0], goal[2], run);
             driving[i] = 1, drive_check[i] = room_frames;
             drive_moved[i][0] = POS(o)[0], drive_moved[i][2] = POS(o)[2];
         }
         if (room_frames - drive_check[i] > SEC * 2) { /* (stuck: left to his script a while) */
             if (dist2(POS(o)[0], POS(o)[2], drive_moved[i][0], drive_moved[i][2]) < 300) {
-                if (drive_unstick[i]++ < 2) { /* (a wall's corner: back to the middle of his polygon first) */
-                    int c = face_at(POS(o)[0], POS(o)[1], POS(o)[2]);
-                    if (c >= 0)
-                        way[i][0] = mid[c][0] + (s32)(rnd() % 600) - 300, way[i][2] = mid[c][2] + (s32)(rnd() % 600) - 300;
-                    drive_check[i] = room_frames - SEC; /* (a second for it) */
+                /* (running in place: the polygons he is wedged on, and the one he was making for, blocked for paths a
+                 * while, and a way round them looked for; wedged again, he is his script's, standing) */
+                int c = face_at(POS(o)[0], POS(o)[1], POS(o)[2]), w = face_at(way[i][0], way[i][1], way[i][2]);
+                if (c >= 0)
+                    nav_blocked[c] = room_frames + SEC * 120;
+                if (w >= 0 && w != c)
+                    nav_blocked[w] = room_frames + SEC * 120;
+                memset(nav_goal, 0, sizeof(nav_goal)); /* (every hunter's way looked for again) */
+                if (drive_unstick[i]++ < 1) {
+                    ELOG("ai: type %d wedged at %d %d: polygons %d, %d blocked, another way", o[6], POS(o)[0], POS(o)[2], c, w);
+                    drive_check[i] = room_frames;
                     drive_moved[i][0] = POS(o)[0], drive_moved[i][2] = POS(o)[2];
-                    goto steer;
+                    driving[i] = 0; /* (a new way next frame) */
+                    continue;
                 }
-                ELOG("ai: type %d stuck at %d %d: his script's again a while, then another way round", o[6], POS(o)[0], POS(o)[2]);
+                ELOG("ai: type %d wedged again at %d %d: standing his ground (his script held till he sees Bond)", o[6],
+                     POS(o)[0], POS(o)[2]);
                 drive_unstick[i] = 0;
-                drive_rest[i] = room_frames + SEC * 4;
+                drive_rest[i] = room_frames + SEC * 15;
+                hold_ground[i] = room_frames + SEC * 60;
+                {   /* (sent from a doorway whose way in leads here: none sent from it again) */
+                    int hh;
+                    for (hh = 0; hh < HUNTERS; hh++)
+                        if (hunters[hh].o == o && stuck_count < 8)
+                            stuck_at[stuck_count][0] = hunters[hh].x, stuck_at[stuck_count][1] = hunters[hh].z, stuck_count++;
+                }
                 ring_off[i] += 1024 + (s32)(rnd() & 511); /* (his point of the ring moved on: not that way again) */
+                if (drive_anim[i] >= 0 && an) /* (not running in place: the animation he had before) */
+                    *(s16 *)(an + 0x10) = *(s16 *)(an + 0x12) = drive_anim[i], an[0x14] = 0, an[0x16] = 1;
+                *(s32 *)(ctx + 0x1C4) = 0;
                 driving[i] = 0;
                 continue;
             }
@@ -1577,15 +1619,24 @@ static void ai_frame(void) {
             u8 *o = OBJ(i);
             int j;
             if (!hunter(o) || room_frames < spread_until[i])
-                continue;
+                continue; /* (stepping already) */
             for (j = D_800B0DA0; j <= D_800B07B0 && j < 64; j++) /* (in a hunter, or in one of the room's own) */
                 if (j != i && OBJ(j)[4] && OBJ(j)[5] == 6 && HEALTH(OBJ(j)) > 0 && (!hunter(OBJ(j)) || j < i) &&
                     room_frames >= spread_until[j] && dist2(POS(o)[0], POS(o)[2], POS(OBJ(j))[0], POS(OBJ(j))[2]) < 400) {
                     s32 a = (s32)(rnd() & 0xFFF), x = POS(o)[0] + (isin(a) * 1200 >> 12), z = POS(o)[2] + (isin(a + 0x400) * 1200 >> 12);
                     int f = floor_near(x, z, POS(o)[1]), t;
-                    if (dist2(POS(o)[0], POS(o)[2], POS(OBJ(j))[0], POS(OBJ(j))[2]) < 150 && spread_tries[i]++ > 0)
-                        for (t = 0; t < 8; t++) { /* (still in each other after stepping: eased apart by hand) */
-                            s32 b = (s32)(rnd() & 0xFFF), nx = POS(o)[0] + (isin(b) * 350 >> 12), nz = POS(o)[2] + (isin(b + 0x400) * 350 >> 12);
+                    if (dist2(POS(o)[0], POS(o)[2], POS(OBJ(j))[0], POS(OBJ(j))[2]) < 300 && spread_tries[i]++ > 0)
+                        for (t = 0; t < 12; t++) { /* (still in each other after stepping: eased apart by hand, away from
+                                                     * the other first, then any way) */
+                            s32 ax = POS(o)[0] - POS(OBJ(j))[0], az = POS(o)[2] - POS(OBJ(j))[2], b, best2 = -0x7FFFFFFF, c2;
+                            s32 nx, nz;
+                            for (c2 = 0, b = 0; c2 < 4096; c2 += 64) {
+                                s32 dd = (isin(c2) >> 4) * (ax >> 4) + (isin(c2 + 0x400) >> 4) * (az >> 4);
+                                if (dd > best2)
+                                    best2 = dd, b = c2;
+                            }
+                            b = (b + (t ? (s32)(rnd() % 1024) - 512 : 0)) & 0xFFF;
+                            nx = POS(o)[0] + (isin(b) * 600 >> 12), nz = POS(o)[2] + (isin(b + 0x400) * 600 >> 12);
                             s32 fy = floor_at(nx, POS(o)[1] - 500, nz), from[4], to[4];
                             s16 nn[4], hh[4];
                             from[0] = POS(o)[0], from[1] = POS(o)[1] - 600, from[2] = POS(o)[2], from[3] = 0;
@@ -1594,12 +1645,20 @@ static void ai_frame(void) {
                                 !func_800746D0(D_800E2F2C, from, to, nn, hh, 0)) {
                                 POS(o)[0] = nx, POS(o)[1] = fy, POS(o)[2] = nz;
                                 spread_tries[i] = 0;
+                                hold_ground[i] = room_frames + SEC * 20; /* (standing there a while: not walked back) */
+                                if (drive_anim[i] < 0 && *(u8 **)(o + 0x94))
+                                    drive_anim[i] = *(s16 *)(*(u8 **)(o + 0x94) + 0x10);
+                                if (drive_anim[i] >= 0 && *(u8 **)(o + 0x94)) {
+                                    u8 *an2 = *(u8 **)(o + 0x94);
+                                    *(s16 *)(an2 + 0x10) = *(s16 *)(an2 + 0x12) = drive_anim[i], an2[0x14] = 0, an2[0x16] = 1;
+                                }
                                 ring_off[i] += 1365;
                                 ELOG("ai: type %d eased apart from another", o[6]);
                                 break;
                             }
                         }
-                    if (f >= 0) {
+                    if (f >= 0 && nav_blocked[f] <= room_frames && room_frames >= drive_rest[i]) { /* (not resting
+                                                                              * from a wedge: stepped, not eased) */
                         hunt_ev[i].type = 0, hunt_ev[i].x = mid[f][0], hunt_ev[i].y = mid[f][1], hunt_ev[i].z = mid[f][2];
                         hunt_ev[i].time = D_8009CDA8 + SEC;
                         spread_until[i] = room_frames + SEC * 2;
@@ -2268,4 +2327,15 @@ void func_80053114(u8 *obj) {
     func_80053114_orig(obj);
     an[0] = keep;
     shots_fired++;
+}
+
+/* A script's sound at its person (op 0x1D: func_800572F4, a sound of the level's bank at him; the guards' calls and
+ * shouts among them): logged (the AI's shouts are found by it) */
+s32 func_800572F4_orig(u32 *cmd, u8 *obj, u8 *chr);
+s32 func_800572F4(u32 *cmd, u8 *obj, u8 *chr) {
+    s16 e[5];
+    if (obj && chr && port_endless_room(e) && getenv("TWINE_ENDLESS_SOUND_LOG"))
+        ELOG("sound: script of type %d (ai %d) plays sound %d (flags %08X)", chr[6], chr[0xA7],
+             (*cmd >> 16 & 3) == 1 ? -1 : (int)(*cmd >> 8 & 0xFF), *(u8 **)(chr + 0x118) ? **(s32 **)(chr + 0x118) : 0);
+    return func_800572F4_orig(cmd, obj, chr);
 }
