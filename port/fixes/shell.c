@@ -55,7 +55,7 @@ int port_hd_movie(const char *name);
 extern int port_endless;
 
 void func_80026998(s32 movie) {
-    if (port_endless) /* (endless mode: no mission's film before its rooms) */
+    if (port_endless || getenv("TWINE_TEST_NO_FILMS")) /* (endless mode: no mission's film before its rooms) */
         return;
     if (!port_hd_movie(D_80070E4C + (s16)movie * 16))
         func_80026998_orig(movie);
@@ -261,7 +261,8 @@ s32 func_80042B94(void) {
 
 /* The title screen; after it, the main menu */
 void func_8002A400(void) {
-    func_8002A400_orig();
+    if (!getenv("TWINE_TEST_NO_FILMS")) /* (tests: no title screen to press START on either) */
+        func_8002A400_orig();
     autoload();
 }
 
@@ -1142,6 +1143,16 @@ static void shell_keys(void) {
      * the intro film, left the run's stats and mission select broken behind it) */
     if (in_mission_select || in_endless_stats || endless_briefing)
         *(s32 *)0x800747ACu = 0;
+    if (getenv("TWINE_TEST_SHELL_SHOTS")) { /* (tests: a shot of each menu once it has shown for 40 frames) */
+        static int on_main, on_ms;
+        extern int port_shot_now;
+        on_main = in_main ? on_main + 1 : 0;
+        on_ms = in_mission_select ? on_ms + 1 : 0;
+        if (on_main == 40 || on_ms == 40) {
+            port_shot_now = 1;
+            port_endless_logf(-1, "test: a shot of %s", on_main == 40 ? "the main menu" : "mission select");
+        }
+    }
     if (after_stats > 0 && --after_stats % 100 == 0) /* (what the front end is doing, for a while after the stats) */
         port_endless_logf(-1, "shell: after the stats: state %d, cursor %d, mission select %d, text %d, screen %d %d",
                           STATE, CURSOR, in_mission_select, S32(0x80073960u), S32(0x80073984u), S32(0x800739D4u));

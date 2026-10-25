@@ -173,10 +173,10 @@ static void people_log(void) {
         if (o == g_Player || !o[4])
             continue;
         ELOG("people: %d type %d %s, health %d, ai %d at %d %d %d (floor %d, yaw %d); record %08X flags %08X w4 %08X; "
-             "state +24 %08X; obj +8 %d +A4 %02X +A6 %02X +48 %08X +4C %08X", i, o[6], made_how[i & 63] ? made_how[i & 63] : "?",
+             "state +24 %08X; obj +8 %d +A4 %02X +A6 %02X +48 %08X +4C %08X +E %04X", i, o[6], made_how[i & 63] ? made_how[i & 63] : "?",
              HEALTH(o), o[0xA7], POS(o)[0], POS(o)[1], POS(o)[2], floor_at(POS(o)[0], POS(o)[1] - 500, POS(o)[2]),
              *(s16 *)(*(u8 **)(o + 0x90) + 0x1A), (u32)src, src ? src[0] : 0, src ? src[1] : 0,
-             st ? *(s32 *)(st + 0x24) : -1, o[8], o[0xA4], o[0xA6], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C));
+             st ? *(s32 *)(st + 0x24) : -1, o[8], o[0xA4], o[0xA6], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C), *(u16 *)(o + 0xE));
     }
 }
 

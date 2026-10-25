@@ -399,8 +399,13 @@ static void dump_display(const char *path) {
 }
 
 /* this frame is one TWINE_SHOT names */
+int port_shot_now; /* (tests: a shot of the next frame shown, asked for by the code: fixes/shell.c's) */
 static int shot_wanted(void) {
     const char *shots = getenv("TWINE_SHOT");
+    if (port_shot_now) {
+        port_shot_now = 0;
+        return 1;
+    }
     char want[16], list[256], *s;
     if (!shots)
         return 0;
