@@ -855,9 +855,9 @@ static void spawn(const char *why) {
             if (OBJ(k) != g_Player && OBJ(k)[4] && HEALTH(OBJ(k)) > 0 &&
                 dist2(POS(OBJ(k))[0], POS(OBJ(k))[2], mid[i][0], mid[i][2]) < 500)
                 break;
-        if (fh == -0x7FFF || fh - mid[i][1] > 300 || mid[i][1] - fh > 300 || k <= D_800B07B0) {
-            ELOG("spawn: the place at %d %d %d won't do (%s): not used again", mid[i][0], mid[i][1], mid[i][2],
-                 k <= D_800B07B0 ? "someone there" : fh == -0x7FFF ? "no floor under it" : "the floor not at its height");
+        if (fh == -0x7FFF || k <= D_800B07B0) {
+            ELOG("spawn: the place at %d %d %d won't do (%s)%s", mid[i][0], mid[i][1], mid[i][2],
+                 k <= D_800B07B0 ? "someone there" : "no floor under it", k <= D_800B07B0 ? "" : ": not used again");
             if (k > D_800B07B0 && stuck_count < 8)
                 stuck_at[stuck_count][0] = mid[i][0], stuck_at[stuck_count][1] = mid[i][2], stuck_count++;
             cooldown = SEC;
@@ -876,8 +876,6 @@ static void spawn(const char *why) {
     rec[4] &= ~(7 << 24);       /* its start pose and state, w4's bits 12-19 and 24-26, and the flags' 14-26) */
     rec[3] &= ~(0x1FFF << 14);
     rec[3] &= ~0x400;           /* (and the pose's flag) */
-    if (!(rec[4] >> 20 & 7))     /* a kind placed with no AI (asleep till the mission's script wakes it: it then */
-        rec[4] |= 0x00700040;    /* stands, can't be hurt): a sent one hunts, as the kinds with AI 7 do */
     making = 1;
     o = func_8003C1BC(rec, mid[i][0], mid[i][1], mid[i][2]);
     for (h = 0; !o && h < kind_count; h++) { /* (the kinds in turn, a slot freed for each) */
@@ -925,6 +923,22 @@ static void recall(void) {
             d += 20000; /* (on another floor: as good as far) */
         if (dist2(POS(o)[0], POS(o)[2], hunters[h].lx, hunters[h].lz) > 400)
             hunters[h].lx = POS(o)[0], hunters[h].lz = POS(o)[2], hunters[h].moved = room_frames;
+        if (getenv("TWINE_ENDLESS_TEST_MEET") && room_frames - hunters[h].born == SEC * 3) {
+            s16 at[5]; /* (headless tests: Bond put 1500 from the guard sent, facing him: does he fire?) */
+            s32 a, ba = 0, best = -0x7FFFFFFF;
+            for (a = 0; a < 4096; a += 64) {
+                s32 x = POS(o)[0] + (isin(a) * 1500 >> 12), z = POS(o)[2] + (isin(a + 0x400) * 1500 >> 12);
+                s32 fh = floor_at(x, POS(o)[1] - 500, z);
+                if (fh != -0x7FFF && fh - POS(o)[1] < 200 && POS(o)[1] - fh < 200 && a > best)
+                    best = a, ba = a;
+            }
+            if (best > -0x7FFFFFFF) {
+                at[0] = D_800D2F8C, at[1] = (s16)((ba + 0x800) & 0xFFF), at[2] = POS(o)[0] + (isin(ba) * 1500 >> 12);
+                at[3] = POS(o)[1], at[4] = POS(o)[2] + (isin(ba + 0x400) * 1500 >> 12);
+                func_80030FA8(at);
+                ELOG("test: Bond put by the sent guard type %d", o[6]);
+            }
+        }
         if (room_frames - hunters[h].born == SEC * 5)
             ELOG("sent guard type %d five seconds on: ai %d, state %08X, health %d, at %d %d %d", o[6], o[0xA7],
                  *(u8 **)(o + 0x94) ? *(s32 *)(*(u8 **)(o + 0x94) + 0x24) : -1, HEALTH(o), POS(o)[0], POS(o)[1], POS(o)[2]);
