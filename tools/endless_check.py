@@ -206,8 +206,12 @@ def check_room(run, room, checks):
                "; ".join(immune)[:160] or "%d shots, %d fell" % (len(shot), len(fell)))
     if "c" in checks:
         bad = []
-        bad += ["type %d on no floor at %d %d %d" % (q["type"], q["x"], q["y"], q["z"]) for q in ppl
-                if q["health"] > 0 and q["floor"] == -32767]
+        off = {}  # (three samples running with no floor under him: a moment's knock-back or a stair's edge is not it)
+        for q in ppl:
+            k = q["slot"]
+            off[k] = off.get(k, 0) + 1 if q["health"] > 0 and q["floor"] == -32767 else 0
+            if off[k] == 3:
+                bad.append("type %d on no floor at %d %d %d" % (q["type"], q["x"], q["y"], q["z"]))
         bad += ["removed while seen: " + l.split("removed: ")[1][:60] for l in run.lines(r"removed: .*Bond could see")
                 if "no floor under him" not in l]  # (a guard just made inside a wall goes at once, seen or not)
         bad += ["copy posed (type %d)" % q["type"] for q in ppl if q["how"] == "sent" and q["flags"] & 0x400]
@@ -410,6 +414,7 @@ def approach(run):
 
 
 def check_ai(runs):
+    covers = 0
     for l, p in AI_ROOMS:
         o, i = runs["ai_%d_%d_original" % (l, p)], runs["ai_%d_%d_improved" % (l, p)]
         bo, so = approach(o)
@@ -419,8 +424,14 @@ def check_ai(runs):
         ok = not i.crashed() and (bi <= max(bo, 3000) or hits_i > 0) and hits_i >= hits_o // 2
         result("j", "%d:%d hunting" % (l, p), ok, "closest %s (game's AI %s), walks %d, hits on Bond %d (game's %d)" % (
             int(bi) if bi < 10 ** 9 else "-", int(bo) if bo < 10 ** 9 else "-", walks, hits_i, hits_o))
+        shots = [re.search(r"guards' shots (\d+), held (\d+)", x) for x in i.lines("guards' shots")]
+        fired, held = (int(shots[-1].group(1)), int(shots[-1].group(2))) if shots and shots[-1] else (0, 0)
+        result("j", "%d:%d fair shooting" % (l, p), hits_i == 0 or fired > 0,
+               "guards' shots %d, held %d (no line of fire, or reacting)" % (fired, held))
+        covers += len(i.lines("takes cover"))
         result("j", "%d:%d no bunching" % (l, p), st <= 12 or st <= so,
                "two within 300 for %d samples (0.5 s) in a row (game's AI %d)" % (st, so))
+    result("j", "cover used", covers > 0, "%d times in the %d rooms" % (covers, len(AI_ROOMS)))
 
 
 # ---- i: the campaign untouched ----

@@ -59,3 +59,14 @@ level08 D_800D2F8C D_800D6594
 # the mission failed (port/mods/endless.c): the frame loop's GAME OVER call
 level04 func_8002D4E4 func_8002D4E4
 level07 func_8002D4E4 func_8002D4E4
+# a person's gun firing at his target (port/mods/endless.c's fairer shooting)
+level02 func_80053114 func_800551A8
+level03 func_80053114 func_80054C68
+level04 func_80053114 func_8005458C
+level05 func_80053114 func_80054F58
+level06 func_80053114 func_80055090
+level07 func_80053114 func_80055564
+level08 func_80053114 func_80055180
+level09 func_80053114 func_80055274
+level10 func_80053114 func_800558FC
+level11 func_80053114 func_8005041C
