@@ -307,10 +307,93 @@ static int scores_read(Score *s) {
     return n;
 }
 
+/* The table on the memory card (fixes/shell.c reads and writes it as its own save beside the campaign's): once a
+ * card's is read it is the table shown and kept to; endless.txt stays as the backup of every ranked run (and, on
+ * a card without the save yet, its table is the card's first) */
+static Score card_tab[SCORES];
+static int card_n = -1; /* (-1: no card's table read) */
+
+static int table_read(Score *s) {
+    if (card_n < 0)
+        return scores_read(s);
+    memcpy(s, card_tab, sizeof(card_tab));
+    return card_n;
+}
+
+/* The card's form: "TWEN", version 1, the count, then SCORES entries of 24 bytes (score, initials, rooms, kills,
+ * accuracy, seconds, date as yyyymmdd), and a sum of all the bytes before it */
+#define CARD_TABLE (16 + SCORES * 24 + 4)
+static void put32(u8 *p, u32 v) {
+    p[0] = (u8)v, p[1] = (u8)(v >> 8), p[2] = (u8)(v >> 16), p[3] = (u8)(v >> 24);
+}
+static u32 get32(const u8 *p) {
+    return p[0] | p[1] << 8 | p[2] << 16 | (u32)p[3] << 24;
+}
+
+int port_endless_table_pack(u8 *out, int len) {
+    Score s[SCORES];
+    int n = table_read(s), i;
+    u32 sum = 0;
+    if (len < CARD_TABLE)
+        return 0;
+    memset(out, 0, CARD_TABLE);
+    memcpy(out, "TWEN", 4);
+    put32(out + 4, 1);
+    put32(out + 8, (u32)n);
+    for (i = 0; i < n; i++) {
+        u8 *e = out + 16 + i * 24;
+        int rooms = 0, kills = 0, acc = 0, secs = 0, y = 0, m = 0, d = 0;
+        sscanf(s[i].rest, "%d %d %d %d %d-%d-%d", &rooms, &kills, &acc, &secs, &y, &m, &d);
+        put32(e, (u32)s[i].score);
+        if (strcmp(s[i].name, "-"))
+            memcpy(e + 4, s[i].name, strlen(s[i].name) < 4 ? strlen(s[i].name) : 4);
+        put32(e + 8, (u32)rooms);
+        put32(e + 12, (u32)kills);
+        put32(e + 16, (u32)(acc << 24 | (secs & 0xFFFFFF)));
+        put32(e + 20, (u32)(y * 10000 + m * 100 + d));
+    }
+    for (i = 0; i < CARD_TABLE - 4; i++)
+        sum += out[i];
+    put32(out + CARD_TABLE - 4, sum);
+    return CARD_TABLE;
+}
+
+/* a card's table (1), or 0 if it isn't one (corrupt: the table stays as it was) */
+int port_endless_table_unpack(const u8 *in, int len) {
+    u32 sum = 0, n;
+    int i;
+    if (len < CARD_TABLE || memcmp(in, "TWEN", 4) || get32(in + 4) != 1 || (n = get32(in + 8)) > SCORES)
+        return 0;
+    for (i = 0; i < CARD_TABLE - 4; i++)
+        sum += in[i];
+    if (sum != get32(in + CARD_TABLE - 4))
+        return 0;
+    for (i = 0; i < (int)n; i++) {
+        const u8 *e = in + 16 + i * 24;
+        u32 a = get32(e + 16), date = get32(e + 20);
+        card_tab[i].score = (int)get32(e);
+        memset(card_tab[i].name, 0, sizeof(card_tab[i].name));
+        memcpy(card_tab[i].name, e + 4, 4);
+        if (!card_tab[i].name[0])
+            strcpy(card_tab[i].name, "-");
+        snprintf(card_tab[i].rest, sizeof(card_tab[i].rest), "%u %u %u %u %04u-%02u-%02u", get32(e + 8),
+                 get32(e + 12), a >> 24, a & 0xFFFFFF, date / 10000, date / 100 % 100, date % 100);
+    }
+    card_n = (int)n;
+    port_endless_logf(-1, "scores: the card's table read (%d entries)", card_n);
+    return 1;
+}
+
+/* a card without the table: endless.txt's becomes its first */
+void port_endless_table_import(void) {
+    card_n = scores_read(card_tab);
+    port_endless_logf(-1, "scores: no table on the card: endless.txt's (%d entries) taken for it", card_n);
+}
+
 /* fixes/shell.c: the best three, for the front end's hi-score table (scores 0 past the last) */
 void port_endless_best(char names[3][4], u32 scores[3]) {
     Score s[SCORES];
-    int n = scores_read(s), i;
+    int n = table_read(s), i;
     for (i = 0; i < 3; i++) {
         memset(names[i], 0, 4);
         if (i < n && strcmp(s[i].name, "-"))
@@ -341,6 +424,18 @@ void port_endless_keep(const char *name) {
     s[i] = now;
     if (++n > SCORES)
         n = SCORES;
+    if (card_n < 0) /* (no card's table yet: endless.txt's, the run with it, is the first) */
+        memcpy(card_tab, s, sizeof(card_tab)), card_n = n;
+    else {
+        Score c[SCORES + 1];
+        memcpy(c, card_tab, sizeof(card_tab));
+        for (i = card_n; i > 0 && c[i - 1].score < now.score; i--)
+            c[i] = c[i - 1];
+        c[i] = now;
+        if (++card_n > SCORES)
+            card_n = SCORES;
+        memcpy(card_tab, c, sizeof(card_tab));
+    }
     scores_path(path, sizeof(path));
     {   /* the folder, as savestate.c makes its own */
         char *c;

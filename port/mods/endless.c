@@ -519,9 +519,10 @@ static int unkillable(u8 *o) { /* (a person now: scripts change these as they go
            (*(s32 *)(o + 0x4C) & 0x400);
 }
 
-static int story_person(u32 t, s32 *rec) { /* (a placed person who would break the run) */
+static int story_person(u32 t, s32 *rec) { /* (a placed person who would break the run: an unkillable one who
+                                            * fights; unkillable civilians, the bank's receptionist, stay) */
     (void)rec;
-    return unkillable_type(t);
+    return unkillable_type(t) && TYPE_DEF(t)[0x2C] != 0;
 }
 
 /* The mission's story people, out: those of a kind it places only once (counts: how many of each kind it places),
@@ -539,7 +540,7 @@ static void no_story_people(s32 *counts) {
         }
     for (i = D_800B0DA0; i <= D_800B07B0; i++) {
         u8 *o = OBJ(i);
-        if (o != g_Player && o[4] && o[5] == 6 && unkillable(o) && !is_copy(o)) {
+        if (o != g_Player && o[4] && o[5] == 6 && unkillable(o) && TYPE_DEF(o[6])[0x2C] && !is_copy(o)) {
             take_out(o, "a story person, as the room starts");
         }
     }
@@ -846,6 +847,23 @@ static void spawn(const char *why) {
         cooldown = SEC * 3;
         return;
     }
+    {   /* the place itself: floor under it (a doorway's or a polygon's middle may be in a wall, a door's frame or
+         * a solid volume, where a guard can't be shot nor move), and nobody within 500 */
+        s32 fh = floor_at(mid[i][0], mid[i][1] - 500, mid[i][2]);
+        int k;
+        for (k = D_800B0DA0; k <= D_800B07B0; k++)
+            if (OBJ(k) != g_Player && OBJ(k)[4] && HEALTH(OBJ(k)) > 0 &&
+                dist2(POS(OBJ(k))[0], POS(OBJ(k))[2], mid[i][0], mid[i][2]) < 500)
+                break;
+        if (fh == -0x7FFF || fh - mid[i][1] > 300 || mid[i][1] - fh > 300 || k <= D_800B07B0) {
+            ELOG("spawn: the place at %d %d %d won't do (%s): not used again", mid[i][0], mid[i][1], mid[i][2],
+                 k <= D_800B07B0 ? "someone there" : fh == -0x7FFF ? "no floor under it" : "the floor not at its height");
+            if (k > D_800B07B0 && stuck_count < 8)
+                stuck_at[stuck_count][0] = mid[i][0], stuck_at[stuck_count][1] = mid[i][2], stuck_count++;
+            cooldown = SEC;
+            return;
+        }
+    }
     rec = copies[copy_next];
     copy_next = (copy_next + 1) % COPIES;
     memcpy(rec, kinds[rnd() % kind_count], sizeof(copies[0]));
@@ -858,6 +876,8 @@ static void spawn(const char *why) {
     rec[4] &= ~(7 << 24);       /* its start pose and state, w4's bits 12-19 and 24-26, and the flags' 14-26) */
     rec[3] &= ~(0x1FFF << 14);
     rec[3] &= ~0x400;           /* (and the pose's flag) */
+    if (!(rec[4] >> 20 & 7))     /* a kind placed with no AI (asleep till the mission's script wakes it: it then */
+        rec[4] |= 0x00700040;    /* stands, can't be hurt): a sent one hunts, as the kinds with AI 7 do */
     making = 1;
     o = func_8003C1BC(rec, mid[i][0], mid[i][1], mid[i][2]);
     for (h = 0; !o && h < kind_count; h++) { /* (the kinds in turn, a slot freed for each) */
@@ -882,9 +902,10 @@ static void spawn(const char *why) {
         hunters[h].z = hunters[h].lz = mid[i][2];
     recent[recent_next][0] = mid[i][0], recent[recent_next][2] = mid[i][2];
     recent_next = (recent_next + 1) % 4;
-    ELOG("spawn (%s): guard type %d %s at %d %d %d, %d from Bond, budget %d", why, rec[3] & 0xFF,
+    ELOG("spawn (%s): guard type %d %s at %d %d %d, %d from Bond, budget %d; ai %d, state %08X", why, rec[3] & 0xFF,
          door ? "in at a doorway" : "on the floor", mid[i][0], mid[i][1], mid[i][2],
-         dist2(g_Args->playerX, g_Args->playerZ, mid[i][0], mid[i][2]), budget);
+         dist2(g_Args->playerX, g_Args->playerZ, mid[i][0], mid[i][2]), budget, o[0xA7],
+         *(u8 **)(o + 0x94) ? *(s32 *)(*(u8 **)(o + 0x94) + 0x24) : -1);
 }
 
 /* Copies left far off for long, sent back (the director sends them again, nearer): the pressure stays on Bond */
@@ -904,6 +925,19 @@ static void recall(void) {
             d += 20000; /* (on another floor: as good as far) */
         if (dist2(POS(o)[0], POS(o)[2], hunters[h].lx, hunters[h].lz) > 400)
             hunters[h].lx = POS(o)[0], hunters[h].lz = POS(o)[2], hunters[h].moved = room_frames;
+        if (room_frames - hunters[h].born == SEC * 5)
+            ELOG("sent guard type %d five seconds on: ai %d, state %08X, health %d, at %d %d %d", o[6], o[0xA7],
+                 *(u8 **)(o + 0x94) ? *(s32 *)(*(u8 **)(o + 0x94) + 0x24) : -1, HEALTH(o), POS(o)[0], POS(o)[1], POS(o)[2]);
+        if (room_frames - hunters[h].born == SEC && floor_at(POS(o)[0], POS(o)[1] - 500, POS(o)[2]) == -0x7FFF) {
+            /* a second on, no floor under him (in a wall or a solid volume: he can't be shot): taken out at once,
+             * seen or not (he has only just come), and none sent there again */
+            if (stuck_count < 8)
+                stuck_at[stuck_count][0] = hunters[h].x, stuck_at[stuck_count][1] = hunters[h].z, stuck_count++;
+            take_out(o, "a sent guard with no floor under him");
+            hunters[h].o = 0;
+            budget += SEC * 5;
+            continue;
+        }
         if (seen(o)) /* (never before his eyes) */
             continue;
         if (room_frames - hunters[h].moved > SEC * 10 && d > 2500 && d < 8000) {
@@ -1081,7 +1115,7 @@ void endless_frame(void) {
         u8 *o = OBJ(i);
         s32 h;
         if (o != g_Player && o[4] && o[5] == 6) {
-            if (unkillable(o) && !seen(o)) { /* (made unkillable by its script since: Electra's hit mask, say) */
+            if (unkillable(o) && TYPE_DEF(o[6])[0x2C] && !seen(o)) { /* (made unkillable by its script since: Electra's hit mask, say) */
                 ELOG("room: person type %d (script %d, hit mask %04X) unkillable", o[6], o[0xA7], *(u16 *)(o + 0xE));
                 take_out(o, "unkillable");
                 continue;
@@ -1277,6 +1311,12 @@ void RestartPrompt_Open(void) {
         RestartPrompt_Open_orig();
         return;
     }
+    /* the watch's RESTART MISSION asks the same, Bond alive: its YES reloads (func_80041DBC: the run again) */
+    if (g_Player && HEALTH(g_Player) > 0) {
+        ELOG("restart: the watch's RESTART MISSION asked");
+        RestartPrompt_Open_orig();
+        return;
+    }
     ELOG("run end: Bond is dead");
     D_8009CAA4 = 0;
     g_Args->flags |= 0x80;
@@ -1316,18 +1356,20 @@ u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z) {
             }
     }
     if (port_endless_room(e) && g_Args && t && TYPE_DEF(t)[1] == 6 && (rec[3] & 0x400) && making != 1) {
-        /* a person placed in a pose: Courier's seated at desks (the pose is his record's whole start, not its flag
+        /* a person placed in a pose: Courier's guards seated at desks (the pose is his record's whole start, not its flag
          * alone, and sits on air without the mission's chair, frozen there) is not made, the director's guards
          * stand; elsewhere (King's Ransom's bar) he stands up, the room kept its people */
-        if (g_Args->level == 2) {
+        if (g_Args->level == 2 && TYPE_DEF(t)[0x2C] != 0) { /* (an armed guard: the desks' civilians stay) */
             if (!port_subframe)
                 ELOG("room: posed person (type %d) at %d %d %d not made", t, x, y, z);
             rec[3] |= 0x100;
             return 0;
         }
-        if (!port_subframe)
-            ELOG("room: posed person (type %d) made standing", t);
-        rec[3] &= ~0x400;
+        if (g_Args->level != 2) {
+            if (!port_subframe)
+                ELOG("room: posed person (type %d) made standing", t);
+            rec[3] &= ~0x400;
+        } /* (Courier's civilians at the counter and behind the glass keep their place, as the mission has them) */
     }
     {
         s32 w3 = rec[3], w4 = rec[4];
@@ -1340,9 +1382,18 @@ u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z) {
                 if (freed_recs[k] == &rec[3])
                     how = "placed again (its slot freed before)";
             made_how[i & 63] = how;
+            if (*(s32 *)(o + 0x4C) & 0x02000000) { /* (made inactive: left out of the game's collisions and updates,
+                                                    * so no shot touches him; the mission's script would wake him) */
+                if (!port_subframe)
+                    ELOG("room: person type %d at %d %d %d made inactive (+4C %08X): left out", t, x, y, z,
+                         *(s32 *)(o + 0x4C));
+                func_800395E8(o);
+                rec[3] |= 0x100;
+                return 0;
+            }
             if (!port_subframe)
-                ELOG("made: person %d type %d %s at %d %d %d, record %08X flags %08X w4 %08X", i, t, how, x, y, z,
-                     (u32)&rec[3], w3, w4);
+                ELOG("made: person %d type %d %s at %d %d %d, record %08X flags %08X w4 %08X; ai %d +48 %08X +4C %08X", i, t,
+                     how, x, y, z, (u32)&rec[3], w3, w4, o[0xA7], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C));
         }
         return o;
     }

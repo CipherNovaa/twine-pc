@@ -1,7 +1,7 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8 func_8003EA00 func_800385C4
+ * MOD_REPLACES_NATIVE: func_8006F30C func_8006F0B4 func_80042450 func_80042B94 func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8 func_8003EA00 func_800385C4
  */
 #include <stdlib.h>
 #include <string.h>
@@ -77,6 +77,7 @@ void port_log(const char *fmt, ...);
  * frame): the save's file, BASLUS-01272 (one a card), the second 0x200 bytes of its first 0x400 unpacked into
  * g_Args (func_80043CAC: the missions open, the settings, ...), the difficulty's flag, and the missions counted
  * again (func_8004DABC). A card without the save, or a save that won't unpack, leaves the game as it was. */
+static void endless_card_read(int slot, const char *why);
 /* the setting: 0 slot 1, 1 slot 2, -1 off */
 static int autoload_slot(void) {
     const char *s = getenv("TWINE_AUTOLOAD");
@@ -87,6 +88,8 @@ static void autoload(void) {
     int slot = autoload_slot();
     u8 *a = G_ARGS, kept[0xDB * 4];
     s32 fd, n;
+    if (slot >= 0)
+        endless_card_read(slot, "autoload");
     if (slot < 0 || !a || (fd = card_open(slot ? "bu10:BASLUS-01272" : "bu00:BASLUS-01272", 1)) < 0)
         return;
     card_lseek(fd, 0x200, 0);
@@ -105,6 +108,155 @@ static void autoload(void) {
     *(u32 *)(a + 4) |= 0x40;
     func_8004DABC();
     port_log("autoload: loaded the save on the card in slot %d\n", slot + 1);
+}
+
+/* Endless mode's high scores on the memory card: a save of their own beside the campaign's, BASLUS-01272ENDLESS
+ * (one block: the title "TWINE ENDLESS" and the campaign save's icon in its header, the table after it:
+ * port/src/endless.c packs it), through the BIOS's file functions as the game's own saves go. It is written to a
+ * card whenever the game saves to it (its save screen, func_80042450, writing the campaign's file with libmcrd's
+ * MemCardWriteFile, func_8006F30C) and after a ranked run (to the card autoload reads, else slot 1), and read
+ * whenever the game reads a card (autoload; the load screen, func_80042B94, reading with MemCardReadFile,
+ * func_8006F0B4). The campaign's save is never touched: a card that hasn't it keeps a block free for it. */
+s32 card_firstfile(const char *pattern, u32 dir);
+s32 card_nextfile(u32 dir);
+int port_endless_table_pack(u8 *out, int len);
+int port_endless_table_unpack(const u8 *in, int len);
+void port_endless_table_import(void);
+#define ENDLESS_SAVE "BASLUS-01272ENDLESS"
+#define CAMPAIGN_SAVE "BASLUS-01272"
+
+static void card_name(int slot, const char *file, char *out) {
+    sprintf(out, "bu%d0:%s", slot, file);
+}
+
+/* the blocks in use on a card (-1: no card) */
+static int card_used(int slot) {
+    static u8 dir[40];
+    char pat[16];
+    int n = 0;
+    u32 d;
+    card_name(slot, "*", pat);
+    for (d = card_firstfile(pat, (u32)dir); d; d = card_nextfile((u32)dir))
+        n += (*(s32 *)(dir + 0x18) + 0x1FFF) / 0x2000;
+    return n;
+}
+
+static int card_has(int slot, const char *file) {
+    char name[32];
+    s32 fd;
+    card_name(slot, file, name);
+    if ((fd = card_open(name, 1)) < 0)
+        return 0;
+    card_close(fd);
+    return 1;
+}
+
+/* the table written to the card in slot (0/1): 1 done */
+static int endless_card_write(int slot, const char *why) {
+    static u8 block[0x2000];
+    static const char title[] = "TWINE ENDLESS";
+    char name[32];
+    s32 fd;
+    int i, at;
+    memset(block, 0, sizeof(block));
+    card_name(slot, CAMPAIGN_SAVE, name);
+    if ((fd = card_open(name, 1)) >= 0) { /* (the campaign save's header: its icon's palette and picture) */
+        card_rw(fd, block, 0x100, 0);
+        card_close(fd);
+    } else /* (none: a plain icon, white on the palette's colour 1) */
+    {
+        memset(block + 0x80, 0x11, 0x80);
+        *(u16 *)(block + 0x62) = 0x7FFF;
+    }
+    block[0] = 'S', block[1] = 'C', block[2] = 0x11, block[3] = 1;
+    memset(block + 4, 0, 0x5C);
+    for (i = 0, at = 4; title[i]; i++, at += 2) { /* (the title in Shift-JIS, as card managers show it) */
+        u16 c = title[i] == ' ' ? 0x8140 : title[i] >= 'A' && title[i] <= 'Z' ? 0x8260 + title[i] - 'A' : 0x8140;
+        block[at] = (u8)(c >> 8), block[at + 1] = (u8)c;
+    }
+    if (!port_endless_table_pack(block + 0x200, sizeof(block) - 0x200))
+        return 0;
+    card_name(slot, ENDLESS_SAVE, name);
+    if ((fd = card_open(name, 2)) < 0) {
+        int used = card_used(slot);
+        if (used < 0 || used + 1 + !card_has(slot, CAMPAIGN_SAVE) > 15) {
+            port_endless_logf(-1, "scores: no room on the card in slot %d (%d blocks used%s): kept in endless.txt only",
+                              slot + 1, used, card_has(slot, CAMPAIGN_SAVE) ? "" : ", one kept for the game's save");
+            return 0;
+        }
+        if ((fd = card_open(name, 0x200 | 1 << 16)) < 0) {
+            port_endless_logf(-1, "scores: no card in slot %d (or it can't take the save): kept in endless.txt only",
+                              slot + 1);
+            return 0;
+        }
+    }
+    i = card_rw(fd, block, sizeof(block), 1);
+    card_close(fd);
+    port_endless_logf(-1, "scores: the table written to the card in slot %d (%s)%s", slot + 1, why,
+                      i == (int)sizeof(block) ? "" : ": the write failed");
+    return i == (int)sizeof(block);
+}
+
+/* the table read from the card in slot: its own, or endless.txt's for a card without it */
+static void endless_card_read(int slot, const char *why) {
+    static u8 block[0x2000];
+    char name[32];
+    s32 fd;
+    int n;
+    card_name(slot, ENDLESS_SAVE, name);
+    if ((fd = card_open(name, 1)) < 0) {
+        port_endless_table_import();
+        return;
+    }
+    n = card_rw(fd, block, sizeof(block), 0);
+    card_close(fd);
+    if (n != (int)sizeof(block) || block[0] != 'S' || block[1] != 'C' ||
+        !port_endless_table_unpack(block + 0x200, sizeof(block) - 0x200)) {
+        port_endless_logf(-1, "scores: the card in slot %d has a damaged table (%s): left as it was", slot + 1, why);
+        return;
+    }
+    port_endless_logf(-1, "scores: read from the card in slot %d (%s)", slot + 1, why);
+}
+
+/* libmcrd's MemCardWriteFile and MemCardReadFile: which card the campaign's save went to or came from */
+static s32 saved_chan = -1, loaded_chan = -1;
+s32 func_8006F30C_orig(s32 chan, char *file, u32 *buf, s32 ofs, s32 bytes);
+s32 func_8006F30C(s32 chan, char *file, u32 *buf, s32 ofs, s32 bytes) {
+    s32 r;
+    if (file && !strcmp(file, CAMPAIGN_SAVE))
+        saved_chan = chan;
+    r = func_8006F30C_orig(chan, file, buf, ofs, bytes);
+    port_endless_logf(-1, "card: the game writes %s to channel %X (%d bytes): %d", file ? file : "?", chan, bytes, r);
+    return r;
+}
+
+s32 func_8006F0B4_orig(s32 chan, char *file, u32 *buf, s32 ofs, s32 bytes);
+s32 func_8006F0B4(s32 chan, char *file, u32 *buf, s32 ofs, s32 bytes) {
+    if (file && !strcmp(file, CAMPAIGN_SAVE))
+        loaded_chan = chan;
+    return func_8006F0B4_orig(chan, file, buf, ofs, bytes);
+}
+
+/* the save screen and the load screen: the table with the campaign */
+s32 func_80042450_orig(s32 arg);
+s32 func_80042450(s32 arg) { /* (arg: the screen's mode, as its callers give it) */
+    s32 r;
+    saved_chan = -1;
+    r = func_80042450_orig(arg);
+    port_endless_logf(-1, "card: the save screen left (channel %d)", saved_chan);
+    if (saved_chan >= 0 && card_has(saved_chan >> 4 & 1, CAMPAIGN_SAVE))
+        endless_card_write(saved_chan >> 4 & 1, "the game saved");
+    return r;
+}
+
+s32 func_80042B94_orig(void);
+s32 func_80042B94(void) {
+    s32 r;
+    loaded_chan = -1;
+    r = func_80042B94_orig();
+    if (loaded_chan >= 0)
+        endless_card_read(loaded_chan >> 4 & 1, "the game loaded");
+    return r;
 }
 
 /* The title screen; after it, the main menu */
@@ -485,6 +637,8 @@ void func_80028644(void) {
             break;
         }
     port_endless_keep(name);
+    if (!port_endless_unranked) /* (a ranked run: the table to the card the campaign autoloads from, else slot 1) */
+        endless_card_write(autoload_slot() < 0 ? 0 : autoload_slot(), "a ranked run");
     {
         char diff[600];
         int n = 0;
