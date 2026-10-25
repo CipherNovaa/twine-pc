@@ -108,6 +108,7 @@ void port_endless_score(int points);
 void port_endless_ungate(int level);
 void port_endless_restart(void);
 void quick_grenade_give(void);
+void func_80053DE4(s16 type, s16 sub, s32 x, s32 y, s32 z); /* an event on the AI's board (0: a gunshot) */
 
 #define OBJ(i) ((u8 *)D_800AFFC8 + (i) * 0x124)
 #define TYPE_DEF(t) ((u8 *)g_Args->unk228 + (t) * 0x70) /* the object types: +1 their class (6 people), +2 (0x22 a door's zone) */
@@ -593,6 +594,24 @@ static void clear_arrival(void) {
     }
 }
 
+/* Each level's AI scripts by index (w4 bits 20-22, obj+0xA7; workbench research, the AIBnn tables): which are a
+ * fighting guard's that moves (GOON*, HEADGOON, KYLE, VGOON, BGOON*, GUARD, GOONCH, COREGOON). A copy takes a kind
+ * whose record has one: others are civilians', story people's, a sniper's (fixed) or a friend's (Turncoat's GABOR). */
+static const char guard_scripts[12][9] = {
+    {0},
+    {1, 0, 0, 0, 0, 0, 0, 0, 0},  /* L01 GOON PILOT SNIPER ELECTRA BONDNIS DIRECTOR */
+    {1, 1, 0, 0, 0, 0, 1, 0, 0},  /* L02 HEADGOON GOON1 LACHASE CIGAR RECEPT SCIENC1 KYLE BONDNIS */
+    {1, 0, 0, 0, 0, 0, 0, 0, 0},  /* L03 GOON CIVI BULL1 BULL2 SNIPER BUM XMAS GABOR */
+    {1, 0, 0, 0, 0, 0, 0, 0, 0},  /* L04 VGOON SERVANT ELECTRA DAVIDOV PHOLDER DAVIDOVNIS BONDNIS */
+    {1, 0, 0, 0, 0, 0, 0, 0, 0},  /* L05 GOON05 XMAS ZUKOVSKY DIRECTOR */
+    {1, 0, 0, 0, 0, 0, 0, 0, 0},  /* L06 GOON XMAS TECH M BONDNIS DIRECTOR */
+    {1, 0, 0, 0, 0, 1, 1, 1, 0},  /* L07 GOON1B XMAS RENARD SCIENC1 BONDNIS BGOON BGOON2 GUARD */
+    {0, 1, 1, 0, 0, 0, 0, 0, 0},  /* L08 CIGARG GOONCH BGOON2 SNIPER PUB SCIENC1 RENARD BONDNIS */
+    {1, 0, 0, 0, 0, 0, 0, 0, 0},  /* L09 GOON GABOR ELECTRA BULLION M BONDNIS DIRECTOR */
+    {1, 0, 0, 0, 0, 1, 0, 0, 0},  /* L10 GOON RENARD XMAS RENARD1 BONDNIS COREGOON DIRECTOR */
+    {1, 0, 0, 0, 0, 0, 0, 0, 0},  /* L11 GOON ZUKOVSKY ELECTRA HOTGIRL DEALER BULLION DIRECTOR */
+};
+#define FIXED_SCRIPT(w4) (g_Args->level >= 1 && g_Args->level <= 11 && !guard_scripts[g_Args->level][(w4) >> 20 & 7])
 /* the room as it starts: the kinds of guards, its doorways and floor */
 static void room_start(void) {
     s32 i, j, counts[256];
@@ -630,7 +649,21 @@ static void room_start(void) {
                 ;
             if (k == kind_count)
                 memcpy(kinds[kind_count++], p, sizeof(kinds[0]));
+            else if (FIXED_SCRIPT(kinds[k][4]) && !FIXED_SCRIPT(p[4])) /* (one of the kind who moves, rather) */
+                memcpy(kinds[k], p, sizeof(kinds[0]));
         }
+    {   /* kinds whose record holds no moving guard's script (a sniper's, a civilian's, a friend's: some the game makes
+         * unhittable, hit mask 7FFF) are copied only when the room has no other */
+        int mobile = 0, n = 0;
+        for (i = 0; i < kind_count; i++)
+            mobile += !FIXED_SCRIPT(kinds[i][4]);
+        for (i = 0; i < kind_count; i++)
+            if (!mobile || !FIXED_SCRIPT(kinds[i][4]))
+                memcpy(kinds[n++], kinds[i], sizeof(kinds[0]));
+            else
+                ELOG("room: kind type %d (script %d: not a moving guard's) not copied", kinds[i][3] & 0xFF, kinds[i][4] >> 20 & 7);
+        kind_count = n;
+    }
     no_story_people(counts);
     {   /* (the log: the mission's placed people kept and left out, its armed guards among them) */
         int kept = 0, out = 0, armed = 0;
@@ -700,7 +733,7 @@ static int lately(s32 x, s32 z) { /* (by where one of the last few came, or by w
     return 0;
 }
 
-#define LEVEL_DY 1500 /* (a place on Bond's own floor: another floor's guards would stay up there and shoot down) */
+#define LEVEL_DY 1000 /* (a place on Bond's own floor: another floor's guards would stay up there and shoot down) */
 
 static int place(int *door) {
     s32 bx = g_Args->playerX, by = g_Args->playerY, bz = g_Args->playerZ, at = dist2(bx, bz, entry[2], entry[4]);
@@ -900,6 +933,9 @@ static void spawn(const char *why) {
         hunters[h].z = hunters[h].lz = mid[i][2];
     recent[recent_next][0] = mid[i][0], recent[recent_next][2] = mid[i][2];
     recent_next = (recent_next + 1) % 4;
+    /* a gunshot heard where Bond is, on the AI's board: a guard sent comes alert (the game's own guards stand and wait
+     * for a noise or the sight of him; Masquerade's take him for one of theirs till then) */
+    func_80053DE4(0, 0, g_Args->playerX, g_Args->playerY, g_Args->playerZ);
     ELOG("spawn (%s): guard type %d %s at %d %d %d, %d from Bond, budget %d; ai %d, state %08X", why, rec[3] & 0xFF,
          door ? "in at a doorway" : "on the floor", mid[i][0], mid[i][1], mid[i][2],
          dist2(g_Args->playerX, g_Args->playerZ, mid[i][0], mid[i][2]), budget, o[0xA7],
@@ -925,18 +961,21 @@ static void recall(void) {
             hunters[h].lx = POS(o)[0], hunters[h].lz = POS(o)[2], hunters[h].moved = room_frames;
         if (getenv("TWINE_ENDLESS_TEST_MEET") && room_frames - hunters[h].born == SEC * 3) {
             s16 at[5]; /* (headless tests: Bond put 1500 from the guard sent, facing him: does he fire?) */
-            s32 a, ba = 0, best = -0x7FFFFFFF;
-            for (a = 0; a < 4096; a += 64) {
+            s32 a, ba = 0, best = -0x7FFFFFFF, toward = *(u16 *)(*(u8 **)(o + 0x90) + 0x62) & 0xFFF; /* (in front of him) */
+            for (a = 0; a < 4096; a += 64) { /* (nearest that way with floor at his height) */
                 s32 x = POS(o)[0] + (isin(a) * 1500 >> 12), z = POS(o)[2] + (isin(a + 0x400) * 1500 >> 12);
-                s32 fh = floor_at(x, POS(o)[1] - 500, z);
-                if (fh != -0x7FFF && fh - POS(o)[1] < 200 && POS(o)[1] - fh < 200 && a > best)
-                    best = a, ba = a;
+                s32 fh = floor_at(x, POS(o)[1] - 500, z), off = (a - toward) & 0xFFF;
+                off = off > 0x800 ? 0x1000 - off : off;
+                if (fh != -0x7FFF && fh - POS(o)[1] < 200 && POS(o)[1] - fh < 200 && -off > best)
+                    best = -off, ba = a;
             }
             if (best > -0x7FFFFFFF) {
                 at[0] = D_800D2F8C, at[1] = (s16)((ba + 0x800) & 0xFFF), at[2] = POS(o)[0] + (isin(ba) * 1500 >> 12);
                 at[3] = POS(o)[1], at[4] = POS(o)[2] + (isin(ba + 0x400) * 1500 >> 12);
                 func_80030FA8(at);
                 ELOG("test: Bond put by the sent guard type %d", o[6]);
+                if (getenv("TWINE_ENDLESS_TEST_NOISE"))
+                    func_80053DE4(0, 0, at[2], at[3], at[4]);
             }
         }
         if (room_frames - hunters[h].born == SEC * 5)
@@ -1059,7 +1098,10 @@ void endless_frame(void) {
     last_frame = D_8009CDA8;
     port_endless_ungate(g_Args->level);
     /* a stretch of the mission (King's Ransom): the next section loaded the mission's way is the next room */
-    if (loading && D_800D2F90 == 0 && D_800D2F8C != last_section) {
+    if (loading)
+        loading++;
+    if (loading && D_800D2F90 == 0 && (D_800D2F8C != last_section || loading > SEC * 3)) {
+        /* (or the same section again, a door back into it: three seconds on, the next room all the same) */
         loading = 0;
         port_endless_room(entry);
         room_start();
@@ -1222,6 +1264,23 @@ void endless_frame(void) {
                 g_Weapons[i].flags |= 0x1800, g_Weapons[i].ammo += 20, g_Weapons[i].reserve += 20;
         log_weapons("armed (test)");
     }
+    if (getenv("TWINE_ENDLESS_TEST_SHOOT") && room_frames >= atoi(getenv("TWINE_ENDLESS_TEST_SHOOT")) * SEC &&
+        room_frames % (SEC * 2) == 0) /* (headless tests: everyone shot, past the game's own hit tests: who is immune?) */
+        for (i = D_800B0DA0; i <= D_800B07B0; i++) {
+            u8 *o = OBJ(i);
+            u16 mask = *(u16 *)(o + 0xE);
+            s32 was = HEALTH(o);
+            if (o == g_Player || !o[4] || o[5] != 6 || was <= 0)
+                continue;
+            if (mask == 0x7FFF || (mask & 0x800) || (*(s32 *)(o + 0x4C) & 0x02000400) || (o[0xA4] & 2)) {
+                ELOG("test shot: person %d type %d immune (hit mask %04X, +4C %08X, +A4 %02X)", i, o[6], mask,
+                     *(s32 *)(o + 0x4C), o[0xA4]);
+                continue;
+            }
+            HEALTH(o) -= 700;
+            func_8005E020(o);
+            ELOG("test shot: person %d type %d health %d -> %d", i, o[6], was, HEALTH(o));
+        }
     if (getenv("TWINE_ENDLESS_TEST_GOD") && HEALTH(g_Player) > 0 && HEALTH(g_Player) < 0x10000)
         HEALTH(g_Player) = 0x20000; /* (headless tests: Bond doesn't fall) */
     if (getenv("TWINE_ENDLESS_TEST_DRAW") && room_frames == 60) /* (headless tests: Bond changes to the weapon named) */
@@ -1244,7 +1303,7 @@ void endless_frame(void) {
         open = 1; /* (headless tests: the exit open) */
     if (getenv("TWINE_ENDLESS_TEST_LOCKED") && room_frames >= 100 && room_frames < 140)
         D_800D2F90 = 2; /* (headless tests: a shut door, walked into again and again) */
-    if (getenv("TWINE_ENDLESS_TEST_DOOR") && room_frames == 100) { /* (headless tests: a door to load point N) */
+    if (getenv("TWINE_ENDLESS_TEST_DOOR") && room_frames == 100 && !segment) { /* (headless tests: a door to load point N) */
         open = 1, room_frames = SEC * 60, D_800D2F90 = 2, D_8009CFFC = 1;
         *(s16 **)(D_8009E9C4 + 8) = D_8009E9C4 + 0xC + atoi(getenv("TWINE_ENDLESS_TEST_DOOR")) * 8;
     }
@@ -1547,6 +1606,19 @@ static void dump(void) {
                      "obj +8 %d +A4 %02X +48 %08X%s", i, o[6], HEALTH(o), o[0xA7], POS(o)[0], POS(o)[1], POS(o)[2],
                      floor_at(POS(o)[0], POS(o)[1] - 500, POS(o)[2]), (u32)src, src ? src[0] : 0, src ? src[1] : 0,
                      o[8], o[0xA4], *(s32 *)(o + 0x48), is_copy(o) ? " (a copy)" : "");
+                if (getenv("TWINE_ENDLESS_DUMP_TYPE") && o[6] == atoi(getenv("TWINE_ENDLESS_DUMP_TYPE"))) {
+                    char hex[0x124 * 2 + 1], hex2[0x80 * 2 + 1];
+                    u8 *m = *(u8 **)(o + 0x90), *st = *(u8 **)(o + 0x94);
+                    for (j = 0; j < 0x124; j++)
+                        snprintf(hex + j * 2, 3, "%02X", o[j]);
+                    ELOG("dump: object %d: %s", i, hex);
+                    for (j = 0; j < 0x80 && m; j++)
+                        snprintf(hex2 + j * 2, 3, "%02X", m[j]);
+                    ELOG("dump: its +90: %s", m ? hex2 : "-");
+                    for (j = 0; j < 0x80 && st; j++)
+                        snprintf(hex2 + j * 2, 3, "%02X", st[j]);
+                    ELOG("dump: its +94: %s", st ? hex2 : "-");
+                }
             }
     if (D_800D2F90 != last_load) {
         s16 *to = *(s16 **)(D_8009E9C4 + 8);

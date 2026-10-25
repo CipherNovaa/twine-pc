@@ -81,12 +81,16 @@ class Run:
             env["TWINE_CARD1"] = "none"
         env.update({k: str(v) for k, v in self.env.items()})
         with open(os.path.join(self.dir, "out.txt"), "w") as out:
+            child = subprocess.Popen(["nice", exe], cwd=self.dir, env=env, stdout=out, stderr=subprocess.STDOUT)
             try:
-                subprocess.run(["nice", exe], cwd=self.dir, env=env, stdout=out, stderr=subprocess.STDOUT,
-                               timeout=self.secs)
-            except subprocess.TimeoutExpired:
-                pass
-        subprocess.run(["pkill", "-x", "-f", exe], stderr=subprocess.DEVNULL)
+                child.wait(timeout=self.secs)
+            except subprocess.TimeoutExpired:  # (only this run's own process is stopped)
+                child.terminate()
+                try:
+                    child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
         try:
             self.log = open(os.path.join(self.dir, "port.log"), errors="replace").read()
         except OSError:
@@ -160,9 +164,10 @@ def result(check, what, ok, detail=""):
 
 def room_run(room):
     l, p = room
-    return Run("room_%d_%d" % (l, p if p >= 0 else 99), l, 55,
+    return Run("room_%d_%d" % (l, p if p >= 0 else 99), l, 72,
                {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "%d:%d" % room, "TWINE_ENDLESS_SEED": 4,
-                "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_MEET": 1})
+                "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_ENDLESS_TEST_NOISE": 1,
+                "TWINE_ENDLESS_TEST_SHOOT": 50})
 
 
 def check_room(run, room, checks):
@@ -172,24 +177,30 @@ def check_room(run, room, checks):
             if c in "abc":
                 result(c, name, False, "crashed or never started")
         return
-    if "a" in checks:
+    if "a" in checks:  # (damage dealt to Bond before the shooting test begins: by a sent guard Bond was put by, or
+        # failing one sent in time, by the room's own)
+        shoot = run.log.find("test shot:")
+        shoot = shoot if shoot >= 0 else len(run.log)
         met = run.log.find("test: Bond put")
-        dmg_after = len(re.findall(r"damage:", run.log[met:])) if met >= 0 else 0
-        dmg = len(run.lines(r"damage:"))
-        if met >= 0:
-            result("a", name, dmg_after > 0, "sent guard met: %d hits on Bond" % dmg_after)
+        if 0 <= met < shoot:
+            n = len(re.findall(r"damage: \d+: health", run.log[met:shoot]))
+            result("a", name, n > 0, "sent guard met: %d hits on Bond" % n)
         else:
-            result("a", name, dmg > 0 or None, "no guard sent (slots full); the room's own: %d hits" % dmg)
+            n = len(re.findall(r"damage: \d+: health", run.log[:shoot]))
+            result("a", name, n > 0 or None, "no guard sent in time (slots full); the room's own: %d hits" % n)
     ppl = people(run)
-    if "b" in checks:
-        immune = sorted({"type %d (%s, +4C %08X, +E %04X)" % (q["type"], q["how"], q["c"], q["e"]) for q in ppl
-                         if q["health"] > 0 and (q["c"] & 0x02000400 or q["e"] == 0x7FFF or q["e"] & 0x800)})
-        result("b", name, not immune, "; ".join(immune) or "%d people seen, none immune" % len({q["slot"] for q in ppl}))
+    if "b" in checks:  # (from 50 s on everyone is shot every 2 s past the game's hit tests: each must fall)
+        immune = sorted({l.split("test shot: ")[1] for l in run.lines(r"test shot: .* immune")})
+        shot = run.lines(r"test shot: person \d+ type \d+ health")
+        fell = [l for l in shot if re.search(r"-> (-\d+|0)$", l)]
+        result("b", name, bool(not immune and (not shot or fell)),
+               "; ".join(immune)[:160] or "%d shots, %d fell" % (len(shot), len(fell)))
     if "c" in checks:
         bad = []
         bad += ["type %d on no floor at %d %d %d" % (q["type"], q["x"], q["y"], q["z"]) for q in ppl
                 if q["health"] > 0 and q["floor"] == -32767]
-        bad += ["removed while seen: " + l.split("removed: ")[1][:60] for l in run.lines(r"removed: .*Bond could see")]
+        bad += ["removed while seen: " + l.split("removed: ")[1][:60] for l in run.lines(r"removed: .*Bond could see")
+                if "no floor under him" not in l]  # (a guard just made inside a wall goes at once, seen or not)
         bad += ["copy posed (type %d)" % q["type"] for q in ppl if q["how"] == "sent" and q["flags"] & 0x400]
         result("c", name, not bad, "; ".join(sorted(set(bad)))[:200] or "%d spawns" % len(run.lines(r"spawn \(")))
 
@@ -270,7 +281,8 @@ def check_restart(runs):
 def carry_runs():
     return {"carry": Run("carry", 8, 110, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:-1", "TWINE_ENDLESS_SEED": 5,
                                          "TWINE_ENDLESS_TEST_ARM": 1, "TWINE_ENDLESS_TEST_DRAW": "FRINESI AUTO",
-                                         "TWINE_ENDLESS_TEST_DOOR": 2, "TWINE_ENDLESS_TEST_GOD": 1})}
+                                         "TWINE_ENDLESS_TEST_DOOR": 2, "TWINE_ENDLESS_TEST_EXIT": 150,
+                                         "TWINE_ENDLESS_TEST_GOD": 1})}
 
 
 def check_carry(runs):
@@ -279,9 +291,9 @@ def check_carry(runs):
     drawn = r.lines(r"weapon: .* drawn")
     stretch_ok = len(left) >= 1 and "FRINESI AUTO" in left[0] and len(drawn) >= 2 and "FRINESI AUTO drawn" in drawn[1]
     result("g", "stretch keeps the weapon", stretch_ok, "; ".join(x.split("endless: ")[1][22:80] for x in (left[:1] + drawn[1:2])))
-    other = [d for d in drawn[3:] if "FRINESI" in d or "no FRINESI" in d]
-    result("g", "another mission: it or the P2K", None if len(drawn) < 4 else bool(other),
-           drawn[3].split("weapon: ")[1][:60] if len(drawn) > 3 else "fewer than 4 rooms")
+    other = [d for d in drawn[2:3] if "FRINESI" in d]
+    result("g", "another mission: it or the P2K", bool(other),
+           drawn[2].split("weapon: ")[1][:60] if len(drawn) > 2 else "fewer than 3 rooms")
 
 
 # ---- h: the high scores on the card ----
