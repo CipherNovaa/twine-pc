@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC
+ * MOD_REPLACES_NATIVE: func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -45,6 +45,7 @@ void *memcpy(void *d, const void *s, unsigned n);
 void *memset(void *d, int c, unsigned n);
 char *strncpy(char *d, const char *s, unsigned n);
 int strncmp(const char *a, const char *b, unsigned n);
+unsigned strlen(const char *s);
 char *strchr(const char *s, int c);
 char *strstr(const char *s, const char *t);
 void port_endless_logf(s32 frame, const char *fmt, ...);
@@ -82,6 +83,8 @@ void func_80030FA8(s16 *at);                     /* puts Bond at a point (sectio
 s32 func_800705A8(s32 floor, s16 *pos, s32 arg2, s32 arg3); /* the floor's height under pos, -0x7FFF none */
 #define MAKE_AT ((s32 *)0x1F8003D4u)             /* (the scratchpad's x, y, z) */
 s32 func_8002D4E4_orig(s32 text);
+void func_80041DBC(void);
+void func_80041DBC_orig(void);
 s32 func_8002E1B0_orig(void);
 void RestartPrompt_Open_orig(void);
 s32 func_8004CA5C_orig(u8 *o, u8 *who);
@@ -217,6 +220,36 @@ static int alive(int *own) {
 }
 
 /* Bond as he leaves the room, for the next (the weapons this mission doesn't have kept as they were) */
+/* What Bond carries in a run, and what may drop: what fights (guns, launchers, grenades, satchels and their
+ * detonator, the stunner, his fists; not the pen bomb, the tranquilizer or the flare gun). The missions' tools and story
+ * things (keys, cards, the palmtop, the scanner, the briefcase, the wrench, the grapple, the bug, the camera, the
+ * VLF disruptor, the radiation badge and detector) are taken away, and Flashpoint's gas grenade too (its slot can't be
+ * thrown: picked up, it did nothing). */
+static const char *const combat_items[] = {
+    "UNARMED", "WOLFRAM P2K", "KOFFLER KS5", "FRINESI SHOTGUN", "FRINESI AUTO", "INGALLS TYPE 20", "AR36 SNIPER",
+    "BELGIQUE PS100", "MEYER TMP", "IAC DEFENDER", "KAZAKOVICH KA-57", "ROCKET LAUNCHER", "GRENADE LAUNCHER",
+    "FRAG GRENADE", "FLASH BANG", "SATCHEL CHARGE", "SATCHEL DETONATO", "CELL PHONE STUNN", 0};
+
+static int combat_item(const char *name) {
+    int k;
+    for (k = 0; combat_items[k]; k++)
+        if (!strncmp(name, combat_items[k], strlen(combat_items[k])))
+            return 1;
+    return 0;
+}
+
+/* the mission's tools and story things out of Bond's hands (whatever it gives him at its start too) */
+static void strip_tools(void) {
+    int i;
+    for (i = 0; i < SLOTS; i++) {
+        Weapon *w = &g_Weapons[i];
+        if (w->pad0[0] >= 'A' && w->pad0[0] <= 'Z' && (w->flags & 0x1800) && !combat_item((char *)w->pad0)) {
+            ELOG("inventory: %s taken away (no use in a fight)", (char *)w->pad0);
+            w->flags &= ~0x1800;
+        }
+    }
+}
+
 /* (the log: Bond's weapons now) */
 static void log_weapons(const char *when) {
     char text[400];
@@ -412,30 +445,35 @@ static int flood(void) {
     return n;
 }
 
-/* The fighters among the mission's people (workbench/research/STAGE2_REPORT.md, Q5): a guard's AI script (each
- * level's scripts by their index, (w4 >> 20) & 7 in a record, +0xA7 in a person: GOON, HEADGOON, KYLE, VGOON,
- * BGOON, GUARD, GOONCH, COREGOON, SNIPER, PILOT), a guard's health (the story's people have 7000-50000), and
- * hittable (hit mask +0x28 in the type, +0xE in a person, not 0x7FFF; not passed by explosions, +0x4C & 0x400).
- * Guards that may not be killed (+0x4C & 0x40000000: Night Watch's, Courier's bank guards) fight in a run. */
-static const u8 guard_scripts[12] = {
-    0, 0x07 /* L01 GOON PILOT SNIPER */, 0x43 /* L02 HEADGOON GOON1 KYLE */, 0x11 /* L03 GOON SNIPER */,
-    0x01 /* L04 VGOON */, 0x01 /* L05 GOON05 */, 0x01 /* L06 GOON */, 0xE1 /* L07 GOON1B BGOON BGOON2 GUARD */,
-    0x0E /* L08 GOONCH BGOON2 SNIPER */, 0x01 /* L09 GOON */, 0x21 /* L10 GOON COREGOON */, 0x01 /* L11 GOON */,
-};
-
+/* The fighters among the mission's people (workbench/research/STAGE2_REPORT.md, Q5), by what they can do: armed
+ * (the type's weapon, +0x2C: the civilians have none), a guard's health (+0x20: the story's people have 7000-50000)
+ * and hittable (hit mask +0x28 in the type, +0xE in a person, not 0x7FFF nor 0x800; not passed by explosions,
+ * +0x40 / +0x4C & 0x400). Guards that may not be killed (+0x4C & 0x40000000: Night Watch's, Courier's bank guards)
+ * fight in a run. */
 static int fighter_type(u32 t, int script) {
     u8 *def = TYPE_DEF(t);
-    return t && def[1] == 6 && t != ((u8 *)g_Player)[6] && (guard_scripts[g_Args->level % 12] >> script & 1) &&
-           *(s32 *)(def + 0x20) <= 5000 && *(u16 *)(def + 0x28) != 0x7FFF && !(*(s32 *)(def + 0x40) & 0x400);
+    (void)script;
+    return t && def[1] == 6 && t != ((u8 *)g_Player)[6] && def[0x2C] != 0 && *(s32 *)(def + 0x20) <= 5000 &&
+           *(u16 *)(def + 0x28) != 0x7FFF && !(*(u16 *)(def + 0x28) & 0x800) && !(*(s32 *)(def + 0x40) & 0x400);
 }
 
-static int fighter(u8 *o) { /* (a person now: scripts change these as they go) */
-    return fighter_type(o[6], o[0xA7]) && *(u16 *)(o + 0xE) != 0x7FFF && !(*(u16 *)(o + 0xE) & 0x800) &&
-           !(*(s32 *)(o + 0x4C) & 0x400);
+/* the people who break a run, taken out: unkillable (hit mask 0x7FFF or 0x800, passed by explosions) or of a story
+ * person's health (the assassin's 50000, Renard's, Electra's): civilians and scientists stay, and may be killed */
+static int unkillable_type(u32 t) {
+    u8 *def = TYPE_DEF(t);
+    return t && def[1] == 6 && t != ((u8 *)g_Player)[6] &&
+           (*(s32 *)(def + 0x20) > 5000 || *(u16 *)(def + 0x28) == 0x7FFF || (*(u16 *)(def + 0x28) & 0x800) ||
+            (*(s32 *)(def + 0x40) & 0x400));
 }
 
-static int story_person(u32 t, s32 *rec) { /* (a placed person who isn't a fighter) */
-    return t && TYPE_DEF(t)[1] == 6 && t != ((u8 *)g_Player)[6] && !fighter_type(t, (rec[4] >> 20) & 7);
+static int unkillable(u8 *o) { /* (a person now: scripts change these as they go, Electra's hit mask) */
+    return unkillable_type(o[6]) || *(u16 *)(o + 0xE) == 0x7FFF || (*(u16 *)(o + 0xE) & 0x800) ||
+           (*(s32 *)(o + 0x4C) & 0x400);
+}
+
+static int story_person(u32 t, s32 *rec) { /* (a placed person who would break the run) */
+    (void)rec;
+    return unkillable_type(t);
 }
 
 /* The mission's story people, out: those of a kind it places only once (counts: how many of each kind it places),
@@ -453,10 +491,57 @@ static void no_story_people(s32 *counts) {
         }
     for (i = D_800B0DA0; i <= D_800B07B0; i++) {
         u8 *o = OBJ(i);
-        if (o != g_Player && o[4] && o[5] == 6 && !fighter(o) && !is_copy(o)) {
+        if (o != g_Player && o[4] && o[5] == 6 && unkillable(o) && !is_copy(o)) {
             ELOG("room: story person (type %d) taken out", o[6]);
             func_800395E8(o);
         }
+    }
+}
+
+/* Nobody where Bond arrives (a section entered from its far side may have a guard's post on its load point, a seated
+ * one at a desk say): Bond arrives instead at the nearest clear floor a little way off, facing the same way */
+static int clear(int f);
+static void clear_arrival(void) {
+    s32 who[8][3], best = 0x7FFFFFFF, mid_x = 0, mid_y = 0, mid_z = 0;
+    int n = 0, i, j, k, b = -1;
+    for (i = D_800B0DA0; i <= D_800B07B0 && n < 8; i++) { /* (the people there, and the section's placed ones) */
+        u8 *o = OBJ(i);
+        if (o != g_Player && o[4] && dist2(POS(o)[0], POS(o)[2], entry[2], entry[4]) < 900)
+            who[n][0] = POS(o)[0], who[n][2] = POS(o)[2], n++;
+    }
+    for (i = 0; i < D_8009CF68; i++)
+        for (j = 0; j < D_8009CF6C[i] && n < 8; j++) {
+            s32 *p = D_8009CF70[i] + j * 6, x = p[0] + D_800D2FB0[0], z = p[2] + D_800D2FB0[2];
+            if ((p[3] & 0xFF) && TYPE_DEF(p[3] & 0xFF)[1] == 6 && dist2(x, z, entry[2], entry[4]) < 900)
+                who[n][0] = x, who[n][2] = z, n++;
+        }
+    if (!n)
+        return;
+    {   /* (places round the arrival, nearest first: floor at its height, away from them all) */
+        s32 fy = floor_at(entry[2], entry[3] - 500, entry[4]), r, a;
+        fy = fy == -0x7FFF ? entry[3] : fy;
+        for (r = 1000; r <= 3000 && b < 0; r += 250)
+            for (a = 0; a < 4096 && b < 0; a += 256) {
+                s32 x = entry[2] + (isin(a) * r >> 12), z = entry[4] + (isin(a + 0x400) * r >> 12);
+                s32 h = floor_at(x, fy - 500, z);
+                if (h == -0x7FFF || h - fy > 300 || fy - h > 300)
+                    continue;
+                for (k = 0; k < n && dist2(x, z, who[k][0], who[k][2]) >= 1300; k++)
+                    ;
+                if (k == n)
+                    b = 0, best = r, mid_x = x, mid_y = h, mid_z = z;
+            }
+    }
+    if (b < 0) {
+        ELOG("room: someone at Bond's arrival, and no clear place near it");
+        return;
+    }
+    {
+        s16 at[5];
+        at[0] = D_800D2F8C, at[1] = entry[1], at[2] = mid_x, at[3] = mid_y, at[4] = mid_z;
+        func_80030FA8(at);
+        ELOG("room: someone at Bond's arrival: he arrives at %d %d %d instead (%d off)", mid_x, mid_y, mid_z, best);
+        entry[2] = mid_x, entry[3] = mid_y, entry[4] = mid_z;
     }
 }
 
@@ -487,7 +572,11 @@ static void room_start(void) {
                 doors[door_count][2] = p[2] + D_800D2FB0[2];
                 door_count++;
             }
-            if (!t || TYPE_DEF(t)[1] != 6 || story_person(t, p) || kind_count == KINDS)
+            if (!fighter_type(t, 0) || kind_count == KINDS) /* (copies only of armed guards) */
+                continue;
+            if (p[3] & 0x400) /* (a guard placed in a pose, seated at a desk: his copies would sit on air) */
+                continue;
+            if (getenv("TWINE_ENDLESS_TEST_KIND") && t != (u32)atoi(getenv("TWINE_ENDLESS_TEST_KIND")))
                 continue;
             for (k = 0; k < kind_count && (kinds[k][3] & 0xFF) != t; k++)
                 ;
@@ -495,25 +584,24 @@ static void room_start(void) {
                 memcpy(kinds[kind_count++], p, sizeof(kinds[0]));
         }
     no_story_people(counts);
-    /* nobody standing where Bond arrives: one there is moved a step aside (a reversed entry may be a guard's post) */
-    for (i = D_800B0DA0; i <= D_800B07B0; i++) {
-        u8 *o = OBJ(i);
-        if (o != g_Player && o[4] && dist2(POS(o)[0], POS(o)[2], entry[2], entry[4]) < 700 &&
-            POS(o)[1] - entry[3] < 1500 && entry[3] - POS(o)[1] < 1500) {
-            s32 k, d[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-            for (k = 0; k < 4; k++) {
-                s32 x = entry[2] + d[k][0] * 900, z = entry[4] + d[k][1] * 900, h = floor_at(x, POS(o)[1] - 400, z);
-                if (h != -0x7FFF && h - POS(o)[1] < 300 && POS(o)[1] - h < 300) {
-                    POS(o)[0] = x, POS(o)[2] = z, POS(o)[1] = h;
-                    break;
+    {   /* (the log: the mission's placed people kept and left out, its armed guards among them) */
+        int kept = 0, out = 0, armed = 0;
+        for (i = 0; i < D_8009CF68; i++)
+            for (j = 0; j < D_8009CF6C[i]; j++) {
+                s32 *p = D_8009CF70[i] + j * 6;
+                u32 t = p[3] & 0xFF;
+                if (!t || TYPE_DEF(t)[1] != 6) {
+                    if ((p[3] & 0x1FF) == 0x100) /* (one left out: no kind now) */
+                        out++;
+                    continue;
                 }
+                kept++;
+                armed += fighter_type(t, 0);
             }
-            ELOG("room: person type %d at Bond's arrival moved %s", o[6], k < 4 ? "aside" : "nowhere: taken out");
-            if (k == 4)
-                func_800395E8(o);
-        }
+        ELOG("room: the mission's people: %d kept (%d armed guards), %d left out", kept, armed, out);
     }
     read_floor();
+    clear_arrival();
     if (!segment)
         carry_in(); /* (Bond as he left the last room, before the room's first frame) */
     if (port_endless_room_started() > 1) { /* RESTART MISSION: the whole run again, fresh */
@@ -623,7 +711,7 @@ static int place(int *door) {
         *door = 0;
         for (i = 0; i < faces; i++) {
             s32 dx = mid[i][0] - bx, dz = mid[i][2] - bz, d = dist2(bx, bz, mid[i][0], mid[i][2]);
-            if (!reach[i] || shut[i] || d <= best || mid[i][1] - by > LEVEL_DY || by - mid[i][1] > LEVEL_DY ||
+            if (!reach[i] || shut[i] || d <= best || d > 16000 || mid[i][1] - by > LEVEL_DY || by - mid[i][1] > LEVEL_DY ||
                 (dx / 16 * fx + dz / 16 * fz) / (d / 16 + 1) > 4096 / 4 || lately(mid[i][0], mid[i][2]) || !clear(i))
                 continue;
             best = d, b = i;
@@ -631,7 +719,7 @@ static int place(int *door) {
         if (b < 0) { /* the last: any place he can walk to, not right by him (a tiny room) */
             for (i = 0; i < faces; i++) {
                 s32 d = dist2(bx, bz, mid[i][0], mid[i][2]);
-                if (reach[i] && !shut[i] && d > 2000 && d > best - 2500 && mid[i][1] - by <= LEVEL_DY &&
+                if (reach[i] && !shut[i] && d > 2000 && d < 16000 && d > best - 2500 && mid[i][1] - by <= LEVEL_DY &&
                     by - mid[i][1] <= LEVEL_DY)
                     best = d + 2500, b = i;
             }
@@ -708,7 +796,10 @@ static void spawn(const char *why) {
     rec[2] = mid[i][2] - D_800D2FB0[2];
     rec[3] &= ~0x300;           /* not made yet; not asleep */
     rec[4] &= ~(0x1F << 7);     /* no path to walk (the kind's was in its own section) */
-    rec[4] &= ~(0xFF << 12);    /* nor the pose it was placed in (a seated guard's, at a desk) */
+    rec[4] &= ~(0xFF << 12);    /* nor the pose it was placed in (a seated guard's, at a desk: */
+    rec[4] &= ~(7 << 24);       /* its start pose and state, w4's bits 12-19 and 24-26, and the flags' 14-26) */
+    rec[3] &= ~(0x1FFF << 14);
+    rec[3] &= ~0x400;           /* (and the pose's flag) */
     o = func_8003C1BC(rec, mid[i][0], mid[i][1], mid[i][2]);
     for (h = 0; !o && h < kind_count; h++) { /* (the kinds in turn, a slot freed for each) */
         rec[3] = (rec[3] & ~0x3FF) | (kinds[h][3] & 0xFF);
@@ -778,10 +869,13 @@ static void drop(u8 *o) {
     s32 weapons[19], ammo[19], na = 0;
     u8 *box;
     for (i = n = 0; i < 19; i++) {
-        if (D_8009D130[i * 4] >= 0 && D_8009D130[i * 4 + 1] > 0)
+        int fights = D_8009D130[i * 4] >= 0 && D_8009D130[i * 4] < SLOTS &&
+                     combat_item((char *)g_Weapons[D_8009D130[i * 4]].pad0) &&
+                     strncmp((char *)g_Weapons[D_8009D130[i * 4]].pad0, "UNARMED", 7);
+        if (fights && D_8009D130[i * 4 + 1] > 0)
             weapons[n++] = i; /* (a weapon lying about: its own pickup) */
-        if (D_8009D130[i * 4] >= 0 && D_8009D130[i * 4] < SLOTS)
-            ammo[na++] = i;   /* (its ammo, in a box: any of the mission's weapons, gadgets too) */
+        if (fights)
+            ammo[na++] = i;   /* (its ammo, in a box) */
     }
     last_drop[0] = x, last_drop[1] = y, last_drop[2] = z;
     /* a frag grenade, now and then: King's Ransom's own pickup there; elsewhere, one of the quick grenade's */
@@ -855,6 +949,7 @@ void endless_frame(void) {
         func_80048B4C(msg_wave, 0x80, 0);
         ELOG("room ready: health %d armour %d, weapon %s, floor Bond can reach: %d polygons", bond_health(),
              D_8009CFF0, weapon_name(), flood());
+        strip_tools();
         draw_weapon();
         log_weapons("as the room starts");
         /* the first room: a heavy armour ahead of Bond */
@@ -895,8 +990,8 @@ void endless_frame(void) {
         u8 *o = OBJ(i);
         s32 h;
         if (o != g_Player && o[4] && o[5] == 6) {
-            if (!fighter(o)) { /* (made a story person by its script since: Electra's hit mask, say) */
-                ELOG("room: person type %d (script %d, hit mask %04X) no fighter: taken out", o[6], o[0xA7],
+            if (unkillable(o)) { /* (made unkillable by its script since: Electra's hit mask, say) */
+                ELOG("room: person type %d (script %d, hit mask %04X) unkillable: taken out", o[6], o[0xA7],
                      *(u16 *)(o + 0xE));
                 func_800395E8(o);
                 continue;
@@ -995,6 +1090,8 @@ void endless_frame(void) {
     }
     if (room_frames == SEC * 5)
         log_weapons("five seconds in");
+    if (getenv("TWINE_ENDLESS_TEST_RESTART") && room_frames == atoi(getenv("TWINE_ENDLESS_TEST_RESTART")))
+        func_80041DBC(); /* (headless tests: the watch's RESTART MISSION) */
     if (getenv("TWINE_ENDLESS_TEST_OPEN") && room_frames == atoi(getenv("TWINE_ENDLESS_TEST_OPEN")))
         open = 1; /* (headless tests: the exit open) */
     if (getenv("TWINE_ENDLESS_TEST_LOCKED") && room_frames >= 100 && room_frames < 140)
@@ -1081,6 +1178,17 @@ void RestartPrompt_Open(void) {
     ELOG("run end: Bond is dead");
     D_8009CAA4 = 0;
     g_Args->flags |= 0x80;
+}
+
+/* RESTART MISSION (the watch's "RELOADING MISSION...": the mission's main returns with g_Args' flags 0x40 and the
+ * boot stub starts it again): in a run, the whole run again, fresh */
+void func_80041DBC(void) {
+    s16 e[5];
+    if (port_endless_room(e)) {
+        ELOG("restart: RESTART MISSION: the run begins again");
+        port_endless_restart();
+    }
+    func_80041DBC_orig();
 }
 
 /* A placed thing made as Bond nears it (the section's spawner): in a run, never a person who isn't a fighter (the
@@ -1237,6 +1345,10 @@ static void dump(void) {
         for (i = 0; i < D_8009CF68; i++)
             for (j = 0; j < D_8009CF6C[i]; j++) {
                 s32 *p = D_8009CF70[i] + j * 6;
+                if (dist2(p[0] + D_800D2FB0[0], p[2] + D_800D2FB0[2], g_Args->playerX, g_Args->playerZ) < 4000)
+                    ELOG("dump: by the entry: type %d class %d/%d at %d %d %d flags %08X cb %08X", p[3] & 0xFF,
+                         TYPE_DEF(p[3] & 0xFF)[1], TYPE_DEF(p[3] & 0xFF)[2], p[0] + D_800D2FB0[0], p[1] + D_800D2FB0[1],
+                         p[2] + D_800D2FB0[2], p[3], *(u32 *)(TYPE_DEF(p[3] & 0xFF) + 0x38));
                 if (TYPE_DEF(p[3] & 0xFF)[1] == 6)
                     ELOG("dump: placed person type %d at %d %d %d flags %08X w4 %08X w5 %08X", p[3] & 0xFF,
                          p[0] + D_800D2FB0[0], p[1] + D_800D2FB0[1], p[2] + D_800D2FB0[2], p[3], p[4], p[5]);
