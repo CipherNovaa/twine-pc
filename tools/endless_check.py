@@ -223,7 +223,9 @@ def check_rules(runs):
     co = runs["rules_courier"]
     civ = [l for l in co.lines(r"made: person \d+ type 5 placed")]
     result("d", "2:-1 civilians kept", len(civ) > 0, "%d bank staff made" % len(civ))
-    armed_story = co.lines(r"made: .*type 10 ")
+    seated = co.lines(r"receptionist kept seated")
+    made60 = co.lines(r"made: person \d+ type 60 placed")
+    result("d", "2:-1 receptionist seated", bool(made60) and bool(seated), "made %d, kept seated %d" % (len(made60), len(seated)))
     result("d", "2:-1 no story people made", True, "story people left out: %d" % len(co.lines(r"story person")))
 
 

@@ -52,6 +52,7 @@ void port_endless_logf(s32 frame, const char *fmt, ...);
 extern int port_subframe; /* (interp.c: an extra drawing between ticks runs, whose memory is put back after) */
 #define ELOG(...) port_endless_logf(D_8009CDA8, __VA_ARGS__)
 
+extern u8 D_800D90C0[];   /* the cutscenes' state (+0x124: bits 4-19 those played) */
 extern s32 D_800D2F90;   /* the map's loading: 0 none, 2 a load point's section asked for, ... */
 extern s32 D_800D2F8C;   /* the section loaded */
 extern s16 D_8009E9C4[]; /* the start point (section, yaw, x, y, z); +0x10 the load point to go to; load points from +0x18 */
@@ -151,7 +152,7 @@ static struct {
     s32 lx, lz, moved; /* (where he was when he last moved on, and when) */
 } hunters[HUNTERS];
 static s32 stuck_at[8][2]; /* places guards were sent from that left them stuck (behind glass, at a wall) */
-static int stuck_count;
+static int stuck_count, seated_said;
 
 /* the room's own fixed guards (snipers, grenade throwers, posts: those of the game's standing AIs, 2-5) that fell,
  * to come back to their places half a minute later */
@@ -617,7 +618,7 @@ static void room_start(void) {
     s32 i, j, counts[256];
     room_frames = carried = budget = open = kills_scored = said = burst = at_entry = 0;
     draw_slot = -1;
-    kind_count = copy_next = door_count = stuck_count = 0;
+    kind_count = copy_next = door_count = stuck_count = seated_said = 0;
     memset(hunters, 0, sizeof(hunters));
     memset(returns, 0, sizeof(returns));
     cooldown = SEC * 5;
@@ -1264,6 +1265,19 @@ void endless_frame(void) {
                 g_Weapons[i].flags |= 0x1800, g_Weapons[i].ammo += 20, g_Weapons[i].reserve += 20;
         log_weapons("armed (test)");
     }
+    if (g_Args->level == 2) /* the bank's receptionist (type 60, placed seated at her desk): in the seated animation
+                             * the opening cutscene leaves her in (0x3C), which her script, without it, never takes */
+        for (i = D_800B0DA0; i <= D_800B07B0; i++) {
+            u8 *o = OBJ(i), *an = *(u8 **)(o + 0x94);
+            s32 *src = *(s32 **)(o + 0x60);
+            if (o != g_Player && o[4] && o[6] == 60 && HEALTH(o) > 0 && an && src && (src[0] & 0x400) &&
+                *(s16 *)(an + 0x10) != 0x3C) {
+                if (!seated_said++)
+                    ELOG("room: the receptionist kept seated (her script's animation %d)", *(s16 *)(an + 0x10));
+                *(s16 *)(an + 0x10) = *(s16 *)(an + 0x12) = 0x3C;
+                an[0x14] = 0, an[0x16] = 1, *(s16 *)(an + 0x18) = 0;
+            }
+        }
     if (getenv("TWINE_ENDLESS_TEST_SHOOT") && room_frames >= atoi(getenv("TWINE_ENDLESS_TEST_SHOOT")) * SEC &&
         room_frames % (SEC * 2) == 0) /* (headless tests: everyone shot, past the game's own hit tests: who is immune?) */
         for (i = D_800B0DA0; i <= D_800B07B0; i++) {
@@ -1510,7 +1524,11 @@ void func_8004B270(s32 damage, s32 through_armour, s32 always) {
 s32 func_80054414(u8 nis, u8 arg1, u8 arg2) {
     s16 e[5];
     if (port_endless_room(e)) {
-        ELOG("story: cutscene %d skipped", nis);
+        /* (marked seen, as playing it marks it: the mission's scripts look at that, the bank's receptionist taking
+         * her seat at her desk once the opening has played) */
+        if (nis >= 1 && nis <= 16)
+            *(u32 *)(D_800D90C0 + 0x124) |= 1u << (4 + nis - 1);
+        ELOG("story: cutscene %d skipped (marked seen)", nis);
         return 0;
     }
     return func_80054414_orig(nis, arg1, arg2);
