@@ -109,6 +109,9 @@ void port_endless_score(int points);
 void port_endless_ungate(int level);
 void port_endless_restart(void);
 void quick_grenade_give(void);
+int quick_grenade_enemy(const s32 *from, const s32 *to, u8 *owner); /* (quickgrenade.c) */
+int port_live_grenades(s32 (*at)[3], int max);
+s32 func_80027248(s32 sound, s32 at, s32 arg2); /* a sound of the level's bank at a place */
 s32 func_80051728(u8 *obj, u8 *target) __attribute__((weak)); /* what a person makes of another: 0x40 he sees him */
 s32 func_800746D0(s32 mesh, s32 *from, s32 *to, s16 *normal, s16 *hit, s32 *flags); /* the walls between: nonzero */
 extern s32 D_800E2F2C;  /* (the section's walls, for it) */
@@ -167,6 +170,9 @@ static s32 last_seen_at = -1, bond_still_since, nav_goal[8][3], drive_rest[64], 
 static u8 driving[64], seen_for[64], react[64];
 static u8 *cover_state_ptr(void);
 static void nav_reset(void);
+static void grenade_reset(void);
+static void blast_frame(void);
+static int blast_active(void);
 
 /* the room's own fixed guards (snipers, grenade throwers, posts: those of the game's standing AIs, 2-5) that fell,
  * to come back to their places half a minute later */
@@ -1001,6 +1007,13 @@ static void recall(void) {
                 ELOG("test: Bond put by the sent guard type %d", o[6]);
                 if (getenv("TWINE_ENDLESS_TEST_NOISE"))
                     func_80053DE4(0, 0, at[2], at[3], at[4]);
+                if (getenv("TWINE_ENDLESS_TEST_MEET_GRENADE")) { /* (and a grenade of Bond's lobbed at him) */
+                    s32 from[3], to[3];
+                    from[0] = at[2], from[1] = at[3] - 1500, from[2] = at[4];
+                    to[0] = POS(o)[0], to[1] = POS(o)[1], to[2] = POS(o)[2];
+                    quick_grenade_enemy(from, to, 0);
+                    ELOG("test: a grenade of Bond's lobbed at the guard");
+                }
             }
         }
         if (room_frames - hunters[h].born == SEC * 5)
@@ -1164,6 +1177,7 @@ static int floor_near(s32 x, s32 z, s32 y) {
  * the ones the port saw the game's own guards run with, and any it sees them run with from then on. */
 static u16 navd[8][FACES];
 static s32 way[64][3], drive_moved[64][3], drive_check[64], on_floor[64][3], on_floor_at[64];
+static u8 walked_ever[64];
 static u8 drive_unstick[64], idle[64], seen_sight[64], spread_tries[64];
 static s32 ring_off[64];
 static s32 nav_blocked[FACES]; /* (until when a polygon is left out of paths: guards wedged on it) */
@@ -1173,6 +1187,9 @@ static void nav_reset(void) {
     memset(nav_blocked, 0, sizeof(nav_blocked));
     memset(drive_anim, 0xFF, sizeof(drive_anim));
     memset(hold_ground, 0, sizeof(hold_ground));
+    memset(walked_ever, 0, sizeof(walked_ever));
+    memset(on_floor_at, 0, sizeof(on_floor_at));
+    grenade_reset();
 }
 /* COVER: a guard in a fight who is hit, or finds Bond's gun on him, runs to a place close by out of Bond's sight,
  * holds there a moment, steps back out to where he could see him and shoots a while, and so on: never more than two
@@ -1394,6 +1411,87 @@ static void cover_frame(void) {
     }
 }
 
+/* GRENADES (IMPROVED): a guard near a live grenade (Bond's, or another's) shouts and scatters from it, run by
+ * hand away from it a second and a half; and when Bond camps, or keeps out of their sight, a hunter some way off
+ * lobs one at him (the mod's own grenade: quickgrenade.c), shouting as he throws. The shout is each level's
+ * guard bark where one is known (shout_sound[]: none of the levels' scripts shouts at a grenade, their handler
+ * of the game's "grenade!" flag only plays a dive; the barks are still to be picked out by ear), and logged. */
+static const s16 shout_sound[12] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+static s32 scatter_until[64], scatter_to[64][3], enemy_throw_at = -SEC * 30, grenade_shouts, grenade_throws, last_shout[64];
+static void grenade_reset(void) {
+    memset(scatter_until, 0, sizeof(scatter_until));
+    memset(last_shout, 0x80, sizeof(last_shout)); /* (long ago) */
+    enemy_throw_at = -SEC * 30;
+}
+
+static void shout(u8 *o, const char *why) {
+    s16 snd = g_Args->level >= 1 && g_Args->level <= 11 ? shout_sound[g_Args->level] : -1;
+    if (snd >= 0)
+        func_80027248(snd, (s32)(*(u8 **)(o + 0x90) + 0x14), 0);
+    grenade_shouts++;
+    ELOG("ai: type %d shouts \"grenade!\" (%s)", o[6], why);
+}
+
+static void grenade_frame(void) {
+    s32 g[8][3];
+    int n = port_live_grenades(g, 8), i, k;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = OBJ(i);
+        if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0 || !*(u8 **)(o + 0x118))
+            continue;
+        if (room_frames < scatter_until[i]) { /* (running from it) */
+            steer_to(o, scatter_to[i][0], scatter_to[i][2], 2);
+            continue;
+        }
+        for (k = 0; k < n; k++) {
+            s32 d = dist2(POS(o)[0], POS(o)[2], g[k][0], g[k][2]);
+            if (d < 3600 && g[k][1] - POS(o)[1] < 2000 && POS(o)[1] - g[k][1] < 2000) { /* (the blast reaches 3250) */
+                s32 dx = POS(o)[0] - g[k][0], dz = POS(o)[2] - g[k][2], f;
+                if (!d)
+                    dx = 1;
+                d = d ? d : 1;
+                f = floor_near(POS(o)[0] + dx * 4000 / d, POS(o)[2] + dz * 4000 / d, POS(o)[1]);
+                scatter_to[i][0] = f >= 0 ? mid[f][0] : POS(o)[0] + dx * 4000 / d;
+                scatter_to[i][2] = f >= 0 ? mid[f][2] : POS(o)[2] + dz * 4000 / d;
+                scatter_until[i] = room_frames + SEC * 5 / 2;
+                cover_state[i] = COVER_NONE, driving[i] = 0;
+                if (room_frames - last_shout[i] > SEC * 4) /* (once a grenade, not again as he runs on) */
+                    shout(o, "and runs from it"), last_shout[i] = room_frames;
+                break;
+            }
+        }
+    }
+    if (room_frames - enemy_throw_at > SEC * 20 && !(room_frames % SEC) && last_seen_at >= 0 &&
+        (room_frames - bond_still_since > SEC * 6 || (room_frames - last_seen_at > SEC * 3 && room_frames - last_seen_at < SEC * 8)))
+        for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) { /* (Bond camping, or keeping out of sight: one lobbed) */
+            u8 *o = OBJ(i);
+            s32 d, from[3], to[3];
+            if (!hunter(o) || room_frames < scatter_until[i])
+                continue;
+            d = dist2(POS(o)[0], POS(o)[2], g_Args->playerX, g_Args->playerZ);
+            if (d < 2500 || d > 8000)
+                continue;
+            from[0] = POS(o)[0], from[1] = POS(o)[1] - 1500, from[2] = POS(o)[2];
+            to[0] = g_Args->playerX, to[1] = g_Args->playerY, to[2] = g_Args->playerZ;
+            {   /* (not with a friend near where it would land) */
+                int j;
+                for (j = D_800B0DA0; j <= D_800B07B0; j++)
+                    if (j != i && OBJ(j)[4] && OBJ(j)[5] == 6 && HEALTH(OBJ(j)) > 0 &&
+                        dist2(POS(OBJ(j))[0], POS(OBJ(j))[2], to[0], to[2]) < 3000)
+                        break;
+                if (j <= D_800B07B0)
+                    continue;
+            }
+            if (quick_grenade_enemy(from, to, o)) {
+                enemy_throw_at = room_frames;
+                grenade_throws++;
+                ELOG("ai: type %d throws a grenade at Bond (%d off)", o[6], d);
+                shout(o, "as he throws");
+            }
+            break;
+        }
+}
+
 static void drive_frame(void) {
     int i;
     for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
@@ -1414,20 +1512,29 @@ static void drive_frame(void) {
             }
             continue;
         }
-        if (!(room_frames & 3) || driving[i] || cover_state[i] != COVER_NONE) { /* (walked by the port: kept on
+        if (!(room_frames & 3) || driving[i] || cover_state[i] != COVER_NONE || room_frames < scatter_until[i]) {
+            /* (walked by the port: kept on
                                                                                   * the floor) */
             if (floor_at(POS(o)[0], POS(o)[1] - 500, POS(o)[2]) == -0x7FFF) {
-                if (driving[i] || cover_state[i] != COVER_NONE) {
-                    if (on_floor_at[i] && room_frames - on_floor_at[i] < SEC) /* (back where he last stood on it) */
+                if (driving[i] || cover_state[i] != COVER_NONE || room_frames < scatter_until[i]) {
+                    if (on_floor_at[i]) /* (back where he last stood on it) */
                         POS(o)[0] = on_floor[i][0], POS(o)[1] = on_floor[i][1], POS(o)[2] = on_floor[i][2];
                     driving[i] = 0, cover_state[i] = COVER_NONE, drive_rest[i] = room_frames + SEC * 4;
+                    scatter_until[i] = 0;
                     ELOG("ai: type %d off the floor: left to his script", o[6]);
                     continue;
                 }
+                else if (on_floor_at[i] && room_frames - on_floor_at[i] > SEC * 2 && walked_ever[i]) {
+                    /* (one the port walked, left off the floor since: put back too) */
+                    POS(o)[0] = on_floor[i][0], POS(o)[1] = on_floor[i][1], POS(o)[2] = on_floor[i][2];
+                    ELOG("ai: type %d found off the floor: put back", o[6]);
+                }
             } else
                 on_floor[i][0] = POS(o)[0], on_floor[i][1] = POS(o)[1], on_floor[i][2] = POS(o)[2], on_floor_at[i] = room_frames;
+            if (driving[i] || cover_state[i] != COVER_NONE || room_frames < scatter_until[i])
+                walked_ever[i] = 1;
         }
-        if (cover_state[i] != COVER_NONE) /* (in cover's moves: cover_frame's) */
+        if (cover_state[i] != COVER_NONE || room_frames < scatter_until[i]) /* (cover's, or scattering) */
             continue;
         if (!hunter(o) || !(an = *(u8 **)(o + 0x94)) || !(ctx = *(u8 **)(o + 0x118)) || hunt_ev[i].type != 0) {
             driving[i] = 0;
@@ -1613,6 +1720,7 @@ static void ai_frame(void) {
             last_seen[0] = bx, last_seen[1] = by, last_seen[2] = bz, last_seen_at = room_frames - SEC * 9;
     }
     cover_frame();
+    grenade_frame();
     drive_frame();
     if (!(room_frames % (SEC / 2))) /* SPREAD: two hunters standing in each other: the later one steps aside */
         for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
@@ -1773,6 +1881,7 @@ void endless_frame(void) {
         }
     }
     room_frames++;
+    blast_frame(); /* (a guard's grenade sparing his friends: over) */
     if (room_frames % (SEC * 10) == 0)
         flood();
     if (room_frames % (getenv("TWINE_ENDLESS_PEOPLE_FAST") ? SEC / 2 : SEC * 4) == 0)
@@ -1817,7 +1926,8 @@ void endless_frame(void) {
         u8 *o = OBJ(i);
         s32 h;
         if (o != g_Player && o[4] && o[5] == 6) {
-            if (unkillable(o) && TYPE_DEF(o[6])[0x2C] && !seen(o)) { /* (made unkillable by its script since: Electra's hit mask, say) */
+            if (unkillable(o) && TYPE_DEF(o[6])[0x2C] && !seen(o) && !blast_active()) { /* (not while a guard's
+                                                                                       * grenade spares them) */ /* (made unkillable by its script since: Electra's hit mask, say) */
                 ELOG("room: person type %d (script %d, hit mask %04X) unkillable", o[6], o[0xA7], *(u16 *)(o + 0xE));
                 take_out(o, "unkillable");
                 continue;
@@ -1924,8 +2034,45 @@ void endless_frame(void) {
                 an[0x14] = 0, an[0x16] = 1, *(s16 *)(an + 0x18) = 0;
             }
         }
+    if (getenv("TWINE_ENDLESS_AI_DUMP") && room_frames == SEC * 3) /* (a guard's script: its handlers and code) */
+        for (i = D_800B0DA0; i <= D_800B07B0; i++) {
+            u8 *o = OBJ(i), *ctx = *(u8 **)(o + 0x118);
+            u32 n, k, w;
+            if (!o[4] || o[5] != 6 || !ctx)
+                continue;
+            n = *(u32 *)(ctx + 0xAC);
+            ELOG("aidump: type %d ai %d: %u handlers, code at %08X pc %08X", o[6], o[0xA7], n, *(u32 *)(ctx + 0xA0), *(u32 *)(ctx + 0xA4));
+            for (k = 0; k < n && k < 24; k++) {
+                u32 *h = *(u32 **)(ctx + 0xB0 + k * 8 + 4), f;
+                char hex[200];
+                int m = 0;
+                if (!h)
+                    continue;
+                f = ((u16 *)h)[1];
+                for (w = 0; w < 10; w++)
+                    m += snprintf(hex + m, sizeof(hex) - m, "%08X ", h[w]);
+                ELOG("aidump:  handler %u (on %u, cond %04X): %s", k, *(u32 *)(ctx + 0xB0 + k * 8), f, hex);
+            }
+            {
+                u32 *c = *(u32 **)(ctx + 0xA0);
+                char hex[9 * 8 + 1];
+                for (k = 0; c && k < 512; k += 8) {
+                    int m = 0;
+                    for (w = 0; w < 8; w++)
+                        m += snprintf(hex + m, sizeof(hex) - m, "%08X ", c[k + w]);
+                    ELOG("aidump:  code +%03X: %s", k * 4, hex);
+                }
+            }
+            break;
+        }
+    if (getenv("TWINE_ENDLESS_SOUND_LOG")) /* (who has been told of a grenade: the game's flag) */
+        for (i = D_800B0DA0; i <= D_800B07B0; i++) {
+            u8 *o = OBJ(i);
+            if (o[4] && o[5] == 6 && *(u8 **)(o + 0x118) && (**(s32 **)(o + 0x118) & 0x04000000))
+                ELOG("sound: type %d told of a grenade (flags %08X)", o[6], **(s32 **)(o + 0x118));
+        }
     if (getenv("TWINE_ENDLESS_TEST_SHOOT") && room_frames >= atoi(getenv("TWINE_ENDLESS_TEST_SHOOT")) * SEC &&
-        room_frames % (SEC * 2) == 0) /* (headless tests: everyone shot, past the game's own hit tests: who is immune?) */
+        room_frames % (SEC * 2) == 0 && !blast_active()) /* (not while a guard's grenade spares them) */ /* (headless tests: everyone shot, past the game's own hit tests: who is immune?) */
         for (i = D_800B0DA0; i <= D_800B07B0; i++) {
             u8 *o = OBJ(i);
             u16 mask = *(u16 *)(o + 0xE);
@@ -2338,4 +2485,36 @@ s32 func_800572F4(u32 *cmd, u8 *obj, u8 *chr) {
         ELOG("sound: script of type %d (ai %d) plays sound %d (flags %08X)", chr[6], chr[0xA7],
              (*cmd >> 16 & 3) == 1 ? -1 : (int)(*cmd >> 8 & 0xFF), *(u8 **)(chr + 0x118) ? **(s32 **)(chr + 0x118) : 0);
     return func_800572F4_orig(cmd, obj, chr);
+}
+
+/* A guard's grenade going off (quickgrenade.c): the people (Bond aside) not hurt by it, their hit masks made
+ * 0x7FFF for the blast's few frames and put back after (a guard's grenade is for Bond, not his friends) */
+static u16 blast_masks[64];
+static s32 blast_until = -1;
+void endless_enemy_blast(void) {
+    int i;
+    if (blast_until >= 0)
+        return;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++)
+        if (OBJ(i) != g_Player) {
+            blast_masks[i] = *(u16 *)(OBJ(i) + 0xE);
+            *(u16 *)(OBJ(i) + 0xE) = 0x7FFF;
+        }
+    blast_until = D_8009CDA8 + SEC;
+    ELOG("ai: a guard's grenade goes off: his friends spared till frame %d", blast_until);
+}
+
+static int blast_active(void) {
+    return blast_until >= 0;
+}
+
+static void blast_frame(void) {
+    int i;
+    if (blast_until < 0 || (D_8009CDA8 < blast_until && D_8009CDA8 >= blast_until - SEC * 2))
+        return; /* (the frame counter going back: a new mission, put back at once) */
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++)
+        if (OBJ(i) != g_Player)
+            *(u16 *)(OBJ(i) + 0xE) = blast_masks[i];
+    blast_until = -1;
+    ELOG("ai: the people's hit masks put back");
 }

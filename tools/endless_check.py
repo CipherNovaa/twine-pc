@@ -210,7 +210,7 @@ def check_room(run, room, checks):
         for q in ppl:
             k = q["slot"]
             off[k] = off.get(k, 0) + 1 if q["health"] > 0 and q["floor"] == -32767 else 0
-            if off[k] == 3:
+            if off[k] == 5:  # (a doorway's threshold has none under it either: a while, not a moment)
                 bad.append("type %d on no floor at %d %d %d" % (q["type"], q["x"], q["y"], q["z"]))
         bad += ["removed while seen: " + l.split("removed: ")[1][:60] for l in run.lines(r"removed: .*Bond could see")
                 if "no floor under him" not in l]  # (a guard just made inside a wall goes at once, seen or not)
@@ -380,8 +380,15 @@ def check_card(runs):
 AI_ROOMS = [(3, 11), (6, 13), (9, 2), (2, 6), (10, 4), (7, 6), (5, 4), (8, 3)]
 
 
+GRENADE_ROOMS = [(8, 3), (3, 11), (6, 13), (10, 4)]
+
+
 def ai_runs():
     runs = {}
+    for l, p in GRENADE_ROOMS:  # (a guard met, and a grenade of Bond's lobbed at him: he and those near shout and run)
+        runs["aig_%d_%d" % (l, p)] = Run("aig_%d_%d" % (l, p), l, 40, {
+            "TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "%d:%d" % (l, p), "TWINE_ENDLESS_SEED": 4,
+            "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_ENDLESS_TEST_MEET_GRENADE": 1})
     for l, p in AI_ROOMS:
         for m in ("original", "improved"):
             runs["ai_%d_%d_%s" % (l, p, m)] = Run("ai_%d_%d_%s" % (l, p, m), l, 75, {
@@ -421,9 +428,12 @@ def check_ai(runs):
         bi, st = approach(i)
         walks = len(i.lines("ai: type \\d+ walked from"))
         hits_o, hits_i = len(o.lines(r"damage: \d+: health")), len(i.lines(r"damage: \d+: health"))
-        ok = not i.crashed() and (bi <= max(bo, 3000) or hits_i > 0) and hits_i >= hits_o // 2
-        result("j", "%d:%d hunting" % (l, p), ok, "closest %s (game's AI %s), walks %d, hits on Bond %d (game's %d)" % (
-            int(bi) if bi < 10 ** 9 else "-", int(bo) if bo < 10 ** 9 else "-", walks, hits_i, hits_o))
+        dmg = lambda r: sum(int(x.split("damage: ")[1].split(":")[0]) for x in r.lines(r"damage: \d+: health"))
+        dmg_o, dmg_i = dmg(o), dmg(i)  # (damage dealt in all, grenades and shots: the pressure on Bond)
+        ok = not i.crashed() and (bi <= max(bo, 3000) or hits_i > 0) and dmg_i >= dmg_o // 2
+        result("j", "%d:%d hunting" % (l, p), ok,
+               "closest %s (game's AI %s), walks %d, hits on Bond %d for %d (game's %d for %d)" % (
+                   int(bi) if bi < 10 ** 9 else "-", int(bo) if bo < 10 ** 9 else "-", walks, hits_i, dmg_i, hits_o, dmg_o))
         shots = [re.search(r"guards' shots (\d+), held (\d+)", x) for x in i.lines("guards' shots")]
         fired, held = (int(shots[-1].group(1)), int(shots[-1].group(2))) if shots and shots[-1] else (0, 0)
         result("j", "%d:%d fair shooting" % (l, p), hits_i == 0 or fired > 0,
@@ -432,6 +442,14 @@ def check_ai(runs):
         result("j", "%d:%d no bunching" % (l, p), st <= 12 or st <= so,
                "two within 300 for %d samples (0.5 s) in a row (game's AI %d)" % (st, so))
     result("j", "cover used", covers > 0, "%d times in the %d rooms" % (covers, len(AI_ROOMS)))
+    thr = sum(len(runs["ai_%d_%d_improved" % r].lines("throws a grenade at Bond")) for r in AI_ROOMS)
+    sht = sum(len(runs["ai_%d_%d_improved" % r].lines('shouts "grenade!" \\(as he throws')) for r in AI_ROOMS)
+    result("j", "grenades thrown at Bond", thr > 0 and sht >= thr, "%d thrown, %d with a shout" % (thr, sht))
+    for r in GRENADE_ROOMS:
+        g = runs["aig_%d_%d" % r]
+        scat = len(g.lines("and runs from it"))
+        result("j", "%d:%d scatter from Bond's grenade" % r, scat > 0 and not g.crashed(),
+               "%d shouted and ran (grenade %s)" % (scat, "lobbed" if g.lines("grenade of Bond's lobbed") else "never lobbed"))
 
 
 # ---- i: the campaign untouched ----

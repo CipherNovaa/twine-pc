@@ -101,6 +101,13 @@ void PopMatrix(void);
 
 static s32 wait;
 static void own_grenades(s32 pressed, s32 fresh);
+static void own_fly(s32 fresh);
+void endless_enemy_blast(void) __attribute__((weak));
+#define LIVE_REAL 4
+static int dist_ok(const s32 *a, const s32 *b) { /* (the same grenade a tick on: near where it was) */
+    s32 dx = a[0] - b[0], dz = a[2] - b[2];
+    return dx > -1500 && dx < 1500 && dz > -1500 && dz < 1500;
+}
 static s32 frame = 0x7FFFFFFF; /* the frame counter when last seen: a smaller one is a new mission */
 
 /* the frag grenades' slot, or -1 */
@@ -136,6 +143,7 @@ void quick_grenade(void) {
         own_grenades(pressed, fresh);
         return;
     }
+    own_fly(fresh); /* (King's Ransom: the mod's grenades only the enemies' here, flown all the same) */
     w = &g_Weapons[i];
     if (fresh && ((w->flags & 0x1800) != 0x1800 || w->ammo < START)) {
         w->flags |= 0x1800;
@@ -197,8 +205,20 @@ static void notice(s32 *pos) {
 }
 
 /* as the game's, with guards noticing it further off */
+static s32 real_at[LIVE_REAL][3], real_tick[LIVE_REAL]; /* (King's Ransom's own frags, as each tick of one sees them) */
 s32 func_80076A8C(u8 *grenade) {
-    notice((s32 *)(W(grenade, 0x90, u8 *) + 0x28));
+    s32 *pos = (s32 *)(W(grenade, 0x90, u8 *) + 0x28), k, b = 0;
+    notice(pos);
+    for (k = 0; k < LIVE_REAL; k++) { /* (kept a moment, for the AI's grenade watch: port_live_grenades) */
+        if (real_tick[k] < real_tick[b])
+            b = k;
+        if (dist_ok(real_at[k], pos) && D_8009CDA8 - real_tick[k] < 3) {
+            b = k;
+            break;
+        }
+    }
+    memcpy(real_at[b], pos, 12);
+    real_tick[b] = D_8009CDA8;
     return 0;
 }
 
@@ -239,6 +259,8 @@ static DObj dobj;
 static Coord coord;
 static struct {
     s32 on, ticks, pos[3], vel[3];
+    u8 *owner; /* (the guard who threw it: endless's enemy AI; none: Bond's) */
+    s32 aim[3]; /* (where a guard's is meant to land) */
 } live[LIVE];
 static s32 frags;       /* Bond's, in a mission without frag grenades */
 static s16 throw_pcm[4096]; /* the throw's sound */
@@ -332,11 +354,13 @@ static s32 rcos(s32 a) {
 }
 
 /* one goes off: the blast and its sound where it is */
-static void blast(s32 *pos) {
+static void blast(s32 *pos, u8 *owner) {
     static u8 obj[0x124], sub[0x80];
     memset(obj, 0, sizeof(obj));
     memset(sub, 0, sizeof(sub));
-    W(obj, 0x88, void *) = g_Player;
+    W(obj, 0x88, void *) = owner ? owner : g_Player; /* (a guard's: not Bond's kill) */
+    if (owner && endless_enemy_blast)
+        endless_enemy_blast(); /* (a guard's spares his friends: endless.c) */
     W(obj, 0x90, u8 *) = sub;
     W(sub, 0x14, s16) = W(sub, 0x1C, s16) = W(sub, 0x24, s16) = 4096;
     memcpy(sub + 0x28, pos, 12);
@@ -356,7 +380,7 @@ static void fly(void) {
             continue;
         if (++live[g].ticks >= FUSE) {
             live[g].on = 0;
-            blast(live[g].pos);
+            blast(live[g].pos, live[g].owner);
             continue;
         }
         live[g].vel[1] += GRAVITY;
@@ -404,6 +428,7 @@ static void throw_own(void) {
     }
     live[g].ticks = 0;
     live[g].on = 1;
+    live[g].owner = 0;
     if (!infinite())
         frags--;
     /* the punch's swing, then the frag's toss */
@@ -418,6 +443,71 @@ static void throw_own(void) {
 /* one more grenade for Bond (endless mode: one a guard dropped, in a mission without them) */
 void quick_grenade_give(void) {
     frags++;
+}
+
+/* (endless's enemy AI) a grenade a guard throws, from `from` to land about `to`: the mod's own grenade, lobbed (it
+ * flies, bounces and goes off as Bond's); 0 if none can be (no model, or four in the air) */
+int quick_grenade_enemy(const s32 *from, const s32 *to, u8 *owner) {
+    s32 g, t, i, d;
+    if (!assets)
+        load();
+    if (assets < 0)
+        return 0;
+    for (g = 0; g < LIVE && live[g].on; g++)
+        ;
+    if (g == LIVE)
+        return 0;
+    d = 0;
+    {
+        s32 dx = to[0] - from[0], dz = to[2] - from[2];
+        long long l = (long long)dx * dx + (long long)dz * dz;
+        while ((long long)d * d < l)
+            d += 16;
+    }
+    t = d / 260; /* (ticks in the air: about 260 a tick across) */
+    t = t < 14 ? 14 : t > 40 ? 40 : t;
+    for (i = 0; i < 3; i += 2) {
+        live[g].pos[i] = from[i];
+        live[g].vel[i] = (to[i] - from[i]) / t;
+    }
+    live[g].pos[1] = from[1];
+    live[g].vel[1] = (to[1] - from[1] - GRAVITY * t * t / 2) / t; /* (y down: up first, gravity bringing it down) */
+    live[g].ticks = 0;
+    live[g].on = 1;
+    live[g].owner = owner;
+    memcpy(live[g].aim, to, 12);
+    toss = TOSS;
+    gpu_load_image(TEX_X, TEX_Y, 16, 64, image);
+    gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
+    return 1;
+}
+
+/* (endless's enemy AI) the grenades live now, the mod's own and King's Ransom's: their places into at[][3] */
+int port_live_grenades(s32 (*at)[3], int max) {
+    int g, n = 0;
+    for (g = 0; g < LIVE && n < max; g++)
+        if (live[g].on && live[g].owner) { /* (a guard's: where it will land, from the first: his friends keep off;
+                                            * and where it is, once it is down near them) */
+            memcpy(at[n++], live[g].aim, 12);
+            if (live[g].ticks > 10 && n < max)
+                memcpy(at[n++], live[g].pos, 12);
+        } else if (live[g].on && live[g].ticks > 14) /* (Bond's: landed, about, not while still in the air) */
+            memcpy(at[n++], live[g].pos, 12);
+    for (g = 0; g < LIVE_REAL && n < max; g++)
+        if (real_tick[g] && D_8009CDA8 - real_tick[g] < 3 && D_8009CDA8 >= real_tick[g])
+            memcpy(at[n++], real_at[g], 12);
+    return n;
+}
+
+static void own_fly(s32 fresh) {
+    s32 g;
+    if (fresh) {
+        for (g = 0; g < LIVE; g++)
+            live[g].on = 0;
+        tick = D_8009CDA8;
+    }
+    for (; tick < D_8009CDA8; tick++)
+        fly();
 }
 
 /* the mod's grenades: moved each tick, one thrown for the key */
