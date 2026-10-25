@@ -415,6 +415,11 @@ static void throw_own(void) {
     gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
 }
 
+/* one more grenade for Bond (endless mode: one a guard dropped, in a mission without them) */
+void quick_grenade_give(void) {
+    frags++;
+}
+
 /* the mod's grenades: moved each tick, one thrown for the key */
 static void own_grenades(s32 pressed, s32 fresh) {
     s32 g;

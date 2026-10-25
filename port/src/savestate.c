@@ -222,7 +222,8 @@ static void put_ram(const Header *s) {
     memcpy((void *)PS1_SCRATCH_BASE, p + PS1_RAM_SIZE, PS1_SCRATCH_SIZE);
 }
 
-extern int port_endless, port_endless_unranked;
+extern int port_endless;
+void port_endless_unrank(const char *why);
 
 /* all of it */
 static void put_all(const Header *s, int loaded) {
@@ -241,7 +242,8 @@ static void put_all(const Header *s, int loaded) {
         gpu_hw_load_image(0, 0, 1024, 512, gpu_vram);
     }
     if (loaded) {
-        port_endless_unranked |= port_endless; /* (endless.c: a run with a state loaded isn't ranked) */
+        if (port_endless) /* (endless.c: a run with a state loaded isn't ranked) */
+            port_endless_unrank("state loaded");
         port_log("savestate: loaded (%s, frame %u)\n", s->module, port_video_frames());
         port_video_message("State loaded");
     }

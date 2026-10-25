@@ -83,3 +83,22 @@ void func_800798D4(void) {
     } else
         func_8007A17C(3);
 }
+
+/* A change to a slot, as the weapon buttons make one (endless mode: the weapon Bond held in the last room drawn in
+ * this one): 1 begun, 0 if the game won't change now (mid-change, fire held) */
+int weapon_change_to(int slot) {
+    if (slot == D_800B0DD4)
+        return 1;
+    if (D_800DDEEC || !func_800794A0())
+        return 0;
+    D_800B0DD8 = D_800B0DD4;
+    D_800B0DDC = slot;
+    D_800AC38C = 0;
+    if (D_800F11F0 - 3 < 2 || D_800F11F0 == 6) {
+        D_8009EEC8 = 15;
+        D_8009EED0 = 100;
+        func_8007A17C(6);
+    } else
+        func_8007A17C(3);
+    return 1;
+}

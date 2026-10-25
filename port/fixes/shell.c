@@ -1,7 +1,7 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8
+ * MOD_REPLACES_NATIVE: func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8 func_8003EA00 func_800385C4
  */
 #include <stdlib.h>
 #include <string.h>
@@ -33,8 +33,11 @@ u32 func_8006CDA8(u32 **addr, u32 **header) {
  *   L1 L1 R1 R1                 any mission can be chosen (D_80073E30)
  *   SELECT R1 L2, five times    D_80073E34, which skips ahead in the front end
  * func_8002ABF0 is the front end's frame (drawing, then waiting for the vblank's buffer swap). */
+static void shell_keys(void);
+
 void func_8002ABF0(void) {
     s32 i;
+    shell_keys();
     if (port_dev_cheats)
         for (i = 0; i < 4; i++)
             if (func_8004977C(i))
@@ -285,11 +288,13 @@ void func_80029B1C(void) {
  * at once (port_exe_leave) with g_Args naming the mission, and the boot stub starts it. */
 s32 func_8003A7A8_orig(void);
 void port_exe_leave(void);
+void port_endless_logf(s32 frame, const char *fmt, ...);
 extern int port_blackjack;
 static char blackjack_text[] = "BLACKJACK";
 
 s32 func_8003A7A8(void) {
     s32 r;
+    port_endless_logf(-1, "shell: main menu");
     port_blackjack = 0;
     in_main = 1;
     main_made = 0;
@@ -391,6 +396,7 @@ s32 func_8003277C(void) {
  * efficiency and health, the enemies eliminated in full, and the score endless mode gives instead of the
  * mission's (D_80160FE8, which the table then takes). */
 extern int port_endless_stats, port_endless_unranked;
+extern char port_endless_unranked_why[32];
 typedef struct {
     int rooms, kills, headshots, shots, hits, time, score, unranked;
 } EndlessRunStats; /* (port/src/endless.h's EndlessRun) */
@@ -473,9 +479,12 @@ void func_80028644(void) {
         }
     port_endless_keep(name);
     memcpy(a, kept, sizeof(kept));
+    /* (a save made from the stats leaves the front end's "go on to the next mission" flag set, which then keeps the
+     * main menu from making its items when mission select is left with BACK: the run has no next mission) */
+    *(u8 *)0x80173998u = 0;
     if (getenv("TWINE_TEST_UNLOCK")) /* (headless tests: every mission open on mission select) */
         memset(a + 0x170, 1, 11);
-    port_log("endless: the run's stats shown (initials \"%s\")\n", name);
+    port_endless_logf(-1, "the run's stats shown (initials \"%s\")", name);
 }
 
 /* ENDLESS on mission select: a twelfth tile at the end of the middle row, which becomes four like the others
@@ -641,9 +650,14 @@ static void show_name(void) {
     func_80051768(0, *(s16 *)0x80153E08u, *(s16 *)0x80153E0Au);
 }
 
+void func_8003C14C_orig(void);
 void func_8003C14C(void) {
     u8 *a = G_ARGS;
     s32 b, m, frame = 0;
+    if (getenv("TWINE_TEST_ORIG_MS")) {
+        func_8003C14C_orig();
+        return;
+    }
     func_8002A66C();
     func_800548B0((char *)0x8008E344u, 0x801A9A44u); /* MSSNSEL.TIM */
     func_80031754();
@@ -745,7 +759,7 @@ void func_8003C14C(void) {
     if (STATE == 2 && CURSOR == ENDLESS) { /* endless mode: its first room's mission, after its briefing */
         port_endless_begin(a);
         endless_briefing = 1;
-        port_log("endless: chosen on mission select\n");
+        port_endless_logf(-1, "chosen on mission select");
     }
 }
 
@@ -821,12 +835,11 @@ void port_endless_cancel(void);
 
 static char brief_text[3][6][40];
 static const char *const brief_src[3][6] = {
-    {"m's briefing", "survive. that is all", "rooms from every mission", "fight to open each exit",
-     "the enemy keeps coming", 0},
-    {"r's gadgets", "your weapons carry over", "guards drop armor, ammo", "no medical kits",
-     "take the heavy armor", 0},
-    {"moneypenny's advice", "keep moving, james", "quick kills score double", "camping costs points",
-     "no cheats on the table", 0},
+    {"m's briefing", "eliminate enemies", "rooms from all missions", "fight to open the exit",
+     "they keep coming", 0},
+    {"q's gadgets", "weapons carry over", "guards drop armor", "and ammo too", "take the heavy armor", 0},
+    {"moneypenny's advice", "keep moving james", "early kills score more", "quick rooms pay more",
+     "aim well. it counts", 0},
 };
 
 static void brief_item(char *text, s32 x, s32 y) {
@@ -922,6 +935,69 @@ void func_800443D8(void) {
     func_80031754();
     if (STATE == 3) { /* BACK: no run */
         port_endless_cancel();
-        port_log("endless: briefing left: no run\n");
+        port_endless_logf(-1, "briefing left: no run");
     }
+}
+
+/* The memory card screens (arg: 2 the save after a mission's stats) */
+void func_8003EA00_orig(u8 mode);
+void func_8003EA00(u8 mode) {
+    port_endless_logf(-1, "shell: memory card screen %d (stats %d)", mode, in_endless_stats);
+    func_8003EA00_orig(mode);
+    port_endless_logf(-1, "shell: memory card screen done (state %d)", STATE);
+}
+
+/* (endless mode's log: the keys pressed on its screens: mission select, briefing, stats) */
+static void shell_keys(void) {
+    static u32 was;
+    extern int port_text_entry;
+    if (port_text_entry > 0)
+        port_text_entry--; /* (the initials entry sets it while it shows) */
+    u32 now = *(u32 *)0x80151A1Cu;
+    /* (and no attract mode from these screens: the front end's idle count, which after a while leaves a screen for
+     * the intro film, left the run's stats and mission select broken behind it) */
+    if (in_mission_select || in_endless_stats || endless_briefing)
+        *(s32 *)0x800747ACu = 0;
+    if ((in_mission_select || in_endless_stats || endless_briefing) && (now & ~was))
+        port_endless_logf(-1, "shell: keys %04X on %s", now & ~was,
+                          in_endless_stats ? "the run's stats" : in_mission_select ? "mission select" : "the briefing");
+    was = now;
+}
+
+/* The hi-score table's initials entry (func_800385C4, each frame it shows: up and down choose the letter, left and
+ * right the place, its letters D_800738E8[3], the letter chosen D_80173A40 at the place D_80174E68, the cursor's x
+ * D_800738E0 from the letters' widths D_800738D4[3]): letters typed with Shift held go in as if chosen, one place on
+ * after each, and Shift+Backspace goes a place back (port/src/video.c) */
+s32 func_800385C4_orig(s16 item);
+int port_text_take(void);
+extern int port_text_entry;
+#define LETTER (*(s32 *)0x80173A40u)
+#define PLACE (*(s32 *)0x80174E68u)
+#define LETTERS ((s32 *)0x800738E8u)
+#define WIDTHS ((s32 *)0x800738D4u)
+#define CURSOR_X (*(s32 *)0x800738E0u)
+
+static void initials_place(int place) {
+    PLACE = place;
+    LETTER = LETTERS[place];
+    CURSOR_X = place == 1 ? WIDTHS[0] + 3 : place == 2 ? WIDTHS[0] + WIDTHS[1] + 6 : 0;
+    func_8005550C(0, 0);
+}
+
+s32 func_800385C4(s16 item) {
+    int c = port_text_take();
+    s32 r;
+    port_text_entry = 3;
+    if (c == '\b') {
+        if (PLACE > 0)
+            initials_place(PLACE - 1);
+    } else if (c >= 'a' && c <= 'z')
+        LETTER = c - 'a';
+    r = func_800385C4_orig(item);
+    if (c >= 'a' && c <= 'z') {
+        port_endless_logf(-1, "shell: initial '%c' typed at place %d", c, PLACE);
+        if (PLACE < 2)
+            initials_place(PLACE + 1);
+    }
+    return r;
 }

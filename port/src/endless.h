@@ -15,6 +15,7 @@ typedef struct {
         int owned;
         short ammo, clip, reserve;
     } weapon[ENDLESS_WEAPONS];
+    char in_hand[24]; /* the weapon he held */
 } EndlessCarry;
 
 typedef struct {

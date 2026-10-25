@@ -51,6 +51,7 @@ extern s32 D_8009CDA8;      /* the frame counter */
 extern int port_gte_mirror;
 int port_quick_melee(void);
 void port_smooth_keep(void *at, u32 size);
+void port_log(const char *fmt, ...);
 void port_heap3_own(int on, int fresh);
 void func_800788E0_orig(void);
 void func_8007545C_orig(s32 first, s32 last);
@@ -85,7 +86,7 @@ static int sided;         /* mirrored has been decided for this punch (at its fi
 static u8 *fist;          /* the unarmed model, loaded for this mission (into fist_data) */
 static u32 fist_data[0xE000 / 4]; /* as big as the game's buffer (the level's heap has no room for it) */
 static u8 *fist_inst;     /* its instance, made once (the model is mapped where it lies) */
-static s32 fist_frame;    /* the frame counter when last seen: a smaller one is a new mission (a new heap) */
+static s32 fist_frame;    /* the frame counter last frame: a smaller one is a new mission (a new heap) */
 
 /* the unarmed weapon's numbers, the same in every mission that has it but for the damage (some have no unarmed
  * weapon: the fists are in their model tables all the same): the projection, offset and angles the fist is seen
@@ -154,10 +155,16 @@ static u8 *fist_ready(void) {
     s32 model = fist_model();
     u8 *p = D_800F0F80;
     s32 i, used;
-    if (D_8009CDA8 < fist_frame || (fist_inst && (fist_inst[0x92] != 1 || W(fist_inst, 0, u8 *) != fist))) {
+    if (fist_inst && (fist_inst[0x92] != 1 || W(fist_inst, 0, u8 *) != fist))
         fist = fist_inst = hand = NULL;
+    /* its animation table moved (a section loaded, the level's tables made again): the instance made again */
+    if (fist_inst && model >= 0 && (W(fist_inst, 0x74, s32) != W(D_8009D0FC + model * 0x70, 0x68, s32) ||
+                                    W(fist_inst, 0x90, u16) != W(D_8009D0FC + model * 0x70, 0x6C, u16))) {
+        port_log("quick punch: the fists' animations moved (%08x to %08x): made again\n", W(fist_inst, 0x74, s32),
+                 W(D_8009D0FC + model * 0x70, 0x68, s32));
+        fist_inst[0x92] = 0;
+        fist_inst = hand = NULL;
     }
-    fist_frame = D_8009CDA8;
     if (fist_inst)
         return fist_inst;
     if (model < 0)
@@ -224,6 +231,8 @@ static void punch(void) {
     sided = 0;
     hand_view();
     func_800757C0(inst, FIST_PUNCH, 1);
+    port_log("quick punch: frame %d level %d: %d frames to play (animations %08x)\n", D_8009CDA8, g_Args->level,
+             W(inst, 0x80, s32), W(inst, 0x74, s32));
 }
 
 /* the blow: the punch's own (func_80038AA4), from the hand as the weapon in hand with the fists' numbers, the
@@ -246,6 +255,14 @@ void func_800788E0(void) {
     int pressed = port_quick_melee();
     u8 *inst, *coord;
     s32 left;
+    /* a new mission (or a room of endless mode's): the model and instance were in the last one's memory. Watched
+     * every frame, not only as he punches: a first punch late in the next mission would miss the count going back */
+    if (D_8009CDA8 < fist_frame) {
+        if (fist)
+            port_log("quick punch: a new mission (frame %d after %d): the fists loaded again\n", D_8009CDA8, fist_frame);
+        fist = fist_inst = hand = NULL;
+    }
+    fist_frame = D_8009CDA8;
     fists_reach();
     func_800788E0_orig();
 #ifdef MOD_QUICKGRENADE

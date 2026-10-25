@@ -15,6 +15,8 @@
 #include <string.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <stdarg.h>
+#include <sys/time.h>
 #include "port.h"
 #include "module.h"
 #include "endless.h"
@@ -27,31 +29,30 @@ typedef struct {
     s8 level, point; /* point: the load point (-1 the start point) */
 } Room;
 
-/* The rooms: each mission's sections, entered at its start point and at each of its load points, but those that
- * start in a cutscene or a loading the run would wait through, those where Bond dies of the place alone (on the
- * train's roof, by City of Walkways' water), Cold Reception's ski slope and a room with nearly no floor to send
- * guards to. Russian Roulette (the casino) has none. (Surveyed headless, 2026-10-24.) */
+/* The rooms: sections of the missions that make a fight with a way out (a door to another section that opens
+ * without the story: no keycard, objective, lift or wait), picked by playing them. A section may be entered from
+ * either end (King's Ransom's 4, played backwards, is one of the best). Left out: Russian Roulette (the casino) and
+ * Night Watch (its guards may not be killed: back with the borrowed guards of stage 2), the sections that start in a
+ * cutscene or where Bond dies of the place alone, the ski slope, rooms whose doors the story keeps shut, the lifts.
+ * King's Ransom flows: from one of its rooms the next of its sections follows, for a stretch (port_endless_segment). */
 static Room rooms[] = {
-    /* Courier */
-    {2, -1}, {2, 0}, {2, 1}, {2, 2}, {2, 3}, {2, 4}, {2, 5}, {2, 6}, {2, 7},
-    /* King's Ransom */
-    {8, -1}, {8, 0}, {8, 2}, {8, 3}, {8, 4}, {8, 5}, {8, 6}, {8, 7},
-    /* Cold Reception */
-    {1, -1}, {1, 0}, {1, 2},
-    /* Night Watch */
-    {4, -1}, {4, 0}, {4, 1}, {4, 2}, {4, 3}, {4, 4}, {4, 5}, {4, 6}, {4, 7}, {4, 8}, {4, 10}, {4, 11}, {4, 12}, {4, 13}, {4, 14}, {4, 15},
+    /* Courier: the bank's floor and the later part (its lift arrivals left out) */
+    {2, -1}, {2, 4}, {2, 5}, {2, 6},
+    /* King's Ransom: all of it but its end (section 3: the balloon, scripted, no way on), the bar's two doors (5)
+     * and the section played backwards (4) among the best */
+    {8, -1}, {8, 0}, {8, 2}, {8, 3}, {8, 4}, {8, 5}, {8, 6},
     /* Masquerade */
-    {7, -1}, {7, 0}, {7, 1}, {7, 2}, {7, 3}, {7, 4}, {7, 5}, {7, 6}, {7, 7},
-    /* Flashpoint */
-    {6, -1}, {6, 0}, {6, 1}, {6, 2}, {6, 3}, {6, 4}, {6, 5}, {6, 6}, {6, 8}, {6, 9}, {6, 10}, {6, 11}, {6, 13},
-    /* City of Walkways */
-    {5, -1}, {5, 0}, {5, 2}, {5, 3}, {5, 4},
-    /* Turncoat */
-    {3, -1}, {3, 0}, {3, 4}, {3, 6}, {3, 8}, {3, 10}, {3, 11}, {3, 12}, {3, 13}, {3, 14},
-    /* Fallen Angel */
-    {9, -1}, {9, 0}, {9, 2}, {9, 3}, {9, 4}, {9, 5},
+    {7, 2},
+    /* Flashpoint: the night-vision pipeline (13) */
+    {6, 0}, {6, 9}, {6, 13},
+    /* City of Walkways: the warehouse (4) */
+    {5, -1}, {5, 4},
+    /* Turncoat: the streets */
+    {3, -1}, {3, 11}, {3, 13},
+    /* Fallen Angel: the MS keycard area and the castle's halls */
+    {9, 0}, {9, 2}, {9, 4},
     /* Meltdown */
-    {10, -1}, {10, 0}, {10, 1}, {10, 2}, {10, 4}, {10, 5}, {10, 6}, {10, 7},
+    {10, -1}, {10, 1}, {10, 2}, {10, 4}, {10, 6},
     {0, 0}, /* (TWINE_ENDLESS_ROOM's, when not one of these) */
 };
 #define ROOMS ((int)(sizeof(rooms) / sizeof(rooms[0])) - 1)
@@ -63,8 +64,10 @@ int port_endless; /* a run is on */
 EndlessCarry port_endless_carry;
 EndlessRun port_endless_run;
 int port_endless_unranked PORT_NOSAVE; /* (a state loaded must not take it back) */
+char port_endless_unranked_why[32] PORT_NOSAVE; /* (why: for the stats screen) */
 int port_endless_stats; /* the front end shows the run's stats next */
-static int room = -1, next_room = -1, room_starts;
+static int room = -1, next_room = -1, room_starts, segments;
+static s16 cur_entry[5]; /* where the room was entered: its section, yaw, x, y, z */
 static void run_over(u8 *args);
 static u32 seed;
 
@@ -72,6 +75,8 @@ static u32 next_rand(void) {
     seed = seed * 1103515245 + 12345;
     return seed >> 8;
 }
+
+void port_endless_logf(s32 frame, const char *fmt, ...);
 
 /* a room of another level than the one before: the level first (each as likely), then one of its rooms */
 static int pick_room(int after) {
@@ -101,6 +106,7 @@ static void begin(void) {
     memset(&port_endless_carry, 0, sizeof(port_endless_carry));
     memset(&port_endless_run, 0, sizeof(port_endless_run));
     port_endless_unranked = 0;
+    port_endless_unranked_why[0] = 0;
     next_room = -1;
     room = pick_room(-1);
 }
@@ -110,7 +116,7 @@ void port_endless_begin(u8 *args) {
     begin();
     *(s16 *)(args + 0x188) = rooms[room].level;
     *(s16 *)(args + 0x18A) = level_mission[rooms[room].level];
-    port_log("endless: the run starts in level %d point %d\n", rooms[room].level, rooms[room].point);
+    port_endless_logf(-1, "the run starts in level %d point %d", rooms[room].level, rooms[room].point);
 }
 
 /* fixes/shell.c: the run given up at its briefing */
@@ -135,7 +141,7 @@ int port_endless_start(void) {
             if (rooms[i].level == l && rooms[i].point == p)
                 room = i;
     }
-    port_log("endless: the run starts in level %d point %d\n", rooms[room].level, rooms[room].point);
+    port_endless_logf(-1, "the run starts in level %d point %d", rooms[room].level, rooms[room].point);
     return rooms[room].level;
 }
 
@@ -150,26 +156,59 @@ void port_endless_level(const PortModule *m) {
     }
     room_starts = 0;
     if (rooms[room].level != m->level) {
-        port_log("endless: level %d started in a run, the room's is %d\n", m->level, rooms[room].level);
+        port_endless_logf(-1, "level %d started in a run, the room's is %d", m->level, rooms[room].level);
         return;
     }
     start = (s16 *)start_point[m->level];
     if (rooms[room].point >= 0)
         memcpy(start, start + 0xC + rooms[room].point * 8, 10);
-    port_log("endless: room in level %d at point %d (section %d at %d %d %d)\n", m->level, rooms[room].point,
+    memcpy(cur_entry, start, 10);
+    segments = 0;
+    port_endless_logf(-1, "room in level %d at point %d (section %d at %d %d %d)", m->level, rooms[room].point,
              start[0], start[2], start[3], start[4]);
+}
+
+/* An endless mode log line, for matching a session's events to what the player saw: "endless:", the wall clock
+ * (to the millisecond) and the mission's frame, then the event */
+void port_endless_logf(s32 frame, const char *fmt, ...) {
+    char text[512];
+    struct timeval tv;
+    struct tm tm;
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(text, sizeof(text), fmt, ap);
+    va_end(ap);
+    gettimeofday(&tv, NULL);
+    localtime_r(&tv.tv_sec, &tm);
+    port_log("endless: %02d:%02d:%02d.%03d f%d %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, (int)(tv.tv_usec / 1000),
+             frame, text);
 }
 
 /* the level's mod: the run made unranked (why: for the log) */
 void port_endless_unrank(const char *why) {
-    if (port_endless && !port_endless_unranked)
-        port_log("endless: the run is unranked from here (%s)\n", why);
+    if (port_endless && !port_endless_unranked) {
+        port_endless_logf(-1, "the run is unranked from here (%s)", why);
+        snprintf(port_endless_unranked_why, sizeof(port_endless_unranked_why), "%s", why);
+    }
     port_endless_unranked |= port_endless;
 }
 
 /* the level's mod, as a room's mission starts: 1 the first time, more when it started over (RESTART MISSION) */
 int port_endless_room_started(void) {
     return ++room_starts;
+}
+
+/* Each level's gate on its doors to other sections (LEVEL01's D_8009CE40: the story's say, a function of the
+ * section asked for that may refuse it: "ACCESS DENIED", "the channels must be offline"...) */
+static const u32 section_gate[12] = {0,          0x8009CE40, 0x800A1078, 0x8009EA18, 0x8009D8A4, 0x800A1470,
+                                     0x8009EE20, 0x800A1DDC, 0x8009F294, 0x800A1ADC, 0x800A0FF0, 0x8009C4E4};
+
+/* the level's mod, every frame of a run: the story's gate off, so that a room's doors open by the run's rules */
+void port_endless_ungate(int level) {
+    if (port_endless && level > 0 && level < 12 && *(u32 *)section_gate[level]) {
+        port_endless_logf(-1, "story: the doors' gate (%08X) taken off", *(u32 *)section_gate[level]);
+        *(u32 *)section_gate[level] = 0;
+    }
 }
 
 /* the level's mod: points scored (kills, rooms cleared) */
@@ -186,15 +225,36 @@ int port_endless_wave(void) {
 int port_endless_room(s16 *entry) {
     if (!port_endless || room < 0)
         return 0;
-    memcpy(entry, (s16 *)start_point[rooms[room].level], 10);
+    memcpy(entry, cur_entry, 10);
+    return 1;
+}
+
+/* The level's mod, as Bond goes through a door to another of the mission's sections (its load point): 1 if that
+ * section is the next room (a mission that flows, for a stretch of a few rooms: the mission loads it its own way),
+ * else 0 (the next room is another mission's) */
+int port_endless_segment(int point) {
+    int l = rooms[room].level;
+    s16 *lp;
+    if (point < 0 || l != 8 || segments >= 2)
+        return 0;
+    lp = (s16 *)start_point[l] + 0xC + point * 8;
+    if (lp[0] == 3) /* (King's Ransom's end: the balloon) */
+        return 0;
+    memcpy(cur_entry, lp, 10);
+    segments++;
+    room_starts = 0; /* (a new room, not the old one started over) */
+    port_endless_run.rooms++;
+    port_endless_logf(-1, "next room: the mission's own section %d (load point %d), stretch %d", lp[0], point, segments);
     return 1;
 }
 
 /* The level's mod, as Bond leaves the room: the next room chosen. (The mission's main then returns, and shows its
  * loading picture for the level g_Args names, from its own files: its own picture.) */
 void port_endless_next(void) {
+    if (next_room >= 0) /* (chosen already) */
+        return;
     next_room = pick_room(room);
-    port_log("endless: next room: level %d point %d\n", rooms[next_room].level, rooms[next_room].point);
+    port_endless_logf(-1, "next room: level %d point %d", rooms[next_room].level, rooms[next_room].point);
 }
 
 /* The high scores: endless.txt in the port's data folder, a line a run, the best first: score, name (the initials
@@ -300,7 +360,7 @@ static void run_over(u8 *args) {
     *(s32 *)(args + 0x2D8) = r->time;
     *(u32 *)args &= ~0x40u; /* on to the front end */
     args[0x114] = 0;        /* (no mission completed: the boot stub plays no film) */
-    port_log("endless: the run is over: %d rooms, %d kills, %d of %d shots hit, score %d%s\n", r->rooms, r->kills,
+    port_endless_logf(-1, "the run is over: %d rooms, %d kills, %d of %d shots hit, score %d%s", r->rooms, r->kills,
              r->hits, r->shots, r->score, port_endless_unranked ? " (unranked)" : "");
     port_endless = 0;
     port_endless_stats = 1;

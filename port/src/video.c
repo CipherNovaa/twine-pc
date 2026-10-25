@@ -70,6 +70,30 @@ static const struct {
     {SDL_SCANCODE_TAB, P_SELECT}, {SDL_SCANCODE_SPACE, P_CROSS}, {SDL_SCANCODE_BACKSPACE, P_TRI},
 };
 
+/* Typing on the front end's initials entry (fixes/shell.c sets port_text_entry while it shows): Shift and a letter
+ * enter the letter, Shift and Backspace take one back (by scancode: any layout's letters). Without Shift the keys
+ * are the menus' as ever. */
+int port_text_entry;
+static char typed[8];
+static int typed_n;
+
+int port_text_take(void) {
+    static int test_done;
+    int c, i;
+    if (!test_done && getenv("TWINE_TEST_TYPE")) { /* (headless tests: these letters typed, '-' a Backspace) */
+        const char *t = getenv("TWINE_TEST_TYPE");
+        for (test_done = 1; *t && typed_n < (int)sizeof(typed); t++)
+            typed[typed_n++] = *t == '-' ? '\b' : *t;
+    }
+    if (!typed_n)
+        return 0;
+    c = typed[0];
+    for (i = 1; i < typed_n; i++)
+        typed[i - 1] = typed[i];
+    typed_n--;
+    return c;
+}
+
 /* the blackjack table's extra keys (F1 lists them there) */
 extern int port_blackjack;
 static const struct {
@@ -570,6 +594,10 @@ static void window_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_QUIT)
         exit(0);
     /* F11 or Alt+Enter: full screen or a window */
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && port_text_entry && (e->key.mod & SDL_KMOD_SHIFT) &&
+        typed_n < (int)sizeof(typed) &&
+        ((e->key.scancode >= SDL_SCANCODE_A && e->key.scancode <= SDL_SCANCODE_Z) || e->key.scancode == SDL_SCANCODE_BACKSPACE))
+        typed[typed_n++] = e->key.scancode == SDL_SCANCODE_BACKSPACE ? '\b' : 'a' + (e->key.scancode - SDL_SCANCODE_A);
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode == SDL_SCANCODE_F1)
         help_shown = !help_shown;
     /* F5 saves a state, F6 loads it (savestate.c) */
@@ -649,7 +677,8 @@ static void poll_input(int tick) {
     keys = SDL_GetKeyboardState(NULL);
     for (i = 0; i < sizeof(keymap) / sizeof(keymap[0]); i++)
         if (keys[keymap[i].key] && !(keymap[i].key == SDL_SCANCODE_RETURN && (SDL_GetModState() & SDL_KMOD_ALT)) &&
-            !(keymap[i].key == SDL_SCANCODE_SPACE && in_gameplay()))
+            !(keymap[i].key == SDL_SCANCODE_SPACE && in_gameplay()) &&
+            !(keymap[i].key == SDL_SCANCODE_BACKSPACE && port_text_entry && (SDL_GetModState() & SDL_KMOD_SHIFT)))
             down |= keymap[i].bit;
     /* at the blackjack table (the front end's BLACKJACK): the pad's buttons its prompts show */
     if (port_blackjack && !in_gameplay())
