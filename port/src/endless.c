@@ -181,6 +181,7 @@ void port_endless_level(const PortModule *m) {
 
 /* An endless mode log line, for matching a session's events to what the player saw: "endless:", the wall clock
  * (to the millisecond) and the mission's frame, then the event */
+u32 port_video_frames(void);
 void port_endless_logf(s32 frame, const char *fmt, ...) {
     char text[512];
     struct timeval tv;
@@ -191,8 +192,8 @@ void port_endless_logf(s32 frame, const char *fmt, ...) {
     va_end(ap);
     gettimeofday(&tv, NULL);
     localtime_r(&tv.tv_sec, &tm);
-    port_log("endless: %02d:%02d:%02d.%03d f%d %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, (int)(tv.tv_usec / 1000),
-             frame, text);
+    port_log("endless: %02d:%02d:%02d.%03d f%d v%u %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, (int)(tv.tv_usec / 1000),
+             frame, port_video_frames(), text);
 }
 
 /* the level's mod: the run made unranked (why: for the log) */

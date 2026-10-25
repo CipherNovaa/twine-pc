@@ -405,7 +405,7 @@ void port_endless_best(char names[3][4], u32 scores[3]);
 void port_endless_keep(const char *name);
 void func_80028644_orig(void);
 #define MISSION_SCORE (*(s32 *)0x80160FE8u)
-static int in_endless_stats;
+static int in_endless_stats, after_stats; /* (after_stats: frames of the front end to log after a run's stats) */
 
 s32 func_8005133C(char *text, s32 x, s32 y) {
     static char line[48];
@@ -475,6 +475,7 @@ void func_80028644(void) {
     a[0x114] = 1; /* the stats as a mission completed's */
     a[0x115] = 0;
     in_endless_stats = 1;
+    port_endless_logf(-1, "the run's stats screen opens");
     func_80028644_orig();
     in_endless_stats = 0;
     for (i = 0; i < 3; i++) /* the run's entry, if it made the table */
@@ -491,6 +492,7 @@ void func_80028644(void) {
     if (getenv("TWINE_TEST_UNLOCK")) /* (headless tests: every mission open on mission select) */
         memset(a + 0x170, 1, 11);
     port_endless_logf(-1, "the run's stats shown (initials \"%s\")", name);
+    after_stats = 20 * 60;
 }
 
 /* ENDLESS on mission select: a twelfth tile at the end of the middle row, which becomes four like the others
@@ -664,8 +666,11 @@ void func_8003C14C(void) {
         func_8003C14C_orig();
         return;
     }
+    port_endless_logf(-1, "shell: mission select opens (state %d, cursor %d, args %08X)", STATE, CURSOR, S32(a));
     func_8002A66C();
+    port_endless_logf(-1, "shell: mission select: loading its picture");
     func_800548B0((char *)0x8008E344u, 0x801A9A44u); /* MSSNSEL.TIM */
+    port_endless_logf(-1, "shell: mission select: picture loaded");
     func_80031754();
     *(s32 *)0x80073924u = 1;
     PAD_WAS = func_80055244(0);
@@ -673,6 +678,8 @@ void func_8003C14C(void) {
     if (*(s16 *)0x80073E68u > 0)
         CURSOR = *(s16 *)0x80073E68u;
     CURSOR = (a[0] & 1) ? *(s16 *)0x80073E60u : 0;
+    if (getenv("TWINE_TEST_MS_CURSOR")) /* (headless tests: the cursor starts here) */
+        CURSOR = atoi(getenv("TWINE_TEST_MS_CURSOR"));
     a[0x170] = 1;
     if (CURSOR < ENDLESS)
         a[0x170 + CURSOR] = 1;
@@ -722,12 +729,14 @@ void func_8003C14C(void) {
     *(s32 *)0x800739DCu = 2;
     *(s32 *)0x800739E0u = 1;
     STATE = 1;
+    port_endless_logf(-1, "shell: mission select: tiles made");
     func_800316D4(0, 0, 0);
     *(s32 *)0x80073914u = 0;
     shade(0);
     shade(1);
     in_mission_select = 1;
     func_80039DE8(PANEL_TOP, 2, 0x32, 0xF3);
+    port_endless_logf(-1, "shell: mission select ready (cursor %d)", CURSOR);
     *(u8 *)0x80073E3Fu = 1;
     while (STATE == 1) {
         s32 buf = *(s32 *)(a + 0x118), pulse;
@@ -762,6 +771,7 @@ void func_8003C14C(void) {
     func_8003A2C4(PANEL_TOP, 2, 0x32, 0xF3);
     func_80031754();
     in_mission_select = 0;
+    port_endless_logf(-1, "shell: mission select left (state %d, cursor %d)", STATE, CURSOR);
     if (STATE == 2 && CURSOR == ENDLESS) { /* endless mode: its first room's mission, after its briefing */
         port_endless_begin(a);
         endless_briefing = 1;
@@ -964,9 +974,13 @@ static void shell_keys(void) {
      * the intro film, left the run's stats and mission select broken behind it) */
     if (in_mission_select || in_endless_stats || endless_briefing)
         *(s32 *)0x800747ACu = 0;
-    if ((in_mission_select || in_endless_stats || endless_briefing) && (now & ~was))
+    if (after_stats > 0 && --after_stats % 100 == 0) /* (what the front end is doing, for a while after the stats) */
+        port_endless_logf(-1, "shell: after the stats: state %d, cursor %d, mission select %d, text %d, screen %d %d",
+                          STATE, CURSOR, in_mission_select, S32(0x80073960u), S32(0x80073984u), S32(0x800739D4u));
+    if ((in_mission_select || in_endless_stats || endless_briefing || after_stats > 0) && (now & ~was))
         port_endless_logf(-1, "shell: keys %04X on %s", now & ~was,
-                          in_endless_stats ? "the run's stats" : in_mission_select ? "mission select" : "the briefing");
+                          in_endless_stats ? "the run's stats" : in_mission_select ? "mission select" :
+                          endless_briefing ? "the briefing" : "the front end (after the stats)");
     was = now;
 }
 

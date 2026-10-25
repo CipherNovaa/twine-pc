@@ -147,7 +147,10 @@ static int copy_next;
 static struct {
     u8 *o;
     s32 born, x, z;
+    s32 lx, lz, moved; /* (where he was when he last moved on, and when) */
 } hunters[HUNTERS];
+static s32 stuck_at[8][2]; /* places guards were sent from that left them stuck (behind glass, at a wall) */
+static int stuck_count;
 
 /* the room's own fixed guards (snipers, grenade throwers, posts: those of the game's standing AIs, 2-5) that fell,
  * to come back to their places half a minute later */
@@ -155,6 +158,27 @@ static struct {
 static struct {
     s32 rec[6], at[3], due;
 } returns[RETURNS];
+
+/* how each people's slot's person was made (the log's: placed, sent, a fallen one's return, remade after a slot freed) */
+static const char *made_how[64];
+static int making;               /* (what spawn()/the returns are making now: 0 the section) */
+static s32 *freed_recs[16];      /* (records (their flags words) whose person free_slot took out) */
+static int freed_next;
+static s32 floor_at(s32 x, s32 y, s32 z);
+static void people_log(void) {
+    int i;
+    for (i = D_800B0DA0; i <= D_800B07B0; i++) {
+        u8 *o = OBJ(i), *st = *(u8 **)(o + 0x94);
+        s32 *src = *(s32 **)(o + 0x60);
+        if (o == g_Player || !o[4])
+            continue;
+        ELOG("people: %d type %d %s, health %d, ai %d at %d %d %d (floor %d, yaw %d); record %08X flags %08X w4 %08X; "
+             "state +24 %08X; obj +8 %d +A4 %02X +A6 %02X +48 %08X +4C %08X", i, o[6], made_how[i & 63] ? made_how[i & 63] : "?",
+             HEALTH(o), o[0xA7], POS(o)[0], POS(o)[1], POS(o)[2], floor_at(POS(o)[0], POS(o)[1] - 500, POS(o)[2]),
+             *(s16 *)(*(u8 **)(o + 0x90) + 0x1A), (u32)src, src ? src[0] : 0, src ? src[1] : 0,
+             st ? *(s32 *)(st + 0x24) : -1, o[8], o[0xA4], o[0xA6], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C));
+    }
+}
 
 static s16 entry[5];
 static s32 was_alive[64]; /* each person's health last frame (a guard falling leaves pickups) */
@@ -264,6 +288,7 @@ static void log_weapons(const char *when) {
     ELOG("weapons %s: %s", when, text);
 }
 
+static int draw_slot = -1; /* (a slot to change to, as soon as the game lets him) */
 static void carry_out(void) {
     EndlessCarry *c = &port_endless_carry;
     int i, j;
@@ -287,8 +312,17 @@ static void carry_out(void) {
         c->weapon[j].ammo = w->ammo;
         c->weapon[j].clip = w->clip;
         c->weapon[j].reserve = w->reserve;
-        if (i == D_800B0DD4)
-            snprintf(c->in_hand, sizeof(c->in_hand), "%s", c->weapon[j].name);
+    }
+    {   /* the weapon in his hand now (or the one he is changing to: ours, or the game's) */
+        int h = draw_slot >= 0 ? draw_slot : D_800B0DDC >= 0 && D_800B0DDC < SLOTS ? D_800B0DDC : D_800B0DD4;
+        if (h < 0 || h >= SLOTS || g_Weapons[h].pad0[0] < 'A' || g_Weapons[h].pad0[0] > 'Z')
+            h = D_800B0DD4;
+        if (h >= 0 && h < SLOTS && g_Weapons[h].pad0[0] >= 'A' && g_Weapons[h].pad0[0] <= 'Z') {
+            strncpy(c->in_hand, (char *)g_Weapons[h].pad0, sizeof(c->in_hand) - 1);
+            c->in_hand[sizeof(c->in_hand) - 1] = 0;
+        }
+        ELOG("carry: Bond leaves with %s in hand (slot %d; in hand %d, changing to %d)", c->in_hand, h, D_800B0DD4,
+             D_800B0DDC);
     }
 }
 
@@ -320,7 +354,6 @@ static void carry_in(void) {
 
 /* the weapon Bond held (in a run's first room: his pistol), drawn as the room starts (the game changes to
  * D_800B0DDC); a mission without it leaves the one it gives */
-static int draw_slot = -1; /* (a slot to change to, as soon as the game lets him) */
 int weapon_change_to(int slot);
 static void draw_weapon(void) {
     EndlessCarry *c = &port_endless_carry;
@@ -510,7 +543,7 @@ static void clear_arrival(void) {
     for (i = 0; i < D_8009CF68; i++)
         for (j = 0; j < D_8009CF6C[i] && n < 8; j++) {
             s32 *p = D_8009CF70[i] + j * 6, x = p[0] + D_800D2FB0[0], z = p[2] + D_800D2FB0[2];
-            if ((p[3] & 0xFF) && TYPE_DEF(p[3] & 0xFF)[1] == 6 && dist2(x, z, entry[2], entry[4]) < 900)
+            if ((p[3] & 0xFF) && !(p[3] & 0x400) && TYPE_DEF(p[3] & 0xFF)[1] == 6 && dist2(x, z, entry[2], entry[4]) < 900)
                 who[n][0] = x, who[n][2] = z, n++;
         }
     if (!n)
@@ -548,7 +581,7 @@ static void room_start(void) {
     s32 i, j, counts[256];
     room_frames = carried = budget = open = kills_scored = said = burst = at_entry = 0;
     draw_slot = -1;
-    kind_count = copy_next = door_count = 0;
+    kind_count = copy_next = door_count = stuck_count = 0;
     memset(hunters, 0, sizeof(hunters));
     memset(returns, 0, sizeof(returns));
     cooldown = SEC * 5;
@@ -630,8 +663,18 @@ static int clear(int f) {
     return !need_clear || ok >= 7;
 }
 
+static int stuck_near(s32 x, s32 z) { /* (by where one sent got stuck) */
+    int k;
+    for (k = 0; k < stuck_count; k++)
+        if (dist2(stuck_at[k][0], stuck_at[k][1], x, z) < 2500)
+            return 1;
+    return 0;
+}
+
 static int lately(s32 x, s32 z) { /* (by where one of the last few came, or by where Bond came in) */
     int k;
+    if (stuck_near(x, z))
+        return 1;
     if (dist2(x, z, entry[2], entry[4]) < 3500)
         return 1;
     for (k = 0; k < 4; k++)
@@ -717,7 +760,8 @@ static int place(int *door) {
         if (b < 0) { /* the last: any place he can walk to, not right by him (a tiny room) */
             for (i = 0; i < faces; i++) {
                 s32 d = dist2(bx, bz, mid[i][0], mid[i][2]);
-                if (reach[i] && !shut[i] && d > 2000 && d < 16000 && d > best - 2500 && mid[i][1] - by <= LEVEL_DY &&
+                if (reach[i] && !shut[i] && d > 2000 && d < 16000 && d > best - 2500 && !stuck_near(mid[i][0], mid[i][2]) &&
+                    mid[i][1] - by <= LEVEL_DY &&
                     by - mid[i][1] <= LEVEL_DY)
                     best = d + 2500, b = i;
             }
@@ -764,8 +808,10 @@ static int free_slot(u32 type) {
     if (b < 0)
         return 0;
     ELOG("slots: %d freed (type %d, %d off)", b, OBJ(b)[6], best);
-    if (*(s32 **)(OBJ(b) + 0x60)) /* (its record: not made, so that the section makes it again when Bond nears) */
-        **(s32 **)(OBJ(b) + 0x60) &= ~0x100;
+    if (*(s32 **)(OBJ(b) + 0x60)) { /* (its record: not made, so that the section makes it again when Bond nears) */
+        **(s32 **)(OBJ(b) + 0x60) &= ~0x100; /* (+0x60: the record's flags word) */
+        freed_recs[freed_next++ & 15] = *(s32 **)(OBJ(b) + 0x60);
+    }
     func_800395E8(OBJ(b));
     return 1;
 }
@@ -798,6 +844,7 @@ static void spawn(const char *why) {
     rec[4] &= ~(7 << 24);       /* its start pose and state, w4's bits 12-19 and 24-26, and the flags' 14-26) */
     rec[3] &= ~(0x1FFF << 14);
     rec[3] &= ~0x400;           /* (and the pose's flag) */
+    making = 1;
     o = func_8003C1BC(rec, mid[i][0], mid[i][1], mid[i][2]);
     for (h = 0; !o && h < kind_count; h++) { /* (the kinds in turn, a slot freed for each) */
         rec[3] = (rec[3] & ~0x3FF) | (kinds[h][3] & 0xFF);
@@ -808,6 +855,7 @@ static void spawn(const char *why) {
             o = func_8003C1BC(rec, mid[i][0], mid[i][1], mid[i][2]);
         rec[3] &= ~0x300;
     }
+    making = 0;
     if (!o) {
         ELOG("spawn: the game made no guard (type %d: the people's six slots are full)", rec[3] & 0xFF);
         cooldown = SEC * 5;
@@ -816,7 +864,8 @@ static void spawn(const char *why) {
     for (h = 0; h < HUNTERS && hunters[h].o && hunters[h].o[4] && HEALTH(hunters[h].o) > 0; h++)
         ;
     if (h < HUNTERS)
-        hunters[h].o = o, hunters[h].born = room_frames, hunters[h].x = mid[i][0], hunters[h].z = mid[i][2];
+        hunters[h].o = o, hunters[h].born = hunters[h].moved = room_frames, hunters[h].x = hunters[h].lx = mid[i][0],
+        hunters[h].z = hunters[h].lz = mid[i][2];
     recent[recent_next][0] = mid[i][0], recent[recent_next][2] = mid[i][2];
     recent_next = (recent_next + 1) % 4;
     ELOG("spawn (%s): guard type %d %s at %d %d %d, %d from Bond, budget %d", why, rec[3] & 0xFF,
@@ -839,6 +888,20 @@ static void recall(void) {
         d = dist2(g_Args->playerX, g_Args->playerZ, POS(o)[0], POS(o)[2]);
         if (POS(o)[1] - g_Args->playerY > 1500 || g_Args->playerY - POS(o)[1] > 1500)
             d += 20000; /* (on another floor: as good as far) */
+        if (dist2(POS(o)[0], POS(o)[2], hunters[h].lx, hunters[h].lz) > 400)
+            hunters[h].lx = POS(o)[0], hunters[h].lz = POS(o)[2], hunters[h].moved = room_frames;
+        if (room_frames - hunters[h].moved > SEC * 10 && d > 2500 && d < 8000) {
+            /* one that came no nearer and stood still a while (in a place he can't leave: behind the bank's glass, at
+             * a wall; more would stand there with him): sent back, and none sent from where he came again */
+            ELOG("recall: guard type %d stuck at %d %d (%d off, sent from %d %d %d s ago): sent back, that place not "
+                 "used again", o[6], POS(o)[0], POS(o)[2], d, hunters[h].x, hunters[h].z, (room_frames - hunters[h].born) / SEC);
+            if (stuck_count < 8)
+                stuck_at[stuck_count][0] = hunters[h].x, stuck_at[stuck_count][1] = hunters[h].z, stuck_count++;
+            func_800395E8(o);
+            hunters[h].o = 0;
+            budget += SEC * 10;
+            continue;
+        }
         if (room_frames - hunters[h].born > SEC * 20 && d > 13000) {
             ELOG("recall: guard type %d left %d off for %d s: sent back", o[6], d, (room_frames - hunters[h].born) / SEC);
             func_800395E8(o);
@@ -959,7 +1022,21 @@ void endless_frame(void) {
     }
     room_frames++;
     if (room_frames % (SEC * 10) == 0)
-        flood(); /* (where Bond can walk to now) */
+        flood();
+    if (room_frames % (SEC * 4) == 0)
+        people_log();
+    if (getenv("TWINE_ENDLESS_TEST_LOOK") && room_frames > SEC * 2) { /* (headless tests: Bond faces person N) */
+        u8 *o = OBJ(atoi(getenv("TWINE_ENDLESS_TEST_LOOK")));
+        if (o[4]) {
+            s32 dx = POS(o)[0] - g_Args->playerX, dz = POS(o)[2] - g_Args->playerZ, a, best = -0x7FFFFFFF, ba = 0;
+            for (a = 0; a < 4096; a += 8) {
+                s32 d = (isin(a) >> 4) * (dx >> 4) + (isin(a + 0x400) >> 4) * (dz >> 4);
+                if (d > best)
+                    best = d, ba = a;
+            }
+            gPsi = ba;
+        }
+    } /* (where Bond can walk to now) */
     /* the debug menu, the game's cheats (used, or on: g_Args +4 bits 3, 9-16) or the port's take the run off the
      * high scores */
     if (g_DevMenu[0])
@@ -1030,11 +1107,13 @@ void endless_frame(void) {
             copy_next = (copy_next + 1) % COPIES;
             memcpy(rec, returns[i].rec, sizeof(returns[i].rec));
             rec[3] &= ~0x300;
+            making = 2;
             o = func_8003C1BC(rec, returns[i].at[0], returns[i].at[1], returns[i].at[2]);
             if (!o && free_slot(rec[3] & 0xFF)) {
                 rec[3] &= ~0x300;
                 o = func_8003C1BC(rec, returns[i].at[0], returns[i].at[1], returns[i].at[2]);
             }
+            making = 0;
             ELOG("special: guard type %d %s at %d %d %d", rec[3] & 0xFF, o ? "back" : "not back (no slot)",
                  returns[i].at[0], returns[i].at[1], returns[i].at[2]);
             returns[i].due = o ? 0 : room_frames + SEC * 5;
@@ -1080,6 +1159,10 @@ void endless_frame(void) {
                 g_Weapons[i].flags |= 0x1800, g_Weapons[i].ammo += 20, g_Weapons[i].reserve += 20;
         log_weapons("armed (test)");
     }
+    if (getenv("TWINE_ENDLESS_TEST_DRAW") && room_frames == 60) /* (headless tests: Bond changes to the weapon named) */
+        for (i = 0; i < 10; i++)
+            if (!strncmp((char *)g_Weapons[i].pad0, getenv("TWINE_ENDLESS_TEST_DRAW"), strlen(getenv("TWINE_ENDLESS_TEST_DRAW"))))
+                draw_slot = i;
     if (draw_slot >= 0 && D_800B0DD4 != draw_slot) {
 #ifdef MOD_WEAPONKEYS
         if (weapon_change_to(draw_slot))
@@ -1125,6 +1208,8 @@ void endless_frame(void) {
             ELOG("door: open, to load point %d (section %d)", point, to ? to[0] : -1);
             if (port_endless_segment(point)) { /* the mission's next section, as the next room */
                 port_endless_score(500 + 250 * wave);
+                log_weapons("as Bond leaves for the next section");
+                carry_out(); /* (the weapon in hand kept across: the same mission's) */
                 segment++;
                 loading = 1;
                 ELOG("room left for the mission's next section (stretch %d)", segment);
@@ -1213,12 +1298,31 @@ u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z) {
                 return 0;
             }
     }
-    if (port_endless_room(e) && g_Args && t && TYPE_DEF(t)[1] == 6 && (rec[3] & 0x400)) {
+    if (port_endless_room(e) && g_Args && t && TYPE_DEF(t)[1] == 6 && (rec[3] & 0x400) && making != 1) {
+        /* a person placed in a pose (seated at a desk: the pose is his record's whole start, not its flag alone, and
+         * sits on air without the mission's chair, frozen there) is not made: the director's guards stand */
         if (!port_subframe)
-            ELOG("room: posed guard (type %d) made standing", t);
-        rec[3] &= ~0x400; /* (a guard placed seated at a desk: in a run he stands, the room's furniture not his) */
+            ELOG("room: posed person (type %d) at %d %d %d not made", t, x, y, z);
+        rec[3] |= 0x100;
+        return 0;
     }
-    return func_8003C1BC_orig(rec, x, y, z);
+    {
+        s32 w3 = rec[3], w4 = rec[4];
+        u8 *o = func_8003C1BC_orig(rec, x, y, z);
+        if (o && port_endless_room(e) && TYPE_DEF(t)[1] == 6 && (u8 *)o >= (u8 *)D_800AFFC8 &&
+            (u8 *)o < (u8 *)D_800AFFC8 + 64 * 0x124) {
+            int i = ((u8 *)o - (u8 *)D_800AFFC8) / 0x124, k;
+            const char *how = making == 1 ? "sent" : making == 2 ? "back (a fallen fixed guard)" : "placed";
+            for (k = 0; k < 16; k++)
+                if (freed_recs[k] == &rec[3])
+                    how = "placed again (its slot freed before)";
+            made_how[i & 63] = how;
+            if (!port_subframe)
+                ELOG("made: person %d type %d %s at %d %d %d, record %08X flags %08X w4 %08X", i, t, how, x, y, z,
+                     (u32)&rec[3], w3, w4);
+        }
+        return o;
+    }
 }
 
 /* A person hit: one that is hit again and again without being hurt (a story person the game won't let die,

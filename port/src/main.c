@@ -18,6 +18,8 @@
 #include <sys/time.h>
 #include <ucontext.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <execinfo.h>
 #include "port.h"
 #include "module.h"
 #include "spu.h"
@@ -572,6 +574,64 @@ static void game_folder_files(void) {
 int port_dev_cheats;
 int port_blackjack; /* the front end's BLACKJACK: the casino mission at its table (fixes/shell.c, fixes/level11.c) */
 
+/* The watchdog: no frame shown for six seconds (the game stuck in a loop, or waiting on something that never
+ * comes) logs where the main thread is (its stack, as addresses in this executable: addr2line -f -e twine) */
+static pthread_t main_thread;
+u32 port_video_frames(void);
+
+static void on_stall(int sig) {
+    void *at[64];
+    int n = backtrace(at, 64);
+    (void)sig;
+    if (log_file) {
+        fprintf(log_file, "watchdog: the main thread's stack:\n");
+        fflush(log_file);
+        backtrace_symbols_fd(at, n, fileno(log_file));
+    }
+}
+
+static void *watchdog(void *arg) {
+    u32 last = port_video_frames();
+    int still = 0, told = 0;
+    (void)arg;
+    for (;;) {
+        u32 v;
+        sleep(1);
+        v = port_video_frames();
+        if (v != last) {
+            if (told && log_file) {
+                fprintf(log_file, "watchdog: frames again (frame %u)\n", v);
+                fflush(log_file);
+            }
+            last = v, still = told = 0;
+            continue;
+        }
+        if (++still == 6 && !told) {
+            told = 1;
+            if (log_file) {
+                fprintf(log_file, "watchdog: no frame shown for 6 s (frame %u)\n", v);
+                fflush(log_file);
+            }
+            pthread_kill(main_thread, SIGUSR2);
+        }
+    }
+    return NULL;
+}
+
+static void watchdog_start(void) {
+    pthread_t t;
+    void *at[4];
+    struct sigaction sa;
+    backtrace(at, 4); /* (loads what it needs now, not in the signal) */
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = on_stall;
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGUSR2, &sa, NULL);
+    main_thread = pthread_self();
+    if (!getenv("TWINE_NO_WATCHDOG"))
+        pthread_create(&t, NULL, watchdog, NULL);
+}
+
 int main(int argc, char **argv) {
     const char *level_env;
     s32 level, r;
@@ -595,6 +655,7 @@ int main(int argc, char **argv) {
     }
     port_video_init();
     port_audio_init();
+    watchdog_start();
     if (level < 1 || level > 11)
         port_intro(); /* the console's boot animation and the port's title card; they leave the machine as it was */
     kernel_tables();
