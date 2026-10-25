@@ -68,8 +68,45 @@ static void map_fixed(int fd, u32 offset, u32 addr, u32 size, int prot) {
  * 8 MB of each region: KSEG0 (0x80000000), KSEG1 (0xA0000000) and KUSEG (from 0x00010000; the first 64 KB
  * can't be mapped on Linux), for code that rebases pointers or sizes memory for 8 MB (the boot stub's heap
  * and stack defaults). */
+u32 port_ram_size = PS1_RAM_CONSOLE;
+
+/* the ram_8mb setting, read before anything (the environment, else twine.ini's line: load_settings comes later) */
+static int ram_8mb_wanted(void) {
+    const char *e = getenv("TWINE_RAM_8MB"), *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
+    char path[1024], line[256];
+    FILE *f;
+    int on = 0;
+    if (e)
+        return atoi(e) != 0;
+    if (xdg && *xdg)
+        snprintf(path, sizeof(path), "%s/twine/twine.ini", xdg);
+    else
+        snprintf(path, sizeof(path), "%s/.config/twine/twine.ini", home ? home : ".");
+    if (!(f = fopen(path, "r")))
+        return 0;
+    while (fgets(line, sizeof(line), f)) {
+        char *k = line;
+        while (*k == ' ' || *k == '\t')
+            k++;
+        if (!strncasecmp(k, "ram_8mb", 7) && strchr(" \t=", k[7]) && strchr(k, '='))
+            on = atoi(strchr(k, '=') + 1) != 0;
+    }
+    fclose(f);
+    return on;
+}
+
 __attribute__((constructor(101))) static void map_ps1_memory(void) {
     int fd = memfd_create("ps1-ram", 0), i;
+    if (ram_8mb_wanted()) { /* (8 MB, once in each segment: no mirrors) */
+        port_ram_size = 0x00800000u;
+        if (fd < 0 || ftruncate(fd, PS1_RAM_SIZE))
+            port_fatal("cannot create PS1 RAM\n");
+        map_fixed(fd, 0, PS1_RAM_BASE, PS1_RAM_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
+        map_fixed(fd, 0, 0xA0000000u, PS1_RAM_SIZE, PROT_READ | PROT_WRITE);
+        map_fixed(fd, 0x10000, 0x00010000u, PS1_RAM_SIZE - 0x10000, PROT_READ | PROT_WRITE);
+        map_fixed(-1, 0, PS1_SCRATCH_BASE, PS1_SCRATCH_SIZE, PROT_READ | PROT_WRITE);
+        return;
+    }
     if (fd < 0 || ftruncate(fd, PS1_RAM_SIZE))
         port_fatal("cannot create PS1 RAM\n");
     for (i = 0; i < 4; i++) {

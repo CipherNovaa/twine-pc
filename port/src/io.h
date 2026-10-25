@@ -2,7 +2,7 @@
 #define IO_H
 
 /* Hardware register model (io.c) and the SPU (spu.c) */
-#define M32_RAM(a) (*(u32 *)(PS1_RAM_BASE + ((a) & 0x1FFFFC)))
+#define M32_RAM(a) (*(u32 *)(PS1_RAM_BASE + ((a) & PS1_RAM_MASK)))
 
 extern u16 spu_regs[0x200];
 extern u8 spu_ram[512 * 1024];

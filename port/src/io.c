@@ -277,9 +277,9 @@ static void dma_run(int ch) {
         for (i = 0; i < words; i++) {
             u32 a = (spu_xfer_addr + i * 4) & (sizeof(spu_ram) - 4);
             if (to_dev)
-                memcpy(&spu_ram[a], (u8 *)PS1_RAM_BASE + ((madr + i * 4) & 0x1FFFFC), 4);
+                memcpy(&spu_ram[a], (u8 *)PS1_RAM_BASE + ((madr + i * 4) & PS1_RAM_MASK), 4);
             else
-                memcpy((u8 *)PS1_RAM_BASE + ((madr + i * 4) & 0x1FFFFC), &spu_ram[a], 4);
+                memcpy((u8 *)PS1_RAM_BASE + ((madr + i * 4) & PS1_RAM_MASK), &spu_ram[a], 4);
         }
         spu_xfer_addr = (spu_xfer_addr + words * 4) & (sizeof(spu_ram) - 1);
         break;

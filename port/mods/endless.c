@@ -109,6 +109,7 @@ void port_endless_score(int points);
 void port_endless_ungate(int level);
 void port_endless_restart(void);
 void quick_grenade_give(void);
+u32 port_ext_free_bytes(void); /* (malloc3.c) */
 void func_80053DE4(s16 type, s16 sub, s32 x, s32 y, s32 z); /* an event on the AI's board (0: a gunshot) */
 
 #define OBJ(i) ((u8 *)D_800AFFC8 + (i) * 0x124)
@@ -691,6 +692,8 @@ static void room_start(void) {
         port_endless_restart();
         g_Args->flags |= 0x40;
     }
+    if (port_ext_free_bytes())
+        ELOG("memory: the ext heap (8 MB of RAM) has %u bytes free", port_ext_free_bytes());
     ELOG("room start: level %d section %d at %d %d %d, wave %d: %d kinds of guards, %d floor polygons, %d doorways, "
          "people slots %d-%d", g_Args->level, D_800D2F8C, entry[2], entry[3], entry[4], port_endless_wave(),
          kind_count, faces, door_count, D_800B0DA0, D_800B07B0);

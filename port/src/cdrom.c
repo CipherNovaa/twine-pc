@@ -585,7 +585,7 @@ void port_cd_reg_write(u32 reg, u32 v) {
 
 /* DMA channel 3: `words` words from the data FIFO to RAM */
 void port_cd_dma(u32 madr, u32 words, int irq) {
-    CdGetSector((u8 *)PS1_RAM_BASE + (madr & 0x1FFFFC), (s32)words);
+    CdGetSector((u8 *)PS1_RAM_BASE + (madr & PS1_RAM_MASK), (s32)words);
     if (irq)
         data_irq = 1;
 }

@@ -8,6 +8,7 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
              d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
+  -8         every run with 8 MB of RAM (the ram_8mb setting)
 
 Environment:
   TWINE_DISC         the disc image (default: the first .bin in workbench/disc/)
@@ -80,6 +81,8 @@ class Run:
         else:
             env["TWINE_CARD1"] = "none"
         env.update({k: str(v) for k, v in self.env.items()})
+        if RAM8:
+            env["TWINE_RAM_8MB"] = "1"
         with open(os.path.join(self.dir, "out.txt"), "w") as out:
             child = subprocess.Popen(["nice", exe], cwd=self.dir, env=env, stdout=out, stderr=subprocess.STDOUT)
             try:
@@ -154,6 +157,7 @@ def people(run):
 
 
 RESULTS = []
+RAM8 = False
 
 
 def result(check, what, ok, detail=""):
@@ -388,6 +392,9 @@ def main():
             rooms = [tuple(int(v) for v in r.split(":")) for r in args.pop(0).split(",")]
         elif a == "-v":
             verbose = True
+        elif a == "-8":
+            global RAM8
+            RAM8 = True
         else:
             sys.exit(__doc__)
     if not os.path.exists(BIN):

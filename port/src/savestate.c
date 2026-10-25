@@ -191,6 +191,11 @@ static Header *read_state(void) {
         port_video_message("No saved state (F5 saves one in a mission)");
         return NULL;
     }
+    if (h.build == build && h.native == native_size && h.ram != PS1_RAM_SIZE + PS1_SCRATCH_SIZE) {
+        fclose(f);
+        port_video_message("The saved state is for the other RAM size (ram_8mb)");
+        return NULL;
+    }
     if (h.build != build || h.native != native_size || h.ram != PS1_RAM_SIZE + PS1_SCRATCH_SIZE) {
         fclose(f);
         port_video_message("The saved state is from another version of the port");

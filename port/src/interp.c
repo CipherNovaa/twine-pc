@@ -35,7 +35,8 @@ static u32 tick_vblanks = 3;
 static u64 cost = 4000000; /* ns per drawing, a moving average */
 static u64 began;
 static int drawings;       /* extra drawings this tick */
-static u8 ram_copy[PS1_RAM_SIZE], scratch_copy[PS1_SCRATCH_SIZE];
+extern u32 port_ext_low;
+static u8 *ram_copy PORT_NOSAVE, scratch_copy[PS1_SCRATCH_SIZE]; /* (RAM's copy: as big as RAM) */
 static u64 shown_at;       /* host time the last drawing was shown */
 static u64 spacing;        /* TWINE_FPS_MAX's time between drawings (0: none) */
 
@@ -125,7 +126,14 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
     *t = (s32)((now - tick_start) * 4096 / (end - tick_start));
     port_mouse_pending(yaw, pitch);
     RT_ENTER(); /* holds the vblank interrupt */
-    memcpy(ram_copy, (void *)PS1_RAM_BASE, PS1_RAM_SIZE);
+    if (!ram_copy && !(ram_copy = malloc(PS1_RAM_SIZE)))
+        port_fatal("out of memory\n");
+    memcpy(ram_copy, (void *)PS1_RAM_BASE, PS1_RAM_CONSOLE);
+    if (PS1_RAM_SIZE > PS1_RAM_CONSOLE && port_ext_low) { /* (8 MB: of the ext heap, its first free block's header
+                                                           * and what it has handed out) */
+        memcpy(ram_copy + PS1_RAM_CONSOLE, (void *)(PS1_RAM_BASE + PS1_RAM_CONSOLE), 16);
+        memcpy(ram_copy + (port_ext_low - PS1_RAM_BASE), (void *)port_ext_low, PS1_RAM_BASE + PS1_RAM_SIZE - port_ext_low);
+    }
     memcpy(scratch_copy, (void *)PS1_SCRATCH_BASE, PS1_SCRATCH_SIZE);
     for (i = 0; i < 4 && kept[i].at; i++)
         memcpy(kept[i].copy, kept[i].at, kept[i].size);
@@ -144,7 +152,11 @@ void port_smooth_end(void) {
     int i;
     cost = (cost * 3 + (now - began)) / 4;
     gpu_draw_origin(&x, &y);
-    memcpy((void *)PS1_RAM_BASE, ram_copy, PS1_RAM_SIZE);
+    memcpy((void *)PS1_RAM_BASE, ram_copy, PS1_RAM_CONSOLE);
+    if (PS1_RAM_SIZE > PS1_RAM_CONSOLE && port_ext_low) {
+        memcpy((void *)(PS1_RAM_BASE + PS1_RAM_CONSOLE), ram_copy + PS1_RAM_CONSOLE, 16);
+        memcpy((void *)port_ext_low, ram_copy + (port_ext_low - PS1_RAM_BASE), PS1_RAM_BASE + PS1_RAM_SIZE - port_ext_low);
+    }
     memcpy((void *)PS1_SCRATCH_BASE, scratch_copy, PS1_SCRATCH_SIZE);
     for (i = 0; i < 4 && kept[i].at; i++)
         memcpy(kept[i].at, kept[i].copy, kept[i].size);

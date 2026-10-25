@@ -7,7 +7,12 @@
 /* PS1 memory lives at its own addresses in this (32-bit) process: 2 MB main RAM at 0x80000000 and the
  * 1 KB scratchpad at 0x1F800000, so the game's pointers and absolute addresses work unchanged. */
 #define PS1_RAM_BASE 0x80000000u
-#define PS1_RAM_SIZE 0x00200000u
+/* 2 MB as on the console; 8 MB (a development kit's) with the ram_8mb setting (TWINE_RAM_8MB), whose last 6 MB
+ * are a heap of the runtime's own for what the levels' 2 MB has no room for (malloc3.c's ext heap) */
+extern u32 port_ram_size;
+#define PS1_RAM_SIZE port_ram_size
+#define PS1_RAM_CONSOLE 0x00200000u
+#define PS1_RAM_MASK (PS1_RAM_SIZE - 4) /* (DMA addresses: words in RAM) */
 #define PS1_SCRATCH_BASE 0x1F800000u
 #define PS1_SCRATCH_SIZE 0x00001000u
 
