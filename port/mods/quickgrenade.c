@@ -76,6 +76,10 @@ s32 func_80065614(void *obj, u8 life, u8 kind);
 s32 func_80027248(s32 sound, s32 at, s32 arg2);
 s32 func_800746D0(s32 mesh, s32 *from, s32 *to, s16 *normal, s16 *hit, s32 *flags);
 void free(void *p);
+void *malloc(unsigned n);
+void port_log(const char *fmt, ...);
+int snprintf(char *s, unsigned n, const char *fmt, ...);
+char *strstr(const char *s, const char *t);
 extern s32 D_800E2F2C;      /* the level's shot mesh */
 extern s32 D_800A0370[];    /* sines and cosines (cos << 16 | sin), 4096 a turn */
 extern u8 D_800B8F88[];     /* the frames' ordering tables (0x14 bytes each) */
@@ -270,18 +274,20 @@ static s32 tick;        /* the frame counter the grenades were last moved at */
 
 /* the throw's sound, King's Ransom's (its sound 0x52: program 7, tone 0 of its bank), decoded from the bank's
  * ADPCM: blocks of 16 bytes, a shift and filter, flags, and 28 four-bit samples */
-static void load_sound(const u8 *vh, const u8 *vb) {
+static u32 decode_tone(const u8 *vh, const u8 *vb, u32 program, u32 tone, s16 *out, u32 max) {
     static const s32 pos[5] = {0, 60, 115, 98, 122}, neg[5] = {0, 0, -52, -55, -60};
-    u32 programs = W(vh, 0x12, u16), tones = 0x20 + 0x800, vag, i, off = 0, size, b, k;
+    u32 programs = W(vh, 0x12, u16), tones = 0x20 + 0x800, vag, i, off = 0, size, b, k, n = 0;
     const u16 *sizes = (const u16 *)(vh + tones + programs * 16 * 32);
     s32 s1 = 0, s2 = 0, sample, filter, shift;
-    if (W(vh, 0, u32) != 0x56414270) /* "pBAV" */
-        return;
-    vag = W(vh, tones + (THROW_PROGRAM * 16 + THROW_TONE) * 32 + 0x16, u16);
+    if (W(vh, 0, u32) != 0x56414270 || program >= programs) /* "pBAV" */
+        return 0;
+    vag = W(vh, tones + (program * 16 + tone) * 32 + 0x16, u16);
+    if (!vag)
+        return 0;
     for (i = 1; i < vag; i++)
         off += sizes[i] * 8;
     size = sizes[vag] * 8;
-    for (b = 0; b < size / 16 && throw_len + 28 <= sizeof(throw_pcm) / 2; b++) {
+    for (b = 0; b < size / 16 && n + 28 <= max; b++) {
         const u8 *blk = vb + off + b * 16;
         shift = blk[0] & 15;
         filter = blk[0] >> 4 > 4 ? 0 : blk[0] >> 4;
@@ -291,11 +297,61 @@ static void load_sound(const u8 *vh, const u8 *vb) {
             sample = sample > 32767 ? 32767 : sample < -32768 ? -32768 : sample;
             s2 = s1;
             s1 = sample;
-            throw_pcm[throw_len++] = sample;
+            out[n++] = sample;
         }
         if (blk[1] & 1)
             break;
     }
+    return n;
+}
+
+static void load_sound(const u8 *vh, const u8 *vb) {
+    throw_len = decode_tone(vh, vb, THROW_PROGRAM, THROW_TONE, throw_pcm, sizeof(throw_pcm) / 2);
+}
+
+/* (endless's enemy AI) a level's voice, a tone of its sound bank's (SOUNDFX/LnFX.VH, .VB in Lnn/LVLnnCD.BIN),
+ * decoded once and played by the runtime (port_sfx) at the rate the voices were made at (11025 Hz: half what a
+ * bank's samples are taken as, as heard): a guard's "grenade!" lent to every mission */
+static struct {
+    s8 level, program, tone;
+    s16 *pcm;
+    u32 len;
+} voices[12];
+
+void port_voice_play(int level, int program, int tone, s32 vol) {
+    int k;
+    for (k = 0; k < 12 && voices[k].pcm && !(voices[k].level == level && voices[k].program == program &&
+                                              voices[k].tone == tone); k++)
+        ;
+    if (k == 12)
+        return;
+    if (!voices[k].pcm) {
+        char name[32];
+        u8 *arc, *e, *vh = NULL, *vb = NULL;
+        u32 n;
+        s16 *buf;
+        snprintf(name, sizeof(name), "L%02d/LVL%02dCD.BIN", level, level);
+        if (!(n = port_disc_file(name, &arc)))
+            return;
+        for (e = arc; e + 0x1C <= arc + n && *e; e += 0x1C) {
+            const char *nm = (const char *)e;
+            if (!strncmp(nm, "SOUNDFX/", 8) && strstr(nm, ".VH"))
+                vh = arc + W(e, 26, u16) * 0x800;
+            else if (!strncmp(nm, "SOUNDFX/", 8) && strstr(nm, ".VB"))
+                vb = arc + W(e, 26, u16) * 0x800;
+        }
+        if (vh && vb && (buf = malloc(2 * 32768))) {
+            voices[k].len = decode_tone(vh, vb, (u32)program, (u32)tone, buf, 32768);
+            voices[k].pcm = buf;
+            voices[k].level = (s8)level, voices[k].program = (s8)program, voices[k].tone = (s8)tone;
+        }
+        free(arc);
+        if (!voices[k].pcm)
+            return;
+        port_log("voice: level %d program %d tone %d: %u samples\n", level, program, tone, voices[k].len);
+    }
+    if (voices[k].len)
+        port_sfx(voices[k].pcm, voices[k].len, 11025, vol);
 }
 
 /* the frag's model and texture, from King's Ransom's archive (entries of 0x1C bytes: name, first sector) */

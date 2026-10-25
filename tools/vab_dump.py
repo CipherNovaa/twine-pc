@@ -7,8 +7,8 @@ Usage: vab_dump.py LEVEL [OUTDIR]
   OUTDIR  default workbench/research/sounds/Lnn/ (gitignored: the samples are the game's)
 
 Each file is named by the sample's number in the bank (as a program's tone points at it) and the first program and
-tone using it: v<sample>_p<program>_t<tone>.wav, decoded from the PS1's ADPCM at 22050 Hz (pitch as stored; the game
-plays them at the tone's note). The sound numbers scripts play (op 0x1D) are program numbers here."""
+tone using it: v<sample>_p<program>_t<tone>.wav, decoded from the PS1's ADPCM at 11025 Hz (the rate the voices were
+made at, as heard: the guard's "grenade!" is right there; the game plays a sound at its table entry's note). The sound numbers scripts play (op 0x1D) are program numbers here."""
 import struct
 import sys
 import wave
@@ -80,7 +80,7 @@ def main():
             with wave.open(str(outdir / ("v%03d_p%03d_t%02d.wav" % (v, p, t))), "wb") as w:
                 w.setnchannels(1)
                 w.setsampwidth(2)
-                w.setframerate(22050)
+                w.setframerate(11025)
                 w.writeframes(struct.pack("<%dh" % len(pcm), *pcm))
         off += size
     print("%s: %d samples to %s" % (vh_name, len(first), outdir))

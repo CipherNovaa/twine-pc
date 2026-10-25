@@ -313,6 +313,29 @@ def carry_runs():
                                          "TWINE_ENDLESS_TEST_GOD": 1})}
 
 
+def lend_runs():
+    pad = ",".join("%d:4000,%d:0" % (t, t + 3) for t in range(520, 900, 6))
+    return {"lend": Run("lend", 8, 50, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:-1", "TWINE_ENDLESS_SEED": 5,
+                                        "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
+                                        "TWINE_ENDLESS_TEST_DRAW": "INGALLS", "TWINE_ENDLESS_TEST_EXIT": 500,
+                                        "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_TEST_PAD": pad}),
+            "survey": Run("survey", 2, 60, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "2:4", "TWINE_ENDLESS_SURVEY": 1})}
+
+
+def check_lend(runs):
+    r = runs["lend"]
+    two = r.log.split("room start: level 2 ", 1)[1] if "room start: level 2 " in r.log else ""
+    lent = r.lines(r"weapons: INGALLS TYPE 20 lent from level 8")
+    result("g", "lent: Ingalls in Courier", bool(lent) and "INGALLS TYPE 20 drawn" in two,
+           (lent[0].split("weapons: ")[1][:70] if lent else "not lent"))
+    kills = len(re.findall(r"kill: .* with INGALLS TYPE 20", two))
+    result("g", "lent: it kills there", kills > 0, "%d kills with it in Courier" % kills)
+    v = runs["survey"]
+    m = v.lines(r"survey done \((\d+) weapons known\)")
+    n = int(re.search(r"\((\d+) weapons", m[0]).group(1)) if m else 0
+    result("g", "weapon survey", n >= 80 and not v.crashed(), "%d weapons known after the survey" % n)
+
+
 def check_carry(runs):
     r = runs["carry"]
     left = r.lines(r"carry: Bond leaves with")
@@ -505,6 +528,7 @@ def main():
         groups["restart"] = restart_runs()
     if "g" in checks:
         groups["carry"] = carry_runs()
+        groups["lend"] = lend_runs()
     if "h" in checks:
         groups["card"] = card_runs()
     if "i" in checks:
@@ -529,6 +553,8 @@ def main():
         check_restart(groups["restart"])
     if "carry" in groups:
         check_carry(groups["carry"])
+    if "lend" in groups:
+        check_lend(groups["lend"])
     if "card" in groups:
         check_card(groups["card"])
     if "campaign" in groups:

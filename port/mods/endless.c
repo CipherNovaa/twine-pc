@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4
+ * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -109,6 +109,26 @@ void port_endless_score(int points);
 void port_endless_ungate(int level);
 void port_endless_restart(void);
 void quick_grenade_give(void);
+typedef struct {
+    char name[28];
+    u8 level, gun, animlen, pad;
+    u8 def[0xB8], type[0x70], anim[16];
+    char path[24];
+} WeaponRec; /* (port/src/endless.c's catalogue of every mission's weapons) */
+void port_weapon_put(int level, const u8 *def, const u8 *type, const u8 *anim, int animlen, const char *path, int gun);
+void port_weapons_saved(void);
+const WeaponRec *port_weapon_find(const char *name, int level);
+int port_endless_surveying(void);
+void port_endless_survey_next(void);
+extern char *D_8009DB50[];  /* the first-person models' files, by model type (a weapon's +0x5B) */
+extern u8 *D_8009D0FC;      /* the model types' entries (0x70 bytes: +0x68 animation numbers, +0x6C their count) */
+extern u8 D_800E2F58;       /* the model type in the load buffer (D_800E2F5C, its file, 0xE000 bytes) */
+extern s32 D_800F0F5C;      /* a model is loading */
+void func_80076014_orig(s32 idx);
+void func_80076104_orig(s32 idx);
+u32 port_disc_file(const char *name, u8 **data);
+void free(void *p);
+void *malloc(unsigned n);
 int quick_grenade_enemy(const s32 *from, const s32 *to, u8 *owner); /* (quickgrenade.c) */
 int port_live_grenades(s32 (*at)[3], int max);
 s32 func_80027248(s32 sound, s32 at, s32 arg2); /* a sound of the level's bank at a place */
@@ -123,7 +143,11 @@ void func_80053DE4(s16 type, s16 sub, s32 x, s32 y, s32 z); /* an event on the A
 #define HEALTH(o) (*(s32 *)((u8 *)(o) + 0x34))
 #define POS(o) ((s32 *)(*(u8 **)((u8 *)(o) + 0x90) + 0x28))
 #define SEC 20                                   /* frames a second (the game's 20 Hz) */
-#define SLOTS 10                                 /* g_Weapons' slots (named; the mission's own set) */
+static int weapon_slots(void) { /* g_Weapons' slots, the mission's own set (the reset function's count) */
+    static const s8 n[12] = {0, 6, 12, 9, 6, 11, 12, 13, 11, 12, 10, 6};
+    return g_Args && g_Args->level >= 1 && g_Args->level <= 11 ? n[g_Args->level] : 6;
+}
+#define SLOTS weapon_slots()
 
 static void dump(void);
 /* the HUD's messages (in writable memory: the game's own are in its data) */
@@ -207,7 +231,8 @@ static s16 entry[5];
 static s32 was_alive[64]; /* each person's health last frame (a guard falling leaves pickups) */
 static s32 was_at[3], said; /* where Bond was as the last frame began; when a message was last given */
 static s32 last_frame = -1, room_frames, carried, kills_at_start, kills_scored, budget, cooldown, open;
-static s32 burst, segment, last_section = -1, loading, at_entry;
+static s32 burst, segment, last_section = -1, loading, at_entry, survey_left, seen_gen = -1;
+int port_endless_gen(void);
 static u32 rng = 12345;
 
 static u32 rnd(void) {
@@ -363,6 +388,94 @@ static void carry_out(void) {
         }
         ELOG("carry: Bond leaves with %s in hand (slot %d; in hand %d, changing to %d)", c->in_hand, h, D_800B0DD4,
              D_800B0DDC);
+    }
+}
+
+/* WEAPONS IN EVERY MISSION. Each mission's weapons go into the catalogue as it starts (port/src/endless.c): each
+ * slot's definition (0xB8 bytes), its first-person model type's entry and animation numbers, and its model's file. A
+ * weapon Bond carries that this mission lacks is then lent to it in a slot of one of its tools (the tools are no use
+ * in a fight and taken away): the donor's definition, fired by this mission's pistol's fire handler (the guns share
+ * one per mission: the donor's own is in the donor's code), its pistol's sound and bullets, and the donor's model,
+ * whose file (another mission's: Lnn/NAME.HMD in that mission's archive) the model loader reads from the disc
+ * (func_80076014/func_80076104 below; the model carries its own textures, which the game uploads as it makes it).
+ * Guns only for now: a weapon fired otherwise (a launcher, a grenade) needs its handler's state in this mission. */
+static int pistol_slot(void) {
+    int i;
+    for (i = 0; i < SLOTS; i++)
+        if (!strncmp((char *)g_Weapons[i].pad0, "WOLFRAM P2K", 23))
+            return i;
+    return -1;
+}
+
+static u32 lent_mask; /* (the slots lent to this mission: theirs are another's) */
+static void weapons_capture(void) {
+    int i, p = pistol_slot(), n = 0;
+    u32 gun_fire = p >= 0 ? *(u32 *)((u8 *)&g_Weapons[p] + 0x3C) : 0;
+    for (i = 0; i < SLOTS; i++) {
+        u8 *w = (u8 *)&g_Weapons[i], t = w[0x5B], *te = D_8009D0FC ? D_8009D0FC + t * 0x70 : 0;
+        if (w[0] < 'A' || w[0] > 'Z' || (lent_mask & 1 << i)) /* (and not a slot lent to this mission) */
+            continue;
+        port_weapon_put(g_Args->level, w, te, te ? *(u8 **)(te + 0x68) : 0, te ? *(u16 *)(te + 0x6C) : 0,
+                        t && D_8009DB50[t] ? D_8009DB50[t] : "", gun_fire && *(u32 *)(w + 0x3C) == gun_fire);
+        n++;
+    }
+    port_weapons_saved();
+    ELOG("weapons: the mission's %d weapons in the catalogue", n);
+}
+
+static char lent_path[8][24];
+static u8 lent_anim[8][16];
+static void lend_weapons(void) {
+    EndlessCarry *c = &port_endless_carry;
+    int j, i, p = pistol_slot(), used = 0;
+    if (!c->valid || p < 0)
+        return;
+    for (j = 0; j < c->weapons && used < 8; j++) {
+        const WeaponRec *r;
+        u8 *w, *pw = (u8 *)&g_Weapons[p], t, *te;
+        int have = 0;
+        if (!c->weapon[j].owned)
+            continue;
+        for (i = 0; i < SLOTS; i++)
+            have |= !strncmp((char *)g_Weapons[i].pad0, c->weapon[j].name, 23);
+        if (have || !(r = port_weapon_find(c->weapon[j].name, g_Args->level)))
+            continue;
+        if (!r->gun || !r->path[0]) {
+            ELOG("weapons: %s can't be lent here yet (not a gun)", c->weapon[j].name);
+            continue;
+        }
+        for (i = 0; i < SLOTS; i++) /* (a tool's slot) */
+            if (g_Weapons[i].pad0[0] >= 'A' && g_Weapons[i].pad0[0] <= 'Z' && !combat_item((char *)g_Weapons[i].pad0) &&
+                !(lent_mask & 1 << i))
+                break;
+        if (i == SLOTS) {
+            ELOG("weapons: no slot left to lend %s in", c->weapon[j].name);
+            break;
+        }
+        w = (u8 *)&g_Weapons[i], t = w[0x5B];
+        if (!t || !D_8009D0FC) /* (a tool without a model of its own) */
+            continue;
+        {
+            u32 pickup = *(u32 *)(w + 0x40);
+            memcpy(w, r->def, 0xB8);
+            *(u32 *)(w + 0x3C) = *(u32 *)(pw + 0x3C); /* (this mission's guns' fire) */
+            *(u32 *)(w + 0x40) = pickup;
+            w[0x5A] = pw[0x5A];                        /* (its pistol's sound) */
+            w[0x5B] = t;
+            lent_mask |= 1 << i;
+            *(s32 *)(w + 0x38) &= ~0x1800;            /* (owned as Bond's carry says: carry_in) */
+        }
+        te = D_8009D0FC + t * 0x70;
+        memcpy(te, r->type, 0x70);
+        te[0] = t;
+        te[0x2C] = (D_8009D0FC + pw[0x5B] * 0x70)[0x2C]; /* (this mission's bullets) */
+        memcpy(lent_anim[used], r->anim, 16);
+        *(u8 **)(te + 0x68) = lent_anim[used];
+        *(u16 *)(te + 0x6C) = r->animlen;
+        snprintf(lent_path[used], sizeof(lent_path[used]), "%s", r->path);
+        D_8009DB50[t] = lent_path[used];
+        ELOG("weapons: %s lent from level %d into slot %d (model %s, type %d)", c->weapon[j].name, r->level, i, r->path, t);
+        used++;
     }
 }
 
@@ -712,7 +825,19 @@ static void room_start(void) {
     read_floor();
     clear_arrival();
     if (!segment)
+        lent_mask = 0; /* (a mission loaded afresh: its own slots again) */
+    weapons_capture();
+    if (port_endless_surveying()) { /* (a survey's room: its weapons taken, left at once) */
+        ELOG("weapons: level %d surveyed", g_Args->level);
+        port_endless_survey_next();
+        g_Args->flags |= 0x40;
+        survey_left = 1; /* (the next mission's first frame starts a room, whatever its frame counter: endless_frame) */
+        return;
+    }
+    if (!segment) {
+        lend_weapons(); /* (his weapons this mission lacks, lent before he comes in with them) */
         carry_in(); /* (Bond as he left the last room, before the room's first frame) */
+    }
     if (port_endless_room_started() > 1) { /* RESTART MISSION: the whole run again, fresh */
         ELOG("restart: the run begins again");
         port_endless_restart();
@@ -1414,9 +1539,9 @@ static void cover_frame(void) {
 /* GRENADES (IMPROVED): a guard near a live grenade (Bond's, or another's) shouts and scatters from it, run by
  * hand away from it a second and a half; and when Bond camps, or keeps out of their sight, a hunter some way off
  * lobs one at him (the mod's own grenade: quickgrenade.c), shouting as he throws. The shout is each level's
- * guard bark where one is known (shout_sound[]: none of the levels' scripts shouts at a grenade, their handler
- * of the game's "grenade!" flag only plays a dive; the barks are still to be picked out by ear), and logged. */
-static const s16 shout_sound[12] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+ * guards' "grenade!" (King's Ransom's, as the user picked it out: none of the levels' scripts shouts at a grenade,
+ * their handler of the game's "grenade!" flag only plays a dive), and logged. */
+void port_voice_play(int level, int program, int tone, s32 vol); /* (quickgrenade.c) */
 static s32 scatter_until[64], scatter_to[64][3], enemy_throw_at = -SEC * 30, grenade_shouts, grenade_throws, last_shout[64];
 static void grenade_reset(void) {
     memset(scatter_until, 0, sizeof(scatter_until));
@@ -1425,9 +1550,9 @@ static void grenade_reset(void) {
 }
 
 static void shout(u8 *o, const char *why) {
-    s16 snd = g_Args->level >= 1 && g_Args->level <= 11 ? shout_sound[g_Args->level] : -1;
-    if (snd >= 0)
-        func_80027248(snd, (s32)(*(u8 **)(o + 0x90) + 0x14), 0);
+    /* (King's Ransom's guard's "grenade!": its voice program 9, tone 2, lent to every mission; louder near Bond) */
+    s32 d = dist2(POS(o)[0], POS(o)[2], g_Args->playerX, g_Args->playerZ);
+    port_voice_play(8, 9, 2, d > 12000 ? 0x1800 : 0x6000 - d * 0x4800 / 12000);
     grenade_shouts++;
     ELOG("ai: type %d shouts \"grenade!\" (%s)", o[6], why);
 }
@@ -1845,10 +1970,15 @@ void endless_frame(void) {
         dump();
     if (!port_endless_room(entry) || !g_Player)
         return;
-    if (D_8009CDA8 == last_frame) /* (once a frame: the controller is read again in some dialogs) */
+    if (D_8009CDA8 == last_frame && port_endless_gen() == seen_gen) /* (once a frame: the controller is read again
+                                                                     * in some dialogs) */
         return;
-    if (D_8009CDA8 < last_frame || last_frame < 0)
+    if (D_8009CDA8 < last_frame || last_frame < 0 || port_endless_gen() != seen_gen) { /* (a mission loaded since:
+                                                                                         * its frame counter may be
+                                                                                         * where the last's left off) */
+        seen_gen = port_endless_gen();
         room_start();
+    }
     last_frame = D_8009CDA8;
     port_endless_ungate(g_Args->level);
     /* a stretch of the mission (King's Ransom): the next section loaded the mission's way is the next room */
@@ -2478,12 +2608,27 @@ void func_80053114(u8 *obj) {
 
 /* A script's sound at its person (op 0x1D: func_800572F4, a sound of the level's bank at him; the guards' calls and
  * shouts among them): logged (the AI's shouts are found by it) */
+typedef struct { u8 prog, tone, note, voice, vol, rnd, pad[2]; } SfxDefE; /* (the mission's sounds' table) */
+static int muted_line(u32 id);
 s32 func_800572F4_orig(u32 *cmd, u8 *obj, u8 *chr);
 s32 func_800572F4(u32 *cmd, u8 *obj, u8 *chr) {
     s16 e[5];
     if (obj && chr && port_endless_room(e) && getenv("TWINE_ENDLESS_SOUND_LOG"))
         ELOG("sound: script of type %d (ai %d) plays sound %d (flags %08X)", chr[6], chr[0xA7],
              (*cmd >> 16 & 3) == 1 ? -1 : (int)(*cmd >> 8 & 0xFF), *(u8 **)(chr + 0x118) ? **(s32 **)(chr + 0x118) : 0);
+    if (obj && chr && port_endless_room(e)) {
+        u32 id = (*cmd >> 16 & 3) == 1 ? ((u8 *)obj + 0x20)[(*cmd >> 8) & 0xFF] : (*cmd >> 8 & 0xFF);
+        if (muted_line(id)) {
+            SfxDefE *d = *(SfxDefE **)((u8 *)g_Args + 0x130);
+            u8 vol = d[id].vol;
+            s32 r;
+            d[id].vol = 0; /* (silent: the game plays nothing at no volume) */
+            r = func_800572F4_orig(cmd, obj, chr);
+            d[id].vol = vol;
+            ELOG("sound: story line %u muted", id);
+            return r;
+        }
+    }
     return func_800572F4_orig(cmd, obj, chr);
 }
 
@@ -2517,4 +2662,83 @@ static void blast_frame(void) {
             *(u16 *)(OBJ(i) + 0xE) = blast_masks[i];
     blast_until = -1;
     ELOG("ai: the people's hit masks put back");
+}
+
+/* The first-person model loader (a weapon change: func_80076014, func_80076104 without the disc archive): a model
+ * of another mission's (a lent weapon's, "Lnn/NAME.HMD" naming that mission) read from that mission's archive on
+ * the disc (Lnn/LVLnnCD.BIN: entries of 0x1C bytes, name and first sector), kept after the first read */
+static struct {
+    char path[24];
+    u8 *data;
+    u32 size;
+} donor_hmd[8];
+
+static int lent_model(s32 idx) {
+    u8 t = ((u8 *)&g_Weapons[idx])[0x5B];
+    const char *p = t ? D_8009DB50[t] : 0;
+    int k, lv;
+    if (!p || p[0] != 'L' || p[3] != '/' || !(lent_mask & 1 << idx))
+        return 0;
+    lv = (p[1] - '0') * 10 + (p[2] - '0');
+    if (lv == g_Args->level)
+        return 0;
+    for (k = 0; k < 8 && donor_hmd[k].data && strncmp(donor_hmd[k].path, p, 23); k++)
+        ;
+    if (k == 8)
+        k = 0, free(donor_hmd[0].data), donor_hmd[0].data = 0;
+    if (!donor_hmd[k].data) {
+        char arcname[32];
+        u8 *arc, *e;
+        u32 n;
+        snprintf(arcname, sizeof(arcname), "L%02d/LVL%02dCD.BIN", lv, lv);
+        if (!(n = port_disc_file(arcname, &arc)))
+            return 0;
+        for (e = arc; e + 0x38 <= arc + n && *e; e += 0x1C)
+            if (!strncmp((char *)e, p, 24)) {
+                u32 at = *(u16 *)(e + 26) * 0x800u, end = *(u16 *)(e + 26 + 0x1C) * 0x800u;
+                u32 size = end > at && end <= n ? end - at : 0;
+                if (size > 0xE000)
+                    size = 0xE000;
+                if (size && (donor_hmd[k].data = malloc(size))) {
+                    memcpy(donor_hmd[k].data, arc + at, size);
+                    donor_hmd[k].size = size;
+                    snprintf(donor_hmd[k].path, sizeof(donor_hmd[k].path), "%s", p);
+                }
+                break;
+            }
+        free(arc);
+        if (!donor_hmd[k].data) {
+            ELOG("weapons: %s not found on the disc", p);
+            return 0;
+        }
+    }
+    memcpy(&D_800E2F58 + 4, donor_hmd[k].data, donor_hmd[k].size);
+    D_800F0F5C = 0;
+    D_800E2F58 = t;
+    return 1;
+}
+
+void func_80076014(s32 idx) {
+    if (!lent_model(idx))
+        func_80076014_orig(idx);
+}
+
+void func_80076104(s32 idx) {
+    if (!lent_model(idx))
+        func_80076104_orig(idx);
+}
+
+/* (the missions' story and public-address voice lines, muted in a run: they'd tell Bond of a story he isn't in;
+ * played by a script's sound op, by their number in the mission's table, g_Args+0x130, 8 bytes each: program,
+ * tone, note, voice, volume, randomness) */
+static int muted_line(u32 id) {
+    static const u8 mute[][3] = {{8, 9, 7}}; /* (level, program, tone): King's Ransom's "hurry James" */
+    SfxDefE *d = *(SfxDefE **)((u8 *)g_Args + 0x130);
+    unsigned k;
+    if (!d || id > 0xFF)
+        return 0;
+    for (k = 0; k < sizeof(mute) / sizeof(mute[0]); k++)
+        if (mute[k][0] == g_Args->level && mute[k][1] == d[id].prog && mute[k][2] == d[id].tone)
+            return 1;
+    return 0;
 }

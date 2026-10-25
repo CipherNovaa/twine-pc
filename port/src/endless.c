@@ -112,9 +112,156 @@ static void begin(void) {
     room = pick_room(-1);
 }
 
+/* WEAPONS IN EVERY MISSION: a catalogue of every mission's weapons, as each mission defines them when it starts
+ * (the level's mod hands each slot over: port_weapon_put), kept in weapons.bin in the data folder (what the game
+ * itself makes of its own code: the user's, never the repo's). A run's first start surveys the missions not in it
+ * yet (each started a moment, its weapons taken, and left): a weapon Bond carries can then be lent to any mission. */
+typedef struct {
+    char name[28];
+    u8 level, gun, animlen, pad;
+    u8 def[0xB8], type[0x70], anim[16];
+    char path[24];
+} WeaponRec;
+#define WEAPON_RECS 128
+static WeaponRec weapon_recs[WEAPON_RECS];
+static int weapon_rec_count = -1;
+static u16 surveyed; /* (levels whose weapons are in: bits) */
+static int survey_queue[12], survey_n, survey_at, surveying, room_after_survey = -1;
+static Room room_saved;
+
+static void weapons_path(char *out, size_t len) {
+    const char *xdg = getenv("XDG_DATA_HOME"), *home = getenv("HOME");
+    if (xdg && *xdg)
+        snprintf(out, len, "%s/twine/weapons.bin", xdg);
+    else
+        snprintf(out, len, "%s/.local/share/twine/weapons.bin", home ? home : ".");
+}
+
+static void weapons_load(void) {
+    char path[512];
+    FILE *f;
+    int i;
+    if (weapon_rec_count >= 0)
+        return;
+    weapon_rec_count = 0;
+    surveyed = 0;
+    weapons_path(path, sizeof(path));
+    if ((f = fopen(path, "rb"))) {
+        char magic[8];
+        if (fread(magic, 1, 8, f) == 8 && !memcmp(magic, "TWWEAP01", 8))
+            weapon_rec_count = (int)fread(weapon_recs, sizeof(WeaponRec), WEAPON_RECS, f);
+        fclose(f);
+    }
+    for (i = 0; i < weapon_rec_count; i++)
+        surveyed |= 1 << weapon_recs[i].level;
+}
+
+static void weapons_save(void) {
+    char path[512], *c;
+    FILE *f;
+    weapons_path(path, sizeof(path));
+    for (c = path + 1; *c; c++)
+        if (*c == '/') {
+            *c = 0;
+            mkdir(path, 0755);
+            *c = '/';
+        }
+    if ((f = fopen(path, "wb"))) {
+        fwrite("TWWEAP01", 1, 8, f);
+        fwrite(weapon_recs, sizeof(WeaponRec), weapon_rec_count, f);
+        fclose(f);
+    }
+}
+
+/* the level's mod: a mission's weapon, as it starts (gun: its fire handler the mission's pistol's) */
+void port_weapon_put(int level, const u8 *def, const u8 *type, const u8 *anim, int animlen, const char *path, int gun) {
+    int i;
+    weapons_load();
+    for (i = 0; i < weapon_rec_count; i++)
+        if (weapon_recs[i].level == level && !strncmp(weapon_recs[i].name, (const char *)def, 27))
+            break;
+    if (i == weapon_rec_count) {
+        if (i == WEAPON_RECS)
+            return;
+        weapon_rec_count++;
+    }
+    memset(&weapon_recs[i], 0, sizeof(WeaponRec));
+    memcpy(weapon_recs[i].name, def, 27);
+    weapon_recs[i].level = (u8)level, weapon_recs[i].gun = (u8)gun;
+    memcpy(weapon_recs[i].def, def, 0xB8);
+    if (type)
+        memcpy(weapon_recs[i].type, type, 0x70);
+    weapon_recs[i].animlen = (u8)(animlen > 16 ? 16 : animlen < 0 ? 0 : animlen);
+    if (anim)
+        memcpy(weapon_recs[i].anim, anim, weapon_recs[i].animlen);
+    snprintf(weapon_recs[i].path, sizeof(weapon_recs[i].path), "%s", path ? path : "");
+    surveyed |= 1 << level;
+}
+
+/* the level's mod, when it has handed them all over */
+void port_weapons_saved(void) {
+    weapons_save();
+}
+
+/* the record of a weapon of that name, defined by another mission than `level` (the first such: a gun's first) */
+const WeaponRec *port_weapon_find(const char *name, int level) {
+    int i, b = -1;
+    weapons_load();
+    for (i = 0; i < weapon_rec_count; i++)
+        if (weapon_recs[i].level != level && !strncmp(weapon_recs[i].name, name, 27) &&
+            (b < 0 || (weapon_recs[i].gun && !weapon_recs[b].gun)))
+            b = i;
+    return b >= 0 ? &weapon_recs[b] : NULL;
+}
+
+/* the level's mod: a survey's room (its weapons taken, then left at once) */
+int port_endless_surveying(void) {
+    return surveying;
+}
+
+/* the survey: before the run's first room, the missions of the room table whose weapons aren't known yet */
+static int survey_begin(void) {
+    int i;
+    weapons_load();
+    survey_n = survey_at = 0;
+    if (getenv("TWINE_ENDLESS_NO_SURVEY") || (getenv("TWINE_ENDLESS_ROOM") && !getenv("TWINE_ENDLESS_SURVEY")))
+        return 0;
+    for (i = 0; i < ROOMS; i++)
+        if (!(surveyed & (1 << rooms[i].level))) {
+            int k;
+            for (k = 0; k < survey_n && survey_queue[k] != rooms[i].level; k++)
+                ;
+            if (k == survey_n && survey_n < 12)
+                survey_queue[survey_n++] = rooms[i].level;
+        }
+    if (!survey_n)
+        return 0;
+    room_after_survey = room;
+    room_saved = rooms[ROOMS];
+    rooms[ROOMS].level = survey_queue[0], rooms[ROOMS].point = -1;
+    room = ROOMS;
+    surveying = 1;
+    port_endless_logf(-1, "weapons: a survey of %d missions first (their weapons not known yet)", survey_n);
+    return 1;
+}
+
+/* the level's mod: the survey's room done (its weapons taken): the next mission to survey, or the run's room */
+void port_endless_survey_next(void) {
+    if (++survey_at < survey_n) {
+        rooms[ROOMS].level = survey_queue[survey_at], rooms[ROOMS].point = -1;
+        next_room = ROOMS;
+    } else {
+        rooms[ROOMS] = room_saved;
+        next_room = room_after_survey;
+        surveying = 0;
+        port_endless_logf(-1, "weapons: survey done (%d weapons known)", weapon_rec_count);
+    }
+}
+
 /* fixes/shell.c: ENDLESS chosen on mission select: a run begun, its first room's mission named in g_Args */
 void port_endless_begin(u8 *args) {
     begin();
+    survey_begin();
     *(s16 *)(args + 0x188) = rooms[room].level;
     *(s16 *)(args + 0x18A) = level_mission[rooms[room].level];
     port_endless_logf(-1, "the run starts in level %d point %d", rooms[room].level, rooms[room].point);
@@ -154,12 +301,19 @@ int port_endless_start(void) {
                 room = i;
     }
     port_endless_logf(-1, "the run starts in level %d point %d", rooms[room].level, rooms[room].point);
+    survey_begin();
     return rooms[room].level;
 }
 
 /* main.c, before a level's main runs: in a run, the room's point copied over the level's start point */
+static int level_gen; /* (each mission started in a run: the level's mod knows a new one by it) */
+int port_endless_gen(void) {
+    return level_gen;
+}
+
 void port_endless_level(const PortModule *m) {
     s16 *start;
+    level_gen++;
     if (!port_endless || !m->level || (room < 0 && next_room < 0))
         return;
     if (next_room >= 0) {
