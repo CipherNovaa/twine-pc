@@ -326,9 +326,7 @@ static void draw_weapon(void) {
     EndlessCarry *c = &port_endless_carry;
     const char *want = c->valid ? c->in_hand : "WOLFRAM P2K";
     int i;
-    static const char *const guns[] = {"ROCKET LAUNCHER", "GRENADE LAUNCHER", "IAC DEFENDER", "KAZAKOVICH KA-57",
-                                       "FRINESI AUTO", "MEYER TMP", "INGALLS TYPE 20", "AR36 SNIPER",
-                                       "FRINESI SHOTGUN", "KOFFLER KS5", "BELGIQUE PS100", "WOLFRAM P2K", 0};
+    static const char *const guns[] = {"WOLFRAM P2K", 0}; /* (never a launcher or an explosive unasked) */
     int g;
     for (i = 0; i < SLOTS; i++) {
         Weapon *w = &g_Weapons[i];
@@ -343,7 +341,7 @@ static void draw_weapon(void) {
             }
         }
     }
-    /* the mission hasn't his (or he hasn't it here): its best gun he has, with ammo */
+    /* the mission hasn't his (or he hasn't it here): his pistol (stage 2's borrowing will keep his own everywhere) */
     for (g = 0; guns[g]; g++)
         for (i = 0; i < SLOTS; i++) {
             Weapon *w = &g_Weapons[i];
@@ -1088,6 +1086,8 @@ void endless_frame(void) {
 #endif
             draw_slot = -1;
     }
+    if (room_frames % SEC == 0)
+        strip_tools(); /* (what the mission gives him later too: its scripts, its pickups) */
     if (room_frames == SEC * 5)
         log_weapons("five seconds in");
     if (getenv("TWINE_ENDLESS_TEST_RESTART") && room_frames == atoi(getenv("TWINE_ENDLESS_TEST_RESTART")))
@@ -1201,6 +1201,22 @@ u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z) {
             ELOG("room: story person (type %d, script %d) not made", t, (rec[4] >> 20) & 7);
         rec[3] |= 0x100; /* (made, as far as the spawner knows) */
         return 0;
+    }
+    if (port_endless_room(e) && g_Args && t && TYPE_DEF(t)[1] != 6) { /* the mission's pickups of tools and story things */
+        int k;
+        for (k = 0; k < 19; k++)
+            if (D_8009D130[k * 4 + 1] == (s32)t && D_8009D130[k * 4] >= 0 && D_8009D130[k * 4] < SLOTS &&
+                !combat_item((char *)g_Weapons[D_8009D130[k * 4]].pad0)) {
+                if (!port_subframe)
+                    ELOG("room: the mission's pickup of %s (type %d) not made", (char *)g_Weapons[D_8009D130[k * 4]].pad0, t);
+                rec[3] |= 0x100;
+                return 0;
+            }
+    }
+    if (port_endless_room(e) && g_Args && t && TYPE_DEF(t)[1] == 6 && (rec[3] & 0x400)) {
+        if (!port_subframe)
+            ELOG("room: posed guard (type %d) made standing", t);
+        rec[3] &= ~0x400; /* (a guard placed seated at a desk: in a run he stands, the room's furniture not his) */
     }
     return func_8003C1BC_orig(rec, x, y, z);
 }
@@ -1357,8 +1373,14 @@ static void dump(void) {
     if (D_8009CDA8 % 100 == 0)
         for (i = D_800B0DA0; i <= D_800B07B0; i++)
             if (OBJ(i)[4])
-                ELOG("dump: person %d type %d health %d ai %d at %d %d %d", i, OBJ(i)[6], HEALTH(OBJ(i)), OBJ(i)[0xA7],
-                     POS(OBJ(i))[0], POS(OBJ(i))[1], POS(OBJ(i))[2]);
+            {
+                u8 *o = OBJ(i);
+                s32 *src = *(s32 **)(o + 0x60);
+                ELOG("dump: person %d type %d health %d ai %d at %d %d %d floor %d; record %08X flags %08X w4 %08X; "
+                     "obj +8 %d +A4 %02X +48 %08X%s", i, o[6], HEALTH(o), o[0xA7], POS(o)[0], POS(o)[1], POS(o)[2],
+                     floor_at(POS(o)[0], POS(o)[1] - 500, POS(o)[2]), (u32)src, src ? src[0] : 0, src ? src[1] : 0,
+                     o[8], o[0xA4], *(s32 *)(o + 0x48), is_copy(o) ? " (a copy)" : "");
+            }
     if (D_800D2F90 != last_load) {
         s16 *to = *(s16 **)(D_8009E9C4 + 8);
         ELOG("dump: load state %d -> %d (to %d)", last_load, D_800D2F90, to ? to[5] : -1);
