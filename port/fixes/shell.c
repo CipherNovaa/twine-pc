@@ -485,7 +485,20 @@ void func_80028644(void) {
             break;
         }
     port_endless_keep(name);
-    memcpy(a, kept, sizeof(kept));
+    {
+        char diff[600];
+        int n = 0;
+        diff[0] = 0;
+        for (i = 0; i < (int)sizeof(kept) && n < 560; i++)
+            if (a[i] != kept[i])
+                n += snprintf(diff + n, sizeof(diff) - n, "%X:%02X>%02X ", i, kept[i], a[i]);
+        port_endless_logf(-1, "stats: g_Args changed: %s", diff);
+    }
+    /* the campaign put back, but not the front end's running state kept in g_Args beside it (0x116-0x12F: the
+     * drawing buffer at 0x118 above all; put back, the screens after drew into the buffer not shown, and showed
+     * nothing of their tiles and text) */
+    memcpy(a, kept, 0x116);
+    memcpy(a + 0x130, kept + 0x130, sizeof(kept) - 0x130);
     /* (a save made from the stats leaves the front end's "go on to the next mission" flag set, which then keeps the
      * main menu from making its items when mission select is left with BACK: the run has no next mission) */
     *(u8 *)0x80173998u = 0;
@@ -729,7 +742,8 @@ void func_8003C14C(void) {
     *(s32 *)0x800739DCu = 2;
     *(s32 *)0x800739E0u = 1;
     STATE = 1;
-    port_endless_logf(-1, "shell: mission select: tiles made");
+    port_endless_logf(-1, "shell: mission select: tiles made (TIMs %08X %08X %08X %08X)", S32(0x8017ECD0u), S32(0x801789D8u),
+                      S32(0x8018CCD0u), S32(0x801793A0u));
     func_800316D4(0, 0, 0);
     *(s32 *)0x80073914u = 0;
     shade(0);

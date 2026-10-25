@@ -41,8 +41,9 @@ static Room rooms[] = {
     /* King's Ransom: all of it but its end (section 3: the balloon, scripted, no way on), the bar's two doors (5)
      * and the section played backwards (4) among the best */
     {8, -1}, {8, 0}, {8, 2}, {8, 3}, {8, 4}, {8, 5}, {8, 6},
-    /* Masquerade */
-    {7, 2},
+    /* Masquerade: the nuclear facility (6 was empty and 7's doors shut before the slots and the story gates were
+     * mended: back on trial) */
+    {7, 2}, {7, 6}, {7, 7},
     /* Flashpoint: the night-vision pipeline (13) */
     {6, 0}, {6, 9}, {6, 13},
     /* City of Walkways: the warehouse (4) */
