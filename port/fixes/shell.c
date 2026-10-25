@@ -1,7 +1,7 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_8006F30C func_8006F0B4 func_80042450 func_80042B94 func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8 func_8003EA00 func_800385C4
+ * MOD_REPLACES_NATIVE: func_80046DC4 func_80033018 func_8006F30C func_8006F0B4 func_80042450 func_80042B94 func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8 func_8003EA00 func_800385C4
  */
 #include <stdlib.h>
 #include <string.h>
@@ -306,7 +306,7 @@ static int mouse_steps(void) { /* mouse speed in quarters, 1-12 */
     return n < 1 ? 1 : n > 12 ? 12 : n;
 }
 
-#define SETTINGS 8
+#define SETTINGS 7
 
 /* the page's line i, as its label and value, and stepped by d (1 on, -1 back) when d */
 static void setting(int i, int d, char *label, char *value) {
@@ -358,13 +358,6 @@ static void setting(int i, int d, char *label, char *value) {
         if (d)
             port_setting_save("rumble", on ? "1" : "0");
         strcpy(label, "vibration");
-        strcpy(value, onoff[on]);
-        return;
-    case 6:
-        on = env_on("TWINE_INFINITE_GRENADES", 0) ^ (d != 0);
-        if (d)
-            port_setting_save("infinite_grenades", on ? "1" : "0");
-        strcpy(label, "infinite grenades");
         strcpy(value, onoff[on]);
         return;
     default: /* F9 opens the developers' debug menu in a mission (mods/savestate.c) */
@@ -456,7 +449,62 @@ s32 func_8003A7A8(void) {
     return r;
 }
 
+/* INFINITE GRENADES on the CHEATS screen (func_80046DC4), a seventh line after the game's six: each line is a label
+ * item and a value item (made as text: func_8005133C, "aaa" then set to "on" or "off" by func_800515D0), the cursor
+ * on the labels (item 2k: cheat k, D_80073D38[k]); the screen's step (func_80033018) turns the cheat at the cursor on
+ * or off with Cross, left or right. The line is made after the game's, as the screen colours its first; its cheat
+ * byte would be D_80073D3E, which the step is given as the setting (twine.ini's infinite_grenades) and put back
+ * after. An endless run with it on is unranked, as before (mods/quickgrenade.c). */
+void func_800515D0(s32 item, char *text);
+static int in_cheats, cheats_made;
+static s32 cheat_label_x, cheat_value_x, cheat_y, cheat_dy, cheat_last_y;
+static char grenades_label[] = "infinite grenades", grenades_value[] = "aaa";
+#define CHEAT_BYTES ((u8 *)0x80073D38u)
+
+static void cheats_line(void) {
+    int on = env_on("TWINE_INFINITE_GRENADES", 0), at;
+    *(u8 *)0x80073F05u = 1; /* (lower case: the screen's small capitals) */
+    func_8005133C(grenades_label, cheat_label_x, cheat_y + cheat_dy);
+    at = ITEMS;
+    func_8005133C(grenades_value, cheat_value_x, cheat_y + cheat_dy);
+    *(u8 *)0x80073F05u = 0;
+    func_800515D0(at, on ? (char *)0x8008E30Cu : (char *)0x8008E308u);
+    func_80051768_orig(at - 1, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
+    func_80051768_orig(at, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
+    CURSOR_END = at + 1;
+}
+
+void func_80046DC4_orig(void);
+void func_80046DC4(void) {
+    in_cheats = 1;
+    cheats_made = 0;
+    cheat_y = cheat_dy = cheat_last_y = 0;
+    func_80046DC4_orig();
+    in_cheats = 0;
+}
+
+s32 func_80033018_orig(void);
+s32 func_80033018(void) {
+    u8 kept = CHEAT_BYTES[6];
+    int on = env_on("TWINE_INFINITE_GRENADES", 0);
+    s32 r;
+    if (!in_cheats)
+        return func_80033018_orig();
+    CHEAT_BYTES[6] = (u8)on; /* (the seventh line's "cheat", for the step to turn) */
+    r = func_80033018_orig();
+    if (CHEAT_BYTES[6] != on) {
+        port_setting_save("infinite_grenades", CHEAT_BYTES[6] ? "1" : "0");
+        port_endless_logf(-1, "shell: infinite grenades %s (cheats)", CHEAT_BYTES[6] ? "on" : "off");
+    }
+    CHEAT_BYTES[6] = kept;
+    return r;
+}
+
 void func_80051768(s32 item, s32 cx, s32 cy) {
+    if (in_cheats && !cheats_made && cheat_dy) { /* (the game's lines all made: ours after them) */
+        cheats_made = 1;
+        cheats_line();
+    }
     func_80051768_orig(item, cx, cy);
     if (in_main && !main_made && item == 3) {
         main_made = 1;
@@ -563,6 +611,15 @@ static int in_endless_stats, after_stats; /* (after_stats: frames of the front e
 s32 func_8005133C(char *text, s32 x, s32 y) {
     static char line[48];
     EndlessRunStats *r = &port_endless_run;
+    if (in_cheats && !cheats_made && text) { /* (the CHEATS lines' places: labels, then "aaa" values) */
+        if (!strcmp(text, "aaa"))
+            cheat_value_x = x;
+        else if (y != cheat_y) {
+            if (cheat_y)
+                cheat_dy = y - cheat_y;
+            cheat_label_x = x, cheat_y = y;
+        }
+    }
     if (in_endless_stats && text) {
         if (getenv("TWINE_ENDLESS_DUMP"))
             port_endless_logf(-1, "stats text \"%s\" at %d %d (unranked %d)", text, x, y, port_endless_unranked);

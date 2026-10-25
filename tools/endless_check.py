@@ -238,10 +238,23 @@ def menu_runs():
         runs["menu_" + name] = Run("menu_" + name, 7, 85 if name.startswith("late") else 60,
                                     {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "7:2", "TWINE_ENDLESS_TEST_DIE": 150,
                                      "TWINE_TEST_PAD": pad, "TWINE_TEST_SHELL_SHOTS": 1, "TWINE_SMOOTH": 0})
+    card = os.environ.get("TWINE_CHECK_CARD", os.path.expanduser("~/.local/share/twine/card1.mcd"))
+    if os.path.exists(card):  # (the main menu's cursor on CONTINUE needs the autoloaded save)
+        pad = "400:40,403:0,460:4000,463:0,530:40,533:0,560:40,563:0,620:4000,623:0," + \
+              ",".join("%d:40,%d:0" % (t, t + 3) for t in (750, 780, 810, 840, 870, 900)) + ",950:20,953:0"
+        runs["menu_cheats"] = Run("menu_cheats", 0, 45, {"TWINE_TEST_NO_FILMS": 1, "TWINE_SMOOTH": 0, "TWINE_HD": 0,
+                                                         "TWINE_TEST_PAD": pad}, card=card,
+                                  config="infinite_grenades = 1\n")
     return runs
 
 
 def check_menus(runs):
+    if "menu_cheats" in runs:
+        r = runs["menu_cheats"]
+        ini = open(os.path.join(r.dir, "conf/twine/twine.ini")).read()
+        result("e", "cheats: infinite grenades", bool(r.lines(r"infinite grenades off \(cheats\)")) and
+               "infinite_grenades = 0" in ini, "toggled %d, ini %s" % (len(r.lines("infinite grenades")),
+                                                                     "saved" if "= 0" in ini else "unchanged"))
     img = runs["menu_main"].shot("the main menu")
     if img is None:
         result("e", "main menu", False, "no shot")
@@ -249,7 +262,7 @@ def check_menus(runs):
         b = bright(img, 0.6, 0.25, 0.95, 0.8)
         result("e", "main menu items", b > 0.04, "items area %.0f%% bright" % (b * 100))
     for k, run in runs.items():
-        if k == "menu_main":
+        if k in ("menu_main", "menu_cheats"):
             continue
         img = run.shot("mission select")
         if img is None:
