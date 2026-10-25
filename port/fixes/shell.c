@@ -306,7 +306,7 @@ static int mouse_steps(void) { /* mouse speed in quarters, 1-12 */
     return n < 1 ? 1 : n > 12 ? 12 : n;
 }
 
-#define SETTINGS 7
+#define SETTINGS 8
 
 /* the page's line i, as its label and value, and stepped by d (1 on, -1 back) when d */
 static void setting(int i, int d, char *label, char *value) {
@@ -359,6 +359,14 @@ static void setting(int i, int d, char *label, char *value) {
             port_setting_save("rumble", on ? "1" : "0");
         strcpy(label, "vibration");
         strcpy(value, onoff[on]);
+        return;
+    case 6: /* endless mode's enemies: the port's hunting AI (mods/endless.c), or the game's own; the campaign keeps the
+             * game's own whatever this says */
+        on = !(getenv("TWINE_ENEMY_AI") && (getenv("TWINE_ENEMY_AI")[0] == 'o' || getenv("TWINE_ENEMY_AI")[0] == '0')) ^ (d != 0);
+        if (d)
+            port_setting_save("enemy_ai", on ? "improved" : "original");
+        strcpy(label, "enemy ai");
+        strcpy(value, on ? "improved" : "original");
         return;
     default: /* F9 opens the developers' debug menu in a mission (mods/savestate.c) */
         on = env_on("TWINE_DEBUG_MENU", 0) ^ (d != 0);

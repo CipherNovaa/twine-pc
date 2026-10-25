@@ -3,12 +3,14 @@
 
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
   -j JOBS    runs at once (default 4)
-  -k CHECKS  the checks to run, letters from abcdefghi (default all):
+  -k CHECKS  the checks to run, letters from abcdefghij (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
-             d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression
+             d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression,
+             j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching)
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
+  -o         every run with the game's own enemy AI (enemy_ai = original; default: the port's, IMPROVED)
 
 Environment:
   TWINE_DISC         the disc image (default: the first .bin in workbench/disc/)
@@ -83,6 +85,8 @@ class Run:
         env.update({k: str(v) for k, v in self.env.items()})
         if RAM8:
             env["TWINE_RAM_8MB"] = "1"
+        if AI_ORIGINAL and "TWINE_ENEMY_AI" not in self.env:
+            env["TWINE_ENEMY_AI"] = "original"
         with open(os.path.join(self.dir, "out.txt"), "w") as out:
             child = subprocess.Popen(["nice", exe], cwd=self.dir, env=env, stdout=out, stderr=subprocess.STDOUT)
             try:
@@ -158,6 +162,7 @@ def people(run):
 
 RESULTS = []
 RAM8 = False
+AI_ORIGINAL = False
 
 
 def result(check, what, ok, detail=""):
@@ -366,6 +371,58 @@ def check_card(runs):
            "; ".join(x.split("scores: ")[1][:50] for x in r.lines("scores:"))[:150])
 
 
+# ---- j: the IMPROVED enemy AI against the game's own, a still Bond ----
+
+AI_ROOMS = [(3, 11), (6, 13), (9, 2), (2, 6), (10, 4), (7, 6), (5, 4), (8, 3)]
+
+
+def ai_runs():
+    runs = {}
+    for l, p in AI_ROOMS:
+        for m in ("original", "improved"):
+            runs["ai_%d_%d_%s" % (l, p, m)] = Run("ai_%d_%d_%s" % (l, p, m), l, 75, {
+                "TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "%d:%d" % (l, p), "TWINE_ENDLESS_SEED": 7,
+                "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENEMY_AI": m, "TWINE_ENDLESS_PEOPLE_FAST": 1})
+    return runs
+
+
+def approach(run):
+    """(the closest a live guard came to Bond's place, from 15 s on; the most samples two stood within 300 in a row)"""
+    bond, best, pairs, run_len = None, 10 ** 9, {}, 0
+    frames = {}
+    for l in run.log.splitlines():
+        m = re.search(r"room start: level \d+ section \d+ at (-?\d+) (-?\d+) (-?\d+)", l)
+        if m:
+            bond = (int(m.group(1)), int(m.group(3)))
+        m = re.search(r" f(\d+) .*people: (\d+) type \d+ \S+, health (-?\d+).* at (-?\d+) (-?\d+) (-?\d+)", l)
+        if m and bond and int(m.group(3)) > 0:
+            f, x, z = int(m.group(1)), int(m.group(4)), int(m.group(6))
+            frames.setdefault(f, []).append((x, z))
+            if f >= 25 * 15:
+                best = min(best, ((x - bond[0]) ** 2 + (z - bond[1]) ** 2) ** 0.5)
+    stack = 0
+    for f in sorted(frames):
+        p = frames[f]
+        close = any(((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 < 300 for i, a in enumerate(p) for b in p[i + 1:])
+        stack = stack + 1 if close else 0
+        run_len = max(run_len, stack)
+    return best, run_len
+
+
+def check_ai(runs):
+    for l, p in AI_ROOMS:
+        o, i = runs["ai_%d_%d_original" % (l, p)], runs["ai_%d_%d_improved" % (l, p)]
+        bo, so = approach(o)
+        bi, st = approach(i)
+        walks = len(i.lines("ai: type \\d+ walked from"))
+        hits_o, hits_i = len(o.lines(r"damage: \d+: health")), len(i.lines(r"damage: \d+: health"))
+        ok = not i.crashed() and (bi <= max(bo, 3000) or hits_i > 0) and hits_i >= hits_o // 2
+        result("j", "%d:%d hunting" % (l, p), ok, "closest %s (game's AI %s), walks %d, hits on Bond %d (game's %d)" % (
+            int(bi) if bi < 10 ** 9 else "-", int(bo) if bo < 10 ** 9 else "-", walks, hits_i, hits_o))
+        result("j", "%d:%d no bunching" % (l, p), st <= 12 or st <= so,
+               "two within 300 for %d samples (0.5 s) in a row (game's AI %d)" % (st, so))
+
+
 # ---- i: the campaign untouched ----
 
 def campaign_runs():
@@ -381,7 +438,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghi", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghij", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -395,6 +452,9 @@ def main():
         elif a == "-8":
             global RAM8
             RAM8 = True
+        elif a == "-o":
+            global AI_ORIGINAL
+            AI_ORIGINAL = True
         else:
             sys.exit(__doc__)
     if not os.path.exists(BIN):
@@ -420,6 +480,8 @@ def main():
         groups["card"] = card_runs()
     if "i" in checks:
         groups["campaign"] = campaign_runs()
+    if "j" in checks:
+        groups["ai"] = ai_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.secs)  # (the long ones first)
     t0 = time.time()
@@ -442,8 +504,10 @@ def main():
         check_card(groups["card"])
     if "campaign" in groups:
         check_campaign(groups["campaign"])
+    if "ai" in groups:
+        check_ai(groups["ai"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
-             "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign"}
+             "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))

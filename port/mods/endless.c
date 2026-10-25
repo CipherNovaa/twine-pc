@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC
+ * MOD_REPLACES_NATIVE: func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -109,6 +109,8 @@ void port_endless_score(int points);
 void port_endless_ungate(int level);
 void port_endless_restart(void);
 void quick_grenade_give(void);
+s32 func_800746D0(s32 mesh, s32 *from, s32 *to, s16 *normal, s16 *hit, s32 *flags); /* the walls between: nonzero */
+extern s32 D_800E2F2C;  /* (the section's walls, for it) */
 u32 port_ext_free_bytes(void); /* (malloc3.c) */
 void func_80053DE4(s16 type, s16 sub, s32 x, s32 y, s32 z); /* an event on the AI's board (0: a gunshot) */
 
@@ -154,6 +156,14 @@ static struct {
 } hunters[HUNTERS];
 static s32 stuck_at[8][2]; /* places guards were sent from that left them stuck (behind glass, at a wall) */
 static int stuck_count, seated_said;
+typedef struct {
+    s16 type, pad;
+    s32 x, y, z, w;
+    u32 time;
+} AiEvent; /* (the AI board's events: D_800DA270's 27, 0x18 bytes each) */
+static AiEvent hunt_ev[64];
+static s32 last_seen_at = -1, bond_still_since, nav_goal[8][3], drive_rest[64], spread_until[64];
+static u8 driving[64], seen_for[64];
 
 /* the room's own fixed guards (snipers, grenade throwers, posts: those of the game's standing AIs, 2-5) that fell,
  * to come back to their places half a minute later */
@@ -164,6 +174,7 @@ static struct {
 
 /* how each people's slot's person was made (the log's: placed, sent, a fallen one's return, remade after a slot freed) */
 static const char *made_how[64];
+static s32 made_at[64]; /* (when: the AI lets his script hear and wake a few seconds first) */
 static int making;               /* (what spawn()/the returns are making now: 0 the section) */
 static s32 *freed_recs[16];      /* (records (their flags words) whose person free_slot took out) */
 static int freed_next;
@@ -176,10 +187,10 @@ static void people_log(void) {
         if (o == g_Player || !o[4])
             continue;
         ELOG("people: %d type %d %s, health %d, ai %d at %d %d %d (floor %d, yaw %d); record %08X flags %08X w4 %08X; "
-             "state +24 %08X; obj +8 %d +A4 %02X +A6 %02X +48 %08X +4C %08X +E %04X", i, o[6], made_how[i & 63] ? made_how[i & 63] : "?",
+             "state +24 %08X anim %d; obj +8 %d +A4 %02X +A6 %02X +48 %08X +4C %08X +E %04X", i, o[6], made_how[i & 63] ? made_how[i & 63] : "?",
              HEALTH(o), o[0xA7], POS(o)[0], POS(o)[1], POS(o)[2], floor_at(POS(o)[0], POS(o)[1] - 500, POS(o)[2]),
              *(s16 *)(*(u8 **)(o + 0x90) + 0x1A), (u32)src, src ? src[0] : 0, src ? src[1] : 0,
-             st ? *(s32 *)(st + 0x24) : -1, o[8], o[0xA4], o[0xA6], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C), *(u16 *)(o + 0xE));
+             st ? *(s32 *)(st + 0x24) : -1, st ? *(s16 *)(st + 0x10) : -1, o[8], o[0xA4], o[0xA6], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C), *(u16 *)(o + 0xE));
     }
 }
 
@@ -620,6 +631,10 @@ static void room_start(void) {
     room_frames = carried = budget = open = kills_scored = said = burst = at_entry = 0;
     draw_slot = -1;
     kind_count = copy_next = door_count = stuck_count = seated_said = 0;
+    for (i = 0; i < 64; i++)
+        hunt_ev[i].type = 0x1C, driving[i] = 0, seen_for[i] = 0, drive_rest[i] = spread_until[i] = 0; /* (none yet) */
+    memset(nav_goal, 0, sizeof(nav_goal));
+    last_seen_at = -1, bond_still_since = 0;
     memset(hunters, 0, sizeof(hunters));
     memset(returns, 0, sizeof(returns));
     cooldown = SEC * 5;
@@ -1086,6 +1101,395 @@ static void leave(int wave, const char *how) {
     ELOG("room left (%s) after %d s", how, room_frames / SEC);
 }
 
+/* ---- Enemy AI, IMPROVED (the enemy AI setting: TWINE_ENEMY_AI "original" keeps the game's own; endless only) ----
+ *
+ * Built on the game's own AI: each guard's script reacts to the nearest event it perceives on the AI's board
+ * (func_80053ED8, every frame: gunshots, alarms, ...), going to see. A hunter is given an event of his own instead,
+ * a gunshot at a place picked for him, so that the scripts' own walking, searching and fighting do the rest:
+ *  - HUNT: the place is Bond's last known position (where a guard last saw him, or heard him fire; refreshed now
+ *    and then as if by radio), on the far side of which...
+ *  - NO BUNCHING / FLANKING: ...each hunter takes his own point of a ring round it (angles spread by his number),
+ *    on floor Bond can reach: a camping Bond is closed on from every side, not through one doorway;
+ *  - STAGGERED ADVANCE: hunters advance in two halves by turns (3 s), the others holding where they are;
+ *  - SEARCH: when Bond is lost (no sighting for 8 s) and a hunter has got to his point, he searches nearby
+ *    places a while.
+ * A guard who sees Bond fights as the game has him (his script); fixed guards (snipers, posts) are left alone. */
+static s32 hunt_at[64][3], hunt_since[64];
+static s32 last_seen[3], bond_was[3];
+static int ai_on = -1;
+
+static int ai_improved(void) {
+    if (ai_on < 0) {
+        const char *v = getenv("TWINE_ENEMY_AI");
+        ai_on = !(v && (v[0] == 'o' || v[0] == 'O' || v[0] == '0'));
+    }
+    return ai_on;
+}
+
+static int hunter(u8 *o) {
+    s32 *src = *(s32 **)(o + 0x60);
+    if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0 || !*(u8 **)(o + 0x118))
+        return 0;
+    if (is_copy(o))
+        return 1;
+    return src && !FIXED_SCRIPT(src[1]) && fighter_type(o[6], 0);
+}
+
+/* the reachable floor polygon nearest (x, z) on Bond's floor (-1 none) */
+static int floor_near(s32 x, s32 z, s32 y) {
+    int i, b = -1;
+    s32 best = 0x7FFFFFFF;
+    for (i = 0; i < faces; i++) {
+        s32 d;
+        if (!reach[i] || shut[i] || mid[i][1] - y > LEVEL_DY || y - mid[i][1] > LEVEL_DY)
+            continue;
+        d = dist2(x, z, mid[i][0], mid[i][2]);
+        if (d < best)
+            best = d, b = i;
+    }
+    return b;
+}
+
+/* LOCOMOTION: a hunter who doesn't see Bond is walked there by the port, along the floor (a path over the section's
+ * floor polygons, breadth first from his goal), his script held meanwhile (its wait, ctx+0x1C4) and his model
+ * turned and given his kind's running animation (the game moves him by the animation's own steps, its walls and
+ * all); seeing Bond, or there, he is his script's again. The running animation's number differs by level and kind:
+ * the ones the port saw the game's own guards run with, and any it sees them run with from then on. */
+static u16 navd[8][FACES];
+static s32 way[64][3], drive_moved[64][3], drive_check[64];
+static u8 drive_unstick[64], idle[64], seen_sight[64];
+static s32 idle_at[64][3], idle_check[64];
+static struct { u8 type; s16 anim; s16 count; } run_seen[16];
+static s32 run_was[64][4];
+
+static s16 run_anim(u8 type) {
+    static const s16 seed[12] = {0, 0, 32, 17, 0, 16, 33, 33, 79, 16, 17, 0};
+    int k;
+    for (k = 0; k < 16; k++)
+        if (run_seen[k].type == type && run_seen[k].count >= 3)
+            return run_seen[k].anim;
+    if (g_Args->level == 5 && type == 30)
+        return 29;
+    if (g_Args->level == 10 && type == 47)
+        return 103;
+    if (g_Args->level == 10 && type == 40)
+        return 19;
+    return g_Args->level >= 1 && g_Args->level <= 11 ? seed[g_Args->level] : 0;
+}
+
+static void learn_run(int i, u8 *o) { /* (a guard of the game's moving fast: the animation he does it with) */
+    u8 *an = *(u8 **)(o + 0x94);
+    s32 d;
+    int k;
+    if (!an || driving[i])
+        return;
+    d = dist2(POS(o)[0], POS(o)[2], run_was[i][0], run_was[i][2]);
+    if (run_was[i][3] == *(s16 *)(an + 0x10) && d > 60 * 10 && d < 4000) {
+        for (k = 0; k < 16 && run_seen[k].count && (run_seen[k].type != o[6] || run_seen[k].anim != *(s16 *)(an + 0x10)); k++)
+            ;
+        if (k < 16) {
+            run_seen[k].type = o[6], run_seen[k].anim = *(s16 *)(an + 0x10);
+            if (run_seen[k].count++ == 3)
+                ELOG("ai: type %d runs with animation %d", o[6], run_seen[k].anim);
+        }
+    }
+    run_was[i][0] = POS(o)[0], run_was[i][2] = POS(o)[2], run_was[i][3] = *(s16 *)(an + 0x10);
+}
+
+static int face_at(s32 x, s32 y, s32 z) { /* (the floor polygon under a place: nearest middle at about its height) */
+    int i, b = -1;
+    s32 best = 0x7FFFFFFF;
+    for (i = 0; i < faces; i++) {
+        s32 d, dy = mid[i][1] - y;
+        if (dy > 800 || dy < -800 || shut[i])
+            continue;
+        d = dist2(x, z, mid[i][0], mid[i][2]);
+        if (d < best)
+            best = d, b = i;
+    }
+    return b;
+}
+
+static void nav_build(int h, s32 x, s32 y, s32 z) { /* (distances in polygons to the goal, for hunter h) */
+    u8 *mesh = (u8 *)D_800E2F54;
+    int g = face_at(x, y, z), head = 0, tail = 0, k, j;
+    memset(navd[h], 0xFF, sizeof(navd[h]));
+    nav_goal[h][0] = x, nav_goal[h][1] = y, nav_goal[h][2] = z;
+    if (g < 0 || !mesh)
+        return;
+    navd[h][g] = 0;
+    queue[tail++] = g;
+    while (head < tail) {
+        int c = queue[head++];
+        u16 *f = (u16 *)(*(u8 **)(mesh + 0x24) + c * 8);
+        for (k = 0; k < 3; k++) {
+            if (f[k] >= VERTS)
+                continue;
+            for (j = vfirst[f[k]]; j < vfirst[f[k] + 1]; j++) {
+                int n = vfaces[j];
+                if (navd[h][n] == 0xFFFF && !shut[n] && mid[n][1] - mid[c][1] < 700 && mid[c][1] - mid[n][1] < 700) {
+                    navd[h][n] = navd[h][c] + 1;
+                    queue[tail++] = n;
+                }
+            }
+        }
+    }
+}
+
+/* the next place on his way: two polygons on down the distances from where he is (none: -1) */
+static int nav_next(int h, u8 *o, s32 *to) {
+    u8 *mesh = (u8 *)D_800E2F54;
+    int c = face_at(POS(o)[0], POS(o)[1], POS(o)[2]), step, k, j;
+    if (c < 0 || navd[h][c] == 0xFFFF)
+        return -1;
+    for (step = 0; step < 2 && navd[h][c]; step++) {
+        u16 *f = (u16 *)(*(u8 **)(mesh + 0x24) + c * 8);
+        int b = c;
+        for (k = 0; k < 3; k++) {
+            if (f[k] >= VERTS)
+                continue;
+            for (j = vfirst[f[k]]; j < vfirst[f[k] + 1]; j++)
+                if (navd[h][vfaces[j]] < navd[h][b])
+                    b = vfaces[j];
+        }
+        if (b == c)
+            break;
+        c = b;
+    }
+    to[0] = mid[c][0], to[1] = mid[c][1], to[2] = mid[c][2];
+    return c;
+}
+
+static int sight(u8 *o);
+static void drive_frame(void) {
+    int i;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = OBJ(i), *an, *ctx;
+        int h = i & 7, f;
+        s32 dx, dz, a, best, ba = 0, goal[3];
+        s16 run;
+        if (!o[4] || o[5] != 6)
+            continue;
+        learn_run(i, o);
+        if (!hunter(o) || !(an = *(u8 **)(o + 0x94)) || !(ctx = *(u8 **)(o + 0x118)) || hunt_ev[i].type != 0) {
+            driving[i] = 0;
+            continue;
+        }
+        if (!driving[i]) { /* (his own going: where he was 3 s ago) */
+            if (room_frames - idle_check[i] >= SEC * 3) {
+                idle[i] = dist2(POS(o)[0], POS(o)[2], idle_at[i][0], idle_at[i][2]) < 250;
+                idle_at[i][0] = POS(o)[0], idle_at[i][2] = POS(o)[2], idle_check[i] = room_frames;
+            }
+        }
+        if (!driving[i] && !idle[i]) { /* (his script has him going somewhere: his own way) */
+            continue;
+        }
+        if (room_frames < drive_rest[i] || room_frames - made_at[i] < SEC * 4) { /* (resting from a way that wasn't
+                                                     * there, or a wall; or just made, his script waking: his own) */
+            driving[i] = 0;
+            continue;
+        }
+        if (room_frames >= spread_until[i] &&
+            ((*(s32 *)ctx & 0x80) || (!(room_frames % 4) ? (seen_sight[i] = (u8)sight(o)) : seen_sight[i]))) {
+            /* (he sees Bond: his script's, after a moment's reaction) */
+            if ((seen_for[i] & 0x7F) < 0x7F)
+                seen_for[i]++;
+            if ((seen_for[i] & 0x7F) > SEC / 3) {
+                driving[i] = 0;
+                continue;
+            }
+        } else
+            seen_for[i] &= 0x80;
+        goal[0] = hunt_ev[i].x, goal[1] = hunt_ev[i].y, goal[2] = hunt_ev[i].z;
+        if (dist2(POS(o)[0], POS(o)[2], goal[0], goal[2]) < 900 || !(run = run_anim(o[6]))) {
+            driving[i] = 0;
+            continue;
+        }
+        if (dist2(goal[0], goal[2], nav_goal[h][0], nav_goal[h][2]) > 400 || !(room_frames % SEC))
+            nav_build(h, goal[0], goal[1], goal[2]);
+        if (!driving[i] || dist2(POS(o)[0], POS(o)[2], way[i][0], way[i][2]) < 500 || !(room_frames % (SEC / 2))) {
+            if ((f = nav_next(h, o, way[i])) < 0) {
+                if (!(seen_for[i] & 0x80)) /* (once: his part of the floor doesn't reach Bond's) */
+                    ELOG("ai: no way for type %d at %d %d to %d %d", o[6], POS(o)[0], POS(o)[2], goal[0], goal[2]);
+                seen_for[i] |= 0x80;
+                drive_rest[i] = room_frames + SEC * 6;
+                driving[i] = 0;
+                continue;
+            }
+        }
+        if (!driving[i]) {
+            ELOG("ai: type %d walked from %d %d toward %d %d (animation %d)", o[6], POS(o)[0], POS(o)[2], goal[0], goal[2], run);
+            driving[i] = 1, drive_check[i] = room_frames;
+            drive_moved[i][0] = POS(o)[0], drive_moved[i][2] = POS(o)[2];
+        }
+        if (room_frames - drive_check[i] > SEC * 2) { /* (stuck: left to his script a while) */
+            if (dist2(POS(o)[0], POS(o)[2], drive_moved[i][0], drive_moved[i][2]) < 300) {
+                if (drive_unstick[i]++ < 2) { /* (a wall's corner: back to the middle of his polygon first) */
+                    int c = face_at(POS(o)[0], POS(o)[1], POS(o)[2]);
+                    if (c >= 0)
+                        way[i][0] = mid[c][0] + (s32)(rnd() % 600) - 300, way[i][2] = mid[c][2] + (s32)(rnd() % 600) - 300;
+                    drive_check[i] = room_frames - SEC; /* (a second for it) */
+                    drive_moved[i][0] = POS(o)[0], drive_moved[i][2] = POS(o)[2];
+                    goto steer;
+                }
+                ELOG("ai: type %d stuck at %d %d: his script's again a while", o[6], POS(o)[0], POS(o)[2]);
+                drive_unstick[i] = 0;
+                drive_rest[i] = room_frames + SEC * 4;
+                driving[i] = 0;
+                continue;
+            }
+            drive_check[i] = room_frames, drive_moved[i][0] = POS(o)[0], drive_moved[i][2] = POS(o)[2];
+            drive_unstick[i] = 0;
+        }
+    steer:
+        dx = way[i][0] - POS(o)[0], dz = way[i][2] - POS(o)[2];
+        for (a = 0, best = -0x7FFFFFFF; a < 4096; a += 16) {
+            s32 d = (isin(a) >> 4) * (dx >> 4) + (isin(a + 0x400) >> 4) * (dz >> 4);
+            if (d > best)
+                best = d, ba = a;
+        }
+        *(s32 *)(ctx + 0x1C4) = 2; /* (his script waits) */
+        *(s16 *)(*(u8 **)(o + 0x90) + 0x62) = (s16)ba;
+        if (*(s16 *)(an + 0x10) != run) {
+            *(s16 *)(an + 0x10) = *(s16 *)(an + 0x12) = run;
+            an[0x14] = 0, an[0x16] = 1;
+        }
+    }
+}
+
+/* (the reachable floor polygon nearest (x, z) not within 900 of another hunter's goal: each his own place) */
+/* whether he can see (or shoot) Bond: nothing of the section's walls between their heads, and not too far */
+static int sight(u8 *o) {
+    s32 from[4], to[4], d = dist2(POS(o)[0], POS(o)[2], g_Args->playerX, g_Args->playerZ);
+    s16 n[4], h[4];
+    if (d > 14000 || POS(o)[1] - g_Args->playerY > 2000 || g_Args->playerY - POS(o)[1] > 2000)
+        return 0;
+    from[0] = POS(o)[0], from[1] = POS(o)[1] - 1200, from[2] = POS(o)[2], from[3] = 0;
+    to[0] = g_Args->playerX, to[1] = g_Args->playerY - 1200, to[2] = g_Args->playerZ, to[3] = 0;
+    return !func_800746D0(D_800E2F2C, from, to, n, h, 0);
+}
+
+static int floor_near_free(s32 x, s32 z, s32 y, int me) {
+    int i, j, b = -1;
+    s32 best = 0x7FFFFFFF;
+    for (i = 0; i < faces; i++) {
+        s32 d;
+        if (!reach[i] || shut[i] || mid[i][1] - y > LEVEL_DY || y - mid[i][1] > LEVEL_DY)
+            continue;
+        d = dist2(x, z, mid[i][0], mid[i][2]);
+        if (d >= best)
+            continue;
+        for (j = D_800B0DA0; j <= D_800B07B0 && j < 64; j++)
+            if (j != me && hunt_ev[j].type == 0 && dist2(hunt_ev[j].x, hunt_ev[j].z, mid[i][0], mid[i][2]) < 900)
+                break;
+        if (j <= D_800B07B0 && j < 64)
+            continue;
+        best = d, b = i;
+    }
+    return b >= 0 ? b : floor_near(x, z, y);
+}
+
+static void ai_frame(void) {
+    int i, n = 0, k = 0;
+    s32 bx = g_Args->playerX, by = g_Args->playerY, bz = g_Args->playerZ;
+    if (!ai_improved())
+        return;
+    if (dist2(bx, bz, bond_was[0], bond_was[2]) > 800)
+        bond_was[0] = bx, bond_was[1] = by, bond_was[2] = bz, bond_still_since = room_frames;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = OBJ(i);
+        if (!hunter(o))
+            continue;
+        n++;
+        if ((**(s32 **)(o + 0x118) & 0x80) || sight(o)) /* (he sees Bond: the game's flag, or the walls say so) */
+            last_seen[0] = bx, last_seen[1] = by, last_seen[2] = bz, last_seen_at = room_frames;
+    }
+    if (last_seen_at < 0 || room_frames - last_seen_at > SEC * 12 || (room_frames % (SEC * 6)) == 0) {
+        /* (none has seen him yet, or long ago: they learn where he is, as by radio, now and then) */
+        if (last_seen_at < 0 || room_frames % (SEC * 6) == 0)
+            last_seen[0] = bx, last_seen[1] = by, last_seen[2] = bz, last_seen_at = room_frames - SEC * 9;
+    }
+    drive_frame();
+    if (!(room_frames % (SEC / 2))) /* SPREAD: two hunters standing in each other: the later one steps aside */
+        for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+            u8 *o = OBJ(i);
+            int j;
+            if (!hunter(o) || room_frames < spread_until[i])
+                continue;
+            for (j = D_800B0DA0; j <= D_800B07B0 && j < 64; j++) /* (in a hunter, or in one of the room's own) */
+                if (j != i && OBJ(j)[4] && OBJ(j)[5] == 6 && HEALTH(OBJ(j)) > 0 && (!hunter(OBJ(j)) || j < i) &&
+                    room_frames >= spread_until[j] && dist2(POS(o)[0], POS(o)[2], POS(OBJ(j))[0], POS(OBJ(j))[2]) < 400) {
+                    s32 a = (s32)(rnd() & 0xFFF), x = POS(o)[0] + (isin(a) * 1200 >> 12), z = POS(o)[2] + (isin(a + 0x400) * 1200 >> 12);
+                    int f = floor_near(x, z, POS(o)[1]);
+                    if (f >= 0) {
+                        hunt_ev[i].type = 0, hunt_ev[i].x = mid[f][0], hunt_ev[i].y = mid[f][1], hunt_ev[i].z = mid[f][2];
+                        hunt_ev[i].time = D_8009CDA8 + SEC;
+                        spread_until[i] = room_frames + SEC * 2;
+                        drive_rest[i] = 0, made_at[i] = -SEC * 10, idle[i] = 1;
+                        ELOG("ai: type %d steps aside from another", o[6]);
+                    }
+                    break;
+                }
+        }
+    if (room_frames % (SEC * 5) == 0)
+        ELOG("ai: %d hunters, Bond last seen %d s ago at %d %d", n, (room_frames - last_seen_at) / SEC, last_seen[0], last_seen[2]);
+    if (room_frames % (SEC / 2))
+        return;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = OBJ(i);
+        s32 a, r, x, z, f, lost;
+        if (!hunter(o)) {
+            hunt_ev[i].type = 0x1C; /* (none) */
+            continue;
+        }
+        if (room_frames < spread_until[i]) { /* (stepping aside: his own place a moment) */
+            k++;
+            continue;
+        }
+        lost = room_frames - last_seen_at > SEC * 8;
+        a = (k * 4096 / (n ? n : 1) + (room_frames / (SEC * 20)) * 512) & 0xFFF;
+        r = room_frames - bond_still_since > SEC * 8 ? 1400 : 2200; /* (a camping Bond: closer, from all sides) */
+        x = last_seen[0] + (isin(a) * r >> 12), z = last_seen[2] + (isin(a + 0x400) * r >> 12);
+        if (lost && dist2(POS(o)[0], POS(o)[2], hunt_at[i][0], hunt_at[i][2]) < 900 &&
+            room_frames - hunt_since[i] > SEC * 4) { /* (got there, nobody: searching about) */
+            x = last_seen[0] + (s32)(rnd() % 6000) - 3000, z = last_seen[2] + (s32)(rnd() % 6000) - 3000;
+            hunt_since[i] = room_frames;
+        }
+        f = floor_near_free(x, z, last_seen[1], i);
+        if (f >= 0)
+            x = mid[f][0], z = mid[f][2];
+        if (((room_frames / (SEC * 3)) & 1) != (k & 1) && !lost) { /* (his half holds this turn) */
+            hunt_ev[i].type = 0x1C;
+            k++;
+            continue;
+        }
+        if (dist2(x, z, hunt_at[i][0], hunt_at[i][2]) > 300)
+            hunt_since[i] = room_frames;
+        hunt_at[i][0] = x, hunt_at[i][1] = f >= 0 ? mid[f][1] : last_seen[1], hunt_at[i][2] = z;
+        hunt_ev[i].type = 0;
+        hunt_ev[i].x = x, hunt_ev[i].y = hunt_at[i][1], hunt_ev[i].z = z;
+        hunt_ev[i].time = D_8009CDA8 + SEC;
+        k++;
+    }
+}
+
+AiEvent *func_80053ED8_orig(u8 *obj);
+AiEvent *func_80053ED8(u8 *obj) { /* the event a person reacts to: a hunter's own, in IMPROVED */
+    s16 e[5];
+    int i;
+    if (ai_on > 0 && port_endless_room(e) && obj >= OBJ(0) && obj < OBJ(64)) {
+        i = (obj - OBJ(0)) / 0x124;
+        if (i >= D_800B0DA0 && i <= D_800B07B0 && hunt_ev[i].type == 0 && driving[i] && hunter(obj)) {
+            AiEvent *g = func_80053ED8_orig(obj);
+            static int told;
+            if (!told++)
+                ELOG("ai: hunter type %d sent to %d %d %d", obj[6], hunt_ev[i].x, hunt_ev[i].y, hunt_ev[i].z);
+            return g && g->type == 0 ? g : &hunt_ev[i]; /* (a real gunshot he hears comes first) */
+        }
+    }
+    return func_80053ED8_orig(obj);
+}
+
 void endless_frame(void) {
     int own, n, wave, i;
     s32 kills, back;
@@ -1133,7 +1537,7 @@ void endless_frame(void) {
     room_frames++;
     if (room_frames % (SEC * 10) == 0)
         flood();
-    if (room_frames % (SEC * 4) == 0)
+    if (room_frames % (getenv("TWINE_ENDLESS_PEOPLE_FAST") ? SEC / 2 : SEC * 4) == 0)
         people_log();
     if (getenv("TWINE_ENDLESS_TEST_LOOK") && room_frames > SEC * 2) { /* (headless tests: Bond faces person N) */
         u8 *o = OBJ(atoi(getenv("TWINE_ENDLESS_TEST_LOOK")));
@@ -1241,6 +1645,7 @@ void endless_frame(void) {
         cooldown = SEC * 4 + rnd() % (SEC * 4);
     }
     recall();
+    ai_frame();
 
     /* the doors: open once the room's own guards about are down (and one at least), or after kills enough, or a
      * while */
@@ -1472,6 +1877,7 @@ u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z) {
                 if (freed_recs[k] == &rec[3])
                     how = "placed again (its slot freed before)";
             made_how[i & 63] = how;
+            made_at[i & 63] = room_frames;
             if (*(s32 *)(o + 0x4C) & 0x02000000) { /* (made inactive: left out of the game's collisions and updates,
                                                     * so no shot touches him; the mission's script would wake him) */
                 if (!port_subframe)
