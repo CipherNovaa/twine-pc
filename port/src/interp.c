@@ -44,22 +44,43 @@ static u64 extra_t;        /* (TWINE_TIMING: the extra drawing's start) */
 #define VBLANK_NS 16683333ull
 
 /* memory of the game's outside PS1 RAM (a mod's), put back after each extra drawing as RAM is */
+#define KEPT 8
 static struct {
     void *at;
     u32 size;
     void *copy;
-} kept[4];
+} kept[KEPT];
 
+/* (a mod's memory is its module's: each level has its own copy of a mod. The list was never emptied, so after four
+ * missions with such memory (a lent weapon's model, the quick punch's fists) it was full and the running
+ * mission's went unkept: its animations went on in every extra drawing, a lent gun's idle and reloads at many
+ * times their speed, the punch skipping frames. Now emptied as each executable starts (main.c), and a region that
+ * can't be kept is said.) */
 void port_smooth_keep(void *at, u32 size) {
-    int i;
-    for (i = 0; i < 4; i++)
+    int i, n = getenv("TWINE_TEST_SMOOTH_NO_FORGET") ? 4 : KEPT; /* (tests: the list as it was) */
+    for (i = 0; i < n; i++)
         if (kept[i].at == at || !kept[i].at) {
-            if (kept[i].at != at)
+            if (kept[i].at != at || kept[i].size < size) {
+                free(kept[i].copy);
                 kept[i].copy = malloc(size);
+            }
             kept[i].at = at;
             kept[i].size = size;
             return;
         }
+    port_log("smooth: no room to keep %p (%X bytes): an extra drawing will leave it changed\n", at, size);
+}
+
+/* main.c: a new executable runs: the last one's mods' memory is no longer the game's */
+void port_smooth_forget(void) {
+    int i;
+    if (getenv("TWINE_TEST_SMOOTH_NO_FORGET")) /* (tests: as before, to show the difference) */
+        return;
+    for (i = 0; i < KEPT; i++) {
+        free(kept[i].copy);
+        kept[i].at = kept[i].copy = NULL;
+        kept[i].size = 0;
+    }
 }
 
 static u64 now_ns(void) {
@@ -139,7 +160,7 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
         memcpy(ram_copy + (port_ext_low - PS1_RAM_BASE), (void *)port_ext_low, PS1_RAM_BASE + PS1_RAM_SIZE - port_ext_low);
     }
     memcpy(scratch_copy, (void *)PS1_SCRATCH_BASE, PS1_SCRATCH_SIZE);
-    for (i = 0; i < 4 && kept[i].at; i++)
+    for (i = 0; i < KEPT && kept[i].at; i++)
         memcpy(kept[i].copy, kept[i].at, kept[i].size);
     PT_END(PT_SMOOTH_COPY, ct);
     }
@@ -167,7 +188,7 @@ void port_smooth_end(void) {
         memcpy((void *)port_ext_low, ram_copy + (port_ext_low - PS1_RAM_BASE), PS1_RAM_BASE + PS1_RAM_SIZE - port_ext_low);
     }
     memcpy((void *)PS1_SCRATCH_BASE, scratch_copy, PS1_SCRATCH_SIZE);
-    for (i = 0; i < 4 && kept[i].at; i++)
+    for (i = 0; i < KEPT && kept[i].at; i++)
         memcpy(kept[i].at, kept[i].copy, kept[i].size);
     PT_END(PT_SMOOTH_COPY, ct);
     }

@@ -2,7 +2,7 @@
 """A weapon at home against the same weapon lent, from TWINE_TRACE=weapon,change logs (port/mods/trace.c).
 
 Usage: weapon_trace.py HOME_LOG LENT_LOG NAME [HOME_LEVEL LENT_LEVEL]
-       weapon_trace.py --summary LOG NAME [LEVEL]
+       weapon_trace.py --summary LOG NAME [LEVEL]   (exit 1 when its animations' playhead jumps: e.g. a real play's log)
 
 For the weapon whose name starts with NAME, in each log (only frames in LEVEL when given), it gathers:
   - each state the weapon went through (D_800F11F0), with the animation each state asks for and how long that
@@ -55,7 +55,8 @@ def changes(log, level=None):
 
 def summary(fr, ch):
     """{state: {anims, lengths, steps, flash}} and other facts"""
-    st = defaultdict(lambda: {"anims": Counter(), "lengths": Counter(), "steps": Counter(), "flash": 0, "frames": 0})
+    st = defaultdict(lambda: {"anims": Counter(), "lengths": Counter(), "steps": Counter(), "jumps": 0, "moves": 0,
+                              "flash": 0, "frames": 0})
     prev = None
     for x in fr:
         s = st[x["state"]]
@@ -67,8 +68,16 @@ def summary(fr, ch):
         if prev and prev["f"] + 1 == x["f"] and prev["anim"] == x["anim"] and x["anim"] >= 0:
             if prev["left"] == 0 and x["left"] > 0 or x["left"] > prev["left"]:  # (an animation (re)starts)
                 s["lengths"][x["left"]] += 1
-            elif x["at"] >= prev["at"]:
-                s["steps"][(x["rate"], x["at"] - prev["at"])] += 1
+            else:
+                d = x["at"] - prev["at"]
+                if d >= 0:
+                    s["steps"][(x["rate"], d)] += 1
+                # (a playhead moving more than a frame's worth a game frame, or back without the animation
+                # starting again: the animation run on in frames that aren't the game's, e.g. smooth motion's
+                # extra drawings when the model's memory isn't put back after them)
+                s["moves"] += 1
+                if d > max(2, x["rate"] // 10 + 1) or d < 0 and x["left"] <= prev["left"] and prev["left"] > 1:
+                    s["jumps"] += 1
         prev = x
     churn, run = 0, 0
     for i in range(1, len(ch)):
@@ -87,7 +96,13 @@ def show(title, s):
     for k in sorted(s["states"]):
         v = s["states"][k]
         print(f"  state {k:3d}: {v['frames']:4d} frames, anims {dict(v['anims'])}, lengths {dict(v['lengths'])}, "
-              f"steps {dict(v['steps'])}, flash shown {v['flash']}")
+              f"steps {dict(v['steps'])}, jumps {v['jumps']} of {v['moves']}, flash shown {v['flash']}")
+
+
+def jumpy(s, what):
+    """states whose playhead jumps (more than 10% of its moves): a list of differences"""
+    return [f"state {k}: the playhead jumps in {v['jumps']} of {v['moves']} frames ({what})"
+            for k, v in sorted(s["states"].items()) if v["moves"] >= 8 and v["jumps"] * 10 > v["moves"]]
 
 
 def common(c):
@@ -96,7 +111,9 @@ def common(c):
 
 def compare(h, l):
     bad = []
-    for k in sorted(set(h["states"]) | set(l["states"])):
+    # (state 6: the next weapon's model still being read from the disc after the put-away; how long depends on the
+    # disc, not on the weapon)
+    for k in sorted((set(h["states"]) | set(l["states"])) - {6}):
         a, b = h["states"].get(k), l["states"].get(k)
         if not a or not b:
             if (a or b)["frames"] > 2:
@@ -111,6 +128,7 @@ def compare(h, l):
             sb = Counter({st: n for (r, st), n in b["steps"].items() if r == rate})
             if sum(sa.values()) >= 4 and sum(sb.values()) >= 4 and common(sa) != common(sb):
                 bad.append(f"state {k} at rate {rate}: playhead {common(sa)} a frame at home, {common(sb)} lent")
+    bad += jumpy(l, "lent") + jumpy(h, "at home")
     hf, lf = common(h["files"]), common(l["files"])
     if hf and lf and hf.split("/")[-1] != lf.split("/")[-1]:
         bad.append(f"model file {hf} at home, {lf} lent")
@@ -128,8 +146,12 @@ def main():
     a = sys.argv[1:]
     if a and a[0] == "--summary":
         lv = int(a[3]) if len(a) > 3 else None
-        show(a[2], summary(frames(a[1], a[2], lv), changes(a[1], lv)))
-        return 0
+        sm = summary(frames(a[1], a[2], lv), changes(a[1], lv))
+        show(a[2], sm)
+        bad = jumpy(sm, a[2])
+        for b in bad:
+            print("  " + b)
+        return 1 if bad else 0
     if len(a) < 3:
         sys.exit(__doc__)
     hl = int(a[3]) if len(a) > 3 else None

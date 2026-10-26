@@ -158,9 +158,13 @@ static Heap own_heap, *heap = &heap3;
 static u32 own_arena[0x10000 / 4];
 
 /* on: the own heap from now on (fresh: emptied first), else the level's again */
+void port_smooth_keep(void *at, u32 size);
 void port_heap3_own(int on, int fresh) {
-    if (fresh)
+    if (fresh) {
         heap_init(&own_heap, own_arena, sizeof(own_arena));
+        port_smooth_keep(own_arena, sizeof(own_arena)); /* (what's made in it, the quick punch's fists' animation
+                                                          * state among it, put back after each extra drawing) */
+    }
     heap = on ? &own_heap : &heap3;
 }
 

@@ -40,16 +40,26 @@ void port_log(const char *fmt, ...) {
     RT_LEAVE();
 }
 
+/* a mod's last word before the game ends (what it knows of how it came to that: endless.c's texts) */
+void (*port_fatal_hook)(void);
+void port_smooth_forget(void);
+
 /* TWINE_CORE=1: abort (for a core dump) rather than exit */
 void port_fatal(const char *fmt, ...) {
     va_list ap;
     char msg[512];
+    void (*hook)(void) = port_fatal_hook;
     va_start(ap, fmt);
     vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
     fprintf(stderr, "fatal: %s", msg);
     if (log_file)
         fprintf(log_file, "fatal: %s", msg);
+    port_fatal_hook = NULL;
+    if (hook)
+        hook();
+    if (log_file)
+        fflush(log_file);
     if (getenv("TWINE_CORE") && atoi(getenv("TWINE_CORE")))
         abort();
     exit(1);
@@ -341,6 +351,7 @@ static s32 run_main(const PortModule *m, s32 argc, u32 argv) {
     port_state_jump = &here;
     port_log("Exec %s\n", m->name);
     port_module = m;
+    port_smooth_forget(); /* (interp.c: the last executable's mods' memory) */
     install_trampolines(m);
     memset((void *)m->bss_start, 0, m->bss_end - m->bss_start);
     port_state_started(argc, argv);

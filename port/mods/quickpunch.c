@@ -52,6 +52,15 @@ extern int port_gte_mirror;
 int port_quick_melee(void);
 void port_smooth_keep(void *at, u32 size);
 void port_log(const char *fmt, ...);
+int port_trace(const char *what);
+extern int port_subframe;
+static int trace_punch(void) {
+    static int on = -1;
+    if (on < 0)
+        on = port_trace("punch");
+    return on;
+}
+
 void port_heap3_own(int on, int fresh);
 void func_800788E0_orig(void);
 void func_8007545C_orig(s32 first, s32 last);
@@ -307,6 +316,13 @@ void func_800788E0(void) {
     W(coord, 0x44, s16) = W(coord, 0x46, s16) = W(coord, 0x48, s16) = 0;
     func_800758F0(coord);
     left = W(inst, 0x74, u8 *)[W(inst, 0x78, s32)] - W(inst, 0x80, s32);
+    if (trace_punch()) { /* (each frame of a punch: its frames left, its first track's playhead) */
+        s32 tracks = W(inst, 0x6C, s32);
+        u8 *tr = tracks > 0 ? W(inst, 0x70, u8 **)[0] : NULL;
+        port_log("trace: L%d f%d punch: anim %d left %d, track playhead %d len %d speed %d, %s hand\n", g_Args->level,
+                 D_8009CDA8, W(inst, 0x78, s32), W(inst, 0x80, s32), tr ? W(tr, 0x16, u16) : -1, tr ? tr[0xC] : -1,
+                 tr ? (s8)tr[0xD] : -1, !sided ? "undecided" : mirrored ? "left" : "right");
+    }
     if (W(inst, 0x80, s32) == 0x14)
         if ((u32)(g_Args->level - 1) < 11)
             func_80026F30(swing_sound[g_Args->level - 1], 0);
@@ -321,6 +337,7 @@ void func_800788E0(void) {
 
 /* Which hand holds the weapon: where its parts (the hand, the arm, the thing held) are seen, right or left of the
  * middle, in its own view (set). Its numbers don't say: the flash bang and the disruptor are held in the left. */
+static s32 held_right_sum; /* (the trace's: how far right the weapon's parts are seen) */
 static int held_right(void) {
     u8 *model = W(D_8009CD98, 0x114, u8 *);
     s32 *unit = W(model, 4, s32 *);
@@ -333,6 +350,7 @@ static int held_right(void) {
         if (D_800B0808[7] > 0)
             right += D_800B0808[5] * 256 / D_800B0808[7];
     }
+    held_right_sum = right;
     return right > 0;
 }
 
@@ -386,6 +404,10 @@ void func_8007545C(s32 first, s32 last) {
         func_8008D2EC(D_800F11D0);
         mirrored = held_right();
         sided = 1;
+        if (trace_punch())
+            port_log("trace: L%d f%d punch: the %s hand punches (the weapon's parts seen %d right of the middle; %s%s)\n",
+                     g_Args->level, D_8009CDA8, mirrored ? "left" : "right", held_right_sum,
+                     (char *)&g_Weapons[D_800B0DD4], port_subframe ? ", decided in an extra drawing" : "");
     }
     func_8008D2EC(view);
     gte_SetGeomScreen(FIST_PROJECTION);

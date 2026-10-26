@@ -278,6 +278,9 @@ void port_video_init(void) {
     int full;
     headless = getenv("TWINE_HEADLESS") != NULL;
     if (headless) {
+        /* (a headless run never opens the computer's sound: SDL's dummy driver for anything that asks, the HD films'
+         * player included; the game's sound goes to TWINE_WAV when asked) */
+        SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
         if (gpu_hw_wanted())
             headless_hw();
         return;

@@ -2,7 +2,7 @@
 """Endless mode's regression suite: headless runs of the native port, checked from their logs and screenshots.
 
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
-  -j JOBS    runs at once (default 4)
+  -j JOBS    runs at once (default 4, at most 5)
   -k CHECKS  the checks to run, letters from abcdefghijkl (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression,
@@ -23,10 +23,12 @@ Environment:
   TWINE_CHECK_DIR    where the runs go (default build/endless_check/)
 
 Each run has its own folders (config, data, state, cards) and runs as "twinechk" (a link to build/port/twine), so
-it never touches the user's settings or cards and isn't mistaken for the game. Exit code 0 when every check passed.
+it never touches the user's settings or cards and isn't mistaken for the game. Runs are headless with SDL's dummy
+sound driver (they never connect to the computer's sound server), at most 5 at once. Exit code 0 when every check passed.
 Nothing here holds game data: it all comes from the disc at run time.
 """
 import concurrent.futures as cf
+from collections import Counter
 import glob
 import hashlib
 import math
@@ -82,7 +84,9 @@ class Run:
         env.update({"XDG_CONFIG_HOME": os.path.join(self.dir, "conf"), "XDG_DATA_HOME": os.path.join(self.dir, "data"),
                     "XDG_STATE_HOME": os.path.join(self.dir, "state"), "TWINE_HEADLESS": "1", "TWINE_MOUSE": "0",
                     "TWINE_NO_INTRO": "1", "TWINE_LEVEL": str(self.level), "TWINE_DISC": DISC,
-                    "TWINE_CARD2": "none"})
+                    "TWINE_CARD2": "none",
+                    # (never the computer's sound server: many runs at once wedged it; the game's sound via TWINE_WAV)
+                    "SDL_AUDIO_DRIVER": "dummy", "SDL_AUDIODRIVER": "dummy"})
         if self.card:
             shutil.copy(self.card, os.path.join(self.dir, "data/twine/card1.mcd"))
         else:
@@ -422,6 +426,15 @@ def lent_runs():
                                                  TWINE_TEST_PAD="850:0008,853:0,900:0040,903:0,920:4000,923:0,980:1000,"
                                                                 "983:0,1010:4000,1013:0", TWINE_SHOT="840,900,960,1100"))
     del runs["k_watch"].env["TWINE_ENDLESS_TEST_MEET"]
+    # (nine missions in a row, a lent AR36 drawn in each, a quick punch in the first: as played, hw renderer and smooth
+    # motion; each mission's own copy of a mod's memory must be put back after the extra drawings, or its animations
+    # race (the list of such memory was never emptied: after four missions the lent gun's and the fists' weren't))
+    runs["k_many"] = Run("k_many", 8, 150, dict(base, TWINE_ENDLESS_ROOM="8:-1",
+                                                TWINE_ENDLESS_NEXT="2:4,10:-1,9:0,5:-1,2:4,3:-1,5:-1,7:2",
+                                                TWINE_ENDLESS_TEST_EXIT=200, TWINE_ENDLESS_TEST_DRAW="AR36",
+                                                TWINE_RENDERER="hw", TWINE_SMOOTH=1, TWINE_TRACE="weapon,punch",
+                                                TWINE_TEST_MELEE=",".join(str(t) for t in range(150, 5000, 130))))
+    del runs["k_many"].env["TWINE_ENDLESS_TEST_MEET"]
     fire2 = "500:4000,503:0,560:4000,563:0"
     for name, room, draw in (("k_rocket", "5:-1", "ROCKET"), ("k_gl", "9:0", "GRENADE"), ("k_flash", "2:4", "FLASH")):
         runs[name] = Run(name, int(room.split(":")[0]), 40, dict(base, TWINE_ENDLESS_ROOM=room, TWINE_ENDLESS_NEXT="8:0",
@@ -588,6 +601,32 @@ def check_lent(runs):
     result("k", "inventory: a pool weapon chosen, in hand", bool(drawn),
            "%s" % (chosen.group(0) + (", in hand" if drawn else ", not in hand") if chosen else "none chosen"))
     import weapon_trace
+    r = runs["k_many"]
+    path = os.path.join(r.dir, "port.log")
+    levels = [int(x) for x in re.findall(r"room start: level (\d+) ", r.log)]
+    bad, seen = [], 0
+    for lv in sorted(set(levels)):
+        sm = weapon_trace.summary(weapon_trace.frames(path, "AR36", lv), [])
+        if sm["frames"]:
+            seen += 1
+            bad += ["L%d %s" % (lv, b) for b in weapon_trace.jumpy(sm, "AR36")]
+    result("k", "lent weapons: animations at the game's pace in every mission of a long run (hw, smooth motion)",
+           len(set(levels)) >= 7 and seen >= 7 and not bad and not r.lines("smooth: no room to keep"),
+           "%d missions, AR36 in hand in %d; %s" % (len(set(levels)), seen, "; ".join(bad[:3]) or "no playhead jumps"))
+    jumps, frames, lv_seen = Counter(), Counter(), set()  # (the quick punch's own animation, frame by frame)
+    prev = None
+    for m in re.finditer(r"trace: L(\d+) f(\d+) punch: anim (-?\d+) left (\d+), track playhead (\d+)", r.log):
+        lv, f, _, left, ph = map(int, m.groups())
+        if prev and prev[0] == lv and prev[1] + 1 == f and left < prev[3]:
+            frames[lv] += 1
+            jumps[lv] += ph - prev[4] not in (0, 1, 2)
+            lv_seen.add(lv)
+        prev = (lv, f, 0, left, ph)
+    sides = Counter(re.findall(r"punch: the (\w+) hand punches", r.log))
+    result("k", "quick punch: every frame of its animation in every mission (hw, smooth motion), the free hand",
+           len(lv_seen) >= 7 and not sum(jumps.values()) and set(sides) == {"left"},
+           "%d missions, %d punch frames, playhead jumps %d; hands %s" % (len(lv_seen), sum(frames.values()),
+                                                                         sum(jumps.values()), dict(sides)))
     r = runs["k_watch"]
     fr = weapon_trace.frames(os.path.join(r.dir, "port.log"), "", 8)
     menu = [x for x in fr if x["menu"] and x["state"] == 0x1F]  # (the watch held up)
@@ -877,7 +916,7 @@ def main():
     while args:
         a = args.pop(0)
         if a == "-j":
-            jobs = int(args.pop(0))
+            jobs = min(int(args.pop(0)), 5)  # (never more than 5 at once: the machine's sound and desktop stay well)
         elif a == "-k":
             checks = args.pop(0)
         elif a == "-r":

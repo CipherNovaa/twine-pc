@@ -52,6 +52,8 @@ char *strstr(const char *s, const char *t);
 void port_endless_logf(s32 frame, const char *fmt, ...);
 int port_trace(const char *what);
 void endless_muted_point(u32 id);
+extern u32 port_rc_ra, port_rc_psp; /* (recomp_rt.c: the PS1 return address, stack pointer of a call from
+                                       * recompiled code) */
 void port_log(const char *fmt, ...);
 extern int port_subframe; /* (interp.c: an extra drawing between ticks runs, whose memory is put back after) */
 #define ELOG(...) port_endless_logf(D_8009CDA8, __VA_ARGS__)
@@ -460,9 +462,33 @@ static void text_watch(void) {
 /* ... and never past them: a text that would take more is cut to what's left (and logged with the texts in use),
  * where the game would stop */
 void func_800291B0_orig(char *s, s16 x, s16 y, s32 *n, s32 arg4, s32 pal);
+static struct { char s[40]; s32 n, after, x, y, arg4; u32 ra, sp; s32 frame, sub; } text_last[8];
+static int text_at;
+extern void (*port_fatal_hook)(void);
+static void text_fatal(void) { /* (the game ends: the last texts drawn, the menu's texts) */
+    int i, o = 0;
+    char b[400];
+    for (i = 0; i < 8; i++) {
+        int k = (text_at + i) % 8;
+        if (text_last[k].s[0] || text_last[k].n)
+            ELOG("text (last %d): \"%s\" at %d,%d from %d letters to %d (arg4 %d, ra %08X sp %08X, frame %d%s)", 8 - i,
+                 text_last[k].s, text_last[k].x, text_last[k].y, text_last[k].n, text_last[k].after, text_last[k].arg4,
+                 text_last[k].ra, text_last[k].sp, text_last[k].frame, text_last[k].sub ? ", an extra drawing" : "");
+    }
+    for (i = 0; i < D_800AC54C && i < 40 && o < 360; i++)
+        o += snprintf(b + o, sizeof(b) - o, "%s\"%.20s\"", i ? ", " : "", (char *)D_800AB744 + i * 0x60 + 0x10);
+    ELOG("text: the game ends with %d letters in %d texts: %s", D_800AEDA8, D_800AC54C, b);
+}
 void func_800291B0(char *s, s16 x, s16 y, s32 *n, s32 arg4, s32 pal) {
     char cut[96];
     unsigned len = strlen(s), room = *n < 230 ? 230 - *n : 0;
+    int me = text_at;
+    port_fatal_hook = text_fatal;
+    text_at = (text_at + 1) % 8;
+    snprintf(text_last[me].s, sizeof(text_last[me].s), "%s", s);
+    text_last[me].n = *n, text_last[me].after = -1, text_last[me].x = x, text_last[me].y = y, text_last[me].arg4 = arg4;
+    text_last[me].ra = port_rc_ra, text_last[me].sp = port_rc_psp, text_last[me].frame = D_8009CDA8;
+    text_last[me].sub = port_subframe;
     if (len > room) {
         static int told;
         if (told++ < 5) {
@@ -479,6 +505,7 @@ void func_800291B0(char *s, s16 x, s16 y, s32 *n, s32 arg4, s32 pal) {
         s = cut;
     }
     func_800291B0_orig(s, x, y, n, arg4, pal);
+    text_last[me].after = *n;
 }
 static void lent_ots(void);
 
@@ -3763,7 +3790,6 @@ int port_tone_play(int level, int program, int tone, int note, s32 vol, int loop
 void port_sfx_stop(int handle);
 
 s32 func_80026F30_orig(u32 id, s32 flags);
-extern u32 port_rc_ra; /* (recomp_rt.c: the PS1 return address of a call from recompiled code) */
 int port_trace(const char *what);
 void endless_muted_point(u32 id);
 void port_log(const char *fmt, ...);
@@ -3798,7 +3824,6 @@ s32 func_80026F30(u32 id, s32 flags) {
             ELOG("sound: story line %u muted (played directly, from %08X)", id, port_rc_ra);
             if (trace_sound()) { /* (the PS1 stack's code addresses: its callers, roughly; the recompiled code's calls
                                   * keep no return address, so port_rc_ra is often 0) */
-                extern u32 port_rc_psp;
                 int k;
                 for (k = 0; k < 64 && port_rc_psp >= 0x80000000u && port_rc_psp < 0x801FFF00u; k++) {
                     u32 v = *(u32 *)(long)(port_rc_psp + k * 4);

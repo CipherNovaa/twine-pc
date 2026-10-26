@@ -103,7 +103,7 @@ int port_hd_movie(const char *name) {
     port_log("hd movie: %s (%.0f s)\n", path, plm_get_duration(plm));
     s.zoom = !getenv("TWINE_HD_FIT") || SDL_strcasecmp(getenv("TWINE_HD_FIT"), "fit");
     port_audio_hold(1);
-    if (plm_get_num_audio_streams(plm)) {
+    if (plm_get_num_audio_streams(plm) && !getenv("TWINE_HEADLESS")) { /* (headless: no sound device, ever) */
         spec.format = SDL_AUDIO_F32;
         spec.channels = 2;
         spec.freq = plm_get_samplerate(plm);
