@@ -69,7 +69,9 @@ void trace_weapon_state(void) {
 /* each frame, at the top of the mission's frame loop (mods/savestate.c) */
 void trace_frame(void) {
     static s32 last_frame = -99999;
-    if (port_subframe || D_8009CDA8 == last_frame) /* (once a frame: not in smooth motion's extra drawings) */
+    if (port_subframe || (D_8009CDA8 == last_frame && !D_8009CAA4)) /* (once a frame: not in smooth motion's extra
+                                                                         * drawings; in a menu, whose frames don't count,
+                                                                         * each time) */
         return;
     last_frame = D_8009CDA8;
     if (on_weapon < 0) {

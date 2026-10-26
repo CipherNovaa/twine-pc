@@ -50,6 +50,8 @@ unsigned strlen(const char *s);
 char *strchr(const char *s, int c);
 char *strstr(const char *s, const char *t);
 void port_endless_logf(s32 frame, const char *fmt, ...);
+int port_trace(const char *what);
+void port_log(const char *fmt, ...);
 extern int port_subframe; /* (interp.c: an extra drawing between ticks runs, whose memory is put back after) */
 #define ELOG(...) port_endless_logf(D_8009CDA8, __VA_ARGS__)
 
@@ -664,6 +666,59 @@ static int carry_entry(const char *name) {
     return -1;
 }
 
+/* THE PAUSE MENU'S WATCH. Opening the pause menu, the game changes to a slot of each mission's (a constant in its
+ * weapon state machine's state 0x1D: levels 1-11 slots 5 11 8 8 9 11 12 10 11 9 3) whose model is Bond's watch (the
+ * Motorola, MOTO.HMD: the menu is drawn on its face), and changes back as it closes. That slot is one of the tools'
+ * slots a weapon is lent into (clean_slots: every mission's watch slot is one), so the menu showed the lent weapon
+ * raised and no watch. While the menu has it, the slot is the watch again: its own definition (bar the name, owned
+ * bits and ammo, which the inventory shows), model type entry (animations) and model file, put back from what the
+ * first lend into it kept; the lent weapon's come back as the menu closes, once the watch's put-away animation is
+ * asked (state 3, its weapon to change to after the menu taken: D_8009EEC4 -1). The one loaded is marked stale both
+ * ways (the slot's model type number is the same), so the state machine loads the other as the put-away ends. */
+static const u8 watch_slots[12] = {0, 5, 11, 8, 8, 9, 11, 12, 10, 11, 9, 3};
+static u8 watch_own_def[0xB8], watch_own_te[0x70], watch_lent_def[0xB8], watch_lent_te[0x70];
+static char *watch_own_path, *watch_lent_path;
+static int watch_on;
+#define WATCH_SLOT (g_Args->level < 12 ? watch_slots[g_Args->level] : 0)
+extern s16 D_8009EEC4; /* the weapon to change to as the menu closes (-1 none) */
+extern s32 D_800F11F0; /* the weapon's state */
+
+static void watch_swap(int in) {
+    int i = WATCH_SLOT;
+    u8 *w = (u8 *)&g_Weapons[i], t = w[0x5B], *te = D_8009D0FC + t * 0x70;
+    if (in) {
+        memcpy(watch_lent_def, w, 0xB8), memcpy(watch_lent_te, te, 0x70), watch_lent_path = D_8009DB50[t];
+        memcpy(w + 0x50, watch_own_def + 0x50, 0xB8 - 0x50);
+        *(s32 *)(w + 0x38) = (*(s32 *)(watch_own_def + 0x38) & ~0x1800) | (*(s32 *)(watch_lent_def + 0x38) & 0x1800);
+        memcpy(te, watch_own_te, 0x70), D_8009DB50[t] = watch_own_path;
+    } else {
+        s32 owned = *(s32 *)(w + 0x38) & 0x1800; /* (the inventory's toggle, meanwhile) */
+        memcpy(w + 0x50, watch_lent_def + 0x50, 0xB8 - 0x50);
+        *(s32 *)(w + 0x38) = (*(s32 *)(watch_lent_def + 0x38) & ~0x1800) | owned;
+        memcpy(te, watch_lent_te, 0x70), D_8009DB50[t] = watch_lent_path;
+    }
+    w[0x5B] = t;
+    if (D_800E2F58 == t)
+        D_800E2F58 = 0;
+    watch_on = in;
+    if (port_trace("weapon"))
+        port_log("trace: L%d f%d weapon: the watch slot %d %s (state %d, in hand %d, to %d, after the menu %d)\n",
+                 g_Args->level, D_8009CDA8, i, in ? "is the watch (the menu's)" : "is the lent weapon's again",
+                 D_800F11F0, D_800B0DD4, D_800B0DDC, D_8009EEC4);
+}
+
+/* each time the controller is read (menus too, whose frames the mission's frame counter doesn't count) */
+static void watch_frame(void) {
+    int i = WATCH_SLOT;
+    if (!i || !(lent_mask >> i & 1))
+        return;
+    if (!watch_on && D_8009CAA4 && D_800B0DDC == i && D_8009EEC4 >= 0 && (D_800B0DD4 != i || D_800F11F0 == 5))
+        watch_swap(1); /* (the menu raising the watch: once the lent weapon in that slot is put away) */
+    else if (watch_on && D_8009EEC4 < 0 && (D_800F11F0 == 3 || D_800F11F0 == 5 || D_800B0DD4 != i))
+        watch_swap(0); /* (the menu closing: the watch's put-away begun, its animation asked; the weapon after it
+                        * loads as that ends, the one loaded being stale) */
+}
+
 /* pool weapon pi into lent slot i (its place k): the donor's definition, this mission's guns' fire, its own sound,
  * model and animations, its pickups' entry */
 static void lend_into(int i, int pi, int k) {
@@ -671,6 +726,12 @@ static void lend_into(int i, int pi, int k) {
     int p = pistol_slot();
     u8 *w = (u8 *)&g_Weapons[i], *pw = (u8 *)&g_Weapons[p], t = w[0x5B], *te;
     u32 pickup = *(u32 *)(w + 0x40);
+    if (i == WATCH_SLOT && watch_on) /* (the menu's watch: the lent weapon's things back first) */
+        watch_swap(0);
+    if (i == WATCH_SLOT && !(lent_mask >> i & 1)) { /* (the watch's own, for the menu) */
+        memcpy(watch_own_def, w, 0xB8), memcpy(watch_own_te, D_8009D0FC + t * 0x70, 0x70);
+        watch_own_path = D_8009DB50[t];
+    }
     if (slot_pool[i] >= 0) { /* (the one there before: its pickups' entry back to none) */
         const WeaponRec *o = pool[(int)slot_pool[i]].r;
         if (o->kind < 19 && D_8009D130[o->kind * 4] == i)
@@ -1421,7 +1482,7 @@ static void room_start(void) {
     read_floor();
     clear_arrival();
     if (!segment)
-        lent_mask = 0, lent_work_type = 0; /* (a mission loaded afresh: its own slots again) */
+        lent_mask = 0, lent_work_type = 0, watch_on = 0; /* (a mission loaded afresh: its own slots again) */
     pool_pending_slot = -1;
     weapons_capture();
     if (port_endless_surveying()) { /* (a survey's room: its weapons taken, left at once) */
@@ -2733,6 +2794,8 @@ void endless_frame(void) {
     s32 kills, back;
     if (port_subframe) /* (an extra drawing's: not the mission's frame) */
         return;
+    if (port_endless_room(entry) && g_Player)
+        watch_frame();
     if (getenv("TWINE_ENDLESS_DUMP"))
         dump();
     if (!port_endless_room(entry) || !g_Player)
@@ -3553,7 +3616,7 @@ static int lent_model(s32 idx) {
     u8 t = ((u8 *)&g_Weapons[idx])[0x5B];
     const char *p = t ? D_8009DB50[t] : 0;
     int k, lv;
-    if (!p || p[0] != 'L' || p[3] != '/' || !(lent_mask & 1 << idx))
+    if (!p || p[0] != 'L' || p[3] != '/' || !(lent_mask & 1 << idx) || (watch_on && idx == WATCH_SLOT))
         return 0;
     lv = (p[1] - '0') * 10 + (p[2] - '0');
     if (lv == g_Args->level && !getenv("TWINE_ENDLESS_TEST_SELFLEND"))
@@ -3719,7 +3782,18 @@ void func_8007A17C(s32 state) {
     func_8007A17C_orig(state);
 }
 
+static void trace_model(const char *how, s32 idx) {
+    static int on = -1;
+    if (on < 0)
+        on = port_trace("weapon");
+    if (on)
+        port_log("trace: L%d f%d weapon: model asked (%s) for slot %d (%.16s, type %d), in hand %d\n", g_Args->level,
+                 D_8009CDA8, how, idx, idx >= 0 && idx < 16 ? (char *)g_Weapons[idx].pad0 : "-",
+                 idx >= 0 && idx < 16 ? ((u8 *)&g_Weapons[idx])[0x5B] : -1, D_800B0DD4);
+}
+
 void func_80076014(s32 idx) {
+    trace_model("80076014", idx);
     if (!lent_model(idx)) {
         port_lent_images(0, 0);
         lent_work_type = 0;
@@ -3728,6 +3802,7 @@ void func_80076014(s32 idx) {
 }
 
 void func_80076104(s32 idx) {
+    trace_model("80076104", idx);
     if (!lent_model(idx)) {
         port_lent_images(0, 0);
         lent_work_type = 0;

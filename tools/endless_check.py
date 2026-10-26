@@ -151,6 +151,20 @@ def bright(img, x0, y0, x1, y1, level=90):
     return hit / n if n else 0.0
 
 
+def motorola(img):
+    """the share of the pause menu's watch frame (the Motorola's grey case: its left edge) found in a screen"""
+    w, h, px = img
+    n = hit = 0
+    for y in range(int(0.2 * h), int(0.9 * h), 2):
+        for x in range(0, int(0.03 * w), 2):
+            i = (y * w + x) * 3
+            if i + 2 < len(px):
+                r, g, b = px[i], px[i + 1], px[i + 2]
+                n += 1
+                hit += min(r, g, b) > 150 and max(r, g, b) - min(r, g, b) < 25
+    return hit / n if n else 0.0
+
+
 def people(run):
     """the people lines: (frame, slot, type, how, health, ai, x, y, z, floor, flags, w4, +4C, +E)"""
     out = []
@@ -395,6 +409,14 @@ def lent_runs():
     # (the pause menu's INVENTORY in King's Ransom: down to its last rows, one toggled out of the round, chosen)
     inv = "800:0008,803:0,840:0040,843:0,870:4000,873:0," + ",".join("%d:0040,%d:0" % (t, t + 3) for t in range(900, 1051, 15))
     runs["k_inv"] = Run("k_inv", 2, 70, dict(runs["k_pool"].env, TWINE_TEST_PAD=inv + ",1080:8000,1083:0,1100:4000,1103:0"))
+    # (the pause menu with a lent weapon in hand in the mission's watch slot, King's Ransom's 10: the watch raised, the
+    # menu and its INVENTORY on its face, closed, the lent weapon back; as played: hw renderer, smooth motion)
+    runs["k_watch"] = Run("k_watch", 5, 80, dict(base, TWINE_ENDLESS_ROOM="5:-1", TWINE_ENDLESS_NEXT="8:-1",
+                                                 TWINE_ENDLESS_TEST_EXIT=500, TWINE_ENDLESS_TEST_DRAW="ROCKET",
+                                                 TWINE_RENDERER="hw", TWINE_SMOOTH=1, TWINE_TRACE="weapon,change",
+                                                 TWINE_TEST_PAD="850:0008,853:0,900:0040,903:0,920:4000,923:0,980:1000,"
+                                                                "983:0,1010:4000,1013:0", TWINE_SHOT="840,900,960,1100"))
+    del runs["k_watch"].env["TWINE_ENDLESS_TEST_MEET"]
     fire2 = "500:4000,503:0,560:4000,563:0"
     for name, room, draw in (("k_rocket", "5:-1", "ROCKET"), ("k_gl", "9:0", "GRENADE"), ("k_flash", "2:4", "FLASH")):
         runs[name] = Run(name, int(room.split(":")[0]), 40, dict(base, TWINE_ENDLESS_ROOM=room, TWINE_ENDLESS_NEXT="8:0",
@@ -544,6 +566,21 @@ def check_lent(runs):
            "rows %s; %d waiting in the pool" % (", ".join("%d-%d of %d" % r for r in rows[:4]), len(pooled)))
     result("k", "inventory: a pool weapon chosen, in hand", bool(drawn),
            "%s" % (chosen.group(0) + (", in hand" if drawn else ", not in hand") if chosen else "none chosen"))
+    import weapon_trace
+    r = runs["k_watch"]
+    fr = weapon_trace.frames(os.path.join(r.dir, "port.log"), "", 8)
+    menu = [x for x in fr if x["menu"] and x["state"] == 0x1F]  # (the watch held up)
+    after = [x for x in fr if not x["menu"] and x["state"] == 1 and x["name"].startswith("ROCKET") and
+             fr.index(x) > (fr.index(menu[-1]) if menu else 1 << 30)]
+    shot = lambda f: read_ppm(os.path.join(r.dir, "screen_%04d_0.ppm" % f)) or read_ppm(os.path.join(r.dir, "screen_%04d.ppm" % f))
+    m = [motorola(i) if i else 0 for i in (shot(840), shot(900), shot(960), shot(1100))]
+    result("k", "pause: the watch raised, a lent weapon in the watch slot (hw renderer, smooth motion)",
+           bool(menu) and all(x["file"].endswith("MOTO.HMD") for x in menu) and m[1] > 0.8 and m[2] > 0.8,
+           "%d menu frames, models %s; the watch's frame on screen: menu %d%%, inventory %d%%" %
+           (len(menu), "/".join(sorted({x["file"] for x in menu})) or "-", m[1] * 100, m[2] * 100))
+    result("k", "pause: the lent weapon back after the menu", bool(after) and all(x["file"] == "L05/RCAM.HMD" for x in after)
+           and m[0] < 0.2 and m[3] < 0.2, "%d frames after, models %s; watch frame before %d%%, after %d%%" %
+           (len(after), "/".join(sorted({x["file"] for x in after})) or "-", m[0] * 100, m[3] * 100))
     a = room_part(runs["k_ammo"].log, 2)
     got = re.findall(r"pickup: (.+?)'s ammo (\d+) -> (\d+)( \(a lent weapon\))?", a)
     lent_got = [g for g in got if g[3] and int(g[2]) > int(g[1])]
