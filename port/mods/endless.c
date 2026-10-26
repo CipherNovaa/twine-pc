@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60
+ * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -43,6 +43,7 @@ int snprintf(char *s, unsigned n, const char *fmt, ...);
 int atoi(const char *s);
 void *memcpy(void *d, const void *s, unsigned n);
 void *memset(void *d, int c, unsigned n);
+void *memmove(void *d, const void *s, unsigned n);
 char *strncpy(char *d, const char *s, unsigned n);
 int strncmp(const char *a, const char *b, unsigned n);
 unsigned strlen(const char *s);
@@ -386,7 +387,7 @@ static void carry_out(void) {
             strncpy(c->weapon[j].name, (char *)w->pad0, 23);
             c->weapon[j].name[23] = 0;
         }
-        c->weapon[j].owned = (w->flags & 0x1800) == 0x1800;
+        c->weapon[j].owned = (w->flags & 0x800) != 0 /* (owned: bit 12 only says in the weapon buttons' round) */;
         c->weapon[j].ammo = w->ammo;
         c->weapon[j].clip = w->clip;
         c->weapon[j].reserve = w->reserve;
@@ -458,6 +459,7 @@ static char lent_path[8][24];
 static char lent_got[8][28], lent_ammo_got[8][32];
 static u8 lent_anim[8][16];
 s32 func_80026F30(u32 id, s32 flags);
+void func_8007A17C(s32 state); /* (the weapon's state set: below) */
 
 /* A PS1 function by its address (recompiled or native), from the mod's own code */
 typedef struct { u32 r[32]; u32 hi, lo; u32 cop0[16]; } RcCtx;
@@ -601,6 +603,7 @@ static struct {
 static int pool_n;
 static s8 slot_pool[16]; /* (a slot's pool weapon now, -1 none) */
 static s8 slot_idx[16];  /* (a lent slot's place among them: its sound, model file, animation numbers, messages) */
+static u8 pool_round[16]; /* (a pool weapon in the weapon buttons' round: the inventory's toggle, flags bit 12) */
 
 static int carry_entry(const char *name) {
     EndlessCarry *c = &port_endless_carry;
@@ -657,6 +660,7 @@ static void lend_into(int i, int pi, int k) {
         e[2] = (s32)(long)lent_got[k];
         e[3] = (s32)(long)lent_ammo_got[k];
     }
+    *(s32 *)(w + 0x38) = (*(s32 *)(w + 0x38) & ~0x1000) | pool_round[pi] << 12;
     slot_pool[i] = (s8)pi, slot_idx[i] = (s8)k;
 }
 
@@ -667,8 +671,8 @@ static void lent_ammo_in(int i) {
     Weapon *w = &g_Weapons[i];
     if (j < 0)
         return;
-    if (c->weapon[j].owned)
-        w->flags |= 0x1800;
+    if (c->weapon[j].owned) /* (owned, and in the weapon buttons' round unless the inventory took it out) */
+        w->flags = (w->flags & ~0x1000) | 0x800 | pool_round[(int)slot_pool[i]] << 12;
     w->ammo = c->weapon[j].ammo, w->clip = c->weapon[j].clip, w->reserve = c->weapon[j].reserve;
 }
 
@@ -679,8 +683,9 @@ static void lent_ammo_out(int i) {
     Weapon *w = &g_Weapons[i];
     if (j < 0)
         return;
-    c->weapon[j].owned = (w->flags & 0x1800) == 0x1800;
+    c->weapon[j].owned = (w->flags & 0x800) != 0;
     c->weapon[j].ammo = w->ammo, c->weapon[j].clip = w->clip, c->weapon[j].reserve = w->reserve;
+    pool_round[(int)slot_pool[i]] = w->flags >> 12 & 1;
 }
 
 static int pool_shown(int pi) {
@@ -742,6 +747,8 @@ static void lend_weapons(void) {
             }
             break;
         }
+    for (j = 0; j < pool_n; j++) /* (in the weapon buttons' round to begin with, as a weapon picked up is) */
+        pool_round[j] = 1;
     for (j = 0; j < pool_n; j++) {
         for (i = 0; i < SLOTS && i < 16; i++) /* (a tool's slot, one the mission's code leaves alone) */
             if ((getenv("TWINE_ENDLESS_TEST_LENDAT") ? i == atoi(getenv("TWINE_ENDLESS_TEST_LENDAT"))
@@ -776,6 +783,8 @@ static void pool_step(void) {
         slot_pool[c] >= 0 && D_800B0DDC != c && (D_800DDE08 || D_800DDDA4) && draw_slot < 0) {
         dir = D_800DDDA4 ? 1 : -1;
         pi = slot_pool[c] + dir; /* (the next one in a slot already: the game steps on to it) */
+        while (pi >= 0 && pi < pool_n && !pool_round[pi] && !pool_shown(pi)) /* (one left out of the round) */
+            pi += dir;
         if (pi >= 0 && pi < pool_n && !pool_shown(pi)) {
             lent_ammo_out(c);
             lend_into(c, pi, slot_idx[c]);
@@ -785,6 +794,159 @@ static void pool_step(void) {
         }
     }
     last_state = st;
+}
+
+/* The pause menu's inventory (func_80042E6C draws it, func_80043078 runs it) in a run: the pool's weapons waiting
+ * out of a slot are listed too, after the slots', and the list scrolls when it's longer than the page (rows from
+ * y 58, 12 apart, above the hint at 195). Choosing a pool weapon lends it into a shared slot (one not in hand if there
+ * is one) and changes to it, as choosing a slot's does; its toggle (left out of the weapon buttons' round) is kept for
+ * it while it waits. */
+M2C_UNK func_8002872C(M2C_UNK *text, M2C_UNK x, M2C_UNK y); /* a menu item: its text at x, y */
+void func_80028B58(s32 item, s32 a, s32 b);                 /* an item's colours */
+M2C_UNK Menu_ResetState();
+M2C_UNK func_8007F0D8(M2C_UNK);
+s16 func_80043B14(s16 first, s16 count);                    /* the menu's buttons: 1 back, 2 moved, 3 chosen */
+void PauseMenu_Open(void);
+void func_800414AC(void);                                   /* the menu closed, the game on */
+void func_80042E6C_orig(void);
+void func_80043078_orig(void);
+extern int D_800AC54C;               /* the next item */
+extern u16 D_800AC4D8, D_800AC4DC;   /* an item's colours */
+extern s16 D_800AEDA0, D_800AEDA4;   /* the chosen one's */
+extern s16 D_800B0794, D_800B0798;   /* the cursor's item, before it moved */
+extern s16 D_8009CFBE;               /* the items to move through */
+extern s16 D_8009EEC4;               /* the weapon to change to as the menu closes (-1 none) */
+extern char D_800A83BC[];            /* the title */
+static char inv_in[] = "*", inv_out[] = "=", inv_hint[] = "\\ TOGGLE"; /* (every mission's: the toggle's marks, its hint) */
+extern M2C_UNK D_800A8410, D_800A8418; /* the footer's two */
+#define INV_ROWS 11
+static s16 inv_entry[48]; /* (a row: a slot, or -1 - a pool weapon) */
+static int inv_n, inv_top;
+
+static int menu_sound(int n) { /* (the menu's sounds: levels 4 and 10 number them one on) */
+    return n + (g_Args->level == 4 || g_Args->level == 10);
+}
+
+static int inv_round(int e) { /* (in the weapon buttons' round: flags bit 12, shown with the first mark) */
+    return e >= 0 ? (int)(g_Weapons[e].flags >> 12 & 1) : pool_round[-1 - e];
+}
+
+static void inv_draw(void) {
+    EndlessCarry *c = &port_endless_carry;
+    int i, j, v;
+    inv_n = 0;
+    for (i = 0; i < SLOTS && inv_n < 48; i++)
+        if (g_Weapons[i].flags >> 11 & 1)
+            inv_entry[inv_n++] = (s16)i;
+    for (i = 0; i < pool_n && inv_n < 48; i++)
+        if (!pool_shown(i) && (j = carry_entry(pool[i].name)) >= 0 && c->weapon[j].owned)
+            inv_entry[inv_n++] = (s16)(-1 - i);
+    v = inv_n < INV_ROWS ? inv_n : INV_ROWS;
+    if (inv_top > inv_n - v)
+        inv_top = inv_n - v;
+    if (inv_top < 0)
+        inv_top = 0;
+    for (i = 0; i < v; i++) {
+        int e = inv_entry[inv_top + i];
+        func_8002872C(e >= 0 ? (M2C_UNK *)&g_Weapons[e] : (M2C_UNK *)pool[-1 - e].name, 0x64, 0x3A + 0xC * i);
+        func_80028B58(D_800AC54C - 1, (s16)D_800AC4D8, (s16)D_800AC4DC);
+    }
+    for (i = 0; i < v; i++) {
+        func_8002872C((M2C_UNK *)(inv_round(inv_entry[inv_top + i]) ? inv_in : inv_out), 0x50, 0x3A + 0xC * i);
+        func_80028B58(D_800AC54C - 1, (s16)D_800AC4D8, (s16)D_800AC4DC);
+    }
+    D_8009CFBE = (s16)v;
+    if (D_800B0794 >= v)
+        D_800B0794 = (s16)(v ? v - 1 : 0);
+    func_80028B58(D_800B0794, D_800AEDA0, D_800AEDA4);
+    func_80028B58(D_800B0794 + v, D_800AEDA0, D_800AEDA4);
+    func_8002872C((M2C_UNK *)D_800A83BC, 0x32, 0x2E);
+    func_8002872C(&D_800A8410, 0x19, 0xD7);
+    func_8002872C(&D_800A8418, 0x19A, 0xD7);
+    func_8002872C((M2C_UNK *)inv_hint, 0xC8, 0xC3);
+    if (getenv("TWINE_ENDLESS_AMMO_LOG")) {
+        char b[160];
+        int o = 0;
+        for (i = 0; i < v && o < 140; i++)
+            o += snprintf(b + o, sizeof(b) - o, "%s%s", i ? ", " : "",
+                          inv_entry[inv_top + i] >= 0 ? (char *)g_Weapons[inv_entry[inv_top + i]].pad0 : pool[-1 - inv_entry[inv_top + i]].name);
+        ELOG("inventory: rows %d-%d of %d, cursor %d: %s", inv_top, inv_top + v - 1, inv_n, inv_top + D_800B0794, b);
+    }
+}
+
+void func_80042E6C(void) {
+    s16 e[5];
+    if (!port_endless_room(e) || !pool_n) {
+        func_80042E6C_orig();
+        return;
+    }
+    if (D_800B0794 == 0)
+        inv_top = 0; /* (the menu just opened: func_80042E34 put the cursor on the first) */
+    inv_draw();
+}
+
+void func_80043078(void) {
+    s16 e[5];
+    s32 sel;
+    int v, at;
+    if (!port_endless_room(e) || !pool_n) {
+        func_80043078_orig();
+        return;
+    }
+    v = D_8009CFBE;
+    sel = func_80043B14(0, (s16)v);
+    at = inv_top + D_800B0794;
+    if (sel == 1) {
+        func_80026F30(menu_sound(1), 0);
+        PauseMenu_Open();
+    } else if (sel == 2) {
+        if (inv_n > v && D_800B0798 == v - 1 && D_800B0794 == 0) { /* (down past the page's last: scroll) */
+            if (inv_top + v < inv_n)
+                inv_top++, D_800B0794 = (s16)(v - 1);
+            else
+                inv_top = 0;
+            Menu_ResetState();
+            inv_draw();
+        } else if (inv_n > v && D_800B0798 == 0 && D_800B0794 == v - 1) { /* (up past its first) */
+            if (inv_top > 0)
+                inv_top--, D_800B0794 = 0;
+            else
+                inv_top = inv_n - v;
+            Menu_ResetState();
+            inv_draw();
+        } else {
+            func_80028B58(D_800B0798 + v, (s16)D_800AC4D8, (s16)D_800AC4DC);
+            func_80028B58(D_800B0794 + v, D_800AEDA0, D_800AEDA4);
+        }
+    } else if (sel == 3 && at < inv_n) {
+        int en = inv_entry[at], slot = en;
+        func_80026F30(menu_sound(1), 0);
+        if (en < 0) { /* a pool weapon: into a shared slot, not the one in hand if another is lent */
+            int i, pi = -1 - en;
+            slot = -1;
+            for (i = 0; i < SLOTS && i < 16; i++)
+                if ((lent_mask >> i & 1) && slot_pool[i] >= 0 && (slot < 0 || slot == D_800B0DD4))
+                    slot = i;
+            if (slot < 0)
+                return;
+            lent_ammo_out(slot);
+            lend_into(slot, pi, slot_idx[slot]);
+            lent_ammo_in(slot);
+            ELOG("weapons: the pool's %s into slot %d (chosen in the inventory)", pool[pi].name, slot);
+        }
+        D_8009EEC4 = (s16)slot;
+        func_800414AC();
+    } else if (g_PadPressed & 0x80 && at < inv_n) { /* (Triangle: in or out of the weapon buttons' round) */
+        int en = inv_entry[at];
+        func_80026F30(menu_sound(2), 0);
+        func_8007F0D8(0);
+        if (en >= 0)
+            g_Weapons[en].flags ^= 0x1000;
+        else
+            pool_round[-1 - en] ^= 1;
+        Menu_ResetState();
+        inv_draw();
+    }
 }
 
 /* a box of a pool weapon's ammo while it isn't in a slot: the ammo to Bond's carry, as the game gives a box's

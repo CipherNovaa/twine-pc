@@ -97,3 +97,12 @@ level10 func_800449BC L2_func_80045728
 level10 func_80044A60 L2_func_800457C0
 level11 func_800449BC L2_func_80045728
 level11 func_80044A60 L2_func_800457C0
+# the pause menu's inventory, drawn and run (port/mods/endless.c: the pool's weapons listed, the list scrolled)
+level04 func_80042E6C func_80043218
+level04 func_80043078 func_80043424
+level04 func_80043B14 func_80043EC0
+level04 D_800B0798 D_800B404C
+level10 func_80042E6C func_80043918
+level10 func_80043078 func_80043B24
+level10 func_80043B14 func_800445C0
+level10 D_800B0798 D_800B5A78

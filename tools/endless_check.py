@@ -384,6 +384,9 @@ def lent_runs():
                                                TWINE_ENDLESS_TEST_EXIT=250, TWINE_ENDLESS_TEST_DRAW="KOFFLER",
                                                TWINE_TEST_PAD=nxt))
     del runs["k_pool"].env["TWINE_ENDLESS_TEST_MEET"]
+    # (the pause menu's INVENTORY in King's Ransom: down to its last rows, one toggled out of the round, chosen)
+    inv = "800:0008,803:0,840:0040,843:0,870:4000,873:0," + ",".join("%d:0040,%d:0" % (t, t + 3) for t in range(900, 1051, 15))
+    runs["k_inv"] = Run("k_inv", 2, 70, dict(runs["k_pool"].env, TWINE_TEST_PAD=inv + ",1080:8000,1083:0,1100:4000,1103:0"))
     fire2 = "500:4000,503:0,560:4000,563:0"
     for name, room, draw in (("k_rocket", "5:-1", "ROCKET"), ("k_gl", "9:0", "GRENADE"), ("k_flash", "2:4", "FLASH")):
         runs[name] = Run(name, int(room.split(":")[0]), 40, dict(base, TWINE_ENDLESS_ROOM=room, TWINE_ENDLESS_NEXT="8:0",
@@ -487,6 +490,16 @@ def check_lent(runs):
     steps = re.findall(r"the pool's (.+?) into slot", p)
     result("k", "pool: more lent than slots, stepped through", len(waits) >= 2 and set(waits) <= set(steps),
            "waiting %s; stepped to %s" % (", ".join(waits) or "none", ", ".join(steps) or "none"))
+    p = room_part(runs["k_inv"].log, 8)
+    rows = [(int(a), int(b), int(n)) for a, b, n in re.findall(r"inventory: rows (\d+)-(\d+) of (\d+)", p)]
+    pooled = re.findall(r"weapons: (.+?) waits in the pool", runs["k_inv"].log.split("room start: level 8 ", 1)[0].rsplit("room start:", 1)[-1])
+    chosen = re.search(r"the pool's (.+?) into slot \d+ \(chosen in the inventory\)", p)
+    drawn = chosen and re.search(r"ammo: %s clip" % re.escape(chosen.group(1)), p.split("chosen in the inventory", 1)[1])
+    result("k", "inventory: the pool's weapons listed, scrolled", bool(rows) and bool(pooled) and
+           rows[0][2] > 11 and any(r[0] > 0 for r in rows),
+           "rows %s; %d waiting in the pool" % (", ".join("%d-%d of %d" % r for r in rows[:4]), len(pooled)))
+    result("k", "inventory: a pool weapon chosen, in hand", bool(drawn),
+           "%s" % (chosen.group(0) + (", in hand" if drawn else ", not in hand") if chosen else "none chosen"))
     a = room_part(runs["k_ammo"].log, 2)
     got = re.findall(r"pickup: (.+?)'s ammo (\d+) -> (\d+)( \(a lent weapon\))?", a)
     lent_got = [g for g in got if g[3] and int(g[2]) > int(g[1])]
