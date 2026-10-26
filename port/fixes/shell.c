@@ -1,7 +1,7 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_80046DC4 func_80033018 func_8006F30C func_8006F0B4 func_80042450 func_80042B94 func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8 func_8003EA00 func_800385C4
+ * MOD_REPLACES_NATIVE: func_80046DC4 func_80033018 func_8006F30C func_8006F0B4 func_80042450 func_80042B94 func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8 func_8003EA00 func_800385C4 func_8004E438 func_8004DB98
  */
 #include <stdlib.h>
 #include <string.h>
@@ -650,6 +650,32 @@ s32 func_8005133C(char *text, s32 x, s32 y) {
         }
     }
     return func_8005133C_orig(text, x, y);
+}
+
+/* The stats are the game's for a mission completed (g_Args +0x114), and the game's completion does more than show
+ * them: func_8004E438 says the game is won (the last mission, index 10, completed with every other: then the "YOU
+ * WON THE GAME" screen, func_8004B650, before the stats), and func_8004DB98 (the stats' loop) unlocks the cheats
+ * the mission's time earns ("CHECK CHEAT: ..."). A run is no mission completed: neither, while its stats show (the
+ * campaign's g_Args are put back after them in any case, below). */
+s16 func_8004E438_orig(void);
+void func_8004DB98_orig(void);
+
+s16 func_8004E438(void) {
+    if (in_endless_stats) {
+        port_endless_logf(-1, "stats: the game's \"won the game\" check skipped (a run)");
+        return 0;
+    }
+    return func_8004E438_orig();
+}
+
+void func_8004DB98(void) {
+    static int said;
+    if (in_endless_stats) {
+        if (!said++)
+            port_endless_logf(-1, "stats: the game's cheat unlocking skipped (a run)");
+        return;
+    }
+    func_8004DB98_orig();
 }
 
 static u8 kept[0xDB * 4]; /* the campaign's g_Args, while the run's stats show */

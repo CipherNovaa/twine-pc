@@ -320,9 +320,12 @@ static void survey_abandon(void) {
     covering = 0;
 }
 
+static void room_from_env(const char *at);
+
 /* fixes/shell.c: ENDLESS chosen on mission select: a run begun, its first room's mission named in g_Args */
 void port_endless_begin(u8 *args) {
     begin();
+    room_from_env(getenv("TWINE_ENDLESS_ROOM"));
     survey_begin();
     *(s16 *)(args + 0x188) = rooms[room].level;
     *(s16 *)(args + 0x18A) = level_mission[rooms[room].level];
@@ -353,10 +356,18 @@ void port_endless_cancel(void) {
 /* main.c: the level a run starts in (0: no run) */
 int port_endless_start(void) {
     const char *s = getenv("TWINE_ENDLESS"), *at = getenv("TWINE_ENDLESS_ROOM");
-    int i;
     if (!s || !atoi(s))
         return 0;
     begin();
+    room_from_env(at);
+    port_endless_logf(-1, "the run starts in level %d point %d", rooms[room].level, rooms[room].point);
+    survey_begin();
+    return rooms[room].level;
+}
+
+/* TWINE_ENDLESS_ROOM=level:point: the first room (headless tests; for a run begun on mission select too) */
+static void room_from_env(const char *at) {
+    int i;
     if (at) {
         int l = atoi(at), p = strchr(at, ':') ? atoi(strchr(at, ':') + 1) : -1;
         rooms[ROOMS].level = l;
@@ -366,9 +377,6 @@ int port_endless_start(void) {
             if (rooms[i].level == l && rooms[i].point == p)
                 room = i;
     }
-    port_endless_logf(-1, "the run starts in level %d point %d", rooms[room].level, rooms[room].point);
-    survey_begin();
-    return rooms[room].level;
 }
 
 /* main.c, before a level's main runs: in a run, the room's point copied over the level's start point */

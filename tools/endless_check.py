@@ -617,7 +617,28 @@ def card_runs():
             "card_load": Run("card_load", 0, 70, dict(base, TWINE_TEST_PAD=load), card=card),
             "card_ranked": Run("card_ranked", 2, 45, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "2:4",
                                                      "TWINE_ENDLESS_TEST_DIE": 150, "TWINE_TEST_PAD": "490:8,493:0"},
-                               card=card)}
+                               card=card),
+            # (from the shell, with the campaign autoloaded: ENDLESS (up from the cursor on Meltdown), a run in Meltdown,
+            # mission index 10, Bond dies; its stats, then X: the game's "YOU WON THE GAME" and cheat unlocking must not
+            # come, nor the campaign change)
+            "card_won": Run("card_won", 0, 75, dict(base, TWINE_RENDERER="hw", TWINE_ENDLESS_ROOM="10:-1",
+                                                    TWINE_ENDLESS_TEST_DIE=150, TWINE_SHOT=",".join(
+                                                        str(f) for f in range(1000, 1600, 30)),
+                                                    TWINE_TEST_PAD="460:4000,463:0,560:10,563:0,600:4000,603:0,"
+                                                                   "740:4000,743:0,1500:4000,1503:0"), card=card)}
+
+
+def stats_screen(img):
+    """the share of the stats screen's cyan frames in a screen (none on the game's won-the-game screen)"""
+    w, h, px = img
+    n = hit = 0
+    for y in range(0, h, 4):
+        for x in range(0, w, 4):
+            i = (y * w + x) * 3
+            if i + 2 < len(px):
+                n += 1
+                hit += px[i + 2] > 150 and px[i + 1] > 120 and px[i] < 110
+    return hit / n if n else 0.0
 
 
 def card_files(path):
@@ -647,6 +668,23 @@ def check_card(runs):
         result("h", k[5:], wrote and "BASLUS-01272ENDLESS" in after and same,
                "written %s, endless block %s, campaign block %s" % (wrote, "BASLUS-01272ENDLESS" in after,
                                                                     "kept" if same else "CHANGED"))
+    r = runs["card_won"]
+    op = re.search(r" v(\d+) the run's stats screen opens", r.log)
+    shots = []
+    if op:
+        for f in range(1000, 1600, 30):
+            if int(op.group(1)) + 30 <= f <= int(op.group(1)) + 280:
+                img = read_ppm(os.path.join(r.dir, "screen_%04d.ppm" % f))
+                shots.append(stats_screen(img) if img else 0)
+    after = card_files(os.path.join(r.dir, "data/twine/card1.mcd"))
+    result("h", "a run's end in Meltdown: its stats, not the campaign's won-the-game screen",
+           bool(r.lines("the game's \"won the game\" check skipped")) and not r.lines("CHECK CHEAT") and
+           bool(shots) and min(shots) > 0.008,
+           "stats %s, %d screens after it opened, %d of them the stats; cheats unlocked: %d" %
+           ("opened" if op else "never", len(shots), sum(x > 0.008 for x in shots), len(r.lines("CHECK CHEAT"))))
+    result("h", "a run's end: the campaign's save kept", bool(r.lines("table written to the card")) and
+           after.get("BASLUS-01272") == before.get("BASLUS-01272"),
+           "campaign block %s" % ("kept" if after.get("BASLUS-01272") == before.get("BASLUS-01272") else "CHANGED"))
     r = runs["card_load"]
     result("h", "load", bool(r.lines(r"scores: .*the game loaded|card's table read|endless.txt's .* taken")),
            "; ".join(x.split("scores: ")[1][:50] for x in r.lines("scores:"))[:150])
