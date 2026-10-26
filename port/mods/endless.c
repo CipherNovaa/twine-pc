@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078
+ * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -209,6 +209,9 @@ static u8 driving[64], seen_for[64], react[64];
 static u8 *cover_state_ptr(void);
 static void nav_reset(void);
 static void grenade_reset(void);
+static void callouts_reset(void);
+static void callout_hit(void);
+static int flash_call; /* (a flash bang gone off: a dazzled guard's "my eyes!" to come) */
 static void blast_frame(void);
 static int blast_active(void);
 
@@ -424,6 +427,48 @@ static int pistol_slot(void) {
 static u32 lent_mask; /* (the slots lent to this mission: theirs are another's) */
 static u32 lent_work[0xE000 / 4]; /* (a lent weapon's model: func_800753F0) */
 static u8 lent_work_type; /* (the model type whose file is in it) */
+
+/* The menu texts' letters (func_800291B0 makes a sprite of each: the game stops at 230, "inc MAX_TEXT_SPRITES!"):
+ * logged when many are in use, with the texts */
+extern int D_800AEDA8, D_800AC54C; /* (the letters in use, the texts) */
+extern u8 D_800AB744[];            /* (the texts: 0x60 bytes each, the text at +0x10) */
+static void text_watch(void) {
+    static int worst;
+    int i;
+    if (D_800AEDA8 > worst && D_800AEDA8 >= 120 && D_800AEDA8 / 20 != worst / 20) {
+        char b[400];
+        int o = 0;
+        for (i = 0; i < D_800AC54C && i < 40 && o < 360; i++)
+            o += snprintf(b + o, sizeof(b) - o, "%s\"%.20s\"", i ? ", " : "", (char *)D_800AB744 + i * 0x60 + 0x10);
+        ELOG("text: %d letters in %d texts: %s", D_800AEDA8, D_800AC54C, b);
+    }
+    if (D_800AEDA8 > worst)
+        worst = D_800AEDA8;
+}
+
+/* ... and never past them: a text that would take more is cut to what's left (and logged with the texts in use),
+ * where the game would stop */
+void func_800291B0_orig(char *s, s16 x, s16 y, s32 *n, s32 arg4, s32 pal);
+void func_800291B0(char *s, s16 x, s16 y, s32 *n, s32 arg4, s32 pal) {
+    char cut[96];
+    unsigned len = strlen(s), room = *n < 230 ? 230 - *n : 0;
+    if (len > room) {
+        static int told;
+        if (told++ < 5) {
+            char b[400];
+            int i, o = 0;
+            for (i = 0; i < D_800AC54C && i < 40 && o < 360; i++)
+                o += snprintf(b + o, sizeof(b) - o, "%s\"%.20s\"", i ? ", " : "", (char *)D_800AB744 + i * 0x60 + 0x10);
+            ELOG("text: \"%.40s\" cut to %u letters (%d in use, the game's most 230): %s", s, room, *n, b);
+        }
+        if (len >= sizeof(cut))
+            len = sizeof(cut) - 1;
+        memcpy(cut, s, len);
+        cut[room < len ? room : len] = 0;
+        s = cut;
+    }
+    func_800291B0_orig(s, x, y, n, arg4, pal);
+}
 static void lent_ots(void);
 
 static void weapons_capture(void) {
@@ -571,6 +616,7 @@ void endless_flash(const s32 *pos) {
             port_video_flash(1500);
     }
     ELOG("weapons: a flash bang went off: %d guards dazzled", n);
+    flash_call = n > 0;
 }
 
 /* the lent frag grenade and the quick throw's count kept as one */
@@ -1895,6 +1941,7 @@ static void nav_reset(void) {
     memset(walked_ever, 0, sizeof(walked_ever));
     memset(on_floor_at, 0, sizeof(on_floor_at));
     grenade_reset();
+    callouts_reset();
 }
 /* COVER: a guard in a fight who is hit, or finds Bond's gun on him, runs to a place close by out of Bond's sight,
  * holds there a moment, steps back out to where he could see him and shoots a while, and so on: never more than two
@@ -2395,6 +2442,101 @@ static int floor_near_free(s32 x, s32 z, s32 y, int me) {
     return b >= 0 ? b : floor_near(x, z, y);
 }
 
+/* CALLOUTS (IMPROVED): the guards call out as they fight, in lines their own missions' guards have (each mission's voice
+ * program 9; any mission's line can be lent to another, as the "grenade!" above): on catching sight of Bond after a
+ * while, "I see him!", "intruder!", "over there!" ... ("he's up there!" when he is well above); as they go after him
+ * unseen, "get him!", "surrender!" ...; when Bond is hit (now and then), "I've got him!"; dazzled by a flash bang, "my eyes!". Each guard
+ * keeps one mission's voice where it has a line for the call; a call at most every 2 s, a guard's every 8 s. (Which
+ * guards are men isn't known yet: step 10.) */
+typedef struct { u8 level, tone; const char *text; } Line;
+enum { CALL_SPOT, CALL_ABOVE, CALL_CHASE, CALL_HIT, CALL_EYES, CALLS };
+static const Line call_lines[CALLS][12] = {
+    {{2, 0, "what the?"}, {2, 5, "intruder!"}, {6, 0, "what the!"}, {6, 3, "I see him!"}, {9, 0, "I see him!"},
+     {7, 5, "halt!"}, {9, 1, "stop right there!"}, {8, 0, "he's over there!"}, {3, 5, "he's over there!"},
+     {10, 0, "over there!"}, {7, 3, "he's over here!"}},
+    {{10, 3, "he's up there!"}},
+    {{9, 2, "get him!"}, {7, 2, "kill him!"}, {8, 1, "let's get him"}, {2, 4, "surrender!"}, {6, 2, "surrender!"},
+     {10, 2, "surrender!"}, {3, 0, "don't let him escape!"}, {2, 1, "raise the alarm!"}},
+    {{8, 3, "I've got him!"}, {10, 6, "I think I got him!"}},
+    {{2, 2, "my eyes!"}, {6, 1, "my eyes!"}},
+};
+static const u8 call_voices[] = {2, 3, 6, 7, 8, 9, 10};
+static s32 last_call = -SEC * 10, call_at[64], unseen_since[64];
+static int calls_made;
+static u32 call_seed = 12345;
+static u32 call_rnd(void) { /* (the calls' own: the director's and the AI's draws stay as they were) */
+    call_seed = call_seed * 1103515245u + 12345u;
+    return call_seed >> 16;
+}
+
+static void callouts_reset(void) {
+    int i;
+    last_call = -SEC * 10;
+    call_seed = 12345;
+    for (i = 0; i < 64; i++)
+        call_at[i] = -SEC * 60, unseen_since[i] = -SEC * 60;
+}
+
+static int call_out(int i, int call, const char *why) {
+    u8 *o = OBJ(i);
+    const Line *l = call_lines[call], *pick = 0;
+    int n = 0, k, voice = call_voices[(i * 7 + o[6]) % sizeof(call_voices)];
+    s32 d;
+    if (call != CALL_EYES && (room_frames - last_call < SEC * 2 || room_frames - call_at[i] < SEC * 8))
+        return 0; /* (but a dazzled man cries out at once) */
+    while (n < 12 && l[n].text)
+        n++;
+    for (k = 0; k < n && !pick; k++)
+        if (l[k].level == voice)
+            pick = &l[k];
+    if (!pick)
+        pick = &l[call_rnd() % n];
+    d = dist2(POS(o)[0], POS(o)[2], g_Args->playerX, g_Args->playerZ);
+    port_voice_play(pick->level, 9, pick->tone, d > 12000 ? 0x1800 : 0x6000 - d * 0x4800 / 12000);
+    last_call = call_at[i] = room_frames;
+    calls_made++;
+    ELOG("ai: type %d calls out \"%s\" (level %d's, %s)", o[6], pick->text, pick->level, why);
+    return 1;
+}
+
+static void callout_frame(void) {
+    int i;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = OBJ(i);
+        if (flash_call && dazzled[i] > room_frames && o[4] && o[5] == 6 && HEALTH(o) > 0 && fighter_type(o[6], 0) &&
+            call_out(i, CALL_EYES, "dazzled by a flash bang"))
+            flash_call = 0;
+        if (!hunter(o) || HEALTH(o) <= 0 || room_frames < scatter_until[i])
+            continue;
+        if (react[i] == 1 && room_frames - unseen_since[i] > SEC * 10) /* (he's seen Bond, the first time a while) */
+            call_out(i, g_Args->playerY < POS(o)[1] - 1500 ? CALL_ABOVE : CALL_SPOT, "seeing Bond");
+        if (react[i])
+            unseen_since[i] = room_frames;
+        else if (driving[i] && room_frames - unseen_since[i] > SEC * 3 && !(call_rnd() % (SEC * 6)))
+            call_out(i, CALL_CHASE, "going after him");
+    }
+}
+
+/* Bond hit: a guard who sees him, the nearest, calls it now and then */
+static void callout_hit(void) {
+    static s32 last_hit_call = -SEC * 60;
+    int i, best = -1;
+    s32 bd = 9000;
+    if (!ai_improved() || room_frames - last_hit_call < SEC * 10 || call_rnd() % 3)
+        return; /* (not each time: one in three, ten seconds apart at least) */
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = OBJ(i);
+        s32 d;
+        if (!hunter(o) || HEALTH(o) <= 0 || !react[i])
+            continue;
+        d = dist2(POS(o)[0], POS(o)[2], g_Args->playerX, g_Args->playerZ);
+        if (d < bd)
+            bd = d, best = i;
+    }
+    if (best >= 0 && call_out(best, CALL_HIT, "Bond hit"))
+        last_hit_call = room_frames;
+}
+
 static void ai_frame(void) {
     int i, n = 0, k = 0;
     s32 bx = g_Args->playerX, by = g_Args->playerY, bz = g_Args->playerZ;
@@ -2427,6 +2569,7 @@ static void ai_frame(void) {
     cover_frame();
     grenade_frame();
     drive_frame();
+    callout_frame();
     if (!(room_frames % (SEC / 2))) /* SPREAD: two hunters standing in each other: the later one steps aside */
         for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
             u8 *o = OBJ(i);
@@ -2844,6 +2987,7 @@ void endless_frame(void) {
             last_state = D_800F11F0;
         }
     }
+    text_watch();
     pool_step();
     frag_sync();
     if (lent_work_type)
@@ -2852,6 +2996,12 @@ void endless_frame(void) {
         strip_tools(); /* (what the mission gives him later too: its scripts, its pickups) */
     if (room_frames == SEC * 5)
         log_weapons("five seconds in");
+    if (getenv("TWINE_ENDLESS_TEST_TEXTS") && room_frames == SEC) { /* (headless tests: menu texts past the letters) */
+        static char t[] = "ENDLESS TEXT TEST LINE OF THIRTY";
+        int k;
+        for (k = 0; k < atoi(getenv("TWINE_ENDLESS_TEST_TEXTS")); k++)
+            func_8002872C((M2C_UNK *)t, 0x20, 0x20 + 8 * (k % 20));
+    }
     if (getenv("TWINE_ENDLESS_TEST_RESTART") && room_frames == atoi(getenv("TWINE_ENDLESS_TEST_RESTART")))
         func_80041DBC(); /* (headless tests: the watch's RESTART MISSION) */
     if (getenv("TWINE_ENDLESS_TEST_OPEN") && room_frames == atoi(getenv("TWINE_ENDLESS_TEST_OPEN")))
@@ -3075,6 +3225,8 @@ void func_8004B270(s32 damage, s32 through_armour, s32 always) {
         return;
     }
     func_8004B270_orig(damage, through_armour, always);
+    if (g_Player && damage > 0 && !port_subframe && port_endless_room(e) && HEALTH(g_Player) < health && HEALTH(g_Player) > 0)
+        callout_hit();
     if (g_Player && damage > 0 && !port_subframe && port_endless_room(e))
         ELOG("damage: %d: health %d -> %d, armour %d -> %d%s", damage, health, HEALTH(g_Player), armour, D_8009CFF0,
              HEALTH(g_Player) <= 0 ? " (dead)" : "");
@@ -3486,7 +3638,12 @@ void func_80076104(s32 idx) {
  * played by a script's sound op, by their number in the mission's table, g_Args+0x130, 8 bytes each: program,
  * tone, note, voice, volume, randomness) */
 static int muted_line(u32 id) {
-    static const u8 mute[][3] = {{8, 9, 7}}; /* (level, program, tone): King's Ransom's "hurry James" */
+    static const u8 mute[][3] = { /* (level, program, tone) */
+        {8, 9, 7},                       /* King's Ransom's "hurry James" */
+        {2, 9, 3}, {2, 9, 6},            /* Courier's ending: "open the door!", "open up" */
+        {6, 9, 4}, {7, 9, 4},            /* Christmas's "I got it" */
+        {7, 9, 0}, {7, 9, 1}, {10, 9, 7}, {10, 9, 8}, /* the public address: "warning", "blast doors open", ... */
+        {7, 9, 7}, {7, 9, 8}};           /* the friendly guard's "hello", "good day sir" (Masquerade's disguise) */
     SfxDefE *d = *(SfxDefE **)((u8 *)g_Args + 0x130);
     unsigned k;
     if (!d || id > 0xFF)

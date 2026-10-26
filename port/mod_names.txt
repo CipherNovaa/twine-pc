@@ -106,3 +106,6 @@ level10 func_80042E6C func_80043918
 level10 func_80043078 func_80043B24
 level10 func_80043B14 func_800445C0
 level10 D_800B0798 D_800B5A78
+# the menu texts' letters (port/mods/endless.c: never past the game's 230)
+level04 func_800291B0 func_800291B0
+level07 func_800291B0 func_800291B0

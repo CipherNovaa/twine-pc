@@ -3,11 +3,12 @@
 
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
   -j JOBS    runs at once (default 4)
-  -k CHECKS  the checks to run, letters from abcdefghijk (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijkl (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression,
              j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching),
-             k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried)
+             k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried),
+             l room starts never run out of the menu texts' letters (20 starts; past them: cut, no crash)
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -475,6 +476,11 @@ def check_lent(runs):
         extra = re.findall(r"a flash bang went off", part) if what == "flash bang" else fired
         result("k", "%s: lent, fires its %s" % (w.title(), what), len(fired) >= 2 and len(extra) >= 1 and not runs[name].crashed(),
                "%d fired in King's Ransom%s" % (len(fired), ", %d went off" % len(extra) if what == "flash bang" else ""))
+        if what == "flash bang":
+            eyes = re.findall(r'calls out "my eyes!"', part)
+            dazzled = re.findall(r"a flash bang went off: [1-9]", part)
+            result("k", "Flash Bang: a dazzled guard cries out", None if AI_ORIGINAL or not dazzled else bool(eyes),
+                   "%d dazzling, %d \"my eyes!\"%s" % (len(dazzled), len(eyes), " (the game's own AI: none)" if AI_ORIGINAL else ""))
     part = room_part(runs["k_satchel"].log, 9)
     thrown = re.findall(r"SATCHEL CHARGE fired", part)
     boom = re.search(r"the detonator set off (\d+) satchel", part)
@@ -643,11 +649,47 @@ def check_ai(runs):
     thr = sum(len(runs["ai_%d_%d_improved" % r].lines("throws a grenade at Bond")) for r in AI_ROOMS)
     sht = sum(len(runs["ai_%d_%d_improved" % r].lines('shouts "grenade!" \\(as he throws')) for r in AI_ROOMS)
     result("j", "grenades thrown at Bond", thr > 0 and sht >= thr, "%d thrown, %d with a shout" % (thr, sht))
+    said = [re.search(r'calls out "(.+?)" \(level (\d+)', x) for l, p in AI_ROOMS
+            for x in runs["ai_%d_%d_improved" % (l, p)].lines("calls out")]
+    texts, voices = {m.group(1) for m in said if m}, {m.group(2) for m in said if m}
+    orig = sum(len(runs["ai_%d_%d_original" % r].lines("calls out")) for r in AI_ROOMS)
+    result("j", "callouts: guards call out, in several voices", len(texts) >= 4 and len(voices) >= 3 and orig == 0,
+           "%d calls: %s; voices of levels %s; with the game's own AI %d" % (
+               len(said), ", ".join(sorted(texts)), ", ".join(sorted(voices)), orig))
     for r in GRENADE_ROOMS:
         g = runs["aig_%d_%d" % r]
         scat = len(g.lines("and runs from it"))
         result("j", "%d:%d scatter from Bond's grenade" % r, scat > 0 and not g.crashed(),
                "%d shouted and ran (grenade %s)" % (scat, "lobbed" if g.lines("grenade of Bond's lobbed") else "never lobbed"))
+
+
+# ---- l: room starts never run out of the menu texts' letters (the game's 230: "inc MAX_TEXT_SPRITES!", a crash) ----
+
+STRESS_ROOMS = [(7, 6)] * 8 + [(2, 6), (3, 11), (5, 4), (6, 13), (8, 3), (9, 2), (10, 4), (7, 6), (2, 4), (10, 2),
+                               (8, 4), (6, 9)]
+
+
+def text_runs():
+    runs = {}
+    for k, (l, p) in enumerate(STRESS_ROOMS):  # (each its first start too: the catalogue's survey, then the room)
+        runs["text_%d_%d_%d" % (l, p, k)] = Run("text_%d_%d_%d" % (l, p, k), l, 30, {
+            "TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "%d:%d" % (l, p), "TWINE_ENDLESS_SEED": 7 + k % 3,
+            "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_PEOPLE_FAST": 1})
+    runs["text_forced"] = Run("text_forced", 7, 25, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "7:6",
+                                                     "TWINE_ENDLESS_SEED": 7, "TWINE_ENDLESS_TEST_GOD": 1,
+                                                     "TWINE_ENDLESS_TEST_TEXTS": 12})
+    return runs
+
+
+def check_texts(runs):
+    bad = [r.name for k, r in runs.items() if k != "text_forced" and (r.crashed() or "MAX_TEXT" in r.log or
+                                                                       "room start:" not in r.log)]
+    cut = [r.name for k, r in runs.items() if k != "text_forced" and r.lines(r"text: .* cut to")]
+    result("l", "%d room starts: no crash, letters to spare" % (len(runs) - 1), not bad and not cut,
+           "crashed or not started: %s; letters cut: %s" % (", ".join(bad) or "none", ", ".join(cut) or "none"))
+    f = runs["text_forced"]
+    result("l", "past the letters: cut, no crash", bool(f.lines(r"text: .* cut to")) and not f.crashed() and
+           "MAX_TEXT" not in f.log, "%d cut, crash %s" % (len(f.lines(r"text: .* cut to")), f.crashed()))
 
 
 # ---- i: the campaign untouched ----
@@ -665,7 +707,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijk", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijkl", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -712,6 +754,8 @@ def main():
         groups["ai"] = ai_runs()
     if "k" in checks:
         groups["lent"] = lent_runs()
+    if "l" in checks:
+        groups["texts"] = text_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.secs)  # (the long ones first)
     t0 = time.time()
@@ -740,9 +784,11 @@ def main():
         check_ai(groups["ai"])
     if "lent" in groups:
         check_lent(groups["lent"])
+    if "texts" in groups:
+        check_texts(groups["texts"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
-             "k": "lent weapons"}
+             "k": "lent weapons", "l": "text letters"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))
