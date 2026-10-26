@@ -308,9 +308,14 @@ s32 VSync(s32 mode) {
         target = vblank_count + 1;
     port_state_frame();
     port_frame_end();
-    while ((s32)(vblank_count - target) < 0)
-        port_wait_vblank();
+    {
+        u64 t = PT_BEGIN();
+        while ((s32)(vblank_count - target) < 0)
+            port_wait_vblank();
+        PT_END(PT_WAIT, t);
+    }
     vsync_last = vblank_count;
+    port_timing_tick();
     port_smooth_tick(mode > 1 ? mode : 1);
     return 0;
 }

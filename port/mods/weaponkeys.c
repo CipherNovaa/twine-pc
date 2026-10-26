@@ -21,6 +21,7 @@ extern u32 D_800F11F0;      /* the weapon's state */
 extern s32 D_800DDEEC;      /* fire held */
 extern u8 D_800AC38C;
 int port_weapon_key(void);
+void trace_change_by(const char *who);
 void func_800798D4_orig(void);
 s32 func_800794A0(void);
 s32 func_80079C04(void);
@@ -78,6 +79,9 @@ void func_800798D4(void) {
         return;
     }
     D_800B0DDC = slot;
+#ifdef MOD_TRACE
+    trace_change_by("the number keys");
+#endif
     /* as func_80079B94 does it for a weapon button */
     D_800AC38C = 0;
     if (D_800F11F0 - 3 < 2 || D_800F11F0 == 6) {

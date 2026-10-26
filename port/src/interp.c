@@ -39,6 +39,7 @@ extern u32 port_ext_low;
 static u8 *ram_copy PORT_NOSAVE, scratch_copy[PS1_SCRATCH_SIZE]; /* (RAM's copy: as big as RAM) */
 static u64 shown_at;       /* host time the last drawing was shown */
 static u64 spacing;        /* TWINE_FPS_MAX's time between drawings (0: none) */
+static u64 extra_t;        /* (TWINE_TIMING: the extra drawing's start) */
 
 #define VBLANK_NS 16683333ull
 
@@ -126,6 +127,9 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
     *t = (s32)((now - tick_start) * 4096 / (end - tick_start));
     port_mouse_pending(yaw, pitch);
     RT_ENTER(); /* holds the vblank interrupt */
+    extra_t = PT_BEGIN();
+    {
+    u64 ct = PT_BEGIN();
     if (!ram_copy && !(ram_copy = malloc(PS1_RAM_SIZE)))
         port_fatal("out of memory\n");
     memcpy(ram_copy, (void *)PS1_RAM_BASE, PS1_RAM_CONSOLE);
@@ -137,6 +141,9 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
     memcpy(scratch_copy, (void *)PS1_SCRATCH_BASE, PS1_SCRATCH_SIZE);
     for (i = 0; i < 4 && kept[i].at; i++)
         memcpy(kept[i].copy, kept[i].at, kept[i].size);
+    PT_END(PT_SMOOTH_COPY, ct);
+    }
+    port_timing_count(PT_EXTRAS);
     GTE_save();
     gpu_save();
     libgpu_save();
@@ -152,6 +159,8 @@ void port_smooth_end(void) {
     int i;
     cost = (cost * 3 + (now - began)) / 4;
     gpu_draw_origin(&x, &y);
+    {
+    u64 ct = PT_BEGIN();
     memcpy((void *)PS1_RAM_BASE, ram_copy, PS1_RAM_CONSOLE);
     if (PS1_RAM_SIZE > PS1_RAM_CONSOLE && port_ext_low) {
         memcpy((void *)(PS1_RAM_BASE + PS1_RAM_CONSOLE), ram_copy + PS1_RAM_CONSOLE, 16);
@@ -160,6 +169,8 @@ void port_smooth_end(void) {
     memcpy((void *)PS1_SCRATCH_BASE, scratch_copy, PS1_SCRATCH_SIZE);
     for (i = 0; i < 4 && kept[i].at; i++)
         memcpy(kept[i].at, kept[i].copy, kept[i].size);
+    PT_END(PT_SMOOTH_COPY, ct);
+    }
     GTE_restore();
     gpu_restore();
     libgpu_restore();
@@ -168,6 +179,7 @@ void port_smooth_end(void) {
     port_video_present_draw(drawings++, x, y);
     port_smooth_shown = 1;
     shown_at = now_ns();
+    PT_END(PT_EXTRA, extra_t);
 }
 
 /* After the tick's own drawing: show it at once (when smoothing; else VSync shows frames as usual). */

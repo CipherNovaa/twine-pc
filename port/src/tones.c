@@ -8,7 +8,6 @@
 #include <math.h>
 #include "port.h"
 
-u32 port_disc_file(const char *name, u8 **out);
 int port_sfx_play(const s16 *pcm, u32 n, u32 rate, s32 vol, s32 loop_at);
 
 #define RD16(p, o) ((u32)(p)[o] | (u32)(p)[(o) + 1] << 8)
@@ -54,7 +53,7 @@ static u32 decode(const u8 *vh, const u8 *vb, u32 program, u32 tone, s16 *out, u
     return n;
 }
 
-#define TONES 24
+#define TONES 64
 static struct {
     s8 level, program, tone;
     s16 *pcm;
@@ -62,36 +61,80 @@ static struct {
     s32 loop, centre;
 } tones[TONES];
 
+/* Each level's sound bank, read from the disc once: the archive's directory (entries of 0x1C bytes: the name, the
+ * first sector at +26; a file runs to the next one's first sector), then its VH and VB alone (reading the whole
+ * archive, megabytes, at the first sound of a level stalled play) */
+static struct {
+    u8 *vh, *vb;
+    int tried;
+} banks[16];
+
+int port_sound_bank(int level, const u8 **vh, const u8 **vb) {
+    char name[32];
+    u8 *dir, *e, *f;
+    u32 n, vh_at = 0, vb_at = 0, vh_end = 0, vb_end = 0, at, size;
+    u64 t;
+    if (level < 0 || level >= 16)
+        return 0;
+    if (!banks[level].tried) {
+        banks[level].tried = 1;
+        t = PT_BEGIN();
+        snprintf(name, sizeof(name), "L%02d/LVL%02dCD.BIN", level, level);
+        if ((n = port_disc_part(name, 0, 0x4000, &dir))) {
+            for (e = dir; e + 0x1C <= dir + n && *e; e += 0x1C) {
+                at = RD16(e, 26) * 0x800;
+                if (!strncmp((char *)e, "SOUNDFX/", 8) && strstr((char *)e, ".VH"))
+                    vh_at = at;
+                else if (!strncmp((char *)e, "SOUNDFX/", 8) && strstr((char *)e, ".VB"))
+                    vb_at = at;
+            }
+            for (e = dir; e + 0x1C <= dir + n && *e; e += 0x1C) { /* (each file's end: the next file's start) */
+                at = RD16(e, 26) * 0x800;
+                if (vh_at && at > vh_at && (!vh_end || at < vh_end))
+                    vh_end = at;
+                if (vb_at && at > vb_at && (!vb_end || at < vb_end))
+                    vb_end = at;
+            }
+            free(dir);
+            if (vh_at && vb_at) {
+                size = vh_end ? vh_end - vh_at : 0x10000;
+                if (port_disc_part(name, vh_at, size, &f))
+                    banks[level].vh = f;
+                size = vb_end ? vb_end - vb_at : 0x100000; /* (the last file: to the archive's end) */
+                if (banks[level].vh && port_disc_part(name, vb_at, size, &f))
+                    banks[level].vb = f;
+            }
+        }
+        port_timing_count(PT_BANK_READS);
+        PT_END(PT_SOUND_LOAD, t);
+        port_log("tones: level %d's sound bank %s\n", level, banks[level].vb ? "read" : "not found");
+    }
+    if (!banks[level].vb)
+        return 0;
+    *vh = banks[level].vh, *vb = banks[level].vb;
+    return 1;
+}
+
 /* a tone, decoded once (NULL: no such tone) */
 static int find(int level, int program, int tone) {
     int k;
-    u8 *arc, *e, *vh = NULL, *vb = NULL;
-    u32 n;
+    const u8 *vh, *vb;
+    u64 t;
     for (k = 0; k < TONES && tones[k].pcm; k++)
         if (tones[k].level == level && tones[k].program == program && tones[k].tone == tone)
             return k;
     if (k == TONES)
         return -1;
-    {
-        char name[32];
-        snprintf(name, sizeof(name), "L%02d/LVL%02dCD.BIN", level, level);
-        if (!(n = port_disc_file(name, &arc)))
-            return -1;
-    }
-    for (e = arc; e + 0x1C <= arc + n && *e; e += 0x1C) {
-        const char *nm = (const char *)e;
-        if (!strncmp(nm, "SOUNDFX/", 8) && strstr(nm, ".VH"))
-            vh = arc + RD16(e, 26) * 0x800;
-        else if (!strncmp(nm, "SOUNDFX/", 8) && strstr(nm, ".VB"))
-            vb = arc + RD16(e, 26) * 0x800;
-    }
-    if (vh && vb && (tones[k].pcm = malloc(2 * 65536))) {
+    if (!port_sound_bank(level, &vh, &vb))
+        return -1;
+    t = PT_BEGIN();
+    if ((tones[k].pcm = malloc(2 * 65536))) {
         tones[k].len = decode(vh, vb, (u32)program, (u32)tone, tones[k].pcm, 65536, &tones[k].loop, &tones[k].centre);
         tones[k].level = (s8)level, tones[k].program = (s8)program, tones[k].tone = (s8)tone;
         port_log("tones: level %d program %d tone %d: %u samples, loop %d, centre %d/128\n", level, program, tone,
                  tones[k].len, tones[k].loop, tones[k].centre);
     }
-    free(arc);
+    PT_END(PT_SOUND_LOAD, t);
     return tones[k].pcm && tones[k].len ? k : -1;
 }
 
@@ -107,5 +150,14 @@ int port_tone_play(int level, int program, int tone, int note, s32 vol, int loop
         rate = 1000;
     if (rate > 176400)
         rate = 176400;
-    return port_sfx_play(tones[k].pcm, tones[k].len, rate, vol, loop ? tones[k].loop : -1);
+    {
+        int h = port_sfx_play(tones[k].pcm, tones[k].len, rate, vol, loop ? tones[k].loop : -1);
+        static int on = -1;
+        if (on < 0)
+            on = port_trace("sound");
+        if (on)
+            port_log("trace: sound: tone level %d program %d tone %d note %d at %u Hz, volume %d%s: handle %d\n", level,
+                     program, tone, note, rate, vol, loop ? " looping" : "", h);
+        return h;
+    }
 }

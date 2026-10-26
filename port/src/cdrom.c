@@ -644,7 +644,38 @@ s32 PCclose(s32 fd) {
 
 /* A file of the disc read straight from the image, past the drive (whose reads it leaves alone): for the runtime's
  * and mods' own use. name as "L08/DATA08.BIN"; returns its size and a malloc()ed copy, or 0 if it isn't there. */
+static int disc_find(const char *name, u32 *at, u32 *bytes);
+
 u32 port_disc_file(const char *name, u8 **data) {
+    return port_disc_part(name, 0, 0xFFFFFFFFu, data);
+}
+
+/* len bytes of a disc file from offset (fewer at its end), malloc'd: how many (0: none) */
+u32 port_disc_part(const char *name, u32 offset, u32 len, u8 **data) {
+    u8 raw[2352];
+    u32 lba, size, i, first, n;
+    if (!disc_find(name, &lba, &size) || offset >= size)
+        return 0;
+    if (len > size - offset)
+        len = size - offset;
+    first = offset / 2048;
+    n = (offset + len + 2047) / 2048 - first;
+    if (!(*data = malloc(n * 2048 + 2048)))
+        return 0;
+    for (i = 0; i < n; i++) {
+        if (!read_raw(lba + first + i, raw)) {
+            free(*data);
+            return 0;
+        }
+        memcpy(*data + i * 2048, raw + 24, 2048);
+    }
+    if (offset % 2048)
+        memmove(*data, *data + offset % 2048, len);
+    return len;
+}
+
+/* a file's first sector and size, from the disc's directories */
+static int disc_find(const char *name, u32 *at, u32 *bytes) {
     u8 raw[2352], *rec;
     u32 lba, size, i, off;
     const char *part = name, *end;
@@ -678,13 +709,6 @@ u32 port_disc_file(const char *name, u8 **data) {
             break;
         part = end + 1;
     }
-    *data = malloc(size + 2048);
-    for (i = 0; i < (size + 2047) / 2048; i++) {
-        if (!read_raw(lba + i, raw)) {
-            free(*data);
-            return 0;
-        }
-        memcpy(*data + i * 2048, raw + 24, 2048);
-    }
-    return size;
+    *at = lba, *bytes = size;
+    return 1;
 }

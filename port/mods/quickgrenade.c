@@ -315,46 +315,44 @@ static void load_sound(const u8 *vh, const u8 *vb) {
 /* (endless's enemy AI) a level's voice, a tone of its sound bank's (SOUNDFX/LnFX.VH, .VB in Lnn/LVLnnCD.BIN),
  * decoded once and played by the runtime (port_sfx) at the rate the voices were made at (11025 Hz: half what a
  * bank's samples are taken as, as heard): a guard's "grenade!" lent to every mission */
+#define VOICES 64
 static struct {
     s8 level, program, tone;
     s16 *pcm;
     u32 len;
-} voices[12];
+} voices[VOICES];
 
+int port_sound_bank(int level, const u8 **vh, const u8 **vb);
+int port_trace(const char *what);
 void port_voice_play(int level, int program, int tone, s32 vol) {
     int k;
-    for (k = 0; k < 12 && voices[k].pcm && !(voices[k].level == level && voices[k].program == program &&
+    for (k = 0; k < VOICES && voices[k].pcm && !(voices[k].level == level && voices[k].program == program &&
                                               voices[k].tone == tone); k++)
         ;
-    if (k == 12)
+    if (k == VOICES)
         return;
     if (!voices[k].pcm) {
-        char name[32];
-        u8 *arc, *e, *vh = NULL, *vb = NULL;
-        u32 n;
+        const u8 *vh, *vb;
         s16 *buf;
-        snprintf(name, sizeof(name), "L%02d/LVL%02dCD.BIN", level, level);
-        if (!(n = port_disc_file(name, &arc)))
+        if (!port_sound_bank(level, &vh, &vb)) /* (the bank read once: port/src/tones.c) */
             return;
-        for (e = arc; e + 0x1C <= arc + n && *e; e += 0x1C) {
-            const char *nm = (const char *)e;
-            if (!strncmp(nm, "SOUNDFX/", 8) && strstr(nm, ".VH"))
-                vh = arc + W(e, 26, u16) * 0x800;
-            else if (!strncmp(nm, "SOUNDFX/", 8) && strstr(nm, ".VB"))
-                vb = arc + W(e, 26, u16) * 0x800;
-        }
-        if (vh && vb && (buf = malloc(2 * 32768))) {
-            voices[k].len = decode_tone(vh, vb, (u32)program, (u32)tone, buf, 32768);
+        if ((buf = malloc(2 * 32768))) {
+            voices[k].len = decode_tone((u8 *)vh, (u8 *)vb, (u32)program, (u32)tone, buf, 32768);
             voices[k].pcm = buf;
             voices[k].level = (s8)level, voices[k].program = (s8)program, voices[k].tone = (s8)tone;
         }
-        free(arc);
         if (!voices[k].pcm)
             return;
         port_log("voice: level %d program %d tone %d: %u samples\n", level, program, tone, voices[k].len);
     }
-    if (voices[k].len)
+    if (voices[k].len) {
+        static int on = -1;
+        if (on < 0)
+            on = port_trace("sound");
+        if (on)
+            port_log("trace: sound: voice level %d program %d tone %d, volume %d\n", level, program, tone, vol);
         port_sfx(voices[k].pcm, voices[k].len, 11025, vol);
+    }
 }
 
 /* the frag's model and texture, from King's Ransom's archive (entries of 0x1C bytes: name, first sector) */

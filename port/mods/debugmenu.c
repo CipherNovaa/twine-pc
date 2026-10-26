@@ -37,7 +37,8 @@ void DebugScreen_DrawPage_orig(s32 page);
 void func_80032E4C(s32 lines, s32 cols); /* the page's box */
 
 #define RETAIL_PAGES 10
-static const char *const pages[] = {"COLLBOX INFO", "TERRAIN INFO", "BG COLOR INFO"};
+static const char *const pages[] = {"COLLBOX INFO", "TERRAIN INFO", "BG COLOR INFO", "WEAPON STATE"};
+#define OUR_PAGES 4
 
 static void print(const char *fmt, ...) {
     char buf[256];
@@ -52,7 +53,7 @@ int FntPrint(char *fmt, ...) {
     char buf[256];
     va_list ap;
     va_start(ap, fmt);
-    MENU->count[0] = RETAIL_PAGES + 3;
+    MENU->count[0] = RETAIL_PAGES + OUR_PAGES;
     if (!strncmp(fmt, "FR %2d - FR CAP %2d", 19)) { /* FRAMERATE INFO: the game's rate, and the frames shown */
         s32 rate = va_arg(ap, s32), cap = va_arg(ap, s32);
         va_end(ap);
@@ -127,6 +128,36 @@ static void bgcolor_page(void) {
     print("B = %3d\n", D_800B8FB0[2]);
 }
 
+/* WEAPON STATE: Bond's weapon and its first-person model as the trace mod sees them (mods/trace.c), live: a line of
+ * the trace a field a line */
+extern char trace_weapon_line[] __attribute__((weak));
+void trace_weapon_state(void) __attribute__((weak));
+static void weapon_page(void) {
+    char line[64];
+    const char *p;
+    int n = 0;
+    g_DebugTextX = 0x26;
+    g_DebugTextY = 12;
+    if (!trace_weapon_state) {
+        print("(the TRACE mod is not built in)\n");
+        return;
+    }
+    trace_weapon_state();
+    for (p = trace_weapon_line; *p; p++) {
+        if ((p[0] == ',' && p[1] == ' ') || n == (int)sizeof(line) - 1) {
+            line[n] = 0;
+            print("%s\n", line);
+            n = 0;
+            if (p[0] == ',')
+                p++;
+            continue;
+        }
+        line[n++] = *p >= 'a' && *p <= 'z' ? *p - 32 : *p; /* (the debug font's capitals) */
+    }
+    line[n] = 0;
+    print("%s\n", line);
+}
+
 /* the page DISPLAY chose: retail's, or one of ours drawn as retail draws its own (box, title, page) */
 void DebugScreen_DrawPage(s32 page) {
     if (page < RETAIL_PAGES) {
@@ -139,7 +170,9 @@ void DebugScreen_DrawPage(s32 page) {
         collbox_page();
     else if (page == RETAIL_PAGES + 1)
         terrain_page();
-    else
+    else if (page == RETAIL_PAGES + 2)
         bgcolor_page();
+    else
+        weapon_page();
     port_fnt_flush();
 }

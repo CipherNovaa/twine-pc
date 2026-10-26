@@ -132,6 +132,7 @@ extern s32 D_800F0F5C;      /* a model is loading */
 void func_80076014_orig(s32 idx);
 void func_80076104_orig(s32 idx);
 u32 port_disc_file(const char *name, u8 **data);
+u32 port_disc_part(const char *name, u32 offset, u32 len, u8 **data);
 void free(void *p);
 void *malloc(unsigned n);
 int quick_grenade_enemy(const s32 *from, const s32 *to, u8 *owner); /* (quickgrenade.c) */
@@ -371,6 +372,8 @@ static void log_weapons(const char *when) {
 }
 
 static int draw_slot = -1; /* (a slot to change to, as soon as the game lets him) */
+static int draw_hidden;     /* (the gun hidden while the carried one loads) */
+static int draw_direct;     /* (this frame: a room's start in a mission loaded afresh, draw_slot taken out at once) */
 static void carry_out(void) {
     EndlessCarry *c = &port_endless_carry;
     int i, j;
@@ -427,6 +430,7 @@ static int pistol_slot(void) {
 static u32 lent_mask; /* (the slots lent to this mission: theirs are another's) */
 static u32 lent_work[0xE000 / 4]; /* (a lent weapon's model: func_800753F0) */
 static u8 lent_work_type; /* (the model type whose file is in it) */
+static char lent_work_path[24]; /* (and that file) */
 
 /* The menu texts' letters (func_800291B0 makes a sprite of each: the game stops at 230, "inc MAX_TEXT_SPRITES!"):
  * logged when many are in use, with the texts */
@@ -697,6 +701,9 @@ static void lend_into(int i, int pi, int k) {
     *(u16 *)(te + 0x6C) = r->animlen;
     snprintf(lent_path[k], sizeof(lent_path[k]), "%s", r->path);
     D_8009DB50[t] = lent_path[k];
+    if (D_800E2F58 == t) /* (the model loaded is of this slot's type number but another weapon's (the pool's weapon
+                          * before it, or the mission's own): loaded afresh when the slot is drawn, func_80075FE4) */
+        D_800E2F58 = 0;
     if (r->kind < 19 && D_8009D130[r->kind * 4] < 0) { /* (its ammo in boxes, its pickups' messages its own) */
         s32 *e = &D_8009D130[r->kind * 4];
         snprintf(lent_got[k], sizeof(lent_got[k]), "%s", r->got);
@@ -816,11 +823,41 @@ static void lend_weapons(void) {
  * the pool has another weapon that way not in a slot: that weapon into this slot instead, and the change to it */
 extern s32 D_800DDE08, D_800DDDA4;
 extern s16 D_800B0DD8; /* the weapon before a change */
+extern s32 D_800DDEEC; /* fire held */
 extern s32 D_800F11F0; /* the weapon's state */
+/* A pool weapon going into the slot in hand: it goes in once the weapon there is put away (the state machine's load,
+ * state 5): its put-away animation, sound and ammo are its own, then the new one's model is loaded (the slot's model
+ * type number stays, so the one loaded is marked stale: func_80075FE4 says no, and the state machine loads) */
+static int pool_pending_slot = -1, pool_pending_pi, pool_pending_put;
+static void pool_later(int c, int pi) {
+    pool_pending_slot = c, pool_pending_pi = pi, pool_pending_put = 0;
+    if (D_800E2F58 == ((u8 *)&g_Weapons[c])[0x5B])
+        D_800E2F58 = 0;
+}
+static void pool_pending(void) {
+    int c = pool_pending_slot;
+    if (c < 0 || D_800F11F0 == 3 || D_800F11F0 == 6) /* (still putting it away) */
+        return;
+    if (c == D_800B0DD4 && D_800F11F0 != 5 && !pool_pending_put && D_8009CAA4 == 0) {
+        /* (chosen in the inventory for the slot in hand: no change began as the menu closed, so it's put away now) */
+        pool_pending_put = 1;
+        D_800B0DD8 = D_800B0DD4, D_800B0DDC = (s16)c;
+        func_8007A17C(3);
+        return;
+    }
+    pool_pending_slot = -1;
+    lent_ammo_out(c);
+    lend_into(c, pool_pending_pi, slot_idx[c]);
+    lent_ammo_in(c);
+    if (getenv("TWINE_ENDLESS_AMMO_LOG"))
+        ELOG("pool: %s in slot %d now (state %d)", pool[pool_pending_pi].name, c, D_800F11F0);
+}
+
 static void pool_step(void) {
     static s32 last_state;
     int c = D_800B0DD8, dir, pi;
     s32 st = D_800F11F0;
+    pool_pending();
     if ((st == 3 || st == 6) && last_state != 3 && last_state != 6 && getenv("TWINE_ENDLESS_AMMO_LOG"))
         ELOG("pool: change from %d to %d (in hand %d), lent %d, pool %d, buttons %d %d, draw_slot %d", c, D_800B0DDC,
              D_800B0DD4, c >= 0 && c < 16 ? (int)(lent_mask >> c & 1) : -1, c >= 0 && c < 16 ? slot_pool[c] : -9,
@@ -832,10 +869,11 @@ static void pool_step(void) {
         while (pi >= 0 && pi < pool_n && !pool_round[pi] && !pool_shown(pi)) /* (one left out of the round) */
             pi += dir;
         if (pi >= 0 && pi < pool_n && !pool_shown(pi)) {
-            lent_ammo_out(c);
-            lend_into(c, pi, slot_idx[c]);
-            lent_ammo_in(c);
+            pool_later(c, pi);
             D_800B0DDC = (s16)c;
+#ifdef MOD_TRACE
+            trace_change_by("endless: the weapon buttons stepping through the pool");
+#endif
             ELOG("weapons: the pool's %s into slot %d (the weapon buttons step through the pool)", pool[pi].name, c);
         }
     }
@@ -975,9 +1013,13 @@ void func_80043078(void) {
                     slot = i;
             if (slot < 0)
                 return;
-            lent_ammo_out(slot);
-            lend_into(slot, pi, slot_idx[slot]);
-            lent_ammo_in(slot);
+            if (slot == D_800B0DD4) /* (the one in hand: in as it's put away) */
+                pool_later(slot, pi);
+            else {
+                lent_ammo_out(slot);
+                lend_into(slot, pi, slot_idx[slot]);
+                lent_ammo_in(slot);
+            }
             ELOG("weapons: the pool's %s into slot %d (chosen in the inventory)", pool[pi].name, slot);
         }
         D_8009EEC4 = (s16)slot;
@@ -1060,6 +1102,7 @@ static void carry_in(void) {
 /* the weapon Bond held (in a run's first room: his pistol), drawn as the room starts (the game changes to
  * D_800B0DDC); a mission without it leaves the one it gives */
 int weapon_change_to(int slot);
+void trace_change_by(const char *who);
 static void draw_weapon(void) {
     EndlessCarry *c = &port_endless_carry;
     const char *want = c->valid ? c->in_hand : "WOLFRAM P2K";
@@ -1379,6 +1422,7 @@ static void room_start(void) {
     clear_arrival();
     if (!segment)
         lent_mask = 0, lent_work_type = 0; /* (a mission loaded afresh: its own slots again) */
+    pool_pending_slot = -1;
     weapons_capture();
     if (port_endless_surveying()) { /* (a survey's room: its weapons taken, left at once) */
         ELOG("weapons: level %d surveyed", g_Args->level);
@@ -2725,6 +2769,7 @@ void endless_frame(void) {
              D_8009CFF0, weapon_name(), flood());
         strip_tools();
         draw_weapon();
+        draw_direct = !segment;
         log_weapons("as the room starts");
         /* the first room: a heavy armour ahead of Bond */
         if (port_endless_wave() == 1 && !segment) {
@@ -2955,7 +3000,32 @@ void endless_frame(void) {
                 draw_slot = i;
     if (draw_slot >= 0 && D_800B0DD4 == draw_slot && D_800F11F0 != 5 && D_800B0DDC == draw_slot)
         draw_slot = -1; /* (in hand: his to change from as he likes) */
+    if (draw_slot >= 0 && D_800B0DD4 != draw_slot && draw_direct && (D_800F11F0 == 1 || D_800F11F0 == 7) &&
+        !D_800DDEEC) {
+        /* (a room's start, a mission loaded afresh: the weapon he came in with is the one taken out, its model loaded
+         * and drawn (state 5), without the mission's own first put away before it) */
+#ifdef MOD_TRACE
+        trace_change_by("endless: the weapon carried in, taken out at the start");
+#endif
+        D_800B0DD8 = D_800B0DD4;
+        D_800B0DDC = (s16)draw_slot;
+        if (D_8009CD98 && !(*(u32 *)(D_8009CD98 + 0x7C) & 0x80000000)) {
+            *(u32 *)(D_8009CD98 + 0x7C) |= 0x80000000; /* (the mission's own not shown meanwhile) */
+            draw_hidden = 1;
+        }
+        func_8007A17C(5);
+        draw_slot = -1;
+    }
+    draw_direct = 0;
+    if (draw_hidden && D_800F11F0 != 5) { /* (loaded: shown, drawn) */
+        draw_hidden = 0;
+        if (D_8009CD98)
+            *(u32 *)(D_8009CD98 + 0x7C) &= 0x7FFFFFFF;
+    }
     if (draw_slot >= 0 && D_800B0DD4 != draw_slot) {
+#ifdef MOD_TRACE
+        trace_change_by("endless: the weapon carried in, drawn");
+#endif
 #ifdef MOD_WEAPONKEYS
         if (weapon_change_to(draw_slot))
 #endif
@@ -3492,21 +3562,22 @@ static int lent_model(s32 idx) {
         ;
     if (k == 8)
         k = 0, free(donor_hmd[0].data), donor_hmd[0].data = 0;
-    if (!donor_hmd[k].data) {
+    if (!donor_hmd[k].data) { /* (the archive's directory, then the file alone: reading the whole archive, megabytes,
+                                 * stalled the weapon change) */
         char arcname[32];
-        u8 *arc, *e;
+        u8 *arc, *e, *data;
         u32 n;
         snprintf(arcname, sizeof(arcname), "L%02d/LVL%02dCD.BIN", lv, lv);
-        if (!(n = port_disc_file(arcname, &arc)))
+        if (!(n = port_disc_part(arcname, 0, 0x4000, &arc)))
             return 0;
         for (e = arc; e + 0x38 <= arc + n && *e; e += 0x1C)
             if (!strncmp((char *)e, p, 24)) {
                 u32 at = *(u16 *)(e + 26) * 0x800u, end = *(u16 *)(e + 26 + 0x1C) * 0x800u;
-                u32 size = end > at && end <= n ? end - at : 0;
+                u32 size = end > at ? end - at : 0;
                 if (size > sizeof(lent_work))
                     size = sizeof(lent_work);
-                if (size && (donor_hmd[k].data = malloc(size))) {
-                    memcpy(donor_hmd[k].data, arc + at, size);
+                if (size && (size = port_disc_part(arcname, at, size, &data))) {
+                    donor_hmd[k].data = data;
                     donor_hmd[k].size = size;
                     snprintf(donor_hmd[k].path, sizeof(donor_hmd[k].path), "%s", p);
                 }
@@ -3525,9 +3596,17 @@ static int lent_model(s32 idx) {
     port_lent_images(lent_work, sizeof(lent_work)); /* (its textures kept by the runtime: libgpu.c) */
     lent_ots();
     lent_work_type = t;
+    snprintf(lent_work_path, sizeof(lent_work_path), "%s", donor_hmd[k].path);
     D_800F0F5C = 0;
     D_800E2F58 = t;
     return 1;
+}
+
+/* (mods/trace.c) the first-person model's file loaded: a lent one's, or the mission's own for the type loaded */
+const char *endless_model_file(void) {
+    if (lent_work_type && D_800E2F58 == lent_work_type)
+        return lent_work_path;
+    return D_800E2F58 ? D_8009DB50[D_800E2F58] : "-";
 }
 
 void *func_800753F0_orig(s32 type);
@@ -3545,6 +3624,9 @@ int port_tone_play(int level, int program, int tone, int note, s32 vol, int loop
 void port_sfx_stop(int handle);
 
 s32 func_80026F30_orig(u32 id, s32 flags);
+int port_trace(const char *what);
+void port_log(const char *fmt, ...);
+static int trace_sound(void);
 s32 func_80026F30(u32 id, s32 flags) {
     if (id >= LENT_SOUND && id < 0x80 && id - LENT_SOUND < 8 && lent_sound[id - LENT_SOUND].level) {
         int n = id - LENT_SOUND;
@@ -3561,9 +3643,28 @@ s32 func_80026F30(u32 id, s32 flags) {
         if (getenv("TWINE_ENDLESS_AMMO_LOG"))
             ELOG("sound: a lent weapon's own (level %d program %d tone %d note %d), volume %d%s: handle %d", lent_sound[n].level,
                  d[0], d[1], d[2], vol, lent_sound[n].loop ? ", looping" : "", h);
+        if (trace_sound())
+            port_log("trace: L%d f%d sound: lent %u (level %d program %d tone %d note %d) volume %d%s: handle %d\n",
+                     g_Args->level, D_8009CDA8, id, lent_sound[n].level, d[0], d[1], d[2], vol,
+                     lent_sound[n].loop ? " looping" : "", h);
         return h ? 0x4000 | (h & 0x3FFF) : -1;
     }
+    if (trace_sound()) { /* (the mission's own: its table's entry, g_Args+0x130 + id * 8: program, tone, note, voice) */
+        static const u8 none[8] = {0xFF, 0xFF, 0xFF, 0xFF};
+        const u8 *e = *(u8 **)((u8 *)g_Args + 0x130) && id < 0x80 ? *(u8 **)((u8 *)g_Args + 0x130) + id * 8 : none;
+        s32 h = func_80026F30_orig(id, flags);
+        port_log("trace: L%d f%d sound: %u flags %X (program %d tone %d note %d voice %d): handle %d\n", g_Args->level,
+                 D_8009CDA8, id, flags, e[0], e[1], e[2], e[3], h);
+        return h;
+    }
     return func_80026F30_orig(id, flags);
+}
+
+static int trace_sound(void) {
+    static int on = -1;
+    if (on < 0)
+        on = port_trace("sound");
+    return on;
 }
 
 void func_80081458_orig(s32 voice);

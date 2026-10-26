@@ -1408,6 +1408,7 @@ static void present(void) {
 /* A frame interp.c had drawn (the `index`th of this tick) at (x, y): shown at once. */
 void port_video_present_draw(int index, s32 x, s32 y) {
     const char *shots = getenv("TWINE_SHOT");
+    u64 pt = PT_BEGIN();
     RT_ENTER();
     if (headless && (shots || gpu_hw_on)) {
         char path[64];
@@ -1429,6 +1430,7 @@ void port_video_present_draw(int index, s32 x, s32 y) {
         present_rect(x, y, 0);
     }
     RT_LEAVE();
+    PT_END(PT_PRESENT, pt);
 }
 
 /* ---- the intro (intro.c), before the game: its frames don't count as the game's ---- */
@@ -1520,6 +1522,7 @@ void port_video_message(const char *text) {
 }
 
 void port_frame_end(void) {
+    u64 pt = PT_BEGIN();
     RT_ENTER();
     frames++;
     if (getenv("TWINE_GPUSTATS") && frames % 50 == 0)
@@ -1541,4 +1544,5 @@ void port_frame_end(void) {
         test_pad();
     port_smooth_shown = 0;
     RT_LEAVE();
+    PT_END(PT_PRESENT, pt);
 }

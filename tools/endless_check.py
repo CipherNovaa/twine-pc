@@ -385,8 +385,13 @@ def lent_runs():
     nxt = ",".join("%d:8000,%d:0" % (t, t + 3) for t in range(700, 1000, 40))  # (the next weapon button: Square)
     runs["k_pool"] = Run("k_pool", 2, 70, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_NEXT="10:-1,8:0",
                                                TWINE_ENDLESS_TEST_EXIT=250, TWINE_ENDLESS_TEST_DRAW="KOFFLER",
-                                               TWINE_TEST_PAD=nxt))
+                                               TWINE_TEST_PAD=nxt, TWINE_TRACE="weapon,change"))
     del runs["k_pool"].env["TWINE_ENDLESS_TEST_MEET"]
+    # (as played: the hardware renderer, smooth motion; the pool stepped through, each weapon's model; the timing)
+    runs["k_pool_hw"] = Run("k_pool_hw", 2, 80, dict(runs["k_pool"].env, TWINE_RENDERER="hw", TWINE_SMOOTH=1))
+    runs["k_perf"] = Run("k_perf", 8, 70, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="2:4",
+                                              TWINE_ENDLESS_TEST_EXIT=120, TWINE_ENDLESS_TEST_DRAW="AR36",
+                                              TWINE_RENDERER="hw", TWINE_SMOOTH=1, TWINE_TIMING=1))
     # (the pause menu's INVENTORY in King's Ransom: down to its last rows, one toggled out of the round, chosen)
     inv = "800:0008,803:0,840:0040,843:0,870:4000,873:0," + ",".join("%d:0040,%d:0" % (t, t + 3) for t in range(900, 1051, 15))
     runs["k_inv"] = Run("k_inv", 2, 70, dict(runs["k_pool"].env, TWINE_TEST_PAD=inv + ",1080:8000,1083:0,1100:4000,1103:0"))
@@ -405,6 +410,29 @@ def lent_runs():
         del runs[k].env["TWINE_ENDLESS_TEST_MEET"]
     del runs["k_ammo"].env["TWINE_ENDLESS_TEST_MEET"]
     return runs
+
+
+def check_pool_models(run, how):
+    """each weapon stepped to in King's Ransom's pool slot shows its own model, put away as itself, no flash idle"""
+    import weapon_trace
+    path = os.path.join(run.dir, "port.log")
+    fr = [x for x in weapon_trace.frames(path, "", 8)]
+    idle = {}
+    for x in fr:
+        if x["state"] == 1 and x["loaded"]:
+            idle.setdefault(x["name"], set()).add(x["file"])
+    files = [f for v in idle.values() for f in v]
+    ok = len(idle) >= 3 and all(len(v) == 1 for v in idle.values()) and len(set(files)) == len(files)
+    result("k", "pool: each weapon shows its own model" + how, ok,
+           "; ".join("%s %s" % (n, "/".join(sorted(v))) for n, v in sorted(idle.items())) or "no idle frames")
+    own = {n: next(iter(v)) for n, v in idle.items() if len(v) == 1}
+    wrong = [x for x in fr if x["state"] in (3, 7) and x["loaded"] and x["name"] in own and x["file"] != own[x["name"]]]
+    result("k", "pool: put away and drawn as itself" + how, bool(own) and not wrong,
+           "%d frames of a weapon with another's model%s" % (len(wrong), " (f%d %s: %s)" % (wrong[0]["f"], wrong[0]["name"],
+                                                                                      wrong[0]["file"]) if wrong else ""))
+    flash = [x for x in fr if x["state"] == 1 and x["flash"] == "SHOWN"]
+    result("k", "pool: no muzzle flash while idle" + how, bool(fr) and len(flash) <= 1,
+           "%d idle frames with the flash shown" % len(flash))
 
 
 def room_part(log, level):
@@ -498,6 +526,14 @@ def check_lent(runs):
     steps = re.findall(r"the pool's (.+?) into slot", p)
     result("k", "pool: more lent than slots, stepped through", len(waits) >= 2 and set(waits) <= set(steps),
            "waiting %s; stepped to %s" % (", ".join(waits) or "none", ", ".join(steps) or "none"))
+    for k in ("k_pool", "k_pool_hw"):
+        check_pool_models(runs[k], "" if k == "k_pool" else " (hw renderer, smooth motion)")
+    p = room_part(runs["k_perf"].log, 2)
+    t = [(float(a), float(b)) for a, b in re.findall(r"timing: .*?, lent swaps ([0-9.]+), .*?; lent reads ([0-9.]+)", p)][1:]
+    swaps = max([a for a, _ in t] or [99])
+    result("k", "lent weapon in hand: its VRAM swaps cheap (hw renderer, smooth motion)", bool(t) and swaps < 6 and
+           all(b == 0 for _, b in t), "%d periods, swaps at most %.2f ms a tick, read back %s" %
+           (len(t), swaps, "never" if all(b == 0 for _, b in t) else "again and again"))
     p = room_part(runs["k_inv"].log, 8)
     rows = [(int(a), int(b), int(n)) for a, b, n in re.findall(r"inventory: rows (\d+)-(\d+) of (\d+)", p)]
     pooled = re.findall(r"weapons: (.+?) waits in the pool", runs["k_inv"].log.split("room start: level 8 ", 1)[0].rsplit("room start:", 1)[-1])

@@ -5,6 +5,7 @@
 #include <string.h>
 #include "port.h"
 #include "gpu.h"
+#include "gpu_hw.h"
 
 typedef struct {
     s16 x, y, w, h;
@@ -57,11 +58,15 @@ void *DrawSyncCallback(void (*fn)(void)) {
  * which this mission may use for its own (Courier's grenade lies where the AR36's scope picture goes). So the images
  * the lent model loads aren't put in VRAM as it's made: they're kept here and put there only while the weapon in hand
  * is drawn (its ordering table, sorted into the frame's: from the first of its tags DrawOTag meets to the next of the
- * frame's own), what was there put back after. */
+ * frame's own), what was there put back after. What was there is read once (again only after the game writes
+ * there itself: lent_written). With the hardware renderer the swaps go to the card's VRAM alone: gpu.c's copy (which
+ * the hardware renderer keeps only for reading VRAM back) keeps the mission's pixels there; swapping it too made
+ * gpu.c keep, and soon draw, everything of every drawing (a third of the time a drawing took). */
 #define LENT_IMAGES 16
 static struct {
     RECT r;
     u16 *pix, *saved;
+    int have; /* (saved holds what is there: read once, then again only after the game writes there itself) */
 } lent_img[LENT_IMAGES];
 static int lent_imgs, lent_in;
 static const u8 *lent_lo, *lent_hi;            /* (the lent model's file: its images are loaded from there) */
@@ -102,24 +107,57 @@ static int lent_image(const RECT *r, const u32 *p) {
         }
         lent_imgs++;
     }
+    lent_img[i].have = 0;
     memcpy(lent_img[i].pix, p, n * 2);
     return 1;
 }
 
+/* the game writes VRAM there itself: what the lent images cover read again at the next swap. (Reading it at each
+ * swap made gpu.c draw everything it keeps for later, every drawing: the swaps' own loads are kept there.) */
+static void lent_written(s32 x, s32 y, s32 w, s32 h) {
+    int i;
+    if (lent_in)
+        return;
+    for (i = 0; i < lent_imgs; i++)
+        if (x < lent_img[i].r.x + lent_img[i].r.w && lent_img[i].r.x < x + w && y < lent_img[i].r.y + lent_img[i].r.h &&
+            lent_img[i].r.y < y + h)
+            lent_img[i].have = 0;
+}
+
 static void lent_swap(int in) {
     int i;
+    u64 t = PT_BEGIN();
+    static int hwonly = -1;
+    static int reread = -1; /* (TWINE_TEST_LENT_REREAD=1: read back at every swap, as before: for comparing) */
+    if (reread < 0)
+        reread = getenv("TWINE_TEST_LENT_REREAD") != NULL;
+    if (in && reread)
+        for (i = 0; i < lent_imgs; i++)
+            lent_img[i].have = 0;
     if (in)
         for (i = 0; i < lent_imgs; i++)
-            gpu_store_image(lent_img[i].r.x, lent_img[i].r.y, lent_img[i].r.w, lent_img[i].r.h, lent_img[i].saved);
+            if (!lent_img[i].have) {
+                gpu_store_image(lent_img[i].r.x, lent_img[i].r.y, lent_img[i].r.w, lent_img[i].r.h, lent_img[i].saved);
+                lent_img[i].have = 1;
+                port_timing_count(PT_LENT_READ);
+            }
+    if (hwonly < 0) /* (the card's VRAM only: TWINE_TEST_LENT_SW_SWAP=1 has gpu.c's copy swapped too, as before) */
+        hwonly = getenv("TWINE_TEST_LENT_SW_SWAP") == NULL;
     for (i = in ? 0 : lent_imgs - 1; in ? i < lent_imgs : i >= 0; i += in ? 1 : -1)
-        gpu_load_image(lent_img[i].r.x, lent_img[i].r.y, lent_img[i].r.w, lent_img[i].r.h,
-                       in ? lent_img[i].pix : lent_img[i].saved);
+        if (hwonly && gpu_hw_on)
+            gpu_hw_load_image(lent_img[i].r.x, lent_img[i].r.y, lent_img[i].r.w, lent_img[i].r.h,
+                              in ? lent_img[i].pix : lent_img[i].saved);
+        else
+            gpu_load_image(lent_img[i].r.x, lent_img[i].r.y, lent_img[i].r.w, lent_img[i].r.h,
+                           in ? lent_img[i].pix : lent_img[i].saved);
     lent_in = in;
+    PT_END(PT_LENT_SWAP, t);
 }
 
 s32 LoadImage(RECT *r, u32 *p) {
     if (lent_image(r, p))
         return 0;
+    lent_written(r->x, r->y, r->w, r->h);
     gpu_load_image(r->x, r->y, r->w, r->h, (const u16 *)p);
     return 0;
 }
@@ -130,11 +168,13 @@ s32 StoreImage(RECT *r, u32 *p) {
 }
 
 s32 MoveImage(RECT *r, s32 x, s32 y) {
+    lent_written(x, y, r->w, r->h);
     gpu_move_image(r->x, r->y, r->w, r->h, x, y);
     return 0;
 }
 
 s32 ClearImage(RECT *r, u8 red, u8 g, u8 b) {
+    lent_written(r->x, r->y, r->w, r->h);
     gpu_fill_rect(r->x, r->y, r->w, r->h, (red >> 3) | ((g >> 3) << 5) | ((b >> 3) << 10));
     return 0;
 }
@@ -158,6 +198,7 @@ u32 *ClearOTagR(u32 *ot, s32 n) {
 
 void DrawOTag(u32 *p) {
     u32 n = 0;
+    u64 t = PT_BEGIN();
     while (p && n++ < 0x100000) {
         u32 tag = *p, len = tag >> 24;
         if (lent_imgs) {
@@ -174,6 +215,7 @@ void DrawOTag(u32 *p) {
     }
     if (lent_in)
         lent_swap(0);
+    PT_END(PT_DRAWOTAG, t);
     if (drawsync_callback)
         drawsync_callback();
 }

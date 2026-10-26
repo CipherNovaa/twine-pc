@@ -18,6 +18,7 @@ extern s32 D_8009CAC4; /* set as the menu closes */
 extern int port_debug_key;
 void port_fnt_frame(void);
 void endless_frame(void);
+void trace_frame(void);
 
 /* F9 (video.c) opens and closes the developers' debug menu, as the game's own menu code does (g_DevMenu, then its page). */
 s32 Pad_Update(void) {
@@ -26,6 +27,9 @@ s32 Pad_Update(void) {
     port_fnt_frame();
 #ifdef MOD_ENDLESS
     endless_frame();
+#endif
+#ifdef MOD_TRACE
+    trace_frame();
 #endif
     if (getenv("TWINE_TEST_DEBUG_PAGE")) /* headless tests: DISPLAY's page (the menu's state: vals[0]) */
         (&g_DevMenu)[14] = atoi(getenv("TWINE_TEST_DEBUG_PAGE"));
