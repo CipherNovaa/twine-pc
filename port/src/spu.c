@@ -559,9 +559,14 @@ static void wav_put(Wav *w, s32 l, s32 r) {
 /* ---- mixer ---- */
 
 /* A sound of the runtime's own (port_sfx): PCM mixed in like a voice, at its own rate */
-static const s16 *sfx_pcm;
-static u32 sfx_len, sfx_pos, sfx_step; /* (16.16 samples) */
-static s32 sfx_vol;
+#define SFX_CHANNELS 8
+static struct {
+    const s16 *pcm;
+    u32 len, loop, pos, step; /* (pos, step: 16.16 samples; loop: where a looping sound starts over, or len) */
+    s32 vol, handle;
+} sfx[SFX_CHANNELS];
+static s32 sfx_handles;
+int port_audio_muted(void); /* endless.c: nothing heard (its first start's survey) */
 
 static void spu_tick(s32 *out, const s32 *cd) {
     u16 attr = spu_regs[REG_ATTR];
@@ -602,16 +607,19 @@ static void spu_tick(s32 *out, const s32 *cd) {
             next_block(v, n);
         }
     }
-    if (sfx_pcm) {
-        if ((sfx_pos >> 16) >= sfx_len)
-            sfx_pcm = NULL;
-        else {
-            s32 o = (sfx_pcm[sfx_pos >> 16] * sfx_vol) >> 15;
-            dry[0] += o;
-            dry[1] += o;
-            sfx_pos += sfx_step;
+    for (c = 0; c < SFX_CHANNELS; c++)
+        if (sfx[c].pcm) {
+            if ((sfx[c].pos >> 16) >= sfx[c].len && sfx[c].loop < sfx[c].len)
+                sfx[c].pos = (sfx[c].loop << 16) + (sfx[c].pos & 0xFFFF);
+            if ((sfx[c].pos >> 16) >= sfx[c].len)
+                sfx[c].pcm = NULL;
+            else {
+                s32 o = (sfx[c].pcm[sfx[c].pos >> 16] * sfx[c].vol) >> 15;
+                dry[0] += o;
+                dry[1] += o;
+                sfx[c].pos += sfx[c].step;
+            }
         }
-    }
     if (attr & ATTR_CD) { /* CD audio: its own volume, then like a voice (reverb if enabled) */
         for (c = 0; c < 2; c++) {
             cdv[c] = (cd[c] * (s16)spu_regs[REG_CDVOL + c]) >> 15;
@@ -625,6 +633,8 @@ static void spu_tick(s32 *out, const s32 *cd) {
         /* the mute bit silences the voices and reverb, not the CD input */
         out[c] = clamp16((clamp16(((attr & ATTR_UNMUTE) ? dry[c] + rv[c] : 0) + cdv[c]) * main_vol[c]) >> 15);
     }
+    if (port_audio_muted())
+        out[0] = out[1] = 0;
 }
 
 static s32 out_peak; /* the loudest sample since spu_take_peak */
@@ -687,15 +697,38 @@ void spu_hold(int on) {
         unlock();
 }
 
-/* play n samples of pcm (kept by the caller) at rate Hz and volume vol (0x7FFF full), over what played before */
-void port_sfx(const s16 *pcm, u32 n, u32 rate, s32 vol) {
+/* play n samples of pcm (kept by the caller) at rate Hz and volume vol (0x7FFF full), with what else plays;
+ * loop_at >= 0: from n on, again from that sample until stopped. A handle for port_sfx_stop. */
+int port_sfx_play(const s16 *pcm, u32 n, u32 rate, s32 vol, s32 loop_at) {
+    int c, oldest = 0;
     lock();
-    sfx_pcm = pcm;
-    sfx_len = n;
-    sfx_pos = 0;
-    sfx_step = (u32)(((u64)rate << 16) / 44100);
-    sfx_vol = vol;
+    for (c = 0; c < SFX_CHANNELS && sfx[c].pcm; c++)
+        if (sfx[c].handle < sfx[oldest].handle)
+            oldest = c;
+    if (c == SFX_CHANNELS)
+        c = oldest;
+    sfx[c].pcm = pcm;
+    sfx[c].len = n;
+    sfx[c].loop = loop_at >= 0 && (u32)loop_at < n ? (u32)loop_at : n;
+    sfx[c].pos = 0;
+    sfx[c].step = (u32)(((u64)rate << 16) / 44100);
+    sfx[c].vol = vol;
+    sfx[c].handle = sfx_handles = sfx_handles % 0x3FFF + 1;
     unlock();
+    return sfx[c].handle;
+}
+
+void port_sfx_stop(int handle) {
+    int c;
+    lock();
+    for (c = 0; c < SFX_CHANNELS; c++)
+        if (sfx[c].pcm && sfx[c].handle == handle)
+            sfx[c].pcm = NULL;
+    unlock();
+}
+
+void port_sfx(const s16 *pcm, u32 n, u32 rate, s32 vol) {
+    port_sfx_play(pcm, n, rate, vol, -1);
 }
 
 static void (*sink)(const s16 *out, int frames);

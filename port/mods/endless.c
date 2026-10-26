@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4
+ * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80081458 func_8004DD9C func_8007A17C func_800753F0
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -114,8 +114,12 @@ typedef struct {
     u8 level, gun, animlen, pad;
     u8 def[0xB8], type[0x70], anim[16];
     char path[24];
+    u8 sfx[8]; /* (its fire sound's entry in its mission's sounds' table: program, tone, note, voice, volume, randomness) */
+    u8 kind, pad2[3]; /* (its entry in the pickups' table, D_8009D130: every mission's numbering; 0xFF none) */
+    char got[28], ammo_got[32]; /* (that entry's messages: the weapon's, its ammo's) */
 } WeaponRec; /* (port/src/endless.c's catalogue of every mission's weapons) */
-void port_weapon_put(int level, const u8 *def, const u8 *type, const u8 *anim, int animlen, const char *path, int gun);
+void port_weapon_put(int level, const u8 *def, const u8 *type, const u8 *anim, int animlen, const char *path, int gun,
+                     const u8 *sfx, int kind, const char *got, const char *ammo_got);
 void port_weapons_saved(void);
 const WeaponRec *port_weapon_find(const char *name, int level);
 int port_endless_surveying(void);
@@ -138,11 +142,19 @@ extern s32 D_800E2F2C;  /* (the section's walls, for it) */
 u32 port_ext_free_bytes(void); /* (malloc3.c) */
 void func_80053DE4(s16 type, s16 sub, s32 x, s32 y, s32 z); /* an event on the AI's board (0: a gunshot) */
 
+extern u8 *D_8009CD98;     /* the weapon in Bond's hands (an object) */
+extern s32 D_8009CD4C;
 #define OBJ(i) ((u8 *)D_800AFFC8 + (i) * 0x124)
+static s32 hp_seen[64]; /* (headless tests: each person's health as the frame began, for the damage a hit did) */
 #define TYPE_DEF(t) ((u8 *)g_Args->unk228 + (t) * 0x70) /* the object types: +1 their class (6 people), +2 (0x22 a door's zone) */
 #define HEALTH(o) (*(s32 *)((u8 *)(o) + 0x34))
 #define POS(o) ((s32 *)(*(u8 **)((u8 *)(o) + 0x90) + 0x28))
 #define SEC 20                                   /* frames a second (the game's 20 Hz) */
+/* each mission's sounds' table: how many (func_80026F30 plays those below; a lent weapon's own sound is given an id
+ * past them, below 0x80, which the guns' code takes as no sound) */
+static const u8 sound_count[12] = {0x69, 0x69, 0x7C, 0x77, 0x69, 0x62, 0x76, 0x79, 0x73, 0x71, 0x7D, 0x69};
+#define LENT_SOUND (sound_count[g_Args->level < 12 ? g_Args->level : 0]) /* (the first lent weapon's sound id) */
+
 static int weapon_slots(void) { /* g_Weapons' slots, the mission's own set (the reset function's count) */
     static const s8 n[12] = {0, 6, 12, 9, 6, 11, 12, 13, 11, 12, 10, 6};
     return g_Args && g_Args->level >= 1 && g_Args->level <= 11 ? n[g_Args->level] : 6;
@@ -408,75 +420,249 @@ static int pistol_slot(void) {
 }
 
 static u32 lent_mask; /* (the slots lent to this mission: theirs are another's) */
+static u32 lent_work[0xE000 / 4]; /* (a lent weapon's model: func_800753F0) */
+static u8 lent_work_type; /* (the model type whose file is in it) */
+
 static void weapons_capture(void) {
     int i, p = pistol_slot(), n = 0;
     u32 gun_fire = p >= 0 ? *(u32 *)((u8 *)&g_Weapons[p] + 0x3C) : 0;
     for (i = 0; i < SLOTS; i++) {
         u8 *w = (u8 *)&g_Weapons[i], t = w[0x5B], *te = D_8009D0FC ? D_8009D0FC + t * 0x70 : 0;
+        int k;
         if (w[0] < 'A' || w[0] > 'Z' || (lent_mask & 1 << i)) /* (and not a slot lent to this mission) */
             continue;
+        for (k = 0; k < 19 && D_8009D130[k * 4] != i; k++)
+            ;
         port_weapon_put(g_Args->level, w, te, te ? *(u8 **)(te + 0x68) : 0, te ? *(u16 *)(te + 0x6C) : 0,
-                        t && D_8009DB50[t] ? D_8009DB50[t] : "", gun_fire && *(u32 *)(w + 0x3C) == gun_fire);
+                        t && D_8009DB50[t] ? D_8009DB50[t] : "", gun_fire && *(u32 *)(w + 0x3C) == gun_fire,
+                        w[0x5A] < LENT_SOUND && *(u8 **)((u8 *)g_Args + 0x130) ? *(u8 **)((u8 *)g_Args + 0x130) + w[0x5A] * 8 : 0,
+                        k < 19 ? k : -1, k < 19 ? (char *)D_8009D130[k * 4 + 2] : 0, k < 19 ? (char *)D_8009D130[k * 4 + 3] : 0);
         n++;
     }
     port_weapons_saved();
     ELOG("weapons: the mission's %d weapons in the catalogue", n);
 }
 
+/* The tool slots a lent weapon works from as at home, per mission: the missions' own code treats some slots by
+ * their number as their tools (Courier's 1 and 5, King's Ransom's grapple at 7, Meltdown's 4-6 ...: a gun there
+ * fires once, or never, or as a grapple), found by firing an automatic lent into each */
+static const u16 clean_slots[12] = {0, 0, 1 << 6 | 1 << 11, 1 << 8, 0, 1 << 7 | 1 << 9, 1 << 6 | 1 << 10 | 1 << 11,
+                                    1 << 11 | 1 << 12, 1 << 10, 1 << 10 | 1 << 11, 1 << 9, 0};
+static struct {
+    u8 level, loop;
+    u8 sfx[8];
+} lent_sound[8]; /* (a lent weapon's fire sound, its own: func_80026F30 below) */
 static char lent_path[8][24];
+static char lent_got[8][28], lent_ammo_got[8][32];
 static u8 lent_anim[8][16];
+s32 func_80026F30(u32 id, s32 flags);
+/* More weapons than the mission has slots for them (King's Ransom, Turncoat and Meltdown have one): the lent ones
+ * share the slots, a pool. The weapon buttons step through the pool's weapons in a shared slot before they step on
+ * (pool_step); each keeps its own ammo (Bond's carry holds it while it isn't in a slot), and drops feed it there
+ * too (func_8004CA5C). */
+static struct {
+    char name[24];
+    const WeaponRec *r;
+} pool[16];
+static int pool_n;
+static s8 slot_pool[16]; /* (a slot's pool weapon now, -1 none) */
+static s8 slot_idx[16];  /* (a lent slot's place among them: its sound, model file, animation numbers, messages) */
+
+static int carry_entry(const char *name) {
+    EndlessCarry *c = &port_endless_carry;
+    int j;
+    for (j = 0; j < c->weapons; j++)
+        if (!strncmp(c->weapon[j].name, name, 23))
+            return j;
+    return -1;
+}
+
+/* pool weapon pi into lent slot i (its place k): the donor's definition, this mission's guns' fire, its own sound,
+ * model and animations, its pickups' entry */
+static void lend_into(int i, int pi, int k) {
+    const WeaponRec *r = pool[pi].r;
+    int p = pistol_slot();
+    u8 *w = (u8 *)&g_Weapons[i], *pw = (u8 *)&g_Weapons[p], t = w[0x5B], *te;
+    u32 pickup = *(u32 *)(w + 0x40);
+    if (slot_pool[i] >= 0) { /* (the one there before: its pickups' entry back to none) */
+        const WeaponRec *o = pool[(int)slot_pool[i]].r;
+        if (o->kind < 19 && D_8009D130[o->kind * 4] == i)
+            D_8009D130[o->kind * 4] = -1;
+    }
+    memcpy(w, r->def, 0xB8);
+    *(u32 *)(w + 0x3C) = *(u32 *)(pw + 0x3C); /* (this mission's guns' fire) */
+    *(u32 *)(w + 0x40) = pickup;
+    memset(&lent_sound[k], 0, sizeof(lent_sound[k]));
+    if (w[0x5A] != 0xFF && r->sfx[4] && LENT_SOUND + k < 0x80) { /* (its own sound: func_80026F30) */
+        lent_sound[k].level = r->level;
+        lent_sound[k].loop = r->def[0x38] >> 1 & 1; /* (an automatic's: a loop while it fires) */
+        memcpy(lent_sound[k].sfx, r->sfx, 8);
+        w[0x5A] = LENT_SOUND + k;
+    }
+    w[0x5B] = t;
+    lent_mask |= 1 << i;
+    *(s32 *)(w + 0x38) &= ~0x1800; /* (owned as Bond's carry says) */
+    te = D_8009D0FC + t * 0x70;
+    memcpy(te, r->type, 0x70);
+    te[0] = t;
+    te[0x2C] = (D_8009D0FC + pw[0x5B] * 0x70)[0x2C]; /* (this mission's bullets) */
+    memcpy(lent_anim[k], r->anim, 16);
+    *(u8 **)(te + 0x68) = lent_anim[k];
+    *(u16 *)(te + 0x6C) = r->animlen;
+    snprintf(lent_path[k], sizeof(lent_path[k]), "%s", r->path);
+    D_8009DB50[t] = lent_path[k];
+    if (r->kind < 19 && D_8009D130[r->kind * 4] < 0) { /* (its ammo in boxes, its pickups' messages its own) */
+        s32 *e = &D_8009D130[r->kind * 4];
+        snprintf(lent_got[k], sizeof(lent_got[k]), "%s", r->got);
+        snprintf(lent_ammo_got[k], sizeof(lent_ammo_got[k]), "%s", r->ammo_got);
+        e[0] = i;
+        e[1] = -1; /* (no gun of it lies about here: its model is its mission's) */
+        e[2] = (s32)(long)lent_got[k];
+        e[3] = (s32)(long)lent_ammo_got[k];
+    }
+    slot_pool[i] = (s8)pi, slot_idx[i] = (s8)k;
+}
+
+/* a lent slot's weapon as Bond's carry has it (owned, its ammo) */
+static void lent_ammo_in(int i) {
+    EndlessCarry *c = &port_endless_carry;
+    int j = slot_pool[i] >= 0 ? carry_entry(pool[(int)slot_pool[i]].name) : -1;
+    Weapon *w = &g_Weapons[i];
+    if (j < 0)
+        return;
+    if (c->weapon[j].owned)
+        w->flags |= 0x1800;
+    w->ammo = c->weapon[j].ammo, w->clip = c->weapon[j].clip, w->reserve = c->weapon[j].reserve;
+}
+
+/* ... and back into the carry as it leaves the slot */
+static void lent_ammo_out(int i) {
+    EndlessCarry *c = &port_endless_carry;
+    int j = slot_pool[i] >= 0 ? carry_entry(pool[(int)slot_pool[i]].name) : -1;
+    Weapon *w = &g_Weapons[i];
+    if (j < 0)
+        return;
+    c->weapon[j].owned = (w->flags & 0x1800) == 0x1800;
+    c->weapon[j].ammo = w->ammo, c->weapon[j].clip = w->clip, c->weapon[j].reserve = w->reserve;
+}
+
+static int pool_shown(int pi) {
+    int i;
+    for (i = 0; i < 16; i++)
+        if (slot_pool[i] == pi && (lent_mask >> i & 1))
+            return 1;
+    return 0;
+}
+
 static void lend_weapons(void) {
     EndlessCarry *c = &port_endless_carry;
-    int j, i, p = pistol_slot(), used = 0;
-    if (!c->valid || p < 0)
+    int j, i, k = 0;
+    memset(lent_sound, 0, sizeof(lent_sound));
+    memset(slot_pool, -1, sizeof(slot_pool));
+    pool_n = 0;
+    if (!c->valid || pistol_slot() < 0 || !D_8009D0FC)
         return;
-    for (j = 0; j < c->weapons && used < 8; j++) {
+    for (j = 0; j < c->weapons && pool_n < 16; j++) {
         const WeaponRec *r;
-        u8 *w, *pw = (u8 *)&g_Weapons[p], t, *te;
         int have = 0;
         if (!c->weapon[j].owned)
             continue;
         for (i = 0; i < SLOTS; i++)
             have |= !strncmp((char *)g_Weapons[i].pad0, c->weapon[j].name, 23);
-        if (have || !(r = port_weapon_find(c->weapon[j].name, g_Args->level)))
+        if (getenv("TWINE_ENDLESS_TEST_SELFLEND") && !strncmp(c->weapon[j].name, getenv("TWINE_ENDLESS_TEST_SELFLEND"), 23))
+            r = port_weapon_find(c->weapon[j].name, -1);
+        else if (have || !(r = port_weapon_find(c->weapon[j].name, g_Args->level)))
             continue;
-        if (!r->gun || !r->path[0]) {
-            ELOG("weapons: %s can't be lent here yet (not a gun)", c->weapon[j].name);
+        if (!r || !r->gun || !r->path[0]) {
+            if (r)
+                ELOG("weapons: %s can't be lent here yet (not a gun)", c->weapon[j].name);
             continue;
         }
-        for (i = 0; i < SLOTS; i++) /* (a tool's slot) */
-            if (g_Weapons[i].pad0[0] >= 'A' && g_Weapons[i].pad0[0] <= 'Z' && !combat_item((char *)g_Weapons[i].pad0) &&
-                !(lent_mask & 1 << i))
-                break;
-        if (i == SLOTS) {
-            ELOG("weapons: no slot left to lend %s in", c->weapon[j].name);
-            break;
-        }
-        w = (u8 *)&g_Weapons[i], t = w[0x5B];
-        if (!t || !D_8009D0FC) /* (a tool without a model of its own) */
-            continue;
-        {
-            u32 pickup = *(u32 *)(w + 0x40);
-            memcpy(w, r->def, 0xB8);
-            *(u32 *)(w + 0x3C) = *(u32 *)(pw + 0x3C); /* (this mission's guns' fire) */
-            *(u32 *)(w + 0x40) = pickup;
-            w[0x5A] = pw[0x5A];                        /* (its pistol's sound) */
-            w[0x5B] = t;
-            lent_mask |= 1 << i;
-            *(s32 *)(w + 0x38) &= ~0x1800;            /* (owned as Bond's carry says: carry_in) */
-        }
-        te = D_8009D0FC + t * 0x70;
-        memcpy(te, r->type, 0x70);
-        te[0] = t;
-        te[0x2C] = (D_8009D0FC + pw[0x5B] * 0x70)[0x2C]; /* (this mission's bullets) */
-        memcpy(lent_anim[used], r->anim, 16);
-        *(u8 **)(te + 0x68) = lent_anim[used];
-        *(u16 *)(te + 0x6C) = r->animlen;
-        snprintf(lent_path[used], sizeof(lent_path[used]), "%s", r->path);
-        D_8009DB50[t] = lent_path[used];
-        ELOG("weapons: %s lent from level %d into slot %d (model %s, type %d)", c->weapon[j].name, r->level, i, r->path, t);
-        used++;
+        if (!strncmp(c->weapon[j].name, c->in_hand, 23) && pool_n) { /* (the one in his hand first: a slot for it) */
+            memmove(&pool[1], &pool[0], sizeof(pool[0]) * pool_n);
+            i = 0;
+        } else
+            i = pool_n;
+        snprintf(pool[i].name, sizeof(pool[i].name), "%s", c->weapon[j].name);
+        pool[i].r = r;
+        pool_n++;
     }
+    for (j = 0; j < pool_n; j++) {
+        for (i = 0; i < SLOTS && i < 16; i++) /* (a tool's slot, one the mission's code leaves alone) */
+            if ((getenv("TWINE_ENDLESS_TEST_LENDAT") ? i == atoi(getenv("TWINE_ENDLESS_TEST_LENDAT"))
+                                                    : (clean_slots[g_Args->level] >> i & 1)) &&
+                g_Weapons[i].pad0[0] >= 'A' && g_Weapons[i].pad0[0] <= 'Z' && !combat_item((char *)g_Weapons[i].pad0) &&
+                !(lent_mask & 1 << i) && ((u8 *)&g_Weapons[i])[0x5B]) /* (and a model type of its own) */
+                break;
+        if (i == SLOTS || i == 16) {
+            ELOG("weapons: %s waits in the pool (no slot left: the weapon buttons step to it)", pool[j].name);
+            continue;
+        }
+        lend_into(i, j, k++);
+        ELOG("weapons: %s lent from level %d into slot %d (model %s, type %d)", pool[j].name, pool[j].r->level, i,
+             pool[j].r->path, ((u8 *)&g_Weapons[i])[0x5B]);
+    }
+}
+
+/* The weapon buttons (D_800DDE08 previous, D_800DDDA4 next, pressed this frame) stepping away from a lent slot while
+ * the pool has another weapon that way not in a slot: that weapon into this slot instead, and the change to it */
+extern s32 D_800DDE08, D_800DDDA4;
+extern s16 D_800B0DD8; /* the weapon before a change */
+extern s32 D_800F11F0; /* the weapon's state */
+static void pool_step(void) {
+    static s32 last_state;
+    int c = D_800B0DD8, dir, pi;
+    s32 st = D_800F11F0;
+    if ((st == 3 || st == 6) && last_state != 3 && last_state != 6 && c >= 0 && c < 16 && (lent_mask >> c & 1) &&
+        slot_pool[c] >= 0 && D_800B0DDC != c && (D_800DDE08 || D_800DDDA4) && draw_slot < 0) {
+        dir = D_800DDDA4 ? 1 : -1;
+        for (pi = slot_pool[c] + dir; pi >= 0 && pi < pool_n && pool_shown(pi); pi += dir)
+            ;
+        if (pi >= 0 && pi < pool_n) {
+            lent_ammo_out(c);
+            lend_into(c, pi, slot_idx[c]);
+            lent_ammo_in(c);
+            D_800B0DDC = (s16)c;
+            ELOG("weapons: the pool's %s into slot %d (the weapon buttons step through the pool)", pool[pi].name, c);
+        }
+    }
+    last_state = st;
+}
+
+/* a box of a pool weapon's ammo while it isn't in a slot: the ammo to Bond's carry, as the game gives a box's
+ * (func_8004CB2C's count, the pickup's message and sound) */
+extern s16 D_8009D124; /* the pickup's sound */
+static int pool_box(u8 *o) {
+    EndlessCarry *c = &port_endless_carry;
+    int pi, j, n, clip, cap;
+    s32 kind;
+    static char msg[48];
+    if (o[6] != (u8)D_8009D108 || !pool_n)
+        return 0;
+    kind = *(s32 *)(o + 0x34);
+    for (pi = 0; pi < pool_n && pool[pi].r->kind != kind; pi++)
+        ;
+    if (pi == pool_n || pool_shown(pi) || (j = carry_entry(pool[pi].name)) < 0)
+        return 0;
+    clip = pool[pi].r->def[0x50], cap = *(s16 *)(pool[pi].r->def + 0x5C);
+    if (cap > 0 && c->weapon[j].reserve >= cap)
+        return 0;
+    n = clip < 2 ? 1 : *(s32 *)(o + 0x60) ? clip : (s32)(rnd() % (clip >> 1)) + 1 + (clip >> 2);
+    if (clip >= 2 && !(clip & 1) && (n & 1))
+        n++;
+    c->weapon[j].reserve += n, c->weapon[j].ammo += n;
+    if (cap > 0 && c->weapon[j].reserve > cap)
+        c->weapon[j].ammo -= c->weapon[j].reserve - cap, c->weapon[j].reserve = cap;
+    snprintf(msg, sizeof(msg), pool[pi].r->ammo_got[0] ? pool[pi].r->ammo_got : "GOT %d ROUNDS", n);
+    func_80048B4C(msg, 0x80, 0);
+    func_80026F30(D_8009D124, 0);
+    if (*(s32 **)(o + 0x60)) {
+        **(s32 **)(o + 0x60) = 0;
+        *(s32 **)(o + 0x60) = 0;
+    }
+    func_800395E8(o);
+    ELOG("pickup: %s's ammo +%d (a lent weapon waiting in the pool)", pool[pi].name, n);
+    return 1;
 }
 
 /* ... and as he comes into this one: what he had of this mission's weapons, and more of an ammo than it gives */
@@ -825,7 +1011,7 @@ static void room_start(void) {
     read_floor();
     clear_arrival();
     if (!segment)
-        lent_mask = 0; /* (a mission loaded afresh: its own slots again) */
+        lent_mask = 0, lent_work_type = 0; /* (a mission loaded afresh: its own slots again) */
     weapons_capture();
     if (port_endless_surveying()) { /* (a survey's room: its weapons taken, left at once) */
         ELOG("weapons: level %d surveyed", g_Args->level);
@@ -1190,8 +1376,27 @@ static u8 *pickup(s32 type, s32 x, s32 y, s32 z, const char *what) {
     return o;
 }
 
+/* explosives (thrown, launched, set): their ammo scarcer in drops */
+static int explosive(const char *nm) {
+    return !strncmp(nm, "FRAG", 4) || !strncmp(nm, "SATCHEL", 7) || !strncmp(nm, "FLASH", 5) ||
+           !strncmp(nm, "GRENADE LAUNCHER", 16) || !strncmp(nm, "ROCKET", 6) || !strncmp(nm, "GAS GRENADE", 11) ||
+           !strncmp(nm, "PIPE BOMB", 9);
+}
+
+/* satchel charges and their detonator go together: Bond given satchels is given the detonator too */
+static void give_detonator(void) {
+    int i;
+    for (i = 0; i < SLOTS; i++)
+        if (!strncmp((char *)g_Weapons[i].pad0, "SATCHEL DETONATOR", 17) && (g_Weapons[i].flags & 0x1800) != 0x1800) {
+            g_Weapons[i].flags |= 0x1800;
+            if (g_Weapons[i].ammo < 1)
+                g_Weapons[i].ammo = 1;
+            ELOG("weapons: the satchel detonator given with the satchels");
+        }
+}
+
 /* What a guard leaves as he falls: armour, ammo for one of the mission's weapons, now and then a weapon */
-static s32 last_drop[3];
+static s32 last_drop[3], last_box[3];
 static void drop(u8 *o) {
     s32 x = POS(o)[0], y = POS(o)[1] - 100, z = POS(o)[2], r = rnd() % 100, i, n;
     s32 weapons[19], ammo[19], na = 0;
@@ -1229,10 +1434,64 @@ static void drop(u8 *o) {
         pickup(D_8009D104 > 0 ? D_8009D104 : D_8009D106, x, y, z, "light armour");
     else if (r < 50 && n)
         pickup(D_8009D130[weapons[rnd() % n] * 4 + 1], x, y, z, "weapon");
-    /* and ammo, mostly */
-    if (rnd() % 100 < 70 && na && (box = pickup(D_8009D108, x + 150, y, z + 150, "ammo box"))) {
-        *(s32 *)(box + 0x34) = ammo[rnd() % na];
-        ELOG("pickup: the box holds %s's ammo", (char *)g_Weapons[D_8009D130[*(s32 *)(box + 0x34) * 4]].pad0);
+    /* and ammo, mostly: for one of the weapons Bond carries (one lent to the mission too), the emptier the likelier,
+     * none for one full; explosives' scarcer than bullets. (So a favourite gun is kept fed, whatever else he has.) */
+    if (rnd() % 100 < 70 && na) {
+        s32 weight[19], total = 0, pick = -1;
+        for (i = 0; i < 19; i++) {
+            s32 sl = D_8009D130[i * 4], cap, have;
+            Weapon *w;
+            const char *nm;
+            weight[i] = 0;
+            if (sl < 0 || sl >= SLOTS)
+                continue;
+            w = &g_Weapons[sl];
+            nm = (char *)w->pad0;
+            if ((w->flags & 0x1800) != 0x1800 || !combat_item(nm) || !strncmp(nm, "UNARMED", 7) ||
+                !strncmp(nm, "SATCHEL DET", 11))
+                continue;
+            cap = *(s16 *)&w->maxAmmo, have = w->reserve;
+            if (cap > 0 && have >= cap)
+                continue;
+            weight[i] = cap > 0 ? 10 + 90 * (cap - have) / cap : 50;
+            if (explosive(nm))
+                weight[i] = (weight[i] + 3) / 4;
+            total += weight[i];
+        }
+        {   /* (and the pool's weapons waiting for a slot: Bond's carry holds their ammo) */
+            EndlessCarry *c = &port_endless_carry;
+            int pi, j;
+            for (pi = 0; pi < pool_n; pi++) {
+                const WeaponRec *r = pool[pi].r;
+                s32 cap = *(s16 *)(r->def + 0x5C), have;
+                if (pool_shown(pi) || r->kind >= 19 || weight[r->kind] || (j = carry_entry(pool[pi].name)) < 0 ||
+                    !c->weapon[j].owned)
+                    continue;
+                have = c->weapon[j].reserve;
+                if (cap > 0 && have >= cap)
+                    continue;
+                weight[r->kind] = cap > 0 ? 10 + 90 * (cap - have) / cap : 50;
+                total += weight[r->kind];
+            }
+        }
+        if (total > 0) {
+            s32 r2 = rnd() % total;
+            for (i = 0; i < 19 && pick < 0; i++)
+                if (weight[i] && (r2 -= weight[i]) < 0)
+                    pick = i;
+        } else
+            pick = ammo[rnd() % na];
+        if (pick >= 0 && (box = pickup(D_8009D108, x + 150, y, z + 150, "ammo box"))) {
+            *(s32 *)(box + 0x34) = pick;
+            last_box[0] = x + 150, last_box[1] = y, last_box[2] = z + 150;
+            if (D_8009D130[pick * 4] >= 0) {
+                ELOG("pickup: the box holds %s's ammo%s", (char *)g_Weapons[D_8009D130[pick * 4]].pad0,
+                     lent_mask >> D_8009D130[pick * 4] & 1 ? " (a lent weapon)" : "");
+                if (!strncmp((char *)g_Weapons[D_8009D130[pick * 4]].pad0, "SATCHEL CHARGE", 14))
+                    give_detonator();
+            } else
+                ELOG("pickup: the box holds kind %d's ammo (a lent weapon waiting in the pool)", pick);
+        }
     }
 }
 
@@ -2140,6 +2399,12 @@ void endless_frame(void) {
     if (getenv("TWINE_ENDLESS_TEST_DIE") && room_frames == atoi(getenv("TWINE_ENDLESS_TEST_DIE")) &&
         (!strchr(getenv("TWINE_ENDLESS_TEST_DIE"), '@') || wave == atoi(strchr(getenv("TWINE_ENDLESS_TEST_DIE"), '@') + 1)))
         func_8004B270(0x40000, 1, 1); /* (headless tests: Bond hit hard, at frame N or N@wave) */
+    if (getenv("TWINE_ENDLESS_TEST_GRAB_BOX") && room_frames % atoi(getenv("TWINE_ENDLESS_TEST_GRAB_BOX")) == 0 && last_box[0]) {
+        s16 at[5]; /* (headless tests: Bond onto the last ammo box) */
+        at[0] = D_800D2F8C, at[1] = gPsi, at[2] = last_box[0], at[3] = last_box[1], at[4] = last_box[2];
+        func_80030FA8(at);
+        last_box[0] = 0;
+    }
     if (getenv("TWINE_ENDLESS_TEST_GRAB") && room_frames == atoi(getenv("TWINE_ENDLESS_TEST_GRAB")) && last_drop[0]) {
         s16 at[5]; /* (headless tests: Bond onto the last drop) */
         at[0] = D_800D2F8C, at[1] = gPsi, at[2] = last_drop[0], at[3] = last_drop[1], at[4] = last_drop[2];
@@ -2221,7 +2486,7 @@ void endless_frame(void) {
     if (getenv("TWINE_ENDLESS_TEST_GOD") && HEALTH(g_Player) > 0 && HEALTH(g_Player) < 0x10000)
         HEALTH(g_Player) = 0x20000; /* (headless tests: Bond doesn't fall) */
     if (getenv("TWINE_ENDLESS_TEST_DRAW") && room_frames == 60) /* (headless tests: Bond changes to the weapon named) */
-        for (i = 0; i < 10; i++)
+        for (i = 0; i < SLOTS; i++)
             if (!strncmp((char *)g_Weapons[i].pad0, getenv("TWINE_ENDLESS_TEST_DRAW"), strlen(getenv("TWINE_ENDLESS_TEST_DRAW"))))
                 draw_slot = i;
     if (draw_slot >= 0 && D_800B0DD4 != draw_slot) {
@@ -2230,6 +2495,33 @@ void endless_frame(void) {
 #endif
             draw_slot = -1;
     }
+    if (getenv("TWINE_ENDLESS_AMMO_LOG") && room_frames == 41) /* (headless tests: which of his weapons drops can feed) */
+        for (i = 0; i < SLOTS; i++)
+            if ((g_Weapons[i].flags & 0x1800) == 0x1800 && *(s16 *)&g_Weapons[i].maxAmmo > 0)
+                ELOG("ammo: %s reserve %d of %d%s", (char *)g_Weapons[i].pad0, g_Weapons[i].reserve,
+                     *(s16 *)&g_Weapons[i].maxAmmo, g_Weapons[i].reserve >= *(s16 *)&g_Weapons[i].maxAmmo ? " (full)" : "");
+    if (getenv("TWINE_ENDLESS_AMMO_LOG"))
+        for (i = 0; i < 64; i++)
+            hp_seen[i] = HEALTH(OBJ(i));
+    if (getenv("TWINE_ENDLESS_AMMO_LOG") && D_800B0DD4 >= 0 && D_800B0DD4 < SLOTS) { /* (headless tests: shots fired) */
+        static s32 last_clip = -1;
+        if (g_Weapons[D_800B0DD4].clip != last_clip)
+            ELOG("ammo: %s clip %d at frame %d", (char *)g_Weapons[D_800B0DD4].pad0, g_Weapons[D_800B0DD4].clip, room_frames);
+        last_clip = g_Weapons[D_800B0DD4].clip;
+        {
+            extern s32 D_800F11F0;
+            static s32 last_state = -99;
+            extern s16 D_8009CF48;
+            extern s32 D_800DDEE8;
+            if (D_800DDEE8 && room_frames % 2 == 0)
+                ELOG("ammo: held, timer %d, +62 %d, state %d", D_8009CF48, *(s16 *)((u8 *)&g_Weapons[D_800B0DD4] + 0x62), D_800F11F0);
+            if (D_800F11F0 != last_state || (D_800F11F0 >= 0x21 && D_800F11F0 <= 0x24 && room_frames % 4 == 0))
+                ELOG("ammo: weapon state %d at frame %d (view +7C %08X, aiming %d)", D_800F11F0, room_frames,
+                     D_8009CD98 ? *(u32 *)((u8 *)D_8009CD98 + 0x7C) : 0, D_8009CD4C);
+            last_state = D_800F11F0;
+        }
+    }
+    pool_step();
     if (room_frames % SEC == 0)
         strip_tools(); /* (what the mission gives him later too: its scripts, its pickups) */
     if (room_frames == SEC * 5)
@@ -2413,17 +2705,35 @@ u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z) {
 /* A person hit: one that is hit again and again without being hurt (a story person the game won't let die,
  * under a guard's look) is taken out of the room */
 void func_8005E020(u8 *o) {
+    s16 e[5];
+    if (getenv("TWINE_ENDLESS_AMMO_LOG") && port_endless_room(e) && (u8 *)o >= OBJ(0) && (u8 *)o < OBJ(64) && o != g_Player &&
+        D_800B0DD4 >= 0) {
+        int i = (int)(((u8 *)o - OBJ(0)) / 0x124);
+        if (hp_seen[i] > HEALTH(o))
+            ELOG("hit: person %d by %s: %d damage", i, (char *)g_Weapons[D_800B0DD4].pad0, hp_seen[i] - HEALTH(o));
+        hp_seen[i] = HEALTH(o);
+    }
     func_8005E020_orig(o); /* (its old backstop, people hit unhurt taken out, took ordinary guards: gone) */
 }
 
 /* A pickup touched by Bond: logged when taken */
 s32 func_8004CA5C(u8 *o, u8 *who) {
     s32 type = o[6], health = HEALTH(g_Player), armour = D_8009CFF0, ammo = D_800B0DD4 >= 0 ? g_Weapons[D_800B0DD4].ammo : 0;
-    s32 r = func_8004CA5C_orig(o, who);
+    s32 before[16], i, n = SLOTS < 16 ? SLOTS : 16, r;
     s16 e[5];
-    if (r && !port_subframe && port_endless_room(e))
+    for (i = 0; i < n; i++)
+        before[i] = g_Weapons[i].ammo;
+    if (port_endless_room(e) && *(s32 *)(who + 0x34) > 0 && pool_box(o))
+        return 1;
+    r = func_8004CA5C_orig(o, who);
+    if (r && !port_subframe && port_endless_room(e)) {
         ELOG("pickup taken: type %d: health %d -> %d, armour %d -> %d, ammo in hand %d -> %d", type, health,
              HEALTH(g_Player), armour, D_8009CFF0, ammo, D_800B0DD4 >= 0 ? g_Weapons[D_800B0DD4].ammo : 0);
+        for (i = 0; i < n; i++)
+            if (g_Weapons[i].ammo != before[i])
+                ELOG("pickup: %s's ammo %d -> %d%s", (char *)g_Weapons[i].pad0, before[i], g_Weapons[i].ammo,
+                     lent_mask >> i & 1 ? " (a lent weapon)" : "");
+    }
     return r;
 }
 
@@ -2673,6 +2983,7 @@ static struct {
     u32 size;
 } donor_hmd[8];
 
+void port_smooth_keep(void *at, u32 size);
 static int lent_model(s32 idx) {
     u8 t = ((u8 *)&g_Weapons[idx])[0x5B];
     const char *p = t ? D_8009DB50[t] : 0;
@@ -2680,7 +2991,7 @@ static int lent_model(s32 idx) {
     if (!p || p[0] != 'L' || p[3] != '/' || !(lent_mask & 1 << idx))
         return 0;
     lv = (p[1] - '0') * 10 + (p[2] - '0');
-    if (lv == g_Args->level)
+    if (lv == g_Args->level && !getenv("TWINE_ENDLESS_TEST_SELFLEND"))
         return 0;
     for (k = 0; k < 8 && donor_hmd[k].data && strncmp(donor_hmd[k].path, p, 23); k++)
         ;
@@ -2697,8 +3008,8 @@ static int lent_model(s32 idx) {
             if (!strncmp((char *)e, p, 24)) {
                 u32 at = *(u16 *)(e + 26) * 0x800u, end = *(u16 *)(e + 26 + 0x1C) * 0x800u;
                 u32 size = end > at && end <= n ? end - at : 0;
-                if (size > 0xE000)
-                    size = 0xE000;
+                if (size > sizeof(lent_work))
+                    size = sizeof(lent_work);
                 if (size && (donor_hmd[k].data = malloc(size))) {
                     memcpy(donor_hmd[k].data, arc + at, size);
                     donor_hmd[k].size = size;
@@ -2712,20 +3023,101 @@ static int lent_model(s32 idx) {
             return 0;
         }
     }
-    memcpy(&D_800E2F58 + 4, donor_hmd[k].data, donor_hmd[k].size);
+    /* (into a buffer of the mod's, as big as the biggest: some missions' own is smaller than another's models,
+     * Courier's 0xD800 bytes to the AR36's 0xD860; the model is made from it: func_800753F0) */
+    memcpy(lent_work, donor_hmd[k].data, donor_hmd[k].size);
+    port_smooth_keep(lent_work, sizeof(lent_work));
+    lent_work_type = t;
     D_800F0F5C = 0;
     D_800E2F58 = t;
     return 1;
 }
 
+void *func_800753F0_orig(s32 type);
+void *func_800753F0(s32 type) {
+    if (lent_work_type && (type & 0xFF) == lent_work_type && D_800E2F58 == lent_work_type)
+        return lent_work;
+    return func_800753F0_orig(type);
+}
+
+/* A lent weapon's fire sound, its own mission's (a sound id of its own, past the mission's table: LENT_SOUND):
+ * its tone decoded from that mission's bank and played by the runtime (port/src/tones.c), as the game plays its
+ * sounds (func_80026F30: the volume the table and the settings give, its note); an automatic weapon's sound loops
+ * until the game stops it (func_80081458, the handle func_80026F30 gave) */
+int port_tone_play(int level, int program, int tone, int note, s32 vol, int loop);
+void port_sfx_stop(int handle);
+
+s32 func_80026F30_orig(u32 id, s32 flags);
+s32 func_80026F30(u32 id, s32 flags) {
+    if (id >= LENT_SOUND && id < 0x80 && id - LENT_SOUND < 8 && lent_sound[id - LENT_SOUND].level) {
+        int n = id - LENT_SOUND;
+        const u8 *d = lent_sound[n].sfx;
+        s32 vol = (flags & 2) ? *((u8 *)g_Args + 0x138) * *(s16 *)((u8 *)g_Args + 0x13A) / 127
+                              : *(s16 *)((u8 *)g_Args + 0x13A);
+        int h;
+        vol = vol * d[4] / 127;
+        if (vol <= 0)
+            return -1;
+        if (vol > 127)
+            vol = 127;
+        h = port_tone_play(lent_sound[n].level, d[0], d[1], d[2], vol * 0x7F, lent_sound[n].loop);
+        if (getenv("TWINE_ENDLESS_AMMO_LOG"))
+            ELOG("sound: a lent weapon's own (level %d program %d tone %d note %d), volume %d%s: handle %d", lent_sound[n].level,
+                 d[0], d[1], d[2], vol, lent_sound[n].loop ? ", looping" : "", h);
+        return h ? 0x4000 | (h & 0x3FFF) : -1;
+    }
+    return func_80026F30_orig(id, flags);
+}
+
+void func_80081458_orig(s32 voice);
+void func_80081458(s32 voice) {
+    if (voice & 0x4000) {
+        port_sfx_stop(voice & 0x3FFF); /* (the handle's low bits: spu.c's handles are counted from 1) */
+        if (getenv("TWINE_ENDLESS_AMMO_LOG"))
+            ELOG("sound: a lent weapon's stopped (handle %d)", voice & 0x3FFF);
+    }
+    else
+        func_80081458_orig(voice);
+}
+
+/* A lent sniper rifle's scope: its home mission's code raises the scope (the weapon's state 0x21, then 0x22) where
+ * other weapons aim (func_8004DD9C), and fires from it (0x23), by the rifle's slot there; a mission without one has
+ * no such code, so the lent rifle is given it here (the states' own code is every mission's) */
+extern s32 D_800F11F0; /* the weapon's state */
+void func_8007A17C(s32 state);
+extern s32 D_8009CD4C; /* aiming */
+static int lent_sniper(void) {
+    return D_800B0DD4 >= 0 && (lent_mask >> D_800B0DD4 & 1) && !strncmp((char *)g_Weapons[D_800B0DD4].pad0, "AR36", 4);
+}
+
+void func_8004DD9C_orig(void);
+void func_8004DD9C(void) {
+    if (lent_sniper() && D_800F11F0 != 0x21 && D_800F11F0 != 0x22) {
+        func_8007A17C(0x21);
+        return;
+    }
+    func_8004DD9C_orig();
+}
+
+void func_8007A17C_orig(s32 state);
+void func_8007A17C(s32 state) {
+    if ((state == 8 || state == 9) && D_8009CD4C && lent_sniper())
+        state = 0x23;
+    func_8007A17C_orig(state);
+}
+
 void func_80076014(s32 idx) {
-    if (!lent_model(idx))
+    if (!lent_model(idx)) {
+        lent_work_type = 0;
         func_80076014_orig(idx);
+    }
 }
 
 void func_80076104(s32 idx) {
-    if (!lent_model(idx))
+    if (!lent_model(idx)) {
+        lent_work_type = 0;
         func_80076104_orig(idx);
+    }
 }
 
 /* (the missions' story and public-address voice lines, muted in a run: they'd tell Bond of a story he isn't in;

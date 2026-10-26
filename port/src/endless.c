@@ -9,7 +9,8 @@
  * when that point is copied over the start point before the mission's main runs.
  *
  * TWINE_ENDLESS=1 starts a run (with TWINE_LEVEL unset or naming the first room's level, for tests);
- * TWINE_ENDLESS_ROOM=level:point starts it in that room (point -1: the start point). */
+ * TWINE_ENDLESS_ROOM=level:point starts it in that room (point -1: the start point); TWINE_ENDLESS_NEXT=l:p,l:p...
+ * (rooms of the table) chooses the rooms after it, in order. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,6 +83,19 @@ void port_endless_logf(s32 frame, const char *fmt, ...);
 /* a room of another level than the one before: the level first (each as likely), then one of its rooms */
 static int pick_room(int after) {
     int levels[12], n = 0, i, l, k = 0, r;
+    static int forced; /* (TWINE_ENDLESS_NEXT=level:point,...: headless tests, the rooms after the first, in order) */
+    const char *f = getenv("TWINE_ENDLESS_NEXT");
+    if (f && after >= 0) {
+        for (i = 0; i < forced && f; i++)
+            f = strchr(f, ',') ? strchr(f, ',') + 1 : 0;
+        if (f && *f) {
+            forced++;
+            l = atoi(f), r = strchr(f, ':') ? atoi(strchr(f, ':') + 1) : -1;
+            for (i = 0; i < ROOMS; i++)
+                if (rooms[i].level == l && rooms[i].point == r)
+                    return i;
+        }
+    }
     for (l = 1; l <= 11; l++)
         for (i = 0; i < ROOMS; i++)
             if (rooms[i].level == l) {
@@ -121,6 +135,9 @@ typedef struct {
     u8 level, gun, animlen, pad;
     u8 def[0xB8], type[0x70], anim[16];
     char path[24];
+    u8 sfx[8]; /* (its fire sound's entry in its mission's sounds' table: program, tone, note, voice, volume, randomness) */
+    u8 kind, pad2[3]; /* (its entry in the pickups' table, D_8009D130: every mission's numbering; 0xFF none) */
+    char got[28], ammo_got[32]; /* (that entry's messages: the weapon's, its ammo's) */
 } WeaponRec;
 #define WEAPON_RECS 128
 static WeaponRec weapon_recs[WEAPON_RECS];
@@ -148,7 +165,7 @@ static void weapons_load(void) {
     weapons_path(path, sizeof(path));
     if ((f = fopen(path, "rb"))) {
         char magic[8];
-        if (fread(magic, 1, 8, f) == 8 && !memcmp(magic, "TWWEAP01", 8))
+        if (fread(magic, 1, 8, f) == 8 && !memcmp(magic, "TWWEAP03", 8))
             weapon_rec_count = (int)fread(weapon_recs, sizeof(WeaponRec), WEAPON_RECS, f);
         fclose(f);
     }
@@ -167,14 +184,15 @@ static void weapons_save(void) {
             *c = '/';
         }
     if ((f = fopen(path, "wb"))) {
-        fwrite("TWWEAP01", 1, 8, f);
+        fwrite("TWWEAP03", 1, 8, f);
         fwrite(weapon_recs, sizeof(WeaponRec), weapon_rec_count, f);
         fclose(f);
     }
 }
 
 /* the level's mod: a mission's weapon, as it starts (gun: its fire handler the mission's pistol's) */
-void port_weapon_put(int level, const u8 *def, const u8 *type, const u8 *anim, int animlen, const char *path, int gun) {
+void port_weapon_put(int level, const u8 *def, const u8 *type, const u8 *anim, int animlen, const char *path, int gun,
+                     const u8 *sfx, int kind, const char *got, const char *ammo_got) {
     int i;
     weapons_load();
     for (i = 0; i < weapon_rec_count; i++)
@@ -195,6 +213,11 @@ void port_weapon_put(int level, const u8 *def, const u8 *type, const u8 *anim, i
     if (anim)
         memcpy(weapon_recs[i].anim, anim, weapon_recs[i].animlen);
     snprintf(weapon_recs[i].path, sizeof(weapon_recs[i].path), "%s", path ? path : "");
+    if (sfx)
+        memcpy(weapon_recs[i].sfx, sfx, 8);
+    weapon_recs[i].kind = (u8)(kind < 0 ? 0xFF : kind);
+    snprintf(weapon_recs[i].got, sizeof(weapon_recs[i].got), "%s", got ? got : "");
+    snprintf(weapon_recs[i].ammo_got, sizeof(weapon_recs[i].ammo_got), "%s", ammo_got ? ammo_got : "");
     surveyed |= 1 << level;
 }
 
@@ -212,6 +235,18 @@ const WeaponRec *port_weapon_find(const char *name, int level) {
             (b < 0 || (weapon_recs[i].gun && !weapon_recs[b].gun)))
             b = i;
     return b >= 0 ? &weapon_recs[b] : NULL;
+}
+
+/* the survey neither seen nor heard: a black screen with a line (video.c), silence (spu.c), until the run's first
+ * room's mission starts */
+static int covering;
+static int survey_room; /* (the mission started is a survey's) */
+int port_video_covered(void) {
+    return covering;
+}
+
+int port_audio_muted(void) {
+    return covering;
 }
 
 /* the level's mod: a survey's room (its weapons taken, then left at once) */
@@ -241,6 +276,7 @@ static int survey_begin(void) {
     rooms[ROOMS].level = survey_queue[0], rooms[ROOMS].point = -1;
     room = ROOMS;
     surveying = 1;
+    covering = 1;
     port_endless_logf(-1, "weapons: a survey of %d missions first (their weapons not known yet)", survey_n);
     return 1;
 }
@@ -314,6 +350,9 @@ int port_endless_gen(void) {
 void port_endless_level(const PortModule *m) {
     s16 *start;
     level_gen++;
+    if (!surveying)
+        covering = 0;
+    survey_room = surveying;
     if (!port_endless || !m->level || (room < 0 && next_room < 0))
         return;
     if (next_room >= 0) {
@@ -636,6 +675,14 @@ void port_endless_returned(const PortModule *m, u8 *args) {
     if (!port_endless || !m->level)
         return;
     if (room < 0 && next_room >= 0) { /* (RESTART MISSION: a fresh run, the first room next; nothing counted) */
+        l = rooms[next_room].level;
+        *(u32 *)args |= 0x40;
+        *(s16 *)(args + 0x188) = l;
+        *(s16 *)(args + 0x18A) = level_mission[l];
+        sprintf((char *)(args + 0x234), "\\L%02d\\LEVEL%02d.EXE;1", l, l);
+        return;
+    }
+    if (survey_room) { /* (a survey's mission: nothing of it counted) */
         l = rooms[next_room].level;
         *(u32 *)args |= 0x40;
         *(s16 *)(args + 0x188) = l;

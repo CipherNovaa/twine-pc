@@ -1324,6 +1324,7 @@ static SDL_Texture *hw_picture(s32 rx, s32 ry, s32 w, s32 h, const SDL_FRect *ds
 }
 
 /* shows the VRAM rectangle at (rx, ry) the size of the display */
+int port_video_covered(void); /* endless.c */
 static void present_rect(s32 rx, s32 ry, int rgb24) {
     s32 y, w = gpu_display.w, h = gpu_display.h;
     SDL_FRect src, dst = picture_rect();
@@ -1344,10 +1345,21 @@ static void present_rect(s32 rx, s32 ry, int rgb24) {
     }
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
-    if (!gpu_display.blank)
+    if (port_video_covered()) { /* (endless's first start: its survey of the missions, not shown) */
+        static const char text[] = "PREPARING ENDLESS MODE";
+        int ww = 0, wh = 0;
+        float scale;
+        SDL_GetCurrentRenderOutputSize(renderer, &ww, &wh);
+        scale = (float)(wh / 240 > 1 ? wh / 240 : 1);
+        SDL_SetRenderScale(renderer, scale, scale);
+        SDL_SetRenderDrawColor(renderer, 235, 235, 235, 255);
+        SDL_RenderDebugText(renderer, (ww / scale - (float)(sizeof(text) - 1) * 8) / 2, (wh / scale - 8) / 2, text);
+        SDL_SetRenderScale(renderer, 1, 1);
+    } else if (!gpu_display.blank)
         draw_picture(pic, &src, &dst);
     draw_debug_text();
-    draw_help();
+    if (!port_video_covered())
+        draw_help();
     if (screen_shot) {
         SDL_Surface *s = SDL_RenderReadPixels(renderer, NULL), *rgb = s ? SDL_ConvertSurface(s, SDL_PIXELFORMAT_RGB24) : NULL;
         FILE *f = rgb ? fopen(screen_shot, "wb") : NULL;

@@ -29,6 +29,10 @@ void func_8007A17C(s32 state);
 extern s32 D_8009EEC8;
 extern s32 D_8009EED0;
 
+/* each mission's weapon slots (g_Weapons' count: its reset function's) */
+static const u8 slot_count[12] = {6, 6, 12, 9, 6, 11, 12, 13, 11, 12, 10, 6};
+#define SLOTS (g_Args->level < 12 ? slot_count[g_Args->level] : 6)
+
 static int picked = -1;  /* the slot last picked by number */
 static int other = -1;   /* the one in hand then */
 static int held = -1;    /* the one in hand last frame, and before it */
@@ -53,16 +57,16 @@ void func_800798D4(void) {
         /* Q: the other of the last two picked by number (none picked yet: the one held before) */
         slot = picked < 0 ? held_before : D_800B0DD4 == picked ? other : picked;
         D_800B0DDC = slot;
-        if (slot < 0 || slot > 5 || func_80079C04())
+        if (slot < 0 || slot >= SLOTS || func_80079C04())
             slot = D_800B0DD4;
     } else {
         /* the key's weapon: the slots Bond has, counted in the order the weapon buttons step through them */
-        for (slot = 0; slot < 6; slot++) {
+        for (slot = 0; slot < SLOTS; slot++) {
             D_800B0DDC = slot;
             if (!func_80079C04() && --key == 0)
                 break;
         }
-        if (slot == 6)
+        if (slot == SLOTS)
             slot = D_800B0DD4;
         else if (slot != D_800B0DD4) {
             other = D_800B0DD4;

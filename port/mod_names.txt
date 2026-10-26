@@ -70,3 +70,11 @@ level08 func_80053114 func_80055180
 level09 func_80053114 func_80055274
 level10 func_80053114 func_800558FC
 level11 func_80053114 func_8005041C
+# the sound player (the same address in these levels; port_symbols.py finds no clean match): endless lends weapons their own sounds
+level04 func_80026F30 func_80026F30
+level05 func_80026F30 func_80026F30
+level06 func_80026F30 func_80026F30
+level07 func_80026F30 func_80026F30
+level08 func_80026F30 func_80026F30
+level09 func_80026F30 func_80026F30
+level10 func_80026F30 func_80026F30

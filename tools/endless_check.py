@@ -3,10 +3,11 @@
 
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
   -j JOBS    runs at once (default 4)
-  -k CHECKS  the checks to run, letters from abcdefghij (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijk (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression,
-             j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching)
+             j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching),
+             k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried)
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -25,6 +26,7 @@ Nothing here holds game data: it all comes from the disc at run time.
 import concurrent.futures as cf
 import glob
 import hashlib
+import math
 import os
 import re
 import shutil
@@ -347,6 +349,108 @@ def check_carry(runs):
            drawn[2].split("weapon: ")[1][:60] if len(drawn) > 2 else "fewer than 3 rooms")
 
 
+# ---- k: a lent weapon as at home: its fire rate, its damage, its scope; ammo from drops for whatever Bond carries ----
+
+def burst(pad_from, frames=40):
+    return "%d:4000,%d:0" % (pad_from, pad_from + frames)
+
+
+def lent_runs():
+    base = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
+            "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_ENDLESS_AMMO_LOG": 1}
+    shots = ",".join(burst(t, 30) for t in range(260, 1000, 50))  # (the room's first: from frame 200 on)
+    later = ",".join(burst(t, 30) for t in range(760, 1500, 50))  # (the room after it: from about frame 622)
+    aim = "200:0800,250:4800,254:0800,300:4800,304:0800,350:4800,354:0800,400:0"
+    aim2 = "700:0800,750:4800,754:0800,800:4800,804:0800,850:4800,854:0800,900:0"
+    home, lent = dict(base, TWINE_ENDLESS_ROOM="8:-1"), dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="2:4",
+                                                         TWINE_ENDLESS_TEST_EXIT=500)
+    long_lent = dict(lent, TWINE_ENDLESS_TEST_EXIT=1000)
+    runs = {"k_home_ingalls": Run("k_home_ingalls", 8, 55, dict(home, TWINE_ENDLESS_TEST_DRAW="INGALLS", TWINE_TEST_PAD=shots)),
+            "k_lent_ingalls": Run("k_lent_ingalls", 8, 85, dict(long_lent, TWINE_ENDLESS_TEST_DRAW="INGALLS", TWINE_TEST_PAD=later)),
+            "k_home_ar36": Run("k_home_ar36", 8, 40, dict(home, TWINE_ENDLESS_TEST_DRAW="AR36", TWINE_TEST_PAD=aim)),
+            "k_lent_ar36": Run("k_lent_ar36", 8, 60, dict(lent, TWINE_ENDLESS_TEST_DRAW="AR36", TWINE_TEST_PAD=aim2)),
+            "k_home_ks5": Run("k_home_ks5", 2, 40, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_TEST_DRAW="KOFFLER",
+                                                        TWINE_TEST_PAD=shots)),
+            "k_lent_ks5": Run("k_lent_ks5", 2, 60, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_NEXT="8:0",
+                                                        TWINE_ENDLESS_TEST_EXIT=500, TWINE_ENDLESS_TEST_DRAW="KOFFLER",
+                                                        TWINE_TEST_PAD=later)),
+            "k_ammo": Run("k_ammo", 8, 100, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="2:4",
+                                                 TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW="INGALLS",
+                                                 TWINE_ENDLESS_TEST_KILL=40, TWINE_ENDLESS_TEST_GRAB_BOX=15))}
+    nxt = ",".join("%d:8000,%d:0" % (t, t + 3) for t in range(700, 1000, 40))  # (the next weapon button: Square)
+    runs["k_pool"] = Run("k_pool", 2, 70, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_NEXT="10:-1,8:0",
+                                               TWINE_ENDLESS_TEST_EXIT=250, TWINE_ENDLESS_TEST_DRAW="KOFFLER",
+                                               TWINE_TEST_PAD=nxt))
+    del runs["k_pool"].env["TWINE_ENDLESS_TEST_MEET"]
+    del runs["k_ammo"].env["TWINE_ENDLESS_TEST_MEET"]
+    return runs
+
+
+def room_part(log, level):
+    """the log of the run's first room in that level (to the next room's start)"""
+    part = log.split("room start: level %d " % level, 1)
+    return part[1].split("room start:", 1)[0] if len(part) > 1 else ""
+
+
+def fire_rate(part, weapon):
+    """the most shots in any 20 frames (the room's frames), from the clip's count going down"""
+    t = [int(m.group(1)) for m in re.finditer(r"ammo: %s[^:]*? clip \d+ at frame (\d+)" % weapon, part)]
+    return max((sum(1 for u in t if v <= u < v + 20) for v in t), default=0) - (1 if t else 0)
+
+
+def damage(part, weapon):
+    """the damage a bullet does (where it hits multiplies it: the hits' greatest common divisor), and the hits"""
+    d = [int(x) for x in re.findall(r"hit: person \d+ by %s[^:]*: (\d+) damage" % weapon, part)]
+    g = 0
+    for x in d:
+        g = math.gcd(g, x)
+    return g, len(d)
+
+
+def check_lent(runs):
+    for w, lv_home, lv_lent, label in (("INGALLS", 8, 2, "Ingalls"), ("KOFFLER", 2, 8, "KS5")):
+        h = room_part(runs["k_home_" + label.lower()].log, lv_home)
+        l = room_part(runs["k_lent_" + label.lower()].log, lv_lent)
+        lent = re.search(r"weapons: %s\S* .*lent from level \d+ into slot (\d+)" % w, runs["k_lent_" + label.lower()].log)
+        rh, rl = fire_rate(h, w), fire_rate(l, w)
+        result("k", "%s: lent, fires as at home" % label, bool(lent) and rh > 2 and abs(rh - rl) <= 1,
+               "shots in 20 frames: home %d, lent %d%s" % (rh, rl, "" if lent else " (not lent)"))
+        sh = re.search(r"sound: a lent weapon's own \(level %d" % lv_home, l)
+        result("k", "%s: its own fire sound" % label, bool(sh), sh.group(0)[7:] if sh else "no lent sound played")
+    h, l = room_part(runs["k_home_ingalls"].log, 8), room_part(runs["k_lent_ingalls"].log, 2)
+    (dh, nh), (dl, nl) = damage(h, "INGALLS"), damage(l, "INGALLS")
+    result("k", "Ingalls: damage as at home", nh > 1 and nl > 1 and dh == dl,
+           "a bullet's damage: home %d (%d hits), lent %d (%d hits)" % (dh, nh, dl, nl))
+    h, l = room_part(runs["k_home_ar36"].log, 8), room_part(runs["k_lent_ar36"].log, 2)
+    sc = lambda p: [int(x) for x in re.findall(r"weapon state (\d+) at", p) if int(x) in (33, 34, 35, 36)]
+    result("k", "AR36: the scope's states as at home", set(sc(h)) == set(sc(l)) == {33, 34, 35, 36},
+           "home %s, lent %s" % (sorted(set(sc(h))), sorted(set(sc(l)))))
+    p = room_part(runs["k_pool"].log, 8)
+    before = runs["k_pool"].log.split("room start: level 8 ", 1)[0].rsplit("room start:", 1)[-1]
+    waits = re.findall(r"weapons: (.+?) waits in the pool", before)  # (as King's Ransom's room starts)
+    steps = re.findall(r"the pool's (.+?) into slot", p)
+    result("k", "pool: more lent than slots, stepped through", len(waits) >= 2 and set(waits) <= set(steps),
+           "waiting %s; stepped to %s" % (", ".join(waits) or "none", ", ".join(steps) or "none"))
+    a = room_part(runs["k_ammo"].log, 2)
+    got = re.findall(r"pickup: (.+?)'s ammo (\d+) -> (\d+)( \(a lent weapon\))?", a)
+    lent_got = [g for g in got if g[3] and int(g[2]) > int(g[1])]
+    result("k", "ammo box feeds a lent weapon", bool(lent_got),
+           "%d boxes for lent weapons taken%s" % (len(lent_got), " (%s %s -> %s)" % lent_got[0][:3] if lent_got else ""))
+    start = re.search(r"weapons as the room starts: (.*)", a)
+    carried = []
+    for e in (start.group(1).split(";") if start else []):  # ("*3:WOLFRAM P2K 80", "4:FLASH BANG(-) 4": not his)
+        m = re.match(r"\s*\*?\d+:(.*?)(\(-\))? \d+$", e)
+        if m and not m.group(2):
+            carried.append(m.group(1))
+    full = set(m[:16] for m in re.findall(r"ammo: (.+?) reserve \d+ of \d+ \(full\)", a))
+    guns = [c.strip() for c in carried if not re.match(r"UNARMED|SATCHEL|FRAG|FLASH|CELL|PALMTOP|BRIEFCASE|VLF|FINGER", c)
+            and c.strip()[:16] not in full]
+    fed = {g[0][:16] for g in got}
+    missing = [g for g in guns if g[:16] not in fed]
+    result("k", "drops feed every gun carried", bool(guns) and not missing,
+           "guns %s; fed %s%s" % (", ".join(guns), len(fed), "; none for " + ", ".join(missing) if missing else ""))
+
+
 # ---- h: the high scores on the card ----
 
 NAV = ("400:40,403:0,460:4000,463:0,530:40,533:0,590:4000,593:0")  # main menu: OPTIONS, MEMORY CARD
@@ -490,7 +594,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghij", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijk", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -535,6 +639,8 @@ def main():
         groups["campaign"] = campaign_runs()
     if "j" in checks:
         groups["ai"] = ai_runs()
+    if "k" in checks:
+        groups["lent"] = lent_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.secs)  # (the long ones first)
     t0 = time.time()
@@ -561,8 +667,11 @@ def main():
         check_campaign(groups["campaign"])
     if "ai" in groups:
         check_ai(groups["ai"])
+    if "lent" in groups:
+        check_lent(groups["lent"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
-             "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI"}
+             "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
+             "k": "lent weapons"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))
