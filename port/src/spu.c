@@ -326,8 +326,34 @@ static void next_block(Voice *v, int n) {
     decode_block(v, n);
 }
 
+int port_trace(const char *what);
+static int spu_trace_on;
+/* TWINE_TRACE=spu: the first half second of each voice's output after a key on, measured (its energy, peak, and a
+ * checksum of its samples: two voices playing the same the same way measure the same), for comparing a lent tone with
+ * the mission's own */
+static struct { u32 n; double e; s32 peak; u32 sum; } meter[24 + 8];
+static void meter_put(int k, s32 smp, int which) {
+    if (meter[k].n >= 22050)
+        return;
+    meter[k].e += (double)smp * smp;
+    if (abs(smp) > meter[k].peak)
+        meter[k].peak = abs(smp);
+    meter[k].sum = meter[k].sum * 31 + (u32)smp;
+    if (++meter[k].n == 22050)
+        port_log("trace: spu: %s %d's first half second: energy %.0f, peak %d, checksum %08X\n",
+                 which ? "lent voice" : "voice", which ? k - 24 : k, meter[k].e / 22050, meter[k].peak, meter[k].sum);
+}
 static void key_on(int n) {
     Voice *v = &voices[n];
+    static int on = -1;
+    if (on < 0)
+        spu_trace_on = on = port_trace("spu");
+    memset(&meter[n], 0, sizeof(meter[n]));
+    if (on) /* (TWINE_TRACE=spu: each key on, the voice's registers as the game set them) */
+        port_log("trace: spu: key on voice %d: vol %04X %04X pitch %04X start %05X adsr %04X %04X%s\n", n,
+                 spu_regs[n * 8 + V_VOLL], spu_regs[n * 8 + V_VOLR], spu_regs[n * 8 + V_PITCH],
+                 spu_regs[n * 8 + V_SSA] * 8u, spu_regs[n * 8 + V_ADSR1], spu_regs[n * 8 + V_ADSR2],
+                 (reg32(REG_EON) >> n & 1) ? ", reverb" : "");
     v->addr = spu_regs[n * 8 + V_SSA] * 8u;
     v->counter = 0;
     v->phase = ENV_ATTACK;
@@ -568,6 +594,66 @@ static struct {
 static s32 sfx_handles;
 int port_audio_muted(void); /* endless.c: nothing heard (its first start's survey) */
 
+/* A sound of another mission's bank (tones.c): a voice as the SPU's own in every way (ADPCM blocks decoded as it
+ * plays, Gaussian interpolation, the tone's ADSR, its volumes, reverb), its samples in host memory (the banks fill
+ * the SPU's RAM). Keyed off, it releases as the game's voices do. */
+#define XVOICES 8
+static struct {
+    Voice v;
+    const u8 *data;  /* (the tone's ADPCM blocks) */
+    u32 size, loop;  /* (bytes; the loop's block, from its loop-start flag) */
+    u16 regs[8];     /* (as a voice's registers: V_VOLL, V_VOLR, V_PITCH, -, V_ADSR1, V_ADSR2) */
+    int reverb, handle;
+} xv[XVOICES];
+
+static void xv_decode(int k) {
+    Voice *v = &xv[k].v;
+    u32 a = v->addr, i;
+    const u8 *b = xv[k].data + (a < xv[k].size ? a : 0);
+    int shift, filter;
+    s32 old = v->buf[30], older = v->buf[29], f0, f1;
+    shift = b[0] & 0xF;
+    if (shift > 12)
+        shift = 9;
+    filter = (b[0] >> 4) & 7;
+    if (filter > 4)
+        filter = 0;
+    f0 = adpcm_filter_pos[filter];
+    f1 = adpcm_filter_neg[filter];
+    v->buf[0] = v->buf[28];
+    v->buf[1] = v->buf[29];
+    v->buf[2] = v->buf[30];
+    for (i = 0; i < 28; i++) {
+        u32 nib = (b[2 + i / 2] >> ((i & 1) * 4)) & 0xF;
+        s32 smp = ((s16)(nib << 12) >> shift) + ((old * f0 + older * f1 + 32) >> 6);
+        smp = clamp16(smp);
+        v->buf[3 + i] = smp;
+        older = old;
+        old = smp;
+    }
+    v->flags = b[1];
+    if (b[1] & 4)
+        xv[k].loop = a;
+}
+
+static void xv_next(int k) {
+    Voice *v = &xv[k].v;
+    if (v->flags & 1) {
+        v->addr = xv[k].loop;
+        if (!(v->flags & 2)) {
+            v->phase = ENV_OFF;
+            v->level = 0;
+        }
+    } else
+        v->addr += 16;
+    if (v->addr + 16 > xv[k].size) { /* (past the tone's end: as the end flag) */
+        v->phase = ENV_OFF;
+        v->level = 0;
+        v->addr = 0;
+    }
+    xv_decode(k);
+}
+
 static void spu_tick(s32 *out, const s32 *cd) {
     u16 attr = spu_regs[REG_ATTR];
     u32 pmon = reg32(REG_PMON), non = reg32(REG_NON), eon = reg32(REG_EON);
@@ -591,6 +677,8 @@ static void spu_tick(s32 *out, const s32 *cd) {
             s = (s * v->level) >> 15;
         }
         prev = s;
+        if (spu_trace_on)
+            meter_put(n, s, 0);
         v->vol[0] = volume_tick(reg[V_VOLL], v->vol[0], &v->vol_counter[0]);
         v->vol[1] = volume_tick(reg[V_VOLR], v->vol[1], &v->vol_counter[1]);
         if (s) {
@@ -620,6 +708,38 @@ static void spu_tick(s32 *out, const s32 *cd) {
                 sfx[c].pos += sfx[c].step;
             }
         }
+    for (c = 0; c < XVOICES; c++) /* (another mission's tones: as a voice) */
+        if (xv[c].data) {
+            Voice *v = &xv[c].v;
+            u32 step = xv[c].regs[V_PITCH] > 0x3FFF ? 0x4000 : xv[c].regs[V_PITCH];
+            s32 sm = 0;
+            int k;
+            adsr_tick(v, xv[c].regs);
+            if (v->phase == ENV_OFF) {
+                while (spu_trace_on && meter[24 + c].n && meter[24 + c].n < 22050) /* (its silence after, measured
+                                                                                     * as a voice's would be) */
+                    meter_put(24 + c, 0, 1);
+                xv[c].data = NULL;
+                continue;
+            }
+            if (v->level)
+                sm = (interpolate(v) * v->level) >> 15;
+            if (spu_trace_on)
+                meter_put(24 + c, sm, 1);
+            v->vol[0] = volume_tick(xv[c].regs[V_VOLL], v->vol[0], &v->vol_counter[0]);
+            v->vol[1] = volume_tick(xv[c].regs[V_VOLR], v->vol[1], &v->vol_counter[1]);
+            for (k = 0; k < 2 && sm; k++) {
+                s32 o = (sm * v->vol[k]) >> 15;
+                dry[k] += o;
+                if (xv[c].reverb)
+                    wet[k] += o;
+            }
+            v->counter += step;
+            while (v->counter >= 28u << 12) {
+                v->counter -= 28u << 12;
+                xv_next(c);
+            }
+        }
     if (attr & ATTR_CD) { /* CD audio: its own volume, then like a voice (reverb if enabled) */
         for (c = 0; c < 2; c++) {
             cdv[c] = (cd[c] * (s16)spu_regs[REG_CDVOL + c]) >> 15;
@@ -638,13 +758,18 @@ static void spu_tick(s32 *out, const s32 *cd) {
 }
 
 static s32 out_peak; /* the loudest sample since spu_take_peak */
+static int test_no_cd = -1;
 
 static void render(s16 *out, int frames) {
     int i, c;
+    if (test_no_cd < 0)
+        test_no_cd = getenv("TWINE_TEST_NO_CD") != NULL;
     for (i = 0; i < frames; i++) {
         s32 o[2] = {0, 0}, cd[2];
         u16 attr = spu_regs[REG_ATTR];
         cd_input(cd); /* the drive's output keeps time whatever the SPU does with it */
+        if (test_no_cd) /* (TWINE_TEST_NO_CD: tests comparing sounds, the music left out) */
+            cd[0] = cd[1] = 0;
         wav_put(&xa_wav, cd[0], cd[1]);
         if (attr & ATTR_ENABLE)
             spu_tick(o, cd);
@@ -724,7 +849,39 @@ void port_sfx_stop(int handle) {
     for (c = 0; c < SFX_CHANNELS; c++)
         if (sfx[c].pcm && sfx[c].handle == handle)
             sfx[c].pcm = NULL;
+    for (c = 0; c < XVOICES; c++) /* (another mission's tone: keyed off, its release) */
+        if (xv[c].data && xv[c].handle == handle && xv[c].v.phase != ENV_OFF) {
+            xv[c].v.phase = ENV_RELEASE;
+            xv[c].v.env_counter = 0;
+        }
     unlock();
+}
+
+/* key on another mission's tone (tones.c): its ADPCM (kept by the caller), the registers the game's sound library
+ * would set (pitch, ADSR, left/right volume), reverb or not. A handle for port_sfx_stop (a release, as keyed off). */
+int port_xvoice_play(const u8 *adpcm, u32 size, u16 pitch, u16 adsr1, u16 adsr2, u16 voll, u16 volr, int reverb) {
+    int c, oldest = 0;
+    if (!adpcm || size < 16)
+        return 0;
+    lock();
+    for (c = 0; c < XVOICES && xv[c].data; c++)
+        if (xv[c].handle < xv[oldest].handle)
+            oldest = c;
+    if (c == XVOICES)
+        c = oldest;
+    memset(&xv[c], 0, sizeof(xv[c]));
+    xv[c].data = adpcm, xv[c].size = size & ~15u;
+    xv[c].regs[V_PITCH] = pitch, xv[c].regs[V_ADSR1] = adsr1, xv[c].regs[V_ADSR2] = adsr2;
+    xv[c].regs[V_VOLL] = voll, xv[c].regs[V_VOLR] = volr;
+    xv[c].reverb = reverb;
+    xv[c].v.phase = ENV_ATTACK;
+    xv_decode(c);
+    memset(&meter[24 + c], 0, sizeof(meter[24 + c]));
+    if (port_trace("spu"))
+        spu_trace_on = 1;
+    xv[c].handle = sfx_handles = sfx_handles % 0x3FFF + 1; /* (one count with port_sfx_play's: port_sfx_stop either) */
+    unlock();
+    return xv[c].handle;
 }
 
 void port_sfx(const s16 *pcm, u32 n, u32 rate, s32 vol) {

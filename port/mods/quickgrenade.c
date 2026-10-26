@@ -324,8 +324,21 @@ static struct {
 
 int port_sound_bank(int level, const u8 **vh, const u8 **vb);
 int port_trace(const char *what);
+int port_tone_play(int level, int program, int tone, int note, s32 l, s32 r, int loop);
 void port_voice_play(int level, int program, int tone, s32 vol) {
     int k;
+    if (!getenv("TWINE_TEST_TONES_PCM")) { /* (a voice as the SPU's own, as the game keys its voices on: tones.c; the
+                                            * old raw PCM with TWINE_TEST_TONES_PCM) */
+        s32 v = vol * 127 / 0x7FFF;
+        int h = port_tone_play(level, program, tone, -1, v, v, 0);
+        static int on = -1;
+        if (on < 0)
+            on = port_trace("sound");
+        if (on)
+            port_log("trace: sound: voice level %d program %d tone %d, volume %d: handle %d\n", level, program, tone, v,
+                     h);
+        return;
+    }
     for (k = 0; k < VOICES && voices[k].pcm && !(voices[k].level == level && voices[k].program == program &&
                                               voices[k].tone == tone); k++)
         ;

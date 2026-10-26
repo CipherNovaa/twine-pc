@@ -52,6 +52,13 @@ char *strstr(const char *s, const char *t);
 void port_endless_logf(s32 frame, const char *fmt, ...);
 int port_trace(const char *what);
 void endless_muted_point(u32 id);
+int port_sound_bank(int level, const u8 **vh, const u8 **vb);
+typedef struct { u8 prog, tone, note, voice, vol, rnd, pad[2]; } SfxDefE; /* (the mission's sounds' table) */
+int port_tone_play(int level, int program, int tone, int note, s32 l, s32 r, int loop);
+s32 func_80026B44(s32 rnd); /* (the game's sounds' random note step) */
+s32 func_80026ED0(void);   /* (its voices in use) */
+int port_tone_play_pcm(int level, int program, int tone, int note, s32 vol, int loop);
+s32 func_80026F30_orig(u32 id, s32 flags);
 extern u32 port_rc_ra, port_rc_psp; /* (recomp_rt.c: the PS1 return address, stack pointer of a call from
                                        * recompiled code) */
 void port_log(const char *fmt, ...);
@@ -901,6 +908,7 @@ static void lend_weapons(void) {
             if (r)
                 ELOG("weapons: %s can't be lent here yet (not a gun)", c->weapon[j].name);
             continue;
+        }
         }
         if (!strncmp(c->weapon[j].name, c->in_hand, 23) && pool_n) { /* (the one in his hand first: a slot for it) */
             memmove(&pool[1], &pool[0], sizeof(pool[0]) * pool_n);
@@ -3636,7 +3644,6 @@ void func_80053114(u8 *obj) {
 
 /* A script's sound at its person (op 0x1D: func_800572F4, a sound of the level's bank at him; the guards' calls and
  * shouts among them): logged (the AI's shouts are found by it) */
-typedef struct { u8 prog, tone, note, voice, vol, rnd, pad[2]; } SfxDefE; /* (the mission's sounds' table) */
 static int muted_line(u32 id);
 s32 func_800572F4_orig(u32 *cmd, u8 *obj, u8 *chr);
 s32 func_800572F4(u32 *cmd, u8 *obj, u8 *chr) {
@@ -3786,7 +3793,6 @@ void *func_800753F0(s32 type) {
  * its tone decoded from that mission's bank and played by the runtime (port/src/tones.c), as the game plays its
  * sounds (func_80026F30: the volume the table and the settings give, its note); an automatic weapon's sound loops
  * until the game stops it (func_80081458, the handle func_80026F30 gave) */
-int port_tone_play(int level, int program, int tone, int note, s32 vol, int loop);
 void port_sfx_stop(int handle);
 
 s32 func_80026F30_orig(u32 id, s32 flags);
@@ -3799,20 +3805,34 @@ s32 func_80026F30(u32 id, s32 flags) {
         int n = id - LENT_SOUND;
         const u8 *d = lent_sound[n].sfx;
         s32 vol = (flags & 2) ? *((u8 *)g_Args + 0x138) * *(s16 *)((u8 *)g_Args + 0x13A) / 127
-                              : *(s16 *)((u8 *)g_Args + 0x13A);
+                              : *(s16 *)((u8 *)g_Args + 0x13A), l, r, note = d[2];
         int h;
-        vol = vol * d[4] / 127;
-        if (vol <= 0)
+        /* (as the game plays its own, func_80026F30: the volume, the place's pans (flags 8), the note moved by the
+         * caller's (flags 4) or at random by the table's (its own function, so the same draws)) */
+        if (func_80026ED0() >= 0x14 || ((g_CutScene == 2 || g_CutScene == 3)))
             return -1;
-        if (vol > 127)
-            vol = 127;
-        h = port_tone_play(lent_sound[n].level, d[0], d[1], d[2], vol * 0x7F, lent_sound[n].loop);
+        vol = vol * d[4] / 127;
+        if (flags & 8)
+            r = vol * ((u8 *)g_Args)[0x136] / 127, l = vol * ((u8 *)g_Args)[0x137] / 127;
+        else
+            l = r = vol;
+        l = l < 0 ? 0 : l > 127 ? 127 : l;
+        r = r < 0 ? 0 : r > 127 ? 127 : r;
+        if (flags & 4)
+            note += *(u16 *)((u8 *)g_Args + 0x134);
+        else if (d[5])
+            note += func_80026B44(d[5]);
+        note = note < 0 ? 0 : note > 127 ? 127 : note;
+        if (!l && !r)
+            return -1;
+        vol = l > r ? l : r;
+        h = port_tone_play(lent_sound[n].level, d[0], d[1], note, l, r, lent_sound[n].loop);
         if (getenv("TWINE_ENDLESS_AMMO_LOG"))
             ELOG("sound: a lent weapon's own (level %d program %d tone %d note %d), volume %d%s: handle %d", lent_sound[n].level,
-                 d[0], d[1], d[2], vol, lent_sound[n].loop ? ", looping" : "", h);
+                 d[0], d[1], note, vol, lent_sound[n].loop ? ", looping" : "", h);
         if (trace_sound())
             port_log("trace: L%d f%d sound: lent %u (level %d program %d tone %d note %d) volume %d%s: handle %d\n",
-                     g_Args->level, D_8009CDA8, id, lent_sound[n].level, d[0], d[1], d[2], vol,
+                     g_Args->level, D_8009CDA8, id, lent_sound[n].level, d[0], d[1], note, vol,
                      lent_sound[n].loop ? " looping" : "", h);
         return h ? 0x4000 | (h & 0x3FFF) : -1;
     }
@@ -3841,6 +3861,23 @@ s32 func_80026F30(u32 id, s32 flags) {
         s32 h = func_80026F30_orig(id, flags);
         port_log("trace: L%d f%d sound: %u flags %X (program %d tone %d note %d voice %d): handle %d (called from %08X)\n",
                  g_Args->level, D_8009CDA8, id, flags, e[0], e[1], e[2], e[3], h, port_rc_ra);
+        { /* (the bank's own numbers for it, from the disc: the program's volume and pan, the tone's volume, pan,
+           * centre, ADSR; and the game's volume setting, the table's volume, the place's pans: for the lent tones) */
+            const u8 *vh, *vb;
+            if (e[0] != 0xFF && port_sound_bank(g_Args->level, &vh, &vb)) {
+                const u8 *pa = vh + 0x20 + e[0] * 16, *ta = vh + 0x20 + 0x800 + (e[0] * 16 + e[1]) * 32;
+                extern u16 spu_regs[0x200];
+                if (h >= 0 && h < 24)
+                    port_log("trace: sound: its voice %d: vol %04X %04X pitch %04X adsr %04X %04X%s\n", h,
+                             spu_regs[h * 8], spu_regs[h * 8 + 1], spu_regs[h * 8 + 2], spu_regs[h * 8 + 4],
+                             spu_regs[h * 8 + 5], ((spu_regs[0xCC] | (u32)spu_regs[0xCD] << 16) >> h & 1) ? ", reverb" : "");
+                port_log("trace: sound: bank level %d: master %d pan %d; program %d volume %d pan %d; tone %d volume %d "
+                         "pan %d centre %d.%d adsr %04X %04X mode %d; setting %d, table %d, place %d %d, flags %X\n",
+                         g_Args->level, vh[0x18], vh[0x19], e[0], pa[1], pa[4], e[1], ta[2], ta[3], ta[4], ta[5],
+                         ta[16] | ta[17] << 8, ta[18] | ta[19] << 8, ta[1], *(s16 *)((u8 *)g_Args + 0x13A), e[4],
+                         ((u8 *)g_Args)[0x136], ((u8 *)g_Args)[0x137], flags);
+            }
+        }
         return h;
     }
     return func_80026F30_orig(id, flags);

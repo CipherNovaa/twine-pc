@@ -9,6 +9,7 @@
 #include "port.h"
 
 int port_sfx_play(const s16 *pcm, u32 n, u32 rate, s32 vol, s32 loop_at);
+int port_tone_play_pcm(int level, int program, int tone, int note, s32 vol, int loop);
 
 #define RD16(p, o) ((u32)(p)[o] | (u32)(p)[(o) + 1] << 8)
 #define RD32(p, o) (RD16(p, o) | RD16(p, (o) + 2) << 16)
@@ -24,7 +25,7 @@ static u32 decode(const u8 *vh, const u8 *vb, u32 program, u32 tone, s16 *out, u
         return 0;
     atr = vh + tones + (program * 16 + tone) * 32;
     vag = RD16(atr, 0x16);
-    *centre = atr[4] * 128 + atr[5];
+    *centre = atr[4] * 128 - atr[5]; /* (the fine tune raises the pitch: the sound library's, as measured: a key on at home) */
     if (!vag)
         return 0;
     for (i = 1; i < vag; i++)
@@ -138,9 +139,54 @@ static int find(int level, int program, int tone) {
     return tones[k].pcm && tones[k].len ? k : -1;
 }
 
-/* play it: note < 0 at the rate the missions' voices are made at (11025 Hz); else at that note (a sample plays at
- * 44100 Hz at its centre note); vol 0..0x7FFF; looping as the sample does if loop. A handle (spu.c's), 0 none. */
-int port_tone_play(int level, int program, int tone, int note, s32 vol, int loop) {
+int port_xvoice_play(const u8 *adpcm, u32 size, u16 pitch, u16 adsr1, u16 adsr2, u16 voll, u16 volr, int reverb);
+
+/* play it as the game's sound library keys a voice on (spu.c's port_xvoice_play: a voice as the SPU's own, from the
+ * bank's ADPCM), as measured against its key-ons at home (TWINE_TRACE=sound,spu): the pitch the note gives at the
+ * tone's centre less its fine tune (4096 at the centre), the tone's ADSR, the left and right volumes as given (0..127,
+ * the game's own for the sound: x 0x3FFF/127), reverb by the tone's mode. note < 0: 11025 Hz (the voices' rate). loop:
+ * ignored (the ADPCM's own loop flags loop it, as on the SPU). A handle (spu.c's), 0 none. */
+int port_tone_play(int level, int program, int tone, int note, s32 l, s32 r, int loop) {
+    const u8 *vh, *vb, *atr, *sizes;
+    u32 programs, i, off = 0, size, vag, pitch;
+    s32 centre;
+    (void)loop;
+    if (getenv("TWINE_TEST_TONES_PCM")) /* (tests: the old way, raw PCM, to compare) */
+        return port_tone_play_pcm(level, program, tone, note, (l > r ? l : r) * 0x7F, loop);
+    if (!port_sound_bank(level, &vh, &vb) || RD32(vh, 0) != 0x56414270 || (u32)program >= RD16(vh, 0x12))
+        return 0;
+    programs = RD16(vh, 0x12);
+    atr = vh + 0x20 + 0x800 + (program * 16 + tone) * 32;
+    sizes = vh + 0x20 + 0x800 + programs * 16 * 32;
+    vag = RD16(atr, 0x16);
+    if (!vag)
+        return 0;
+    for (i = 1; i < vag; i++)
+        off += RD16(sizes, i * 2) * 8;
+    size = RD16(sizes, vag * 2) * 8;
+    centre = atr[4] * 128 - atr[5]; /* (the fine tune raises the pitch: the sound library's, as measured: a key on at home) */
+    pitch = note < 0 ? 0x400 : (u32)(4096.0 * pow(2.0, (note * 128 - centre) / (12.0 * 128)) + 0.5);
+    if (pitch > 0x3FFF)
+        pitch = 0x3FFF;
+    l = l < 0 ? 0 : l > 127 ? 127 : l; /* (the voice's volumes: the game's left and right as given, as the sound
+                                         * library keys a sound on: neither the tone's nor the program's volume) */
+    r = r < 0 ? 0 : r > 127 ? 127 : r;
+    {
+        int h = port_xvoice_play(vb + off, size, (u16)pitch, (u16)RD16(atr, 0x10), (u16)RD16(atr, 0x12),
+                                 (u16)(l * 0x3FFF / 127), (u16)(r * 0x3FFF / 127), (atr[1] & 4) != 0);
+        static int on = -1;
+        if (on < 0)
+            on = port_trace("sound");
+        if (on)
+            port_log("trace: sound: tone level %d program %d tone %d note %d: a voice, pitch %04X adsr %04X %04X "
+                     "volume %d %d%s: handle %d\n", level, program, tone, note, pitch, RD16(atr, 0x10), RD16(atr, 0x12),
+                     l, r, (atr[1] & 4) ? ", reverb" : "", h);
+        return h;
+    }
+}
+
+/* (the old way: decoded to PCM, mixed raw, nearest sample: TWINE_TEST_TONES_PCM) */
+int port_tone_play_pcm(int level, int program, int tone, int note, s32 vol, int loop) {
     int k = find(level, program, tone);
     u32 rate;
     if (k < 0)

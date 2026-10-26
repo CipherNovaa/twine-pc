@@ -435,6 +435,17 @@ def lent_runs():
                                                 TWINE_RENDERER="hw", TWINE_SMOOTH=1, TWINE_TRACE="weapon,punch",
                                                 TWINE_TEST_MELEE=",".join(str(t) for t in range(150, 5000, 130))))
     del runs["k_many"].env["TWINE_ENDLESS_TEST_MEET"]
+    # (a lent weapon's fire sound, sample for sample as at home: the IAC Defender at home (Meltdown) and lent (King's
+    # Ransom), each shot's first half second measured by spu.c (TWINE_TRACE=spu: energy, peak, checksum); and one of a
+    # mission's own sounds played the game's way and the lent way in the same room (TWINE_TEST_TONE_AB))
+    snd = dict(base, TWINE_TRACE="sound,spu", TWINE_TEST_NO_CD=1, TWINE_ENDLESS_TEST_DRAW="IAC",
+               TWINE_TEST_PAD="500:4000,503:0,600:4000,603:0,700:4000,703:0", TWINE_ENDLESS_ROOM="10:4",
+               TWINE_ENDLESS_TEST_EXIT="200,5000")
+    runs["k_snd_home"] = Run("k_snd_home", 10, 40, dict(snd, TWINE_ENDLESS_NEXT="10:-1"))
+    runs["k_snd_lent"] = Run("k_snd_lent", 10, 40, dict(snd, TWINE_ENDLESS_NEXT="8:-1"))
+    runs["k_snd_ab"] = Run("k_snd_ab", 8, 25, {"TWINE_TEST_TONE_AB": 42, "TWINE_TEST_NO_CD": 1, "TWINE_TRACE": "sound,spu"})
+    for k in ("k_snd_home", "k_snd_lent"):
+        del runs[k].env["TWINE_ENDLESS_TEST_MEET"]
     fire2 = "500:4000,503:0,560:4000,563:0"
     for name, room, draw in (("k_rocket", "5:-1", "ROCKET"), ("k_gl", "9:0", "GRENADE"), ("k_flash", "2:4", "FLASH")):
         runs[name] = Run(name, int(room.split(":")[0]), 40, dict(base, TWINE_ENDLESS_ROOM=room, TWINE_ENDLESS_NEXT="8:0",
@@ -641,6 +652,32 @@ def check_lent(runs):
     result("k", "pause: the lent weapon back after the menu", bool(after) and all(x["file"] == "L05/RCAM.HMD" for x in after)
            and m[0] < 0.2 and m[3] < 0.2, "%d frames after, models %s; watch frame before %d%%, after %d%%" %
            (len(after), "/".join(sorted({x["file"] for x in after})) or "-", m[0] * 100, m[3] * 100))
+    def measured(log, own):
+        """each program 4 tone 13 (the IAC's shot) keyed on: its first half second as spu.c measured it"""
+        out, lines = [], log.splitlines()
+        for i, x in enumerate(lines):
+            m = re.search(r"sound: (\d+) flags \w+ \(program 4 tone 13 .*handle (\d+)", x) if own else \
+                re.search(r"tone level \d+ program 4 tone 13 note \d+: a voice.*handle (\d+)", x)
+            if not m:
+                continue
+            pat = r"spu: voice %s's first half second: (.*)" % m.group(2) if own else r"lent voice \d+'s first half second: (.*)"
+            for y in lines[i:i + 600]:
+                k = re.search(pat, y)
+                if k:
+                    out.append(k.group(1))
+                    break
+        return out
+    h, l = measured(runs["k_snd_home"].log, True), measured(runs["k_snd_lent"].log, False)
+    lent_room = room_part(runs["k_snd_lent"].log, 8)
+    result("k", "IAC Defender lent: its shot's sound sample for sample as at home", bool(h) and bool(l) and
+           set(h) == set(l) and "lent from" in runs["k_snd_lent"].log,
+           "home %s; lent %s" % (sorted(set(h))[:2] or "none", sorted(set(l))[:2] or "none"))
+    ab = runs["k_snd_ab"].log
+    m = re.search(r"f100 sound: 42 flags 0 .*handle (\d+)", ab)
+    own = re.search(r"spu: voice %s's first half second: (.*)" % m.group(1), ab.split(m.group(0), 1)[1]) if m else None
+    lent = re.search(r"lent voice \d+'s first half second: (.*)", ab)
+    result("k", "a sound the lent way (a voice as the SPU's) as the game plays it", bool(own and lent) and
+           own.group(1) == lent.group(1), "game %s; lent way %s" % (own.group(1) if own else "-", lent.group(1) if lent else "-"))
     a = room_part(runs["k_ammo"].log, 2)
     got = re.findall(r"pickup: (.+?)'s ammo (\d+) -> (\d+)( \(a lent weapon\))?", a)
     lent_got = [g for g in got if g[3] and int(g[2]) > int(g[1])]

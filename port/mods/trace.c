@@ -66,6 +66,39 @@ void trace_weapon_state(void) {
              w ? w->reserve : 0, D_800DDEE8 != 0, D_8009CF48, g_FrameRate, g_FrameCap, D_8009CAA4 ? ", menu" : "");
 }
 
+
+/* TWINE_TEST_TONE_AB=id (tests, in any mission): that sound of the mission's, three ways 3 s apart from frame 100: the
+ * game's own, as a lent weapon's is played (a voice as the SPU's, tones.c), and the old raw PCM: for comparing
+ * recordings (TWINE_WAV, with TWINE_TEST_NO_CD) */
+typedef struct { u8 prog, tone, note, voice, vol, rnd, pad[2]; } SfxDefT;
+s32 func_80026F30(u32 id, s32 flags);
+int port_tone_play(int level, int program, int tone, int note, s32 l, s32 r, int loop);
+int port_tone_play_pcm(int level, int program, int tone, int note, s32 vol, int loop);
+char *getenv(const char *name);
+int atoi(const char *s);
+static void tone_ab(void) {
+    static int on = -1;
+    u32 id;
+    SfxDefT *d = *(SfxDefT **)((u8 *)g_Args + 0x130);
+    s32 vol, f = D_8009CDA8;
+    if (on < 0)
+        on = getenv("TWINE_TEST_TONE_AB") != 0;
+    if (!on || !d || (f != 100 && f != 160 && f != 220))
+        return;
+    id = (u32)atoi(getenv("TWINE_TEST_TONE_AB"));
+    if (id >= 0x80)
+        return;
+    vol = *(s16 *)((u8 *)g_Args + 0x13A) * d[id].vol / 127;
+    port_log("trace: L%d f%d sound test: %u (program %d tone %d note %d) %s\n", g_Args->level, f, id, d[id].prog,
+             d[id].tone, d[id].note, f == 100 ? "the game's own" : f == 160 ? "as lent" : "as raw PCM");
+    if (f == 100)
+        func_80026F30(id, 0);
+    else if (f == 160)
+        port_tone_play(g_Args->level, d[id].prog, d[id].tone, d[id].note, vol, vol, 0);
+    else
+        port_tone_play_pcm(g_Args->level, d[id].prog, d[id].tone, d[id].note, vol * 0x7F, 0);
+}
+
 /* each frame, at the top of the mission's frame loop (mods/savestate.c) */
 void trace_frame(void) {
     static s32 last_frame = -99999;
@@ -74,6 +107,7 @@ void trace_frame(void) {
                                                                          * each time) */
         return;
     last_frame = D_8009CDA8;
+    tone_ab();
     if (on_weapon < 0) {
         on_weapon = port_trace("weapon");
         on_change = port_trace("change");
