@@ -1325,6 +1325,14 @@ static SDL_Texture *hw_picture(s32 rx, s32 ry, s32 w, s32 h, const SDL_FRect *ds
 
 /* shows the VRAM rectangle at (rx, ry) the size of the display */
 int port_video_covered(void); /* endless.c */
+static Uint64 flash_until, flash_len; /* port_video_flash's */
+
+/* a flash bang's: the picture whited out, fading over ms (endless mode's lent flash bangs) */
+void port_video_flash(int ms) {
+    flash_len = (Uint64)ms;
+    flash_until = SDL_GetTicks() + flash_len;
+}
+
 static void present_rect(s32 rx, s32 ry, int rgb24) {
     s32 y, w = gpu_display.w, h = gpu_display.h;
     SDL_FRect src, dst = picture_rect();
@@ -1357,6 +1365,11 @@ static void present_rect(s32 rx, s32 ry, int rgb24) {
         SDL_SetRenderScale(renderer, 1, 1);
     } else if (!gpu_display.blank)
         draw_picture(pic, &src, &dst);
+    if (SDL_GetTicks() < flash_until && flash_len) {
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, (Uint8)(255 * (flash_until - SDL_GetTicks()) / flash_len));
+        SDL_RenderFillRect(renderer, &dst);
+    }
     draw_debug_text();
     if (!port_video_covered())
         draw_help();

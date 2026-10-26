@@ -265,7 +265,10 @@ static struct {
     s32 on, ticks, pos[3], vel[3];
     u8 *owner; /* (the guard who threw it: endless's enemy AI; none: Bond's) */
     s32 aim[3]; /* (where a guard's is meant to land) */
+    s32 kind;   /* (endless's lent weapons: QP_FRAG, a flash bang, a launcher's round, a rocket, a satchel charge) */
 } live[LIVE];
+enum { QP_FRAG, QP_FLASH, QP_ROUND, QP_ROCKET, QP_SATCHEL };
+void endless_flash(const s32 *pos) __attribute__((weak)); /* (a flash bang gone off: endless.c dazzles who sees it) */
 static s32 frags;       /* Bond's, in a mission without frag grenades */
 static s16 throw_pcm[4096]; /* the throw's sound */
 static u32 throw_len;
@@ -410,7 +413,12 @@ static s32 rcos(s32 a) {
 }
 
 /* one goes off: the blast and its sound where it is */
+static void blast_or_flash(s32 *pos, u8 *owner, int harm);
 static void blast(s32 *pos, u8 *owner) {
+    blast_or_flash(pos, owner, 1);
+}
+
+static void blast_or_flash(s32 *pos, u8 *owner, int harm) {
     static u8 obj[0x124], sub[0x80];
     memset(obj, 0, sizeof(obj));
     memset(sub, 0, sizeof(sub));
@@ -420,7 +428,8 @@ static void blast(s32 *pos, u8 *owner) {
     W(obj, 0x90, u8 *) = sub;
     W(sub, 0x14, s16) = W(sub, 0x1C, s16) = W(sub, 0x24, s16) = 4096;
     memcpy(sub + 0x28, pos, 12);
-    func_80065614(obj, 1, 5);
+    if (harm)
+        func_80065614(obj, 1, 5);
     func_80027248(BLAST_SOUND, (s32)(sub + 0x14), 0);
 }
 
@@ -434,17 +443,37 @@ static void fly(void) {
     for (g = 0; g < LIVE; g++) {
         if (!live[g].on)
             continue;
-        if (++live[g].ticks >= FUSE) {
+        if (++live[g].ticks >= FUSE && live[g].kind != QP_SATCHEL && live[g].kind != QP_ROUND &&
+            live[g].kind != QP_ROCKET) {
+            live[g].on = 0;
+            if (live[g].kind == QP_FLASH) {
+                if (endless_flash)
+                    endless_flash(live[g].pos);
+                blast_or_flash(live[g].pos, live[g].owner, 0);
+            } else
+                blast(live[g].pos, live[g].owner);
+            continue;
+        }
+        if (live[g].ticks >= 150 && (live[g].kind == QP_ROUND || live[g].kind == QP_ROCKET)) { /* (nothing hit) */
             live[g].on = 0;
             blast(live[g].pos, live[g].owner);
             continue;
         }
-        live[g].vel[1] += GRAVITY;
+        if (live[g].kind != QP_ROCKET)
+            live[g].vel[1] += GRAVITY;
         for (i = 0; i < 3; i++) {
             from[i] = live[g].pos[i];
             to[i] = from[i] + live[g].vel[i];
         }
-        if (func_800746D0(D_800E2F2C, from, to, normal, hit, &flags) != 0) {
+        if (func_800746D0(D_800E2F2C, from, to, normal, hit, &flags) != 0 &&
+            (live[g].kind == QP_ROUND || live[g].kind == QP_ROCKET)) { /* (a launcher's round, a rocket: off as it hits) */
+            memcpy(live[g].pos, hit, 12);
+            live[g].on = 0;
+            blast(live[g].pos, live[g].owner);
+            continue;
+        } else if (live[g].kind == QP_SATCHEL && !live[g].vel[0] && !live[g].vel[2] && live[g].ticks > 1) {
+            continue; /* (a satchel charge come to rest: there until detonated) */
+        } else if (func_800746D0(D_800E2F2C, from, to, normal, hit, &flags) != 0) {
             /* off the surface: the speed across it turned back at a quarter, along it a third kept (it lands
              * near where it comes down, not skidding on) */
             long long dot = 0, len = 0;
@@ -460,6 +489,8 @@ static void fly(void) {
                 s32 across = len ? (s32)(dot * normal[i] / len) : 0;
                 live[g].vel[i] = (live[g].vel[i] - across) / 3 - across / 4;
             }
+            if (live[g].kind == QP_SATCHEL) /* (a satchel charge sticks where it lands) */
+                live[g].vel[0] = live[g].vel[1] = live[g].vel[2] = 0;
         } else
             for (i = 0; i < 3; i++)
                 live[g].pos[i] = to[i];
@@ -485,6 +516,7 @@ static void throw_own(void) {
     live[g].ticks = 0;
     live[g].on = 1;
     live[g].owner = 0;
+    live[g].kind = QP_FRAG;
     if (!infinite())
         frags--;
     /* the punch's swing, then the frag's toss */
@@ -494,6 +526,59 @@ static void throw_own(void) {
     /* (again: what the level loads may cover it) */
     gpu_load_image(TEX_X, TEX_Y, 16, 64, image);
     gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
+}
+
+/* (endless's lent weapons) what one of another mission's throws or launches, from in front of Bond's view: a frag
+ * grenade, a flash bang (no blast: a flash), a grenade launcher's round or a rocket (off as they hit something,
+ * the rocket flying straight), a satchel charge (lies where it lands until quick_detonate). The mod's own object,
+ * flown and drawn as its grenades are. 0 if none can be (no model, or four out) */
+int quick_projectile(int kind) {
+    s32 g, yaw = W(&g_Camera, 0x82, s16), pitch = W(&g_Camera, 0x80, s16), i, speed, loft;
+    s32 dir[3];
+    if (!assets)
+        load();
+    if (assets < 0)
+        return 0;
+    for (g = 0; g < LIVE && live[g].on; g++)
+        ;
+    if (g == LIVE)
+        return 0;
+    speed = kind == QP_ROCKET ? 900 : kind == QP_ROUND ? 700 : kind == QP_SATCHEL ? 300 : SPEED;
+    loft = kind == QP_ROCKET ? 0 : kind == QP_ROUND ? 0x60 : LOFT;
+    pitch += loft;
+    dir[0] = rsin(yaw) * rcos(pitch) >> 12;
+    dir[1] = -rsin(pitch);
+    dir[2] = rcos(yaw) * rcos(pitch) >> 12;
+    for (i = 0; i < 3; i++) {
+        live[g].pos[i] = g_CamPosX[i] + (dir[i] * 300 >> 12);
+        live[g].vel[i] = dir[i] * speed >> 12;
+    }
+    live[g].ticks = 0;
+    live[g].on = 1;
+    live[g].owner = 0;
+    live[g].kind = kind;
+    if (kind <= QP_FLASH || kind == QP_SATCHEL)
+        toss = TOSS;
+    gpu_load_image(TEX_X, TEX_Y, 16, 64, image);
+    gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
+    return 1;
+}
+
+/* (endless's lent weapons) the detonator: every satchel charge out goes off; how many did */
+int quick_detonate(void) {
+    s32 g, n = 0;
+    for (g = 0; g < LIVE; g++)
+        if (live[g].on && live[g].kind == QP_SATCHEL) {
+            live[g].on = 0;
+            blast(live[g].pos, live[g].owner);
+            n++;
+        }
+    return n;
+}
+
+/* (endless's lent weapons) the frag grenades the quick throw has: lent ones count with them */
+s32 *quick_grenade_count(void) {
+    return &frags;
 }
 
 /* one more grenade for Bond (endless mode: one a guard dropped, in a mission without them) */
@@ -531,6 +616,7 @@ int quick_grenade_enemy(const s32 *from, const s32 *to, u8 *owner) {
     live[g].ticks = 0;
     live[g].on = 1;
     live[g].owner = owner;
+    live[g].kind = QP_FRAG;
     memcpy(live[g].aim, to, 12);
     toss = TOSS;
     gpu_load_image(TEX_X, TEX_Y, 16, 64, image);

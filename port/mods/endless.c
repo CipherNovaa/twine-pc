@@ -145,6 +145,7 @@ void func_80053DE4(s16 type, s16 sub, s32 x, s32 y, s32 z); /* an event on the A
 extern u8 *D_8009CD98;     /* the weapon in Bond's hands (an object) */
 extern s32 D_8009CD4C;
 #define OBJ(i) ((u8 *)D_800AFFC8 + (i) * 0x124)
+static s32 dazzled[64]; /* (till when a flash bang has a guard dazzled: endless_flash) */
 static s32 hp_seen[64]; /* (headless tests: each person's health as the frame began, for the damage a hit did) */
 #define TYPE_DEF(t) ((u8 *)g_Args->unk228 + (t) * 0x70) /* the object types: +1 their class (6 people), +2 (0x22 a door's zone) */
 #define HEALTH(o) (*(s32 *)((u8 *)(o) + 0x34))
@@ -456,6 +457,138 @@ static char lent_path[8][24];
 static char lent_got[8][28], lent_ammo_got[8][32];
 static u8 lent_anim[8][16];
 s32 func_80026F30(u32 id, s32 flags);
+
+/* A PS1 function by its address (recompiled or native), from the mod's own code */
+typedef struct { u32 r[32]; u32 hi, lo; u32 cop0[16]; } RcCtx;
+void port_rc_call(RcCtx *c, u32 addr);
+u32 port_rc_enter(void);
+void port_rc_leave(u32 sp);
+static void call_ps1(u32 addr) {
+    RcCtx c;
+    u32 sp;
+    memset(&c, 0, sizeof(c));
+    sp = port_rc_enter();
+    c.r[29] = sp;
+    port_rc_call(&c, addr);
+    port_rc_leave(sp);
+}
+
+/* The Frinesi shotgun's and auto's fire (their missions' handler, func_800393A8 in King's Ransom: the guns' fire
+ * five times over, one shell, one sound) in a mission without it: this mission's guns' fire five times, the shell
+ * and the sound and the shot counted once */
+static u32 lent_gun_fire; /* (this mission's guns' fire handler) */
+static void lent_shotgun(void) {
+    Weapon *w = &g_Weapons[D_800B0DD4];
+    u8 *wb = (u8 *)w, snd = wb[0x5A];
+    s32 shots = *(s32 *)((u8 *)g_Args + 0x2C8), k;
+    s16 ammo, clip, reserve;
+    if (!lent_gun_fire)
+        return;
+    call_ps1(lent_gun_fire);
+    ammo = w->ammo, clip = w->clip, reserve = w->reserve;
+    wb[0x5A] = 0xFF;
+    for (k = 0; k < 4; k++) /* (the other pellets) */
+        call_ps1(lent_gun_fire);
+    wb[0x5A] = snd;
+    w->ammo = ammo, w->clip = clip, w->reserve = reserve;
+    *(s32 *)((u8 *)g_Args + 0x2C8) = shots + 1;
+}
+
+static int shotgun_rec(const WeaponRec *r) {
+    return !strncmp(r->name, "FRINESI", 7);
+}
+
+/* Thrown, launched and set weapons (frag grenade, flash bang, grenade launcher, rocket launcher, satchel charge and
+ * its detonator) in a mission without them: their home code makes their mission's own objects, which this one
+ * hasn't, so the quick grenade's own object flies instead (port/mods/quickgrenade.c quick_projectile), thrown or
+ * fired from in front of Bond's view, the weapon's own fire animation (state 8) and sound */
+int quick_projectile(int kind) __attribute__((weak));
+int quick_detonate(void) __attribute__((weak));
+s32 *quick_grenade_count(void) __attribute__((weak));
+static int throw_kind(const char *nm) { /* (quickgrenade.c's QP_: -2 the detonator, -1 none) */
+    return !strncmp(nm, "FRAG GRENADE", 12)     ? 0
+           : !strncmp(nm, "FLASH BANG", 10)       ? 1
+           : !strncmp(nm, "GRENADE LAUNCHER", 16) ? 2
+           : !strncmp(nm, "ROCKET LAUNCHER", 15)  ? 3
+           : !strncmp(nm, "SATCHEL CHARGE", 14)   ? 4
+           : !strncmp(nm, "SATCHEL DETONATOR", 17) ? -2
+                                                   : -1;
+}
+
+static void lent_throw(void) {
+    static s32 last_tick = -100;
+    Weapon *w = &g_Weapons[D_800B0DD4];
+    u8 *wb = (u8 *)w;
+    int kind = throw_kind((char *)w->pad0);
+    if (D_8009CDA8 - last_tick >= 0 && D_8009CDA8 - last_tick < 15) /* (one a press: the throw's own pace) */
+        return;
+    last_tick = D_8009CDA8;
+    if (kind == -2) { /* the detonator: the satchels out go off */
+        int n = quick_detonate ? quick_detonate() : 0;
+        ELOG("weapons: the detonator set off %d satchel charges", n);
+        func_8007A17C(8);
+        return;
+    }
+    if (kind < 0 || !quick_projectile || w->ammo <= 0 || !quick_projectile(kind))
+        return;
+    if (w->flags & 0x2000) { /* (a clip: from it, as the guns' fire takes it) */
+        w->clip--;
+        if (w->clip <= 0 && w->reserve > 0 && wb[0x50] <= 1) /* (one at a time: the next to hand, as the throw's) */
+            w->clip = 1, w->reserve--;
+        w->ammo = w->clip + w->reserve;
+    } else
+        w->ammo--;
+    (*(s32 *)((u8 *)g_Args + 0x2C8))++;
+    if (wb[0x5A] < 0x80)
+        func_80026F30(wb[0x5A], 0);
+    func_8007A17C(8);
+    ELOG("weapons: %s fired (the mod's own %s), %d left", (char *)w->pad0,
+         kind == 0 ? "grenade" : kind == 1 ? "flash bang" : kind == 2 ? "round" : kind == 3 ? "rocket" : "charge", w->ammo);
+}
+
+/* a flash bang gone off (quickgrenade.c): the guards near it, who can see it, dazzled for a while (they can't shoot),
+ * and Bond's view whited out if he faces it near */
+void port_video_flash(int ms);
+void endless_flash(const s32 *pos) {
+    int i, n = 0;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = OBJ(i);
+        s32 dx, dz;
+        if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0)
+            continue;
+        dx = POS(o)[0] - pos[0], dz = POS(o)[2] - pos[2];
+        if (dx > -4000 && dx < 4000 && dz > -4000 && dz < 4000) {
+            dazzled[i] = room_frames + SEC * 4;
+            n++;
+        }
+    }
+    {
+        s32 dx = POS(g_Player)[0] - pos[0], dz = POS(g_Player)[2] - pos[2];
+        if (dx > -2500 && dx < 2500 && dz > -2500 && dz < 2500)
+            port_video_flash(1500);
+    }
+    ELOG("weapons: a flash bang went off: %d guards dazzled", n);
+}
+
+/* the lent frag grenade and the quick throw's count kept as one */
+static void frag_sync(void) {
+    static s32 last = -1;
+    s32 *q = quick_grenade_count ? quick_grenade_count() : 0;
+    int i;
+    for (i = 0; i < SLOTS && i < 16; i++)
+        if ((lent_mask >> i & 1) && throw_kind((char *)g_Weapons[i].pad0) == 0 && q) {
+            Weapon *w = &g_Weapons[i];
+            if (last >= 0 && w->ammo != last)
+                *q += w->ammo - last; /* (a box's, or the lent one thrown) */
+            if (*q < 0)
+                *q = 0;
+            w->ammo = (s16)*q, w->clip = *q > 0, w->reserve = *q > 0 ? *q - 1 : 0;
+            last = w->ammo;
+            return;
+        }
+    last = -1;
+}
+
 /* More weapons than the mission has slots for them (King's Ransom, Turncoat and Meltdown have one): the lent ones
  * share the slots, a pool. The weapon buttons step through the pool's weapons in a shared slot before they step on
  * (pool_step); each keeps its own ammo (Bond's carry holds it while it isn't in a slot), and drops feed it there
@@ -490,7 +623,10 @@ static void lend_into(int i, int pi, int k) {
             D_8009D130[o->kind * 4] = -1;
     }
     memcpy(w, r->def, 0xB8);
-    *(u32 *)(w + 0x3C) = *(u32 *)(pw + 0x3C); /* (this mission's guns' fire) */
+    lent_gun_fire = *(u32 *)(pw + 0x3C);
+    *(u32 *)(w + 0x3C) = shotgun_rec(r)               ? (u32)(long)lent_shotgun
+                         : throw_kind(r->name) != -1 ? (u32)(long)lent_throw
+                                                     : lent_gun_fire; /* (this mission's guns' fire) */
     *(u32 *)(w + 0x40) = pickup;
     memset(&lent_sound[k], 0, sizeof(lent_sound[k]));
     if (w[0x5A] != 0xFF && r->sfx[4] && LENT_SOUND + k < 0x80) { /* (its own sound: func_80026F30) */
@@ -573,7 +709,9 @@ static void lend_weapons(void) {
             r = port_weapon_find(c->weapon[j].name, -1);
         else if (have || !(r = port_weapon_find(c->weapon[j].name, g_Args->level)))
             continue;
-        if (!r || !r->gun || !r->path[0]) {
+        if (r && !strncmp(r->name, "SATCHEL CHARGE", 14) && !port_weapon_find("SATCHEL DETONATOR", -1))
+            r = 0; /* (satchels only with their detonator) */
+        if (!r || !(r->gun || shotgun_rec(r) || throw_kind(r->name) != -1) || !r->path[0]) {
             if (r)
                 ELOG("weapons: %s can't be lent here yet (not a gun)", c->weapon[j].name);
             continue;
@@ -587,6 +725,22 @@ static void lend_weapons(void) {
         pool[i].r = r;
         pool_n++;
     }
+    for (j = 0; j + 1 < pool_n; j++) /* (the detonator next to the satchel charges: one press between them) */
+        if (!strncmp(pool[j].name, "SATCHEL CHARGE", 14)) {
+            for (i = 0; i < pool_n && strncmp(pool[i].name, "SATCHEL DET", 11); i++)
+                ;
+            if (i < pool_n && i != j + 1) {
+                typeof(pool[0]) det = pool[i];
+                if (i > j) {
+                    memmove(&pool[j + 2], &pool[j + 1], sizeof(pool[0]) * (i - j - 1));
+                    pool[j + 1] = det;
+                } else {
+                    memmove(&pool[i], &pool[i + 1], sizeof(pool[0]) * (j - i));
+                    pool[j] = det; /* (the charges moved down one: the detonator after them) */
+                }
+            }
+            break;
+        }
     for (j = 0; j < pool_n; j++) {
         for (i = 0; i < SLOTS && i < 16; i++) /* (a tool's slot, one the mission's code leaves alone) */
             if ((getenv("TWINE_ENDLESS_TEST_LENDAT") ? i == atoi(getenv("TWINE_ENDLESS_TEST_LENDAT"))
@@ -613,12 +767,15 @@ static void pool_step(void) {
     static s32 last_state;
     int c = D_800B0DD8, dir, pi;
     s32 st = D_800F11F0;
+    if ((st == 3 || st == 6) && last_state != 3 && last_state != 6 && getenv("TWINE_ENDLESS_AMMO_LOG"))
+        ELOG("pool: change from %d to %d (in hand %d), lent %d, pool %d, buttons %d %d, draw_slot %d", c, D_800B0DDC,
+             D_800B0DD4, c >= 0 && c < 16 ? (int)(lent_mask >> c & 1) : -1, c >= 0 && c < 16 ? slot_pool[c] : -9,
+             D_800DDE08, D_800DDDA4, draw_slot);
     if ((st == 3 || st == 6) && last_state != 3 && last_state != 6 && c >= 0 && c < 16 && (lent_mask >> c & 1) &&
         slot_pool[c] >= 0 && D_800B0DDC != c && (D_800DDE08 || D_800DDDA4) && draw_slot < 0) {
         dir = D_800DDDA4 ? 1 : -1;
-        for (pi = slot_pool[c] + dir; pi >= 0 && pi < pool_n && pool_shown(pi); pi += dir)
-            ;
-        if (pi >= 0 && pi < pool_n) {
+        pi = slot_pool[c] + dir; /* (the next one in a slot already: the game steps on to it) */
+        if (pi >= 0 && pi < pool_n && !pool_shown(pi)) {
             lent_ammo_out(c);
             lend_into(c, pi, slot_idx[c]);
             lent_ammo_in(c);
@@ -937,6 +1094,7 @@ static const char guard_scripts[12][9] = {
 static void room_start(void) {
     s32 i, j, counts[256];
     room_frames = carried = budget = open = kills_scored = said = burst = at_entry = 0;
+    memset(dazzled, 0, sizeof(dazzled));
     draw_slot = -1;
     kind_count = copy_next = door_count = stuck_count = seated_said = 0;
     for (i = 0; i < 64; i++)
@@ -2489,6 +2647,8 @@ void endless_frame(void) {
         for (i = 0; i < SLOTS; i++)
             if (!strncmp((char *)g_Weapons[i].pad0, getenv("TWINE_ENDLESS_TEST_DRAW"), strlen(getenv("TWINE_ENDLESS_TEST_DRAW"))))
                 draw_slot = i;
+    if (draw_slot >= 0 && D_800B0DD4 == draw_slot && D_800F11F0 != 5 && D_800B0DDC == draw_slot)
+        draw_slot = -1; /* (in hand: his to change from as he likes) */
     if (draw_slot >= 0 && D_800B0DD4 != draw_slot) {
 #ifdef MOD_WEAPONKEYS
         if (weapon_change_to(draw_slot))
@@ -2522,6 +2682,7 @@ void endless_frame(void) {
         }
     }
     pool_step();
+    frag_sync();
     if (room_frames % SEC == 0)
         strip_tools(); /* (what the mission gives him later too: its scripts, its pickups) */
     if (room_frames == SEC * 5)
@@ -2897,6 +3058,10 @@ void func_80053114(u8 *obj) {
         return;
     }
     i = (obj - OBJ(0)) / 0x124 & 63;
+    if (dazzled[i] > room_frames) { /* (a flash bang's: he can't see to shoot) */
+        shots_held++;
+        return;
+    }
     if (!((func_80051728 && (func_80051728(obj, g_Player) & 0x40)) || sight(obj))) {
         /* (the game's own test of his seeing Bond, walls and all; Meltdown has none: the section's walls) */
         shots_held++;

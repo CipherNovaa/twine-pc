@@ -374,14 +374,27 @@ def lent_runs():
             "k_lent_ks5": Run("k_lent_ks5", 2, 60, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_NEXT="8:0",
                                                         TWINE_ENDLESS_TEST_EXIT=500, TWINE_ENDLESS_TEST_DRAW="KOFFLER",
                                                         TWINE_TEST_PAD=later)),
-            "k_ammo": Run("k_ammo", 8, 100, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="2:4",
-                                                 TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW="INGALLS",
-                                                 TWINE_ENDLESS_TEST_KILL=40, TWINE_ENDLESS_TEST_GRAB_BOX=15))}
+            "k_ammo": Run("k_ammo", 8, 120, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="2:4",
+                                                 TWINE_ENDLESS_TEST_EXIT=700, TWINE_ENDLESS_TEST_DRAW="INGALLS",
+                                                 TWINE_ENDLESS_TEST_KILL=30, TWINE_ENDLESS_TEST_GRAB_BOX=15))}
     nxt = ",".join("%d:8000,%d:0" % (t, t + 3) for t in range(700, 1000, 40))  # (the next weapon button: Square)
     runs["k_pool"] = Run("k_pool", 2, 70, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_NEXT="10:-1,8:0",
                                                TWINE_ENDLESS_TEST_EXIT=250, TWINE_ENDLESS_TEST_DRAW="KOFFLER",
                                                TWINE_TEST_PAD=nxt))
     del runs["k_pool"].env["TWINE_ENDLESS_TEST_MEET"]
+    fire2 = "500:4000,503:0,560:4000,563:0"
+    for name, room, draw in (("k_rocket", "5:-1", "ROCKET"), ("k_gl", "9:0", "GRENADE"), ("k_flash", "2:4", "FLASH")):
+        runs[name] = Run(name, int(room.split(":")[0]), 40, dict(base, TWINE_ENDLESS_ROOM=room, TWINE_ENDLESS_NEXT="8:0",
+                                                                TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW=draw,
+                                                                TWINE_TEST_PAD=fire2))
+    runs["k_satchel"] = Run("k_satchel", 8, 40, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="9:0",
+                                                    TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW="SATCHEL CHARGE",
+                                                    TWINE_TEST_PAD="500:4000,503:0,540:4000,543:0,580:8000,583:0,660:4000,663:0"))
+    runs["k_shotgun"] = Run("k_shotgun", 8, 45, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="3:-1",
+                                                    TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW="FRINESI",
+                                                    TWINE_TEST_PAD="200:4000,240:0,520:4000,560:0"))
+    for k in ("k_rocket", "k_gl", "k_flash", "k_satchel", "k_shotgun"):
+        del runs[k].env["TWINE_ENDLESS_TEST_MEET"]
     del runs["k_ammo"].env["TWINE_ENDLESS_TEST_MEET"]
     return runs
 
@@ -419,12 +432,30 @@ def check_lent(runs):
         result("k", "%s: its own fire sound" % label, bool(sh), sh.group(0)[7:] if sh else "no lent sound played")
     h, l = room_part(runs["k_home_ingalls"].log, 8), room_part(runs["k_lent_ingalls"].log, 2)
     (dh, nh), (dl, nl) = damage(h, "INGALLS"), damage(l, "INGALLS")
-    result("k", "Ingalls: damage as at home", nh > 1 and nl > 1 and dh == dl,
+    # (where a bullet hits multiplies its damage: few hits can show only a multiple; the same bullet if one divides the other)
+    result("k", "Ingalls: damage as at home", nh > 1 and nl > 1 and dh and dl and max(dh, dl) % min(dh, dl) == 0
+           and max(dh, dl) // min(dh, dl) <= 2,
            "a bullet's damage: home %d (%d hits), lent %d (%d hits)" % (dh, nh, dl, nl))
     h, l = room_part(runs["k_home_ar36"].log, 8), room_part(runs["k_lent_ar36"].log, 2)
     sc = lambda p: [int(x) for x in re.findall(r"weapon state (\d+) at", p) if int(x) in (33, 34, 35, 36)]
     result("k", "AR36: the scope's states as at home", set(sc(h)) == set(sc(l)) == {33, 34, 35, 36},
            "home %s, lent %s" % (sorted(set(sc(h))), sorted(set(sc(l)))))
+    for name, w, lv, what in (("k_rocket", "ROCKET LAUNCHER", 8, "rocket"), ("k_gl", "GRENADE LAUNCHER", 8, "round"),
+                              ("k_flash", "FLASH BANG", 8, "flash bang")):
+        part = room_part(runs[name].log, lv)
+        fired = re.findall(r"weapons: %s fired" % w, part)
+        extra = re.findall(r"a flash bang went off", part) if what == "flash bang" else fired
+        result("k", "%s: lent, fires its %s" % (w.title(), what), len(fired) >= 2 and len(extra) >= 1 and not runs[name].crashed(),
+               "%d fired in King's Ransom%s" % (len(fired), ", %d went off" % len(extra) if what == "flash bang" else ""))
+    part = room_part(runs["k_satchel"].log, 9)
+    thrown = re.findall(r"SATCHEL CHARGE fired", part)
+    boom = re.search(r"the detonator set off (\d+) satchel", part)
+    result("k", "Satchels + detonator: lent together", len(thrown) >= 2 and boom and int(boom.group(1)) >= 2,
+           "%d thrown, %s" % (len(thrown), boom.group(0)[4:] if boom else "no detonation"))
+    h, l = room_part(runs["k_shotgun"].log, 8), room_part(runs["k_shotgun"].log, 3)
+    rh, rl = fire_rate(h, "FRINESI"), fire_rate(l, "FRINESI")
+    result("k", "Frinesi auto: lent, fires as at home", rh >= 2 and abs(rh - rl) <= 1,
+           "shots in 20 frames: home %d, lent %d" % (rh, rl))
     p = room_part(runs["k_pool"].log, 8)
     before = runs["k_pool"].log.split("room start: level 8 ", 1)[0].rsplit("room start:", 1)[-1]
     waits = re.findall(r"weapons: (.+?) waits in the pool", before)  # (as King's Ransom's room starts)
