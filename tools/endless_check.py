@@ -367,8 +367,10 @@ def lent_runs():
     long_lent = dict(lent, TWINE_ENDLESS_TEST_EXIT=1000)
     runs = {"k_home_ingalls": Run("k_home_ingalls", 8, 55, dict(home, TWINE_ENDLESS_TEST_DRAW="INGALLS", TWINE_TEST_PAD=shots)),
             "k_lent_ingalls": Run("k_lent_ingalls", 8, 85, dict(long_lent, TWINE_ENDLESS_TEST_DRAW="INGALLS", TWINE_TEST_PAD=later)),
-            "k_home_ar36": Run("k_home_ar36", 8, 40, dict(home, TWINE_ENDLESS_TEST_DRAW="AR36", TWINE_TEST_PAD=aim)),
-            "k_lent_ar36": Run("k_lent_ar36", 8, 60, dict(lent, TWINE_ENDLESS_TEST_DRAW="AR36", TWINE_TEST_PAD=aim2)),
+            "k_home_ar36": Run("k_home_ar36", 8, 40, dict(home, TWINE_ENDLESS_TEST_DRAW="AR36", TWINE_TEST_PAD=aim,
+                                                          TWINE_SHOT=240)),
+            "k_lent_ar36": Run("k_lent_ar36", 8, 60, dict(lent, TWINE_ENDLESS_TEST_DRAW="AR36", TWINE_TEST_PAD=aim2,
+                                                          TWINE_SHOT=740)),
             "k_home_ks5": Run("k_home_ks5", 2, 40, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_TEST_DRAW="KOFFLER",
                                                         TWINE_TEST_PAD=shots)),
             "k_lent_ks5": Run("k_lent_ks5", 2, 60, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_NEXT="8:0",
@@ -420,6 +422,24 @@ def damage(part, weapon):
     return g, len(d)
 
 
+def scope_picture(img):
+    """the share of the sniper scope's picture found where it is drawn (a 512x240 frame's places, dark): its
+    crosshair's lines and ring"""
+    w, h, px = img
+    sx, sy = w / 512.0, h / 240.0
+
+    def dark(x, y):
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                i = (int((y + dy) * sy) * w + int((x + dx) * sx)) * 3
+                if i + 2 < len(px) and max(px[i], px[i + 1], px[i + 2]) < 48:
+                    return True
+        return False
+    pts = [(255, y) for y in range(150, 195, 5)] + [(x, 117) for x in range(125, 205, 8)] + \
+        [(x, 117) for x in range(306, 386, 8)] + [(214, 118), (297, 118), (256, 93), (256, 142)]
+    return sum(dark(x, y) for x, y in pts) / len(pts)
+
+
 def check_lent(runs):
     for w, lv_home, lv_lent, label in (("INGALLS", 8, 2, "Ingalls"), ("KOFFLER", 2, 8, "KS5")):
         h = room_part(runs["k_home_" + label.lower()].log, lv_home)
@@ -440,6 +460,11 @@ def check_lent(runs):
     sc = lambda p: [int(x) for x in re.findall(r"weapon state (\d+) at", p) if int(x) in (33, 34, 35, 36)]
     result("k", "AR36: the scope's states as at home", set(sc(h)) == set(sc(l)) == {33, 34, 35, 36},
            "home %s, lent %s" % (sorted(set(sc(h))), sorted(set(sc(l)))))
+    ph = read_ppm(os.path.join(runs["k_home_ar36"].dir, "shot_0240.ppm"))
+    pl = read_ppm(os.path.join(runs["k_lent_ar36"].dir, "shot_0740.ppm"))
+    qh, ql = scope_picture(ph) if ph else 0, scope_picture(pl) if pl else 0
+    result("k", "AR36: the scope's picture as at home", qh >= 0.85 and ql >= 0.85,
+           "its marks found: home %d%%, lent %d%%" % (qh * 100, ql * 100))
     for name, w, lv, what in (("k_rocket", "ROCKET LAUNCHER", 8, "rocket"), ("k_gl", "GRENADE LAUNCHER", 8, "round"),
                               ("k_flash", "FLASH BANG", 8, "flash bang")):
         part = room_part(runs[name].log, lv)
@@ -543,10 +568,12 @@ GRENADE_ROOMS = [(8, 3), (3, 11), (6, 13), (10, 4)]
 
 def ai_runs():
     runs = {}
-    for l, p in GRENADE_ROOMS:  # (a guard met, and a grenade of Bond's lobbed at him: he and those near shout and run)
+    for l, p in GRENADE_ROOMS:  # (a guard met, and a grenade of Bond's lobbed at him: he and those near shout and run;
+        # the IMPROVED AI's, so with it under -o too, as the other runs here say which they have)
         runs["aig_%d_%d" % (l, p)] = Run("aig_%d_%d" % (l, p), l, 40, {
             "TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "%d:%d" % (l, p), "TWINE_ENDLESS_SEED": 4,
-            "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_ENDLESS_TEST_MEET_GRENADE": 1})
+            "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_ENDLESS_TEST_MEET_GRENADE": 1,
+            "TWINE_ENEMY_AI": "improved"})
     for l, p in AI_ROOMS:
         for m in ("original", "improved"):
             runs["ai_%d_%d_%s" % (l, p, m)] = Run("ai_%d_%d_%s" % (l, p, m), l, 75, {

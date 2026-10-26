@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80081458 func_8004DD9C func_8007A17C func_800753F0
+ * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -423,6 +423,7 @@ static int pistol_slot(void) {
 static u32 lent_mask; /* (the slots lent to this mission: theirs are another's) */
 static u32 lent_work[0xE000 / 4]; /* (a lent weapon's model: func_800753F0) */
 static u8 lent_work_type; /* (the model type whose file is in it) */
+static void lent_ots(void);
 
 static void weapons_capture(void) {
     int i, p = pistol_slot(), n = 0;
@@ -2683,6 +2684,8 @@ void endless_frame(void) {
     }
     pool_step();
     frag_sync();
+    if (lent_work_type)
+        lent_ots();
     if (room_frames % SEC == 0)
         strip_tools(); /* (what the mission gives him later too: its scripts, its pickups) */
     if (room_frames == SEC * 5)
@@ -3149,6 +3152,19 @@ static struct {
 } donor_hmd[8];
 
 void port_smooth_keep(void *at, u32 size);
+void port_lent_images(const void *at, u32 size);
+void port_lent_ot(int k, const void *org, u32 tags);
+extern u8 D_800D2AFC[][0x14], D_800B8F88[][0x14]; /* (the weapon in hand's ordering tables, the frame's) */
+
+/* the lent model's textures go into VRAM only while it's drawn: where its tags and the frame's are */
+static void lent_ots(void) {
+    int k;
+    for (k = 0; k < 2; k++) {
+        port_lent_ot(k, *(void **)(D_800D2AFC[k] + 4), 1u << *(u32 *)D_800D2AFC[k]);
+        port_lent_ot(2 + k, *(void **)(D_800B8F88[k] + 4), 1u << *(u32 *)D_800B8F88[k]);
+    }
+}
+
 static int lent_model(s32 idx) {
     u8 t = ((u8 *)&g_Weapons[idx])[0x5B];
     const char *p = t ? D_8009DB50[t] : 0;
@@ -3192,6 +3208,8 @@ static int lent_model(s32 idx) {
      * Courier's 0xD800 bytes to the AR36's 0xD860; the model is made from it: func_800753F0) */
     memcpy(lent_work, donor_hmd[k].data, donor_hmd[k].size);
     port_smooth_keep(lent_work, sizeof(lent_work));
+    port_lent_images(lent_work, sizeof(lent_work)); /* (its textures kept by the runtime: libgpu.c) */
+    lent_ots();
     lent_work_type = t;
     D_800F0F5C = 0;
     D_800E2F58 = t;
@@ -3264,6 +3282,21 @@ void func_8004DD9C(void) {
     func_8004DD9C_orig();
 }
 
+/* ... and its gun isn't drawn in closer while aimed, as other guns are (the aim's per-frame pull in, and its
+ * hold): the missions with a sniper rifle leave its slot out there (levels 1 and 8 slot 3, levels 3 and 5 slot 2),
+ * and the scope's picture, part of the rifle's model, would come too near the eye to be drawn */
+void func_800449BC_orig(void);
+void func_800449BC(void) {
+    if (!lent_sniper())
+        func_800449BC_orig();
+}
+
+void func_80044A60_orig(void);
+void func_80044A60(void) {
+    if (!lent_sniper())
+        func_80044A60_orig();
+}
+
 void func_8007A17C_orig(s32 state);
 void func_8007A17C(s32 state) {
     if ((state == 8 || state == 9) && D_8009CD4C && lent_sniper())
@@ -3273,6 +3306,7 @@ void func_8007A17C(s32 state) {
 
 void func_80076014(s32 idx) {
     if (!lent_model(idx)) {
+        port_lent_images(0, 0);
         lent_work_type = 0;
         func_80076014_orig(idx);
     }
@@ -3280,6 +3314,7 @@ void func_80076014(s32 idx) {
 
 void func_80076104(s32 idx) {
     if (!lent_model(idx)) {
+        port_lent_images(0, 0);
         lent_work_type = 0;
         func_80076104_orig(idx);
     }

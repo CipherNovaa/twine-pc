@@ -1,6 +1,7 @@
 /* libgpu on the host: the game's ordering tables, primitives, drawing/display environments and image
  * transfers go to the software GPU (gpu.c). Drawing completes immediately. Signatures follow PsyQ's
  * libgpu.h. */
+#include <stdlib.h>
 #include <string.h>
 #include "port.h"
 #include "gpu.h"
@@ -52,7 +53,73 @@ void *DrawSyncCallback(void (*fn)(void)) {
     return old;
 }
 
+/* A weapon lent from another mission (port/mods/endless.c) has its model's textures where its own mission keeps them,
+ * which this mission may use for its own (Courier's grenade lies where the AR36's scope picture goes). So the images
+ * the lent model loads aren't put in VRAM as it's made: they're kept here and put there only while the weapon in hand
+ * is drawn (its ordering table, sorted into the frame's: from the first of its tags DrawOTag meets to the next of the
+ * frame's own), what was there put back after. */
+#define LENT_IMAGES 16
+static struct {
+    RECT r;
+    u16 *pix, *saved;
+} lent_img[LENT_IMAGES];
+static int lent_imgs, lent_in;
+static const u8 *lent_lo, *lent_hi;            /* (the lent model's file: its images are loaded from there) */
+static const u32 *lent_ot_lo[4], *lent_ot_hi[4]; /* (the tags of the weapon in hand's two ordering tables, then the
+                                                  * frame's two) */
+
+void port_lent_images(const void *at, u32 size) {
+    int i;
+    for (i = 0; i < lent_imgs; i++)
+        free(lent_img[i].pix), free(lent_img[i].saved);
+    lent_imgs = 0;
+    lent_lo = at;
+    lent_hi = (const u8 *)at + size;
+}
+
+void port_lent_ot(int k, const void *org, u32 tags) {
+    if (k >= 0 && k < 4)
+        lent_ot_lo[k] = org, lent_ot_hi[k] = (const u32 *)org + tags;
+}
+
+static int lent_image(const RECT *r, const u32 *p) {
+    int i;
+    u32 n = (u32)r->w * (u32)r->h;
+    if (!lent_lo || (const u8 *)p < lent_lo || (const u8 *)p >= lent_hi || r->w <= 0 || r->h <= 0)
+        return 0;
+    for (i = 0; i < lent_imgs; i++)
+        if (!memcmp(&lent_img[i].r, r, sizeof(*r)))
+            break;
+    if (i == LENT_IMAGES)
+        return 0;
+    if (i == lent_imgs) {
+        lent_img[i].r = *r;
+        lent_img[i].pix = malloc(n * 2);
+        lent_img[i].saved = malloc(n * 2);
+        if (!lent_img[i].pix || !lent_img[i].saved) {
+            free(lent_img[i].pix), free(lent_img[i].saved);
+            return 0;
+        }
+        lent_imgs++;
+    }
+    memcpy(lent_img[i].pix, p, n * 2);
+    return 1;
+}
+
+static void lent_swap(int in) {
+    int i;
+    if (in)
+        for (i = 0; i < lent_imgs; i++)
+            gpu_store_image(lent_img[i].r.x, lent_img[i].r.y, lent_img[i].r.w, lent_img[i].r.h, lent_img[i].saved);
+    for (i = in ? 0 : lent_imgs - 1; in ? i < lent_imgs : i >= 0; i += in ? 1 : -1)
+        gpu_load_image(lent_img[i].r.x, lent_img[i].r.y, lent_img[i].r.w, lent_img[i].r.h,
+                       in ? lent_img[i].pix : lent_img[i].saved);
+    lent_in = in;
+}
+
 s32 LoadImage(RECT *r, u32 *p) {
+    if (lent_image(r, p))
+        return 0;
     gpu_load_image(r->x, r->y, r->w, r->h, (const u16 *)p);
     return 0;
 }
@@ -93,12 +160,20 @@ void DrawOTag(u32 *p) {
     u32 n = 0;
     while (p && n++ < 0x100000) {
         u32 tag = *p, len = tag >> 24;
+        if (lent_imgs) {
+            if (!lent_in && ((p >= lent_ot_lo[0] && p < lent_ot_hi[0]) || (p >= lent_ot_lo[1] && p < lent_ot_hi[1])))
+                lent_swap(1);
+            else if (lent_in && ((p >= lent_ot_lo[2] && p < lent_ot_hi[2]) || (p >= lent_ot_lo[3] && p < lent_ot_hi[3])))
+                lent_swap(0);
+        }
         if (len)
             gpu_gp0(p + 1, len);
         if ((tag & 0xFFFFFF) == 0xFFFFFF)
             break;
         p = (u32 *)(0x80000000u | (tag & 0xFFFFFF));
     }
+    if (lent_in)
+        lent_swap(0);
     if (drawsync_callback)
         drawsync_callback();
 }
