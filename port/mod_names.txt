@@ -78,6 +78,13 @@ level07 func_80026F30 func_80026F30
 level08 func_80026F30 func_80026F30
 level09 func_80026F30 func_80026F30
 level10 func_80026F30 func_80026F30
+level04 func_80027248 func_80027248
+level05 func_80027248 func_80027248
+level06 func_80027248 func_80027248
+level07 func_80027248 func_80027248
+level08 func_80027248 func_80027248
+level09 func_80027248 func_80027248
+level10 func_80027248 func_80027248
 # the aim's pull in of the gun and its hold (port/mods/endless.c: none for a lent sniper rifle, as at home)
 level02 func_800449BC func_80045728
 level02 func_80044A60 func_800457C0

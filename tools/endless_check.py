@@ -252,6 +252,11 @@ def check_rules(runs):
         gone = fixed - alive
         result("d", "8:4 fixed guards last %ds" % ((last - first) // 25), bool(fixed) and not gone,
                "%d fixed (ai 2-5), %d gone" % (len(fixed), len(gone)))
+    r = runs["rules_hurry"]
+    muted = r.lines(r"story line 101 muted")
+    played = r.lines(r"sound: \d+ flags \w+ \(program 9 tone 7 note 80 voice \d+\): handle")
+    result("d", "8:5 \"hurry James\" muted (hw renderer, smooth motion)", bool(muted) and not played,
+           "muted %d, played %d" % (len(muted), len(played)))
     co = runs["rules_courier"]
     civ = [l for l in co.lines(r"made: person \d+ type 5 placed")]
     result("d", "2:-1 civilians kept", len(civ) > 0, "%d bank staff made" % len(civ))
@@ -422,9 +427,13 @@ def lent_runs():
         runs[name] = Run(name, int(room.split(":")[0]), 40, dict(base, TWINE_ENDLESS_ROOM=room, TWINE_ENDLESS_NEXT="8:0",
                                                                 TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW=draw,
                                                                 TWINE_TEST_PAD=fire2))
-    runs["k_satchel"] = Run("k_satchel", 8, 40, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="9:0",
-                                                    TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW="SATCHEL CHARGE",
-                                                    TWINE_TEST_PAD="500:4000,503:0,540:4000,543:0,580:8000,583:0,660:4000,663:0"))
+    # (lent satchels as at home: a charge thrown, the detonator in hand by itself; fired, the charges back; then the
+    # weapon buttons step all round: the detonator never comes with no charge out. As played: hw renderer, smooth)
+    runs["k_satchel"] = Run("k_satchel", 8, 70, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="9:0",
+                                                    TWINE_ENDLESS_TEST_EXIT="300,800", TWINE_ENDLESS_TEST_DRAW="SATCHEL CHARGE",
+                                                    TWINE_RENDERER="hw", TWINE_SMOOTH=1, TWINE_TRACE="weapon,change",
+                                                    TWINE_TEST_PAD="500:4000,503:0,600:4000,603:0," + ",".join(
+                                                        "%d:8000,%d:0" % (t, t + 3) for t in range(650, 1000, 35))))
     runs["k_shotgun"] = Run("k_shotgun", 8, 45, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="3:-1",
                                                     TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW="FRINESI",
                                                     TWINE_TEST_PAD="200:4000,240:0,520:4000,560:0"))
@@ -534,10 +543,22 @@ def check_lent(runs):
             result("k", "Flash Bang: a dazzled guard cries out", None if AI_ORIGINAL or not dazzled else bool(eyes),
                    "%d dazzling, %d \"my eyes!\"%s" % (len(dazzled), len(eyes), " (the game's own AI: none)" if AI_ORIGINAL else ""))
     part = room_part(runs["k_satchel"].log, 9)
-    thrown = re.findall(r"SATCHEL CHARGE fired", part)
-    boom = re.search(r"the detonator set off (\d+) satchel", part)
-    result("k", "Satchels + detonator: lent together", len(thrown) >= 2 and boom and int(boom.group(1)) >= 2,
-           "%d thrown, %s" % (len(thrown), boom.group(0)[4:] if boom else "no detonation"))
+    fr = lambda pat: [int(x) for x in re.findall(r" f(\d+) v\d+ weapons: " + pat, part)]
+    thrown, det_in, boom, back = (fr(r"SATCHEL CHARGE fired"), fr(r"SATCHEL DETONATOR into slot \d+ \(a charge out"),
+                                  fr(r"the detonator set off [1-9]"), fr(r"SATCHEL CHARGE into slot \d+ \(the charges set off"))
+    ok = bool(thrown and det_in and boom and back) and 15 <= det_in[0] - thrown[0] <= 35 and 0 < back[0] - boom[0] <= 10
+    result("k", "Satchels + detonator: lent, as at home (thrown: the detonator; fired: the charges)", ok,
+           "thrown f%s, detonator in hand f%s, set off f%s, charges back f%s (home: +23, +7)" %
+           tuple((x[0] if x else "-") for x in (thrown, det_in, boom, back)))
+    import weapon_trace
+    tr = [x for x in weapon_trace.frames(os.path.join(runs["k_satchel"].dir, "port.log"), "SATCHEL DETONATOR", 9)
+          if x["f"] > (back[0] if back else 0) and x["state"] in (1, 7)]
+    steps = re.findall(r"change: to \d+ \((.+?)\) from .* by the next-weapon button", part)
+    pooled = re.findall(r"weapons: the pool's (.+?) into slot", part)
+    result("k", "Satchels: no detonator in hand with no charge out (the weapon buttons stepped round)",
+           bool(back) and "SATCHEL CHARGE" in steps and len(steps) + len(pooled) >= 8 and not tr,
+           "%d steps round to the charges again (%d through the pool), %d frames of the detonator in hand after" %
+           (len(steps) + len(pooled), len(pooled), len(tr)))
     h, l = room_part(runs["k_shotgun"].log, 8), room_part(runs["k_shotgun"].log, 3)
     rh, rl = fire_rate(h, "FRINESI"), fire_rate(l, "FRINESI")
     result("k", "Frinesi auto: lent, fires as at home", rh >= 2 and abs(rh - rl) <= 1,
@@ -883,7 +904,14 @@ def main():
     if "d" in checks:
         groups["rules"] = {"rules_kr": Run("rules_kr", 8, 150, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:4",
                                                                "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1}),
-                           "rules_courier": Run("rules_courier", 2, 30, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "2:-1"})}
+                           "rules_courier": Run("rules_courier", 2, 30, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "2:-1"}),
+                           # (King's Ransom's "hurry James", its mission logic's line at f1020 in 8:5: muted; as played,
+                           # hw renderer, smooth motion, Bond aiming and firing)
+                           "rules_hurry": Run("rules_hurry", 8, 75, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:5",
+                                                                    "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1,
+                                                                    "TWINE_TRACE": "sound", "TWINE_RENDERER": "hw",
+                                                                    "TWINE_SMOOTH": 1, "TWINE_TEST_PAD":
+                                                                    "300:0800,900:4800,960:0800,1100:0"})}
     if "e" in checks:
         groups["menus"] = menu_runs()
     if "f" in checks:

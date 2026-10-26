@@ -316,6 +316,8 @@ static void bios_call(R3000 *c, u32 table) {
     *v0 = 0;
 }
 
+u32 port_rc_psp; /* (and its stack pointer) */
+u32 port_rc_ra; /* (the PS1 return address of the recompiled code's call into native code now: for traces) */
 void port_rc_call(R3000 *c, u32 addr) {
     RcFunc f = rc_lookup(addr);
     NativeFn n;
@@ -335,12 +337,14 @@ void port_rc_call(R3000 *c, u32 addr) {
     if (!n)
         port_fatal("recompiled code called %08X: no function there\n", addr);
     {
-        u32 sp = c->r[29], a[16], k;
+        u32 sp = c->r[29], a[16], k, was = port_rc_ra;
         for (k = 0; k < 4; k++)
             a[k] = c->r[4 + k];
         for (k = 4; k < 16; k++)
             a[k] = M32(sp + 16 + (k - 4) * 4);
+        port_rc_ra = c->r[31], port_rc_psp = c->r[29];
         c->r[2] = port_call16((void *)n, a);
+        port_rc_ra = was;
     }
 }
 

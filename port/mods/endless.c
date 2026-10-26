@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0
+ * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -51,6 +51,7 @@ char *strchr(const char *s, int c);
 char *strstr(const char *s, const char *t);
 void port_endless_logf(s32 frame, const char *fmt, ...);
 int port_trace(const char *what);
+void endless_muted_point(u32 id);
 void port_log(const char *fmt, ...);
 extern int port_subframe; /* (interp.c: an extra drawing between ticks runs, whose memory is put back after) */
 #define ELOG(...) port_endless_logf(D_8009CDA8, __VA_ARGS__)
@@ -376,6 +377,7 @@ static void log_weapons(const char *when) {
 static int draw_slot = -1; /* (a slot to change to, as soon as the game lets him) */
 static int draw_hidden;     /* (the gun hidden while the carried one loads) */
 static int draw_direct;     /* (this frame: a room's start in a mission loaded afresh, draw_slot taken out at once) */
+static const char *detonator_charges(int slot);
 static void carry_out(void) {
     EndlessCarry *c = &port_endless_carry;
     int i, j;
@@ -404,7 +406,10 @@ static void carry_out(void) {
         int h = draw_slot >= 0 ? draw_slot : D_800B0DDC >= 0 && D_800B0DDC < SLOTS ? D_800B0DDC : D_800B0DD4;
         if (h < 0 || h >= SLOTS || g_Weapons[h].pad0[0] < 'A' || g_Weapons[h].pad0[0] > 'Z')
             h = D_800B0DD4;
-        if (h >= 0 && h < SLOTS && g_Weapons[h].pad0[0] >= 'A' && g_Weapons[h].pad0[0] <= 'Z') {
+        if (h >= 0 && h < SLOTS && detonator_charges(h)) {
+            strncpy(c->in_hand, detonator_charges(h), sizeof(c->in_hand) - 1); /* (the lent detonator: its charges) */
+            c->in_hand[sizeof(c->in_hand) - 1] = 0;
+        } else if (h >= 0 && h < SLOTS && g_Weapons[h].pad0[0] >= 'A' && g_Weapons[h].pad0[0] <= 'Z') {
             strncpy(c->in_hand, (char *)g_Weapons[h].pad0, sizeof(c->in_hand) - 1);
             c->in_hand[sizeof(c->in_hand) - 1] = 0;
         }
@@ -569,6 +574,10 @@ static int throw_kind(const char *nm) { /* (quickgrenade.c's QP_: -2 the detonat
                                                    : -1;
 }
 
+static s8 slot_pool[16];
+static u8 pool_round[16];
+static int sat_pi, det_pi, charges_out, sat_switch; /* (below: SATCHELS AND THEIR DETONATOR) */
+static s32 sat_switch_at;
 static void lent_throw(void) {
     static s32 last_tick = -100;
     Weapon *w = &g_Weapons[D_800B0DD4];
@@ -581,6 +590,11 @@ static void lent_throw(void) {
         int n = quick_detonate ? quick_detonate() : 0;
         ELOG("weapons: the detonator set off %d satchel charges", n);
         func_8007A17C(8);
+        charges_out = 0;
+        if (det_pi >= 0)
+            pool_round[det_pi] = 0;
+        if (sat_pi >= 0 && slot_pool[D_800B0DD4] == det_pi) /* (back to the charges, as at home) */
+            sat_switch = D_800B0DD4, sat_switch_at = D_8009CDA8 + 7;
         return;
     }
     if (kind < 0 || !quick_projectile || w->ammo <= 0 || !quick_projectile(kind))
@@ -596,6 +610,14 @@ static void lent_throw(void) {
     if (wb[0x5A] < 0x80)
         func_80026F30(wb[0x5A], 0);
     func_8007A17C(8);
+    if (kind == 4) { /* a charge out: the detonator Bond's, taken out as the throw ends (as at home) */
+        charges_out++;
+        if (det_pi >= 0) {
+            pool_round[det_pi] = 1;
+            if (slot_pool[D_800B0DD4] == sat_pi)
+                sat_switch = D_800B0DD4, sat_switch_at = 0;
+        }
+    }
     ELOG("weapons: %s fired (the mod's own %s), %d left", (char *)w->pad0,
          kind == 0 ? "grenade" : kind == 1 ? "flash bang" : kind == 2 ? "round" : kind == 3 ? "rocket" : "charge", w->ammo);
 }
@@ -654,6 +676,19 @@ static struct {
 } pool[16];
 static int pool_n;
 static s8 slot_pool[16]; /* (a slot's pool weapon now, -1 none) */
+/* SATCHELS AND THEIR DETONATOR, LENT, AS AT HOME. At home (King's Ransom, its slots 5 and 6) the detonator is Bond's
+ * only while charges are out: a charge thrown, the game changes to the detonator; the detonator fired, back to the
+ * charges (a slot with none left: the game changes on as from any empty weapon). Lent, the charges and the detonator
+ * share the charges' slot: the detonator (pool entry det_pi, from the catalogue, never from the carry) goes into it
+ * as a charge has been thrown, the charges back as it has fired (sat_switch: as the throw's or the detonation's
+ * animation ends, the other loaded and drawn at once, state 5, as at home); while no charge is out the detonator is in no slot, out of the weapon buttons' round and the
+ * inventory. */
+static int sat_pi = -1, det_pi = -1, charges_out, sat_switch = -1;
+static s32 sat_switch_at; /* (the detonator's: back to the charges 7 frames into its fire, as at home) */
+static const char *detonator_charges(int slot) { /* (the lent detonator in that slot: its charges' name) */
+    return slot >= 0 && slot < 16 && (lent_mask >> slot & 1) && det_pi >= 0 && slot_pool[slot] == det_pi && sat_pi >= 0
+               ? pool[sat_pi].name : 0;
+}
 static s8 slot_idx[16];  /* (a lent slot's place among them: its sound, model file, animation numbers, messages) */
 static u8 pool_round[16]; /* (a pool weapon in the weapon buttons' round: the inventory's toggle, flags bit 12) */
 
@@ -775,6 +810,10 @@ static void lend_into(int i, int pi, int k) {
         e[3] = (s32)(long)lent_ammo_got[k];
     }
     *(s32 *)(w + 0x38) = (*(s32 *)(w + 0x38) & ~0x1000) | pool_round[pi] << 12;
+    if (pi == det_pi) { /* (Bond's while charges are out: owned, in the round, its one "round") */
+        *(s32 *)(w + 0x38) |= 0x1800;
+        ((Weapon *)w)->ammo = ((Weapon *)w)->clip = 1, ((Weapon *)w)->reserve = 0;
+    }
     slot_pool[i] = (s8)pi, slot_idx[i] = (s8)k;
 }
 
@@ -783,7 +822,7 @@ static void lent_ammo_in(int i) {
     EndlessCarry *c = &port_endless_carry;
     int j = slot_pool[i] >= 0 ? carry_entry(pool[(int)slot_pool[i]].name) : -1;
     Weapon *w = &g_Weapons[i];
-    if (j < 0)
+    if (j < 0 || slot_pool[i] == det_pi) /* (the detonator's "round": always one, while it's his) */
         return;
     if (c->weapon[j].owned) /* (owned, and in the weapon buttons' round unless the inventory took it out) */
         w->flags = (w->flags & ~0x1000) | 0x800 | pool_round[(int)slot_pool[i]] << 12;
@@ -795,7 +834,7 @@ static void lent_ammo_out(int i) {
     EndlessCarry *c = &port_endless_carry;
     int j = slot_pool[i] >= 0 ? carry_entry(pool[(int)slot_pool[i]].name) : -1;
     Weapon *w = &g_Weapons[i];
-    if (j < 0)
+    if (j < 0 || slot_pool[i] == det_pi) /* (the detonator's "round": always one, while it's his) */
         return;
     c->weapon[j].owned = (w->flags & 0x800) != 0;
     c->weapon[j].ammo = w->ammo, c->weapon[j].clip = w->clip, c->weapon[j].reserve = w->reserve;
@@ -821,7 +860,7 @@ static void lend_weapons(void) {
     for (j = 0; j < c->weapons && pool_n < 16; j++) {
         const WeaponRec *r;
         int have = 0;
-        if (!c->weapon[j].owned)
+        if (!c->weapon[j].owned || !strncmp(c->weapon[j].name, "SATCHEL DET", 11)) /* (the detonator: with the charges) */
             continue;
         for (i = 0; i < SLOTS; i++)
             have |= !strncmp((char *)g_Weapons[i].pad0, c->weapon[j].name, 23);
@@ -845,6 +884,16 @@ static void lend_weapons(void) {
         pool[i].r = r;
         pool_n++;
     }
+    sat_pi = det_pi = -1, charges_out = 0, sat_switch = -1;
+    for (j = 0; j < pool_n; j++) /* (lent charges: their detonator, the catalogue's, beside them) */
+        if (!strncmp(pool[j].name, "SATCHEL CHARGE", 14) && pool_n < 16) {
+            const WeaponRec *d = port_weapon_find("SATCHEL DETONATOR", -1);
+            if (d) {
+                snprintf(pool[pool_n].name, sizeof(pool[pool_n].name), "%s", d->name);
+                pool[pool_n++].r = d;
+            }
+            break;
+        }
     for (j = 0; j + 1 < pool_n; j++) /* (the detonator next to the satchel charges: one press between them) */
         if (!strncmp(pool[j].name, "SATCHEL CHARGE", 14)) {
             for (i = 0; i < pool_n && strncmp(pool[i].name, "SATCHEL DET", 11); i++)
@@ -861,9 +910,16 @@ static void lend_weapons(void) {
             }
             break;
         }
-    for (j = 0; j < pool_n; j++) /* (in the weapon buttons' round to begin with, as a weapon picked up is) */
+    for (j = 0; j < pool_n; j++) { /* (in the weapon buttons' round to begin with, as a weapon picked up is) */
         pool_round[j] = 1;
+        if (!strncmp(pool[j].name, "SATCHEL CHARGE", 14))
+            sat_pi = j;
+        if (!strncmp(pool[j].name, "SATCHEL DET", 11))
+            det_pi = j, pool_round[j] = 0; /* (no charge out yet) */
+    }
     for (j = 0; j < pool_n; j++) {
+        if (j == det_pi) /* (no slot of its own: the charges' once one is out) */
+            continue;
         for (i = 0; i < SLOTS && i < 16; i++) /* (a tool's slot, one the mission's code leaves alone) */
             if ((getenv("TWINE_ENDLESS_TEST_LENDAT") ? i == atoi(getenv("TWINE_ENDLESS_TEST_LENDAT"))
                                                     : (clean_slots[g_Args->level] >> i & 1)) &&
@@ -919,6 +975,27 @@ static void pool_step(void) {
     int c = D_800B0DD8, dir, pi;
     s32 st = D_800F11F0;
     pool_pending();
+    if (sat_switch >= 0 && pool_pending_slot < 0 && D_8009CAA4 == 0) {
+        if (D_800B0DD4 != sat_switch) /* (he changed weapons meanwhile) */
+            sat_switch = -1;
+        else if (sat_switch_at ? D_8009CDA8 >= sat_switch_at : st == 1) { /* (the throw's animation over; the
+                                                                            * detonator's 7 frames in) */
+            int to = slot_pool[sat_switch] == det_pi ? sat_pi : det_pi;
+            /* (as the game does at home: no put-away, the other loaded and drawn at once, state 5) */
+            lent_ammo_out(sat_switch);
+            lend_into(sat_switch, to, slot_idx[sat_switch]);
+            lent_ammo_in(sat_switch);
+            D_800B0DD8 = D_800B0DDC = (s16)sat_switch;
+            func_8007A17C(5);
+#ifdef MOD_TRACE
+            trace_change_by(to == det_pi ? "endless: a charge out, the detonator taken out (as at home)"
+                                         : "endless: the charges set off, the charges taken out again (as at home)");
+#endif
+            ELOG("weapons: %s into slot %d (%s)", pool[to].name, sat_switch,
+                 to == det_pi ? "a charge out, as at home" : "the charges set off, as at home");
+            sat_switch = -1;
+        }
+    }
     if ((st == 3 || st == 6) && last_state != 3 && last_state != 6 && getenv("TWINE_ENDLESS_AMMO_LOG"))
         ELOG("pool: change from %d to %d (in hand %d), lent %d, pool %d, buttons %d %d, draw_slot %d", c, D_800B0DDC,
              D_800B0DD4, c >= 0 && c < 16 ? (int)(lent_mask >> c & 1) : -1, c >= 0 && c < 16 ? slot_pool[c] : -9,
@@ -984,7 +1061,7 @@ static void inv_draw(void) {
         if (g_Weapons[i].flags >> 11 & 1)
             inv_entry[inv_n++] = (s16)i;
     for (i = 0; i < pool_n && inv_n < 48; i++)
-        if (!pool_shown(i) && (j = carry_entry(pool[i].name)) >= 0 && c->weapon[j].owned)
+        if (!pool_shown(i) && i != det_pi && (j = carry_entry(pool[i].name)) >= 0 && c->weapon[j].owned)
             inv_entry[inv_n++] = (s16)(-1 - i);
     v = inv_n < INV_ROWS ? inv_n : INV_ROWS;
     if (inv_top > inv_n - v)
@@ -1150,7 +1227,8 @@ static void carry_in(void) {
                 break;
         if (j == c->weapons)
             continue;
-        if (c->weapon[j].owned)
+        if (c->weapon[j].owned && strncmp((char *)w->pad0, "SATCHEL DET", 11)) /* (a mission's own detonator: its
+                                                                                * code makes it his as a charge is set) */
             w->flags |= 0x1800;
         if (c->weapon[j].ammo > w->ammo) {
             w->ammo = c->weapon[j].ammo;
@@ -1404,7 +1482,16 @@ static const char guard_scripts[12][9] = {
 };
 #define FIXED_SCRIPT(w4) (g_Args->level >= 1 && g_Args->level <= 11 && !guard_scripts[g_Args->level][(w4) >> 20 & 7])
 /* the room as it starts: the kinds of guards, its doorways and floor */
+static int trace_sound(void);
 static void room_start(void) {
+    if (trace_sound()) { /* (the mission's sounds of program 9, its voice lines: their numbers, for muting) */
+        const u8 *d = *(u8 **)((u8 *)g_Args + 0x130);
+        int k;
+        for (k = 0; d && k < 0x80; k++)
+            if (d[k * 8] == 9)
+                port_log("trace: L%d sound: table %u (0x%X) is program 9 tone %d note %d volume %d\n", g_Args->level, k, k,
+                         d[k * 8 + 1], d[k * 8 + 2], d[k * 8 + 4]);
+    }
     s32 i, j, counts[256];
     room_frames = carried = budget = open = kills_scored = said = burst = at_entry = 0;
     memset(dazzled, 0, sizeof(dazzled));
@@ -1855,18 +1942,6 @@ static int explosive(const char *nm) {
            !strncmp(nm, "PIPE BOMB", 9);
 }
 
-/* satchel charges and their detonator go together: Bond given satchels is given the detonator too */
-static void give_detonator(void) {
-    int i;
-    for (i = 0; i < SLOTS; i++)
-        if (!strncmp((char *)g_Weapons[i].pad0, "SATCHEL DETONATOR", 17) && (g_Weapons[i].flags & 0x1800) != 0x1800) {
-            g_Weapons[i].flags |= 0x1800;
-            if (g_Weapons[i].ammo < 1)
-                g_Weapons[i].ammo = 1;
-            ELOG("weapons: the satchel detonator given with the satchels");
-        }
-}
-
 /* What a guard leaves as he falls: armour, ammo for one of the mission's weapons, now and then a weapon */
 static s32 last_drop[3], last_box[3];
 static void drop(u8 *o) {
@@ -1959,8 +2034,6 @@ static void drop(u8 *o) {
             if (D_8009D130[pick * 4] >= 0) {
                 ELOG("pickup: the box holds %s's ammo%s", (char *)g_Weapons[D_8009D130[pick * 4]].pad0,
                      lent_mask >> D_8009D130[pick * 4] & 1 ? " (a lent weapon)" : "");
-                if (!strncmp((char *)g_Weapons[D_8009D130[pick * 4]].pad0, "SATCHEL CHARGE", 14))
-                    give_detonator();
             } else
                 ELOG("pickup: the box holds kind %d's ammo (a lent weapon waiting in the pool)", pick);
         }
@@ -3145,7 +3218,10 @@ void endless_frame(void) {
         open = 1, room_frames = SEC * 60, D_800D2F90 = 2, D_8009CFFC = 1;
         *(s16 **)(D_8009E9C4 + 8) = D_8009E9C4 + 0xC + atoi(getenv("TWINE_ENDLESS_TEST_DOOR")) * 8;
     }
-    if (getenv("TWINE_ENDLESS_TEST_EXIT") && room_frames == atoi(getenv("TWINE_ENDLESS_TEST_EXIT")))
+    if (getenv("TWINE_ENDLESS_TEST_EXIT") && /* (N, or N,M: the first room at N, the rest at M) */
+        room_frames == (port_endless_wave() > 1 && strchr(getenv("TWINE_ENDLESS_TEST_EXIT"), ',')
+                            ? atoi(strchr(getenv("TWINE_ENDLESS_TEST_EXIT"), ',') + 1)
+                            : atoi(getenv("TWINE_ENDLESS_TEST_EXIT"))))
         open = 1, D_800D2F90 = 2, room_frames = SEC * 60; /* (headless tests: as if Bond went through a door) */
     /* the way out by the entry (for a room whose doors lead nowhere: a story's, a lift's, or only for show): once the
      * exit is open, standing where he came in, Bond is told he may leave, and leaves with the use button */
@@ -3687,7 +3763,9 @@ int port_tone_play(int level, int program, int tone, int note, s32 vol, int loop
 void port_sfx_stop(int handle);
 
 s32 func_80026F30_orig(u32 id, s32 flags);
+extern u32 port_rc_ra; /* (recomp_rt.c: the PS1 return address of a call from recompiled code) */
 int port_trace(const char *what);
+void endless_muted_point(u32 id);
 void port_log(const char *fmt, ...);
 static int trace_sound(void);
 s32 func_80026F30(u32 id, s32 flags) {
@@ -3712,15 +3790,58 @@ s32 func_80026F30(u32 id, s32 flags) {
                      lent_sound[n].loop ? " looping" : "", h);
         return h ? 0x4000 | (h & 0x3FFF) : -1;
     }
+    {   /* the mission's story lines muted in a run, whoever plays them: King's Ransom's "hurry James" (0x65) comes
+         * straight here from its mission logic (func_8006AEC0, each frame: as its stage counter D_800E3168 moves on),
+         * not by a script's sound op (func_800572F4) nor as a sound at a place (func_80027248) */
+        s16 e[5];
+        if (id < 0x80 && port_endless_room(e) && muted_line(id)) {
+            ELOG("sound: story line %u muted (played directly, from %08X)", id, port_rc_ra);
+            if (trace_sound()) { /* (the PS1 stack's code addresses: its callers, roughly; the recompiled code's calls
+                                  * keep no return address, so port_rc_ra is often 0) */
+                extern u32 port_rc_psp;
+                int k;
+                for (k = 0; k < 64 && port_rc_psp >= 0x80000000u && port_rc_psp < 0x801FFF00u; k++) {
+                    u32 v = *(u32 *)(long)(port_rc_psp + k * 4);
+                    if (v >= 0x80010000u && v < 0x800A0000u && !(v & 3))
+                        port_log("trace: sound stack +%X %08X\n", k * 4, v);
+                }
+            }
+            endless_muted_point(id);
+            return -1;
+        }
+    }
     if (trace_sound()) { /* (the mission's own: its table's entry, g_Args+0x130 + id * 8: program, tone, note, voice) */
         static const u8 none[8] = {0xFF, 0xFF, 0xFF, 0xFF};
         const u8 *e = *(u8 **)((u8 *)g_Args + 0x130) && id < 0x80 ? *(u8 **)((u8 *)g_Args + 0x130) + id * 8 : none;
         s32 h = func_80026F30_orig(id, flags);
-        port_log("trace: L%d f%d sound: %u flags %X (program %d tone %d note %d voice %d): handle %d\n", g_Args->level,
-                 D_8009CDA8, id, flags, e[0], e[1], e[2], e[3], h);
+        port_log("trace: L%d f%d sound: %u flags %X (program %d tone %d note %d voice %d): handle %d (called from %08X)\n",
+                 g_Args->level, D_8009CDA8, id, flags, e[0], e[1], e[2], e[3], h, port_rc_ra);
         return h;
     }
     return func_80026F30_orig(id, flags);
+}
+
+/* (a debugger's breakpoint: a muted line's caller, bt) */
+void __attribute__((noinline)) endless_muted_point(u32 id) {
+    __asm__ volatile("" ::"r"(id));
+}
+
+/* A sound at a place (the game's 3D one: a person's cry, an object's): the mission's story lines muted in a run as
+ * the scripts' are (King's Ransom's "hurry James" came this way, not by a script) */
+s32 func_80027248_orig(s32 sound, s32 pos, s32 flags);
+s32 func_80027248(s32 sound, s32 pos, s32 flags) {
+    s16 e[5];
+    u32 id = sound & 0xFF;
+    if (trace_sound()) {
+        const u8 *d = *(u8 **)((u8 *)g_Args + 0x130);
+        port_log("trace: L%d f%d sound: at a place %u flags %X (program %d tone %d) from %08X\n", g_Args->level,
+                 D_8009CDA8, id, flags, d ? d[id * 8] : -1, d ? d[id * 8 + 1] : -1, port_rc_ra);
+    }
+    if (port_endless_room(e) && muted_line(id)) {
+        ELOG("sound: story line %u muted (a sound at a place, from %08X)", id, port_rc_ra);
+        return 0;
+    }
+    return func_80027248_orig(sound, pos, flags);
 }
 
 static int trace_sound(void) {
