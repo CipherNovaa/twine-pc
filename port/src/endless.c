@@ -237,11 +237,18 @@ const WeaponRec *port_weapon_find(const char *name, int level) {
     return b >= 0 ? &weapon_recs[b] : NULL;
 }
 
-/* the survey neither seen nor heard: a black screen with a line (video.c), silence (spu.c), until the run's first
- * room's mission starts */
+/* the survey neither seen nor heard: a black screen with a line (video.c), silence (spu.c), from the first surveyed
+ * mission's start (not before: the shell's briefing still waits for its button) until the run's first room's mission
+ * starts. A survey that makes no progress for 10 s (600 frames shown) is given up: the run starts where it is (the
+ * missions not surveyed are catalogued when they first start) */
 static int covering;
 static int survey_room; /* (the mission started is a survey's) */
+static u32 survey_mark; /* (the frame of its last progress) */
+u32 port_video_frames(void);
+static void survey_abandon(void);
 int port_video_covered(void) {
+    if (covering && surveying && port_video_frames() - survey_mark > 600)
+        survey_abandon();
     return covering;
 }
 
@@ -276,13 +283,17 @@ static int survey_begin(void) {
     rooms[ROOMS].level = survey_queue[0], rooms[ROOMS].point = -1;
     room = ROOMS;
     surveying = 1;
-    covering = 1;
+    survey_mark = port_video_frames();
+    if (getenv("TWINE_ENDLESS_TEST_SURVEY_STALL")) /* (test: covered at once, as before a fix: the shell's briefing then
+                                                    * waits unseen, the survey makes no progress: given up) */
+        covering = 1;
     port_endless_logf(-1, "weapons: a survey of %d missions first (their weapons not known yet)", survey_n);
     return 1;
 }
 
 /* the level's mod: the survey's room done (its weapons taken): the next mission to survey, or the run's room */
 void port_endless_survey_next(void) {
+    survey_mark = port_video_frames();
     if (++survey_at < survey_n) {
         rooms[ROOMS].level = survey_queue[survey_at], rooms[ROOMS].point = -1;
         next_room = ROOMS;
@@ -292,6 +303,21 @@ void port_endless_survey_next(void) {
         surveying = 0;
         port_endless_logf(-1, "weapons: survey done (%d weapons known)", weapon_rec_count);
     }
+}
+
+/* the survey given up (or the run before it, at its briefing): the run's own room next */
+static void survey_abandon(void) {
+    if (!surveying)
+        return;
+    port_endless_logf(-1, "weapons: survey given up at mission %d of %d (no progress for 10 s): the run starts", survey_at + 1,
+                      survey_n);
+    rooms[ROOMS] = room_saved;
+    if (room == ROOMS)
+        room = room_after_survey;
+    if (next_room == ROOMS)
+        next_room = room_after_survey;
+    surveying = 0;
+    covering = 0;
 }
 
 /* fixes/shell.c: ENDLESS chosen on mission select: a run begun, its first room's mission named in g_Args */
@@ -316,6 +342,10 @@ void port_endless_restart(void) {
 
 /* fixes/shell.c: the run given up at its briefing */
 void port_endless_cancel(void) {
+    if (surveying) {
+        rooms[ROOMS] = room_saved;
+        surveying = covering = 0;
+    }
     port_endless = 0;
     room = -1;
 }
@@ -350,8 +380,8 @@ int port_endless_gen(void) {
 void port_endless_level(const PortModule *m) {
     s16 *start;
     level_gen++;
-    if (!surveying)
-        covering = 0;
+    covering = surveying && port_endless && m->level;
+    survey_mark = port_video_frames();
     survey_room = surveying;
     if (!port_endless || !m->level || (room < 0 && next_room < 0))
         return;
@@ -360,9 +390,11 @@ void port_endless_level(const PortModule *m) {
         next_room = -1;
     }
     room_starts = 0;
-    if (rooms[room].level != m->level) {
-        port_endless_logf(-1, "level %d started in a run, the room's is %d", m->level, rooms[room].level);
-        return;
+    if (rooms[room].level != m->level) { /* (a survey given up as the shell started its mission: a room of this one) */
+        port_endless_logf(-1, "level %d started in a run, the room's is %d: a room of level %d instead", m->level,
+                          rooms[room].level, m->level);
+        rooms[ROOMS].level = m->level, rooms[ROOMS].point = -1;
+        room = ROOMS;
     }
     start = (s16 *)start_point[m->level];
     if (rooms[room].point >= 0)

@@ -50,6 +50,18 @@ void GTE_restore(void) {
     memcpy(C, saved_c, sizeof(C));
 }
 
+/* All 64 registers as stored (data then control), out and back in: for a check that runs code twice from the same
+ * state (port/mods/people.c's TWINE_PEOPLE_VERIFY). */
+void port_gte_get(u32 *regs) {
+    memcpy(regs, D, sizeof(D));
+    memcpy(regs + 32, C, sizeof(C));
+}
+
+void port_gte_put(const u32 *regs) {
+    memcpy(D, regs, sizeof(D));
+    memcpy(C, regs + 32, sizeof(C));
+}
+
 /* Back to the power-on state (all registers zero), after the BIOS boot animation (intro.c). */
 void GTE_reset(void) {
     int i;

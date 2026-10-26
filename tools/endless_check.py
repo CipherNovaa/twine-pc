@@ -8,7 +8,9 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
              d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression,
              j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching),
              k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried),
-             l room starts never run out of the menu texts' letters (20 starts; past them: cut, no crash)
+             l room starts never run out of the menu texts' letters (20 starts; past them: cut, no crash),
+             m a run started from the shell (main menu, mission select's ENDLESS, its briefing) with no weapons
+               catalogue: the briefing seen, the survey then the first room; a survey stalled is given up after 10 s
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -692,6 +694,38 @@ def check_texts(runs):
            "MAX_TEXT" not in f.log, "%d cut, crash %s" % (len(f.lines(r"text: .* cut to")), f.crashed()))
 
 
+# ---- m: a run started from the shell, its weapons not catalogued yet ----
+
+def shell_runs():
+    # main menu: NEW GAME, then mission select; down and left onto ENDLESS, chosen; the briefing's X later
+    pad = "460:4000,463:0,560:4000,563:0,660:40,663:0,700:80,703:0,760:4000,763:0"
+    env = {"TWINE_TEST_NO_FILMS": 1, "TWINE_SMOOTH": 0, "TWINE_RENDERER": "hw"}
+    return {"shell_start": Run("shell_start", 0, 110, dict(env, TWINE_SHOT=880, TWINE_TEST_PAD=pad + ",900:4000,903:0")),
+            "shell_stall": Run("shell_stall", 0, 80, dict(env, TWINE_SHOT=1450, TWINE_ENDLESS_TEST_SURVEY_STALL=1,
+                                                         TWINE_TEST_PAD=pad + ",1500:4000,1503:0"))}
+
+
+def screen_level(run, frame):
+    img = read_ppm(os.path.join(run.dir, "screen_%04d.ppm" % frame))
+    return sum(img[2]) / max(1, len(img[2])) if img and img[2] else -1
+
+
+def check_shell(runs):
+    r = runs["shell_start"]
+    seen = screen_level(r, 880)
+    after = r.log[r.log.find("survey done"):] if "survey done" in r.log else ""
+    result("m", "shell start: the briefing seen (not under the survey's cover)", seen > 10, "screen level %.1f" % seen)
+    result("m", "shell start: the survey, then the run's first room", bool(after) and "room start:" in after and
+           not r.crashed(), "survey done %s, room after it %s, crash %s" % (bool(after), "room start:" in after,
+                                                                          r.crashed()))
+    r = runs["shell_stall"]
+    seen = screen_level(r, 1450)
+    after = r.log[r.log.find("survey given up"):] if "survey given up" in r.log else ""
+    result("m", "a stalled survey given up after 10 s, the run started", bool(after) and "room start:" in after and
+           seen > 10 and not r.crashed(), "given up %s, room after it %s, briefing level %.1f" %
+           (bool(after), "room start:" in after, seen))
+
+
 # ---- i: the campaign untouched ----
 
 def campaign_runs():
@@ -707,7 +741,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijkl", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklm", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -756,6 +790,8 @@ def main():
         groups["lent"] = lent_runs()
     if "l" in checks:
         groups["texts"] = text_runs()
+    if "m" in checks:
+        groups["shell"] = shell_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.secs)  # (the long ones first)
     t0 = time.time()
@@ -786,9 +822,11 @@ def main():
         check_lent(groups["lent"])
     if "texts" in groups:
         check_texts(groups["texts"])
+    if "shell" in groups:
+        check_shell(groups["shell"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
-             "k": "lent weapons", "l": "text letters"}
+             "k": "lent weapons", "l": "text letters", "m": "shell start"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))
