@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0
+ * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 SsUtAllKeyOff func_80026C90
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -3696,6 +3696,14 @@ static void draw_frame(void) { /* (the weapon he came in with taken out: each fr
     }
 }
 
+int port_spu_sounding(char *buf, int size);
+static int trace_voices(void) {
+    static int on = -1;
+    if (on < 0)
+        on = port_trace("voices");
+    return on;
+}
+
 void endless_frame(void) {
     int own, n, wave, i;
     s32 kills, back;
@@ -3703,6 +3711,14 @@ void endless_frame(void) {
         return;
     if (port_endless_room(entry) && g_Player)
         watch_frame();
+    if (trace_voices() && D_8009CAA4 && port_endless_room(entry)) { /* (the watch's menu up: what sounds meanwhile) */
+        static int menu_calls;
+        char what[640];
+        if (++menu_calls % 25 == 1) {
+            port_spu_sounding(what, sizeof(what));
+            port_log("trace: L%d f%d voices: the menu up (call %d): %s\n", g_Args->level, D_8009CDA8, menu_calls, what);
+        }
+    }
     if (getenv("TWINE_ENDLESS_DUMP"))
         dump();
     if (!port_endless_room(entry) || !g_Player)
@@ -3756,6 +3772,12 @@ void endless_frame(void) {
         func_80048B4C(msg_wave, 0x80, 0);
     }
     room_frames++;
+    if (trace_voices() && (room_frames == 1 || room_frames == 20 || room_frames == 40 || room_frames % 100 == 0)) {
+        char what[640]; /* (TWINE_TRACE=voices: what sounds; a sound left on from the last mission, the playtest's
+                         * endless SMG fire, shows as keyed on before this executable) */
+        port_spu_sounding(what, sizeof(what));
+        port_log("trace: L%d f%d voices: room frame %d: %s\n", g_Args->level, D_8009CDA8, room_frames, what);
+    }
     blast_frame(); /* (a guard's grenade sparing his friends: over) */
     if (room_frames % (SEC * 10) == 0)
         flood();
@@ -4860,6 +4882,33 @@ void func_80081458(s32 voice) {
     }
     else
         func_80081458_orig(voice);
+}
+
+/* The game keys all its voices off (SsUtAllKeyOff: the mission's end; func_80026C90(-1): every voice but one stopped,
+ * as the menu over the mission opens): the runtime's own (a lent weapon's sound, a callout) with them, as more of the
+ * SPU's voices. A lent automatic's looping fire played on through the menu (its stop comes from the weapon's state
+ * machine, which the menu holds still) and, held through a door, on through the next missions (playtest 8; spu.c
+ * also stops them as an executable starts). TWINE_TEST_SOUND_KEEP=1: not (the bug, for tests). */
+int port_spu_runtime_off(int keep);
+static void runtime_off(const char *why, int keep) {
+    int n;
+    if (getenv("TWINE_TEST_SOUND_KEEP"))
+        return;
+    n = port_spu_runtime_off(keep);
+    if (n && trace_sound())
+        port_log("trace: L%d f%d sound: %s: %d of the runtime's own with them\n", g_Args->level, D_8009CDA8, why, n);
+}
+
+void SsUtAllKeyOff_orig(s32 mode);
+void SsUtAllKeyOff(s32 mode) {
+    runtime_off("all keyed off", 0);
+    SsUtAllKeyOff_orig(mode);
+}
+
+void func_80026C90_orig(s32 keep);
+void func_80026C90(s32 keep) {
+    runtime_off("all voices stopped", keep >= 0 && (keep & 0x4000) ? keep & 0x3FFF : 0);
+    func_80026C90_orig(keep);
 }
 
 /* A lent sniper rifle's scope: its home mission's code raises the scope (the weapon's state 0x21, then 0x22) where

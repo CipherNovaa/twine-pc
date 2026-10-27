@@ -139,3 +139,13 @@ level07 func_8002E228 func_8002E1CC
 level08 func_8002E228 func_8002E2F0
 level09 func_8002E228 func_8002E360
 level10 func_8002E228 func_8002E3C4
+# every voice but one stopped (port/mods/endless.c: the runtime's own sounds with them): the same address, not placed
+level02 func_80026C90 func_80026C90
+level03 func_80026C90 func_80026C90
+level04 func_80026C90 func_80026C90
+level05 func_80026C90 func_80026C90
+level06 func_80026C90 func_80026C90
+level07 func_80026C90 func_80026C90
+level08 func_80026C90 func_80026C90
+level09 func_80026C90 func_80026C90
+level10 func_80026C90 func_80026C90

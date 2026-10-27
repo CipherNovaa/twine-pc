@@ -5,7 +5,8 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
   -j JOBS    runs at once (default 4, at most 5)
   -k CHECKS  the checks to run, letters from abcdefghijklmno (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
-             d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression,
+             d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
+             the menu), g weapon carry, h card save, i campaign regression,
              j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching),
              k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried),
              l room starts never run out of the menu texts' letters (20 starts; past them: cut, no crash),
@@ -332,6 +333,56 @@ def restart_runs():
     env = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "2:4"}
     return {"restart_yes": Run("restart_yes", 2, 45, dict(env, TWINE_TEST_PAD=pad + ",560:20,563:0,600:4000,603:0")),
             "restart_no": Run("restart_no", 2, 45, dict(env, TWINE_TEST_PAD=pad + ",600:4000,603:0"))}
+
+
+def sound_stop_runs():
+    """a lent automatic's looping fire (King's Ransom's Ingalls lent in City of Walkways) held as Bond goes
+    through a door, as RESTART MISSION comes, as the menu opens (hw renderer, smooth motion, pad-held fire)"""
+    env = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
+           "TWINE_ENDLESS_TEST_DRAW": "INGALLS", "TWINE_ENDLESS_ROOM": "8:-1", "TWINE_ENDLESS_NEXT": "5:-1,6:0",
+           "TWINE_TRACE": "weapon,voices,sound", "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1}
+    return {"snd_door": Run("snd_door", 8, 50, dict(env, TWINE_ENDLESS_TEST_EXIT="200,300", TWINE_TEST_PAD="600:4000,700:0")),
+            "snd_restart": Run("snd_restart", 8, 50, dict(env, TWINE_ENDLESS_TEST_EXIT="200,5000",
+                                                          TWINE_ENDLESS_TEST_RESTART=250, TWINE_TEST_PAD="540:4000,800:0")),
+            "snd_menu": Run("snd_menu", 8, 45, dict(env, TWINE_ENDLESS_TEST_EXIT="200,5000",
+                                                    TWINE_TEST_PAD="500:4000,600:4008,603:0,800:8,803:0"))}
+
+
+def firing_lent(log, level):
+    """the lent Ingalls firing (its looping sound keyed, state 9) at the last weapon frame traced in level"""
+    w = re.findall(r"trace: L%d f\d+ weapon: slot \d+ \(.*?\) INGALLS TYPE 20, state (\d+)" % level, log)
+    return bool(w) and w[-1] == "9" and bool(re.search(r"trace: L%d f\d+ sound: lent .* looping" % level, log))
+
+
+def leftovers(log, level):
+    """the voices lines of level's first room after the change: (lines, those with sounds from before it)"""
+    after = log.split("room in level %d " % level, 1)[1] if "room in level %d " % level in log else ""
+    lines = re.findall(r"voices: room frame \d+: .*keyed on before this executable: (\d+)(.*)", after)
+    return lines, [l for l in lines if l[0] != "0"]
+
+
+def check_sound_stop(runs):
+    d, r, m = runs["snd_door"], runs["snd_restart"], runs["snd_menu"]
+    lines, bad = leftovers(d.log, 6)
+    pre = firing_lent(d.log.split("room in level 6 ", 1)[0], 5)
+    result("f", "a lent automatic's fire held through a door: no sound left on (hw, smooth)",
+           None if not pre else len(lines) >= 3 and not bad,
+           ("firing as Bond left: %s; next room: %d checks, %d with a sound from before%s" %
+            (pre, len(lines), len(bad), (" (" + bad[0][1][:80] + ")") if bad else "")))
+    two = r.log.split("restart: RESTART MISSION: the run begins again", 1)
+    m2 = re.search(r"restart: a fresh run from level (\d+)", r.log)
+    lines, bad = leftovers(two[1], int(m2.group(1))) if len(two) > 1 and m2 else ([], [])
+    pre = len(two) > 1 and firing_lent(two[0], 5)
+    result("f", "a lent automatic's fire held as RESTART MISSION comes: no sound left on (hw, smooth)",
+           None if not pre else len(lines) >= 3 and not bad,
+           "firing as it came: %s; the fresh run's first room: %d checks, %d with a sound from before" %
+           (pre, len(lines), len(bad)))
+    menu = re.findall(r"trace: L5 f\d+ voices: the menu up \(call (\d+)\): .*the runtime's (\d+);", m.log)
+    stopped = m.lines(r"L5 f\d+ sound: all voices stopped: \d+ of the runtime's own")
+    later = [n for c, n in menu if int(c) > 1]
+    result("f", "a lent automatic's fire held as the menu opens: stopped with the game's (hw, smooth)",
+           None if not stopped and not (menu and menu[0][1] != "0") else len(later) >= 3 and set(later) == {"0"},
+           "lent sounds stopped as it opened: %d; in the menu after: %s" % (len(stopped), ",".join(later[:8])))
 
 
 def check_restart(runs):
@@ -1189,6 +1240,7 @@ def main():
         groups["menus"] = menu_runs()
     if "f" in checks:
         groups["restart"] = restart_runs()
+        groups["sound_stop"] = sound_stop_runs()
     if "g" in checks:
         groups["carry"] = carry_runs()
         groups["iris"] = iris_runs()
@@ -1225,6 +1277,8 @@ def main():
         check_menus(groups["menus"])
     if "restart" in groups:
         check_restart(groups["restart"])
+    if "sound_stop" in groups:
+        check_sound_stop(groups["sound_stop"])
     if "carry" in groups:
         check_carry(groups["carry"])
     if "iris" in groups:
