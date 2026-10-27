@@ -10,7 +10,10 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
              k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried),
              l room starts never run out of the menu texts' letters (20 starts; past them: cut, no crash),
              m a run started from the shell (main menu, mission select's ENDLESS, its briefing) with no weapons
-               catalogue: the briefing seen, the survey then the first room; a survey stalled is given up after 10 s
+               catalogue: the briefing seen, the survey then the first room; a survey stalled is given up after 10 s,
+             n more than six people (8 MB of RAM, whatever -8 says: 12 slots): 12 alive at once, drawn, each fires
+               and falls, real shots hit and kill people in the extra slots (hw renderer, smooth motion), a save
+               state with 12 about, a long run of rooms
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -848,7 +851,10 @@ def ai_runs():
         for m in ("original", "improved"):
             runs["ai_%d_%d_%s" % (l, p, m)] = Run("ai_%d_%d_%s" % (l, p, m), l, 75, {
                 "TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "%d:%d" % (l, p), "TWINE_ENDLESS_SEED": 7,
-                "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENEMY_AI": m, "TWINE_ENDLESS_PEOPLE_FAST": 1})
+                "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENEMY_AI": m, "TWINE_ENDLESS_PEOPLE_FAST": 1,
+                # (the two AIs against the game's six slots under -8 too: with 12 the director's cap doubles and its
+                # draws, not the AIs, decide how much each side sends; 12 people are check n's)
+                "TWINE_PEOPLE_SLOTS": 6})
     return runs
 
 
@@ -943,6 +949,90 @@ def check_texts(runs):
            "MAX_TEXT" not in f.log, "%d cut, crash %s" % (len(f.lines(r"text: .* cut to")), f.crashed()))
 
 
+# ---- n: more than six people at once (port/mods/people.c: 12 slots with 8 MB of RAM) ----
+
+def people_runs():
+    # (guards sent every half second until the slots are full: TWINE_ENDLESS_TEST_FILL)
+    base = {"TWINE_RAM_8MB": 1, "TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1,
+            "TWINE_ENDLESS_TEST_FILL": 1, "TWINE_ENDLESS_PEOPLE_FAST": 1, "TWINE_PEOPLE_TRACE": 1,
+            "TWINE_ENDLESS_AMMO_LOG": 1, "TWINE_ENEMY_AI": "improved"}  # (the port's AI under -o too: guards that
+    # hunt Bond, so each one fires)
+    return {"n_fill": Run("n_fill", 5, 120, dict(base, TWINE_ENDLESS_ROOM="5:4", TWINE_ENDLESS_TEST_SHOOT=80)),
+            # (Bond faces each one drawn from an extra slot in turn, 4 s each, firing from f900: the game's own hit
+            # tests; as played: hw renderer, smooth motion)
+            "n_fire": Run("n_fire", 10, 120, dict(base, TWINE_ENDLESS_ROOM="10:-1", TWINE_ENDLESS_TEST_LOOK="extra",
+                                                  TWINE_ENDLESS_TEST_ARM=1, TWINE_TEST_PAD="900:4000",
+                                                  TWINE_RENDERER="hw", TWINE_SMOOTH=1, TWINE_SHOT=1500)),
+            "n_save": Run("n_save", 5, 100, dict(base, TWINE_ENDLESS_ROOM="5:4", TWINE_TEST_SAVE=1000,
+                                                 TWINE_TEST_LOAD=1300)),
+            "n_long": Run("n_long", 10, 240, dict(base, TWINE_ENDLESS_ROOM="10:-1",
+                                                  TWINE_ENDLESS_NEXT="5:4,9:2,7:6,8:-1,3:11,2:4,6:13",
+                                                  TWINE_ENDLESS_TEST_EXIT="700,500", TWINE_ENDLESS_TEST_SHOOT=25))}
+
+
+def alive_frames(run):
+    """{frame: {person: (health, x, y, z, slot-less line)}} from the people lines"""
+    out = {}
+    for m in re.finditer(r" f(\d+) v\d+ people: (\d+) type \d+ \S+, health (-?\d+), ai \d+ at (-?\d+) (-?\d+) (-?\d+)"
+                         r".*?shots (\d+)", run.log):
+        out.setdefault(int(m.group(1)), {})[int(m.group(2))] = tuple(int(m.group(k)) for k in (3, 4, 5, 6, 7))
+    return out
+
+
+def check_people(runs):
+    r = runs["n_fill"]
+    fr = alive_frames(r)
+    most = max((sum(1 for v in p.values() if v[0] > 0) for p in fr.values()), default=0)
+    slots = r.lines(r"people: 12 slots")
+    result("n", "12 alive at once (8 MB: 12 slots)", bool(slots) and most >= 12 and not r.crashed(),
+           "most alive %d, slots %s, crash %s" % (most, "12" if slots else "-", r.crashed()))
+    drawn = max([int(x) for x in re.findall(r"drawn at once \(2 s\): (\d+)", r.log)] or [0])
+    result("n", "more than six drawn at once", drawn >= 9, "most drawn %d" % drawn)
+    shots = {}
+    for p in fr.values():
+        for i, v in p.items():
+            shots[i] = max(shots.get(i, 0), v[4])
+    late = {i: shots.get(i, 0) for i in range(7, 13)}
+    result("n", "people 7-12 each fire", all(late.values()), "shots %s" % late)
+    fell = {int(m.group(1)) for m in re.finditer(r"test shot: person (\d+) type \d+ health -?\d+ -> (-\d+|0)$",
+                                                  r.log, re.M)}
+    result("n", "people 1-12 each fall", set(range(1, 13)) <= fell, "fell %s" % sorted(fell))
+    r = runs["n_fire"]
+    extra = {int(m.group(1)) for m in re.finditer(r"test look: person (\d+) \(slot (\d+)\)", r.log) if int(m.group(2)) >= 6}
+    hit = {int(x) for x in re.findall(r"hit: person (\d+) by", r.log)} & extra
+    kills = len(r.lines(r"kill: guard"))
+    img = read_ppm(os.path.join(r.dir, "screen_1500_0.ppm"))
+    level = sum(img[2]) / max(1, len(img[2])) if img and img[2] else -1
+    result("n", "real shots hit and kill people in the extra slots (hw, smooth motion)",
+           len(hit) >= 3 and kills >= 2 and level > 10 and not r.crashed(),
+           "hit %s of %s, %d kills, screen level %.1f" % (sorted(hit), sorted(extra), kills, level))
+    r = runs["n_save"]
+    saved = re.search(r"savestate: saved .*frame (\d+)\)", r.log)
+    loaded = r.log.find("savestate: loaded")
+    ok, detail = False, "no save/load"
+    if saved and loaded > 0:
+        first = r.log[:loaded]
+        after = r.log[loaded:]
+        fa = {}
+        for part, d in ((first, {}), (after, {})):
+            for m in re.finditer(r" f(\d+) v\d+ people: (\d+) type \d+ \S+, health (-?\d+), ai \d+ at (-?\d+) (-?\d+) "
+                                 r"(-?\d+)", part):
+                d.setdefault(int(m.group(1)), {})[int(m.group(2))] = m.group(3, 4, 5, 6)
+            fa[part is first] = d
+        f0 = min(fa[False]) if fa[False] else -1
+        same = f0 in fa[True] and fa[True][f0] == fa[False][f0]
+        n = sum(1 for v in fa[False].get(f0, {}).values() if int(v[0]) > 0)
+        ok = same and n >= 10 and not r.crashed() and "people: 12 slots" in r.log
+        detail = "back at f%d: %d alive, as when saved %s, crash %s" % (f0, n, same, r.crashed())
+    result("n", "a save state with 12 about: loaded as it was", ok, detail)
+    r = runs["n_long"]
+    rooms = len(r.lines(r"room start: level"))
+    free = [int(x) for x in re.findall(r"ext heap \(8 MB of RAM\) has (\d+) bytes free", r.log)]
+    result("n", "a long run (12 slots in every room)", rooms >= 6 and not r.crashed() and
+           len(r.lines(r"people: 12 slots")) >= rooms and (not free or min(free) > 1000000),
+           "%d rooms, ext heap free at least %s, crash %s" % (rooms, min(free) if free else "?", r.crashed()))
+
+
 # ---- m: a run started from the shell, its weapons not catalogued yet ----
 
 def shell_runs():
@@ -990,7 +1080,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklm", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmn", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -1048,6 +1138,8 @@ def main():
         groups["texts"] = text_runs()
     if "m" in checks:
         groups["shell"] = shell_runs()
+    if "n" in checks:
+        groups["people"] = people_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.secs)  # (the long ones first)
     t0 = time.time()
@@ -1080,9 +1172,12 @@ def main():
         check_texts(groups["texts"])
     if "shell" in groups:
         check_shell(groups["shell"])
+    if "people" in groups:
+        check_people(groups["people"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
-             "k": "lent weapons", "l": "text letters", "m": "shell start"}
+             "k": "lent weapons", "l": "text letters", "m": "shell start",
+             "n": "12 people"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))

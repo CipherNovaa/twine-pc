@@ -19,7 +19,7 @@
  * More than six (step 6b): with RAM past the console's 2 MB an endless run may have more (func_8002E228 below). The
  * extra slots' instances are copies of the game's slots' (n_8005B508), the extra pool entries in the ext heap.
  *
- * MOD_REPLACES_NATIVE: func_8005B508 func_8005B584 func_8005B5AC func_8003C88C func_8005AEF8 func_8005B96C func_8005BA30 func_8005BAE8 func_800393E4 func_80033090 func_8005D5C4 func_800540CC func_80054118 func_8002E228 func_8005ED88
+ * MOD_REPLACES_NATIVE: func_8005B508 func_8005B584 func_8005B5AC func_8003C88C func_8005AEF8 func_8005B96C func_8005BA30 func_8005BAE8 func_800393E4 func_80033090 func_8005D5C4 func_800540CC func_80054118 func_8002E228 func_8005ED88 func_8003A71C
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -99,6 +99,7 @@ static struct {
     u8 busy[EXT];
     u8 *owner[EXT];
     u8 mat[EXT][0x20];
+    u8 rec[EXT][0x20]; /* (each its own record: a copy of the game's slot it copies, its type and texture chunk) */
     u8 *list_inst[MAX_SLOTS + 1];
     u8 list_mat[MAX_SLOTS][0x20];
     u8 *list_owner[MAX_SLOTS];
@@ -115,12 +116,19 @@ static Pools *pools;
 static int pools_gen = -1, clones_gen = -1;
 static u8 *clone_buf[EXT];
 static u32 clone_size[EXT];
+static u8 *raw_buf[GAME_SLOTS]; /* (the game's slots' instances as the GUY file has them, before relocation) */
+static u32 raw_size[GAME_SLOTS], raw_most;
+static s8 bound[EXT];           /* (each extra slot: the game's slot it is a copy of) */
+static u8 guard_type[16];       /* (people_guard_types: the kinds the extra slots go to) */
+static int guard_types;
 static int slots = GAME_SLOTS; /* the slots in use (the pools: as many more past their own) */
 static int kept;
 static int dry, would_spawn; /* (TWINE_PEOPLE_VERIFY: func_80033090 run to see whether it would send a guard) */
 static int trace = -1;       /* TWINE_PEOPLE_TRACE=1: the slots' instances, clones, counts logged */
 extern u32 port_ram_size;
 extern int port_endless;
+extern int port_subframe;
+extern s32 D_8009CDA8;
 int port_endless_gen(void);
 void *port_ext_alloc(u32 size);
 void port_ext_free(void *p);
@@ -167,8 +175,8 @@ u8 **people_owner(int i) {
 u8 *people_matrix(int i) {
     return i < GAME_SLOTS ? D_800DE004 + i * 0x20 : ext.mat[i - GAME_SLOTS];
 }
-u8 *people_record(int i) { /* (an extra slot shares the record of the game's it copies: its type, its texture chunk) */
-    return D_800D2E84 + (i % GAME_SLOTS) * 0x20;
+u8 *people_record(int i) {
+    return i < GAME_SLOTS ? D_800D2E84 + i * 0x20 : ext.rec[i - GAME_SLOTS];
 }
 
 #define INST(i) (*people_inst(i))
@@ -179,6 +187,11 @@ u8 *people_record(int i) { /* (an extra slot shares the record of the game's it 
 #define W(p, o) (*(s32 *)((u8 *)(p) + (o)))
 #define H(p, o) (*(s16 *)((u8 *)(p) + (o)))
 #define HU(p, o) (*(u16 *)((u8 *)(p) + (o)))
+
+static int depth_trace(void) { /* (TWINE_PEOPLE_VERIFY's dry runs aside) */
+    return dry;
+}
+int snprintf(char *s, unsigned n, const char *fmt, ...);
 
 /* ---- the slots ---- */
 
@@ -199,6 +212,56 @@ static u32 inst_size(int i) {
     return most ? most : 0x8000;
 }
 
+/* extra slot i made a copy of the game's slot s: its instance as loaded, relocated where it is, its record (type,
+ * texture chunk); only while free */
+static void bind(int i, int s) {
+    int j = i - GAME_SLOTS;
+    if (BUSY(i) || !clone_buf[j] || !raw_buf[s] || bound[j] == s)
+        return;
+    memcpy(clone_buf[j], raw_buf[s], raw_size[s]);
+    memcpy(ext.rec[j], REC(s), 0x20);
+    func_8007CE30((u32)clone_buf[j], REC(s)[1]);
+    ext.inst[j] = clone_buf[j];
+    bound[j] = s;
+}
+
+/* the free extra slots shared out between the game's slots of the kinds of guards a mod asked for (endless.c: the
+ * room's), as they are bound now; a game slot's type follows into its copies */
+static void rebind(void) {
+    int src[GAME_SLOTS], n = 0, s, k, i;
+    for (s = 0; s < GAME_SLOTS; s++)
+        for (k = 0; k < guard_types; k++)
+            if (HU(REC(s), 0x1C) == guard_type[k]) {
+                src[n++] = s;
+                break;
+            }
+    for (i = GAME_SLOTS; i < slots; i++) {
+        int j = i - GAME_SLOTS;
+        if (n)
+            bind(i, src[j % n]);
+        if (bound[j] >= 0 && !BUSY(i))
+            H(ext.rec[j], 0x1C) = H(REC(bound[j]), 0x1C);
+    }
+    if (TRACE) {
+        char at[200];
+        int m = 0;
+        for (i = GAME_SLOTS; i < slots && m < 190; i++)
+            m += snprintf(at + m, sizeof(at) - m, " %d:%d(type %d)", i, bound[i - GAME_SLOTS], HU(REC(i), 0x1C));
+        at[m] = 0;
+        port_log("people: extra slots (slot:copy of):%s\n", at);
+    }
+}
+
+/* for other mods: the kinds of guards the extra slots should go to (the room's) */
+void people_guard_types(const u8 *types, int n) {
+    int k;
+    guard_types = n < 16 ? n : 16;
+    for (k = 0; k < guard_types; k++)
+        guard_type[k] = types[k];
+    if (slots > GAME_SLOTS)
+        rebind();
+}
+
 /* each slot's instance relocated and bound to its texture chunk; all free (after a section's GUY file loads). The
  * extra slots (6 and up) get copies of the game's slots' instances (slot j the copy of j mod 6, as it shares its
  * record), made before those are relocated in place, in the ext heap */
@@ -211,35 +274,49 @@ static void n_8005B508(void) {
                      "+18 %X +1C %X +54 %X\n", i, (u32)h, inst_size(i), REC(i)[1], HU(REC(i), 0x1C), h[0], HU(h, 4),
                      h[2], h[3], h[4], h[5], h[6], h[7], h[0x15]);
         }
-    if (slots > GAME_SLOTS) {
+    if (slots > GAME_SLOTS) { /* (the game's instances kept as loaded, then the extra slots made copies of them) */
         if (clones_gen != port_endless_gen()) { /* (a new executable: the ext heap afresh) */
             memset(clone_buf, 0, sizeof(clone_buf));
             memset(clone_size, 0, sizeof(clone_size));
+            memset(raw_buf, 0, sizeof(raw_buf));
+            memset(raw_size, 0, sizeof(raw_size));
             clones_gen = port_endless_gen();
         }
+        raw_most = 0;
+        for (i = 0; i < GAME_SLOTS; i++) {
+            u32 sz = inst_size(i);
+            if (raw_size[i] < sz) {
+                if (raw_buf[i])
+                    port_ext_free(raw_buf[i]);
+                raw_buf[i] = port_ext_alloc(sz);
+                raw_size[i] = raw_buf[i] ? sz : 0;
+            }
+            if (raw_buf[i])
+                memcpy(raw_buf[i], INST(i), sz);
+            raw_size[i] = raw_buf[i] ? sz : 0;
+            if (raw_size[i] > raw_most)
+                raw_most = raw_size[i];
+        }
         for (i = GAME_SLOTS; i < slots; i++) {
-            u32 sz = inst_size(i % GAME_SLOTS);
             int j = i - GAME_SLOTS;
-            if (clone_size[j] < sz) {
+            if (clone_size[j] < raw_most) {
                 if (clone_buf[j])
                     port_ext_free(clone_buf[j]);
-                clone_buf[j] = port_ext_alloc(sz);
-                clone_size[j] = clone_buf[j] ? sz : 0;
+                clone_buf[j] = port_ext_alloc(raw_most);
+                clone_size[j] = clone_buf[j] ? raw_most : 0;
             }
-            ext.inst[j] = clone_buf[j];
-            if (clone_buf[j])
-                memcpy(clone_buf[j], INST(i % GAME_SLOTS), sz);
-            if (TRACE)
-                port_log("people: slot %d a copy of slot %d's instance at %08X (%X bytes)\n", i, i % GAME_SLOTS,
-                         (u32)clone_buf[j], sz);
+            ext.inst[j] = NULL;
+            bound[j] = -1;
+            BUSY(i) = 0;
+            bind(i, i % GAME_SLOTS); /* (the default: the game's slots twice over) */
         }
     }
-    for (i = 0; i < slots; i++) {
-        if (INST(i))
-            func_8007CE30((u32)INST(i), REC(i)[1]);
-        BUSY(i) = INST(i) ? 0 : 2; /* (a slot without its copy: never free) */
+    for (i = 0; i < GAME_SLOTS; i++) {
+        func_8007CE30((u32)INST(i), REC(i)[1]);
+        BUSY(i) = 0;
     }
 }
+
 
 /* slot i is bound to type v */
 static s32 n_8005B584(s32 a0, u16 v, s16 i) {
@@ -261,12 +338,22 @@ static s32 n_8005B5AC(u8 *obj, s32 *p) {
             return i < GAME_SLOTS ? *p : (s32)INST(i);
         }
     }
+    if (TRACE && !depth_trace()) {
+        char at[200];
+        int m = 0;
+        for (i = 0; i < slots && m < 190; i++)
+            m += snprintf(at + m, sizeof(at) - m, " %d:%d/%d", i, HU(REC(i), 0x1C), BUSY(i));
+        at[m] = 0;
+        port_log("people: no free slot of type %d (slot:type/taken%s)\n", obj[6], at);
+    }
     return 0;
 }
 
 /* slot bound to an object type */
 static s32 n_8003C88C(s32 slot, s32 type) {
     H(REC(slot), 0x1C) = (s16)type;
+    if (slots > GAME_SLOTS && slot < GAME_SLOTS)
+        rebind();
     return (s32)D_800D2E84;
 }
 
@@ -434,12 +521,17 @@ static s32 n_8005D5C4(u8 *first, u8 *last) {
     for (p = first; (u32)last >= (u32)p; p += ANIM_SIZE)
         if (!(W(p, 0) & 1))
             goto found;
-    if (first != D_800B05B0 || last != D_800B05B0 + (GAME_ANIMS - 1) * ANIM_SIZE)
+    if (first != D_800B05B0 || last != D_800B05B0 + (GAME_ANIMS - 1) * ANIM_SIZE) {
+        if (TRACE && !depth_trace())
+            port_log("people: no free animation record in %08X-%08X\n", (u32)first, (u32)last);
         return 0;
+    }
     n = slots - GAME_SLOTS;
     for (i = 0; i < n; i++)
         if (!(W(p = pools->anim[i], 0) & 1))
             goto found;
+    if (TRACE && !depth_trace())
+        port_log("people: no free animation record (%d)\n", GAME_ANIMS + n);
     return 0;
 found:
     func_8005D630((u32)p);
@@ -462,6 +554,8 @@ static u8 *n_800540CC(void) {
             return a;
         }
     }
+    if (TRACE && !depth_trace())
+        port_log("people: no free AI context (%d)\n", n);
     return NULL;
 }
 
@@ -470,6 +564,43 @@ static void n_80054118(void) {
     s32 i, n = GAME_AIS + slots - GAME_SLOTS;
     for (i = 0; i < n; i++)
         *(u32 *)(ai_ctx(i) + 0x1CC) &= ~2;
+}
+
+/* ---- the people's texture animations ---- */
+
+/* A person whose model animates its textures (its type's def +3: blinking, a face) takes a record of the level's
+ * table of them (D_800D8FF8, 0x48 bytes each, D_8009D368 of them, set up by the mission for its own people: a few
+ * per type), or isn't made at all (func_8003A71C). Past the game's six people a type can run out: then the person
+ * shares one of his type's records (obj+0xA9), its owner kept (func_80039520 lets a record go only for its owner),
+ * so they animate together; never a record that takes its object out when its time is up (flags 8). */
+#define TEX_ANIM_SIZE 0x48
+extern u8 D_800D8FF8[];
+extern s32 D_8009D368;
+u8 *func_8003A71C_orig(u8 **obj);
+u8 *func_8003A71C(u8 **obj) {
+    u8 *r = func_8003A71C_orig(obj);
+    s32 i;
+    if (r || slots <= GAME_SLOTS || !(*obj)[3])
+        return r;
+    for (i = 0; i < D_8009D368; i++) {
+        u8 *e = D_800D8FF8 + i * TEX_ANIM_SIZE;
+        if (e[0] && e[1] == (*obj)[3] && !(HU(e, 0x34) & 8)) {
+            ((u8 *)obj)[0xA9] = i;
+            if (TRACE)
+                port_log("people: a person (texture animation type %d) shares record %d\n", (*obj)[3], i);
+            return e;
+        }
+    }
+    if (TRACE) {
+        char at[300];
+        int m = 0;
+        for (i = 0; i < D_8009D368 && m < 280; i++)
+            m += snprintf(at + m, sizeof(at) - m, " %d:t%d/a%d/f%X", i, D_800D8FF8[i * TEX_ANIM_SIZE + 1],
+                          D_800D8FF8[i * TEX_ANIM_SIZE], HU(D_800D8FF8 + i * TEX_ANIM_SIZE, 0x34));
+        at[m] = 0;
+        port_log("people: no texture animation record for type %d (%d:%s)\n", (*obj)[3], D_8009D368, at);
+    }
+    return NULL;
 }
 
 /* ---- how many ---- */
@@ -481,22 +612,31 @@ static void n_80054118(void) {
 #define WANT_SLOTS 12
 void func_8002E228_orig(void);
 void func_8005ED88_orig(void);
-static s16 people_objs_set; /* (what this left in D_800B0868: a mission sets its own before each call) */
 static int wanted(void) {
     const char *e = getenv("TWINE_PEOPLE_SLOTS");
     if (port_ram_size <= 0x200000 || !port_endless)
         return GAME_SLOTS;
-    return e && *e ? atoi(e) : GAME_SLOTS; /* (6b: WANT_SLOTS once proven) */
+    return e && *e ? atoi(e) : WANT_SLOTS;
 }
+/* The held things' objects (a guard's gun among them: func_80039A34 makes it, or the person isn't made) are two
+ * ranges (D_800B0AC8 of one kind, D_800B0AE4 of the other) inside the range of D_800B008C objects that follows the
+ * people's, which they fill: each grows by the extra slots, and the range around them by both. */
+extern s16 D_800B0AC8, D_800B0AE4, D_800B008C;
+static s16 counts_set[4]; /* (what this left: a mission sets its own before each call) */
 void func_8002E228(void) {
-    s16 own = D_800B0868;
-    if (own == people_objs_set && own > GAME_SLOTS) /* (called again without the mission setting its own) */
-        own -= slots - GAME_SLOTS;
+    s16 *v[4] = {&D_800B0868, &D_800B0AC8, &D_800B0AE4, &D_800B008C}, own[4];
+    int k, extra;
+    for (k = 0; k < 4; k++) { /* (called again without the mission setting its own: the mission's back) */
+        int was = (slots - GAME_SLOTS) * (k == 3 ? 2 : 1);
+        own[k] = *v[k] - (counts_set[0] && *v[k] == counts_set[k] ? was : 0);
+    }
     people_set_slots(wanted());
-    D_800B0868 = own + (slots - GAME_SLOTS);
-    people_objs_set = D_800B0868;
+    extra = slots - GAME_SLOTS;
+    for (k = 0; k < 4; k++)
+        counts_set[k] = *v[k] = own[k] + extra * (k == 3 ? 2 : 1);
     if (TRACE)
-        port_log("people: %d slots, %d people objects (the mission's %d)\n", slots, D_800B0868, own);
+        port_log("people: %d slots: %d people objects, held things %d+%d in %d (the mission's %d, %d+%d in %d)\n",
+                 slots, D_800B0868, D_800B0AC8, D_800B0AE4, D_800B008C, own[0], own[1], own[2], own[3]);
     func_8002E228_orig();
 }
 
@@ -615,6 +755,16 @@ static void n_8005AEF8(void) {
         }
     }
     D_8009D8E8 = n < 0x100 ? n : 0xFF;
+    if (TRACE && !port_subframe) { /* (the most drawn at once, every 2 s of frames) */
+        static int most, at;
+        if (n > most)
+            most = n;
+        if (D_8009CDA8 / 40 != at) {
+            at = D_8009CDA8 / 40;
+            port_log("people: drawn at once (2 s): %d of %d slots\n", most, slots);
+            most = 0;
+        }
+    }
 
     for (i = 0; i < n; i++) {
         e = list_mat + i * 0x20;
