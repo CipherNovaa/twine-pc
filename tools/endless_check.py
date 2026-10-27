@@ -34,10 +34,17 @@ Environment:
   TWINE_CHECK_CARD   a memory card image with a campaign save, for h (default ~/.local/share/twine/card1.mcd);
                      only a copy is ever used
   TWINE_CHECK_DIR    where the runs go (default build/endless_check/)
+  TWINE_CHECK_ENV    NAME=VALUE;... added to every run (tests of the harness: TWINE_TURBO_LOOK_NS=0 makes LEVEL07's
+                     busy wait stick)
 
 Each run has its own folders (config, data, state, cards) and runs as "twinechk" (a link to build/port/twine), so
 it never touches the user's settings or cards and isn't mistaken for the game. Runs are headless with SDL's dummy
-sound driver (they never connect to the computer's sound server). Exit code 0 when every check passed.
+sound driver (they never connect to the computer's sound server). A run is never cut short by the wall clock as
+such: only when its game is stuck (the watchdog's "no frame shown", in turbo 6 s of the game's own CPU time, and 30 s
+more) or past secs * 20 + 900 s; it is then run once more, and if stopped again its checks say STOP (the harness's
+doing, the check's verdict unknown), never FAIL. A check over a run that asked for the hw renderer and drew in
+software (no GPU) says ENV, not FAIL. Exit code 0 when every check passed, 1 if any failed, 2 if none failed but
+some are STOP or ENV.
 Nothing here holds game data: it all comes from the disc at run time.
 """
 import concurrent.futures as cf
@@ -83,7 +90,8 @@ class Run:
         self.name, self.level, self.secs, self.env, self.card, self.config = name, level, secs, env or {}, card, config
         self.dir = os.path.join(WORK, name)
         self.log = ""
-        self.timed_out = False
+        self.timed_out = False  # (stopped by the harness, never reaching its vblanks: .stopped says why)
+        self.stopped = ""
         self.wall = 0.0
 
     def cost(self):
@@ -122,6 +130,8 @@ class Run:
         else:
             env["TWINE_CARD1"] = "none"
         env.update({k: str(v) for k, v in self.env.items()})
+        for kv in filter(None, os.environ.get("TWINE_CHECK_ENV", "").split(";")):  # (tests of the harness itself)
+            env[kv.split("=", 1)[0]] = kv.split("=", 1)[1]
         env["TWINE_TEST_VBLANKS"] = str(int(round(self.secs * 59.94)))
         if TURBO:  # (game time: as fast as the machine runs it, the same frames, vblanks, controls and sound)
             env["TWINE_TURBO"] = "1"
@@ -136,22 +146,53 @@ class Run:
             # host's address randomization left: with it, two runs of the same build can differ)
             child = subprocess.Popen(["nice"] + SETARCH + [exe], cwd=self.dir, env=env, stdout=out,
                                      stderr=subprocess.STDOUT)
-            try:
-                child.wait(timeout=self.secs * 2 + 60)
-            except subprocess.TimeoutExpired:  # (only this run's own process is stopped)
-                self.timed_out = True
-                child.terminate()
+            # (no bound on the wall clock that a loaded machine can reach: a run is stopped when its game is stuck, the
+            # watchdog's "no frame shown" (in turbo: 6 s of the game thread's own CPU time) standing for 30 s, or
+            # past secs * 20 + 900 s whatever it does; only this run's own process)
+            self.timed_out, self.stopped = False, ""
+            seen, stuck_since, log = 0, None, os.path.join(self.dir, "port.log")
+            stuck = False
+            while True:
                 try:
                     child.wait(timeout=5)
+                    break
                 except subprocess.TimeoutExpired:
-                    child.kill()
-                    child.wait()
+                    pass
+                try:
+                    with open(log, "rb") as f:
+                        f.seek(seen)
+                        new = f.read()
+                    seen += len(new)
+                    for m in re.finditer(rb"watchdog: (no frame shown|frames again)", new):
+                        stuck = m.group(1) == b"no frame shown"
+                except OSError:
+                    pass
+                now = time.time()
+                stuck_since = (stuck_since or now) if stuck else None
+                if stuck_since and now - stuck_since >= 30:
+                    self.stopped = "stuck: no frame shown for 6 s and 30 s more"
+                elif now - t0 > self.secs * 20 + 900:
+                    self.stopped = "over %d s on the wall clock" % (self.secs * 20 + 900)
+                if self.stopped:
+                    self.timed_out = True
+                    child.terminate()
+                    try:
+                        child.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        child.kill()
+                        child.wait()
+                    break
         self.wall = time.time() - t0
         try:
             self.log = open(os.path.join(self.dir, "port.log"), errors="replace").read()
         except OSError:
             self.log = ""
         return self
+
+    def hw_fell_back(self):
+        """the hardware renderer asked for and not had (no GPU for new programs, e.g. its driver updated under a running
+        kernel): the run drew in software, its hw shots missing: the machine's problem, not the check's"""
+        return str(self.env.get("TWINE_RENDERER", "")).lower() == "hw" and "no hardware renderer" in self.log
 
     def lines(self, pat):
         return [l for l in self.log.splitlines() if re.search(pat, l)]
@@ -229,6 +270,24 @@ JOBS_MAX = 12
 TURBO = True
 RAM8 = False
 AI_ORIGINAL = False
+
+
+def checked(runs, fn, *args):
+    """a check over these runs: what it would call failed is STOP when the harness had to stop one of them (stuck, or
+    past its bound: never reaching its vblanks), the run's log cut short: the check's verdict is not known; ENV when
+    it is a check of the hw renderer's ("hw" in its name) and one of the runs asked for it but drew in software"""
+    n = len(RESULTS)
+    fn(*args)
+    stopped = [r for r in runs if r.timed_out]
+    soft = [r for r in runs if r.hw_fell_back()]
+    if stopped or soft:
+        why = "; ".join(["%s stopped: %s" % (r.name, r.stopped) for r in stopped] +
+                        ["%s: hw renderer asked, no GPU (software)" % r.name for r in soft])
+        for i in range(n, len(RESULTS)):
+            c, w, st, d = RESULTS[i]
+            # (ENV only for a check that says it is the hw renderer's: the group's software runs still count)
+            if st == "FAIL" and (stopped or re.search(r"\bhw\b", w)):
+                RESULTS[i] = (c, w, "STOP" if stopped else "ENV", ("[%s] " % why) + d)
 
 
 def result(check, what, ok, detail=""):
@@ -1563,47 +1622,58 @@ def main():
     with cf.ThreadPoolExecutor(jobs) as ex:
         for r in ex.map(Run.go, every):
             pass
+    again = [r for r in every if r.timed_out]
+    if again:  # (a run the harness had to stop: once more, before any check reads it)
+        print("endless_check: stopped (%s), run again: %s" % ("; ".join(sorted({r.stopped for r in again})),
+                                                             ", ".join(r.name for r in again)), flush=True)
+        for r in again:
+            r.first = "%s, %.0f s" % (r.stopped, r.wall)
+        with cf.ThreadPoolExecutor(jobs) as ex:
+            for r in ex.map(Run.go, again):
+                pass
     open(os.path.join(WORK, "times.txt"), "w").write("".join(
-        "%-24s %6.1f s wall for %3d s of game time%s\n" % (r.name, r.wall, r.secs, " (stopped: never reached its end)"
-                                                            if r.timed_out else "") for r in every))
+        "%-24s %6.1f s wall for %3d s of game time%s%s\n" % (
+            r.name, r.wall, r.secs, " (STOPPED: %s)" % r.stopped if r.timed_out else "",
+            " (run again; the first stopped: %s)" % getattr(r, "first") if hasattr(r, "first") else "") for r in every))
     stuck = [r.name for r in every if r.timed_out]
     if stuck:
-        print("endless_check: stopped on the wall clock, never reaching their vblanks: " + ", ".join(stuck), flush=True)
+        print("endless_check: STOPPED twice, never reaching their vblanks (their checks STOP, not FAIL): " +
+              ", ".join(stuck), flush=True)
     if "rooms" in groups:
         for room, r in groups["rooms"].items():
-            check_room(r, room, checks)
+            checked([r], check_room, r, room, checks)
     if "rules" in groups:
-        check_rules(groups["rules"])
+        checked(groups["rules"].values(), check_rules, groups["rules"])
     if "menus" in groups:
-        check_menus(groups["menus"])
+        checked(groups["menus"].values(), check_menus, groups["menus"])
     if "restart" in groups:
-        check_restart(groups["restart"])
+        checked(groups["restart"].values(), check_restart, groups["restart"])
     if "sound_stop" in groups:
-        check_sound_stop(groups["sound_stop"])
+        checked(groups["sound_stop"].values(), check_sound_stop, groups["sound_stop"])
     if "carry" in groups:
-        check_carry(groups["carry"])
+        checked(groups["carry"].values(), check_carry, groups["carry"])
     if "iris" in groups:
-        check_iris(groups["iris"])
+        checked(groups["iris"].values(), check_iris, groups["iris"])
     if "lend" in groups:
-        check_lend(groups["lend"])
+        checked(groups["lend"].values(), check_lend, groups["lend"])
     if "card" in groups:
-        check_card(groups["card"])
+        checked(groups["card"].values(), check_card, groups["card"])
     if "campaign" in groups:
-        check_campaign(groups["campaign"])
+        checked(groups["campaign"].values(), check_campaign, groups["campaign"])
     if "ai" in groups:
-        check_ai(groups["ai"])
+        checked(groups["ai"].values(), check_ai, groups["ai"])
     if "lent" in groups:
-        check_lent(groups["lent"])
+        checked(groups["lent"].values(), check_lent, groups["lent"])
     if "texts" in groups:
-        check_texts(groups["texts"])
+        checked(groups["texts"].values(), check_texts, groups["texts"])
     if "shell" in groups:
-        check_shell(groups["shell"])
+        checked(groups["shell"].values(), check_shell, groups["shell"])
     if "people" in groups:
-        check_people(groups["people"])
+        checked(groups["people"].values(), check_people, groups["people"])
     if "doors" in groups:
-        check_doors(groups["doors"])
+        checked(groups["doors"].values(), check_doors, groups["doors"])
     if "ramp" in groups:
-        check_ramp(groups["ramp"])
+        checked(groups["ramp"].values(), check_ramp, groups["ramp"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
              "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp",
@@ -1613,14 +1683,18 @@ def main():
     print("\n".join(report))
     open(os.path.join(WORK, "report.txt"), "w").write("\n".join(report) + "\n")
     fails = [x for x in RESULTS if x[2] == "FAIL"]
-    print("endless_check: %d passed, %d failed, %d skipped in %d s" %
-          (sum(x[2] == "PASS" for x in RESULTS), len(fails), sum(x[2] == "SKIP" for x in RESULTS), time.time() - t0))
+    stops = [x for x in RESULTS if x[2] in ("STOP", "ENV")]
+    print("endless_check: %d passed, %d failed, %d skipped%s in %d s" %
+          (sum(x[2] == "PASS" for x in RESULTS), len(fails), sum(x[2] == "SKIP" for x in RESULTS),
+           ", %d STOPPED or ENV (a run stopped by the harness, or hw asked with no GPU: not the check's verdict)" % len(stops)
+           if stops else "",
+           time.time() - t0))
     if verbose:
         for g in groups.values():
             for r in g.values():
                 if any(f[1] in r.name or r.name.endswith(f[1].replace(":", "_")) for f in fails):
                     print("---- %s\n%s" % (r.name, "\n".join(r.log.splitlines()[-15:])))
-    sys.exit(1 if fails else 0)
+    sys.exit(1 if fails else 2 if stops else 0)
 
 
 if __name__ == "__main__":

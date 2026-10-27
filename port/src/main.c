@@ -646,12 +646,25 @@ static void on_stall(int sig) {
     }
 }
 
+/* (TWINE_TURBO: 6 s of the game thread's own CPU time, or 60 s: a run on game time in a loaded machine may well
+ * wait its turn for seconds, its game not stuck at all) */
+static u64 thread_cpu_ns(clockid_t c) {
+    struct timespec ts;
+    return clock_gettime(c, &ts) ? 0 : (u64)ts.tv_sec * 1000000000ull + (u64)ts.tv_nsec;
+}
+
 static void *watchdog(void *arg) {
     u32 last = port_video_frames();
     int still = 0, told = 0;
+    clockid_t cpu;
+    u64 cpu_from = 0;
+    int have_cpu = port_turbo && !pthread_getcpuclockid(main_thread, &cpu);
     (void)arg;
+    if (have_cpu)
+        cpu_from = thread_cpu_ns(cpu);
     for (;;) {
         u32 v;
+        int stuck;
         sleep(1);
         v = port_video_frames();
         if (v != last) {
@@ -660,12 +673,16 @@ static void *watchdog(void *arg) {
                 fflush(log_file);
             }
             last = v, still = told = 0;
+            cpu_from = have_cpu ? thread_cpu_ns(cpu) : 0;
             continue;
         }
-        if (++still == 6 && !told) {
+        ++still;
+        stuck = have_cpu ? thread_cpu_ns(cpu) - cpu_from >= 6000000000ull || still >= 60 : still >= 6;
+        if (stuck && !told) {
             told = 1;
             if (log_file) {
-                fprintf(log_file, "watchdog: no frame shown for 6 s (frame %u)\n", v);
+                fprintf(log_file, "watchdog: no frame shown for 6 s (frame %u%s)\n", v,
+                        have_cpu ? ", the game's own time" : "");
                 fflush(log_file);
             }
             pthread_kill(main_thread, SIGUSR2);
