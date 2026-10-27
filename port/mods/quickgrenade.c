@@ -800,10 +800,17 @@ static u8 *count(u32 *ot, u8 *sprite, s32 x, s32 y, s32 n, u8 r, u8 g, u8 b) {
 }
 
 /* with the rest of the HUD (its ordering table D_800B8EFC[]'s, func_800463C8), when the ammo counter could show */
+void weaponkeys_hud(void) __attribute__((weak)); /* (the weapon list's strip: port/mods/weaponkeys.c) */
+void weaponkeys_hud_pre(void) __attribute__((weak));
 void func_800463C8(void) {
+    if (weaponkeys_hud_pre)
+        weaponkeys_hud_pre();
     func_800463C8_orig();
-    if (D_8009CABF == 0 && D_8009CAA4 == 0 && g_CutScene == 0 && D_8009CD00 == 0)
+    if (D_8009CABF == 0 && D_8009CAA4 == 0 && g_CutScene == 0 && D_8009CD00 == 0) {
         count_shown(D_800B8EFC[D_800B8F24][1]);
+        if (weaponkeys_hud)
+            weaponkeys_hud();
+    }
 }
 
 static void count_shown(s32 ot) {

@@ -918,6 +918,30 @@ static void test_pad(void) {
             bits = b;
         s = *end ? end + 1 : end;
     }
+    /* <frame>:<input>[,...]: the PC's weapon inputs as they reach the game: wheelup / wheeldown (a mouse wheel step:
+     * the weapon button for a game tick), z / x (the keys, held as long), dleft / dright (the modern layout's d-pad),
+     * q, l1 (the modern layout's: as Q) and 1-9 (the number keys) */
+    s = getenv("TWINE_TEST_INPUT");
+    while (s && *s) {
+        char *end, name[16];
+        u32 at = (u32)strtoul(s, &end, 10);
+        int k = 0;
+        if (*end == ':')
+            for (end++; *end && *end != ',' && k < 15; end++)
+                name[k++] = *end;
+        name[k] = 0;
+        if (frames >= at && frames < at + 3) {
+            if (!strcmp(name, "wheelup") || !strcmp(name, "z") || !strcmp(name, "dleft"))
+                bits |= action_bits(A_PREV_WEAPON);
+            else if (!strcmp(name, "wheeldown") || !strcmp(name, "x") || !strcmp(name, "dright"))
+                bits |= action_bits(A_NEXT_WEAPON);
+        }
+        if (frames == at && (!strcmp(name, "q") || !strcmp(name, "l1")))
+            weapon_key = -1;
+        else if (frames == at && name[0] >= '1' && name[0] <= '9' && !name[1])
+            weapon_key = name[0] - '0';
+        s = *end ? end + 1 : end;
+    }
     port_pad_buttons[0] = (u16)~bits;
     s = getenv("TWINE_TEST_MELEE"); /* <frame>[,...]: the quick punch pressed at these frames */
     while (s && *s) {
@@ -1543,7 +1567,7 @@ void port_frame_end(void) {
     } else if (screen && !port_smooth_shown)
         present();
     if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK") || getenv("TWINE_TEST_MELEE") || getenv("TWINE_TEST_GRENADE") ||
-        getenv("TWINE_TEST_WEAPON") || getenv("TWINE_TEST_JUMP"))
+        getenv("TWINE_TEST_WEAPON") || getenv("TWINE_TEST_JUMP") || getenv("TWINE_TEST_INPUT"))
         test_pad();
     port_smooth_shown = 0;
     RT_LEAVE();

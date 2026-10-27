@@ -3,7 +3,7 @@
 
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
   -j JOBS    runs at once (default 4, at most 5)
-  -k CHECKS  the checks to run, letters from abcdefghijklmno (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijklmnop (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression,
              j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching),
@@ -15,6 +15,9 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
                by the mission, leads out all the same; none just refuses), and the entry's way out
              o the early waves' ramp: Meltdown 4 (six guards of its own) as waves 1, 3 and 5 against no ramp: the
                damage Bond takes standing still, its bursts, the hunters at once
+             p the weapon list: own and lent weapons each an entry with a checkmark; the weapon buttons (wheel, Z/X,
+               d-pad) step through the checked ones, Q/L1 the one held before, number keys by group; checkmarks kept
+               for the run; every lent weapon reached; the campaign's stepping the game's own; the HUD strip
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -438,7 +441,8 @@ def lent_runs():
             "k_ammo": Run("k_ammo", 8, 120, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="2:4",
                                                  TWINE_ENDLESS_TEST_EXIT=700, TWINE_ENDLESS_TEST_DRAW="INGALLS",
                                                  TWINE_ENDLESS_TEST_KILL=30, TWINE_ENDLESS_TEST_GRAB_BOX=15))}
-    nxt = ",".join("%d:8000,%d:0" % (t, t + 3) for t in range(700, 1000, 40))  # (the next weapon button: Square)
+    # (the next weapon button: Square; it steps through all Bond carries in the groups' order, the lent among his own)
+    nxt = ",".join("%d:8000,%d:0" % (t, t + 3) for t in range(650, 1000, 20))
     runs["k_pool"] = Run("k_pool", 2, 70, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_NEXT="10:-1,8:0",
                                                TWINE_ENDLESS_TEST_EXIT=250, TWINE_ENDLESS_TEST_DRAW="KOFFLER",
                                                TWINE_TEST_PAD=nxt, TWINE_TRACE="weapon,change"))
@@ -1132,6 +1136,111 @@ def campaign_runs():
     return {"campaign_%d" % l: Run("campaign_%d" % l, l, 30, {}) for l in (2, 5, 8)}
 
 
+# ---- p: the weapons Bond carries, one list: own and lent each an entry with its own checkmark; the weapon buttons (pad,
+# mouse wheel, Z/X) step through the checked ones; Q (and L1) the weapon held before; the number keys by group; the
+# checkmarks kept for the run; the campaign's stepping the game's own; the HUD strip on a change ----
+
+SEL_INPUTS = [(900, "wheeldown", "FLASH BANG"), (1000, "x", "IAC DEFENDER"), (1100, "dright", "FLASH BANG"),
+              (1200, "wheelup", "IAC DEFENDER"), (1300, "z", "FLASH BANG"), (1400, "dleft", "IAC DEFENDER"),
+              (1500, "q", "FLASH BANG"), (1600, "l1", "IAC DEFENDER"), (1700, "6", "FLASH BANG"),
+              (1800, "6", "CELL PHONE STUNNER"), (1900, "1", "WOLFRAM P2K"), (2000, "1", "IAC DEFENDER")]
+
+
+def select_runs():
+    base = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": "first",
+            "TWINE_ENDLESS_ROOM": "6:0", "TWINE_ENDLESS_TEST_DRAW": "IAC", "TWINE_TRACE": "select,change",
+            "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1}
+    runs = {
+        # (the playtest's: King's Ransom, the IAC and the flash bang lent into its one shared slot, only they checked)
+        "p_kr": Run("p_kr", 6, 130, dict(base, TWINE_ENDLESS_NEXT="8:0", TWINE_ENDLESS_TEST_EXIT="200,5000",
+                                         TWINE_ENDLESS_TEST_TICKS="8:IAC|FLASH", TWINE_SHOT="895,925",
+                                         TWINE_TEST_INPUT=",".join("%d:%s" % (t, k) for t, k, _ in SEL_INPUTS))),
+        # (the checkmarks kept: set in King's Ransom, then Meltdown and Courier)
+        "p_ticks": Run("p_ticks", 6, 120, dict(base, TWINE_ENDLESS_NEXT="8:0,10:-1,2:4", TWINE_ENDLESS_TEST_EXIT="200,500",
+                                               TWINE_ENDLESS_TEST_TICKS="8:IAC|FLASH",
+                                               TWINE_TEST_INPUT="700:wheeldown,1150:wheeldown,1650:wheeldown")),
+        # (... and as the inventory sets them: King's Ransom's first row (the P2K) toggled out, then Meltdown)
+        "p_inv": Run("p_inv", 8, 100, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="10:-1",
+                                           TWINE_ENDLESS_TEST_EXIT="1000,5000", TWINE_ENDLESS_TEST_DRAW="",
+                                           TWINE_TEST_PAD="800:0008,803:0,840:0040,843:0,870:4000,873:0,900:8000,903:0,"
+                                                          "950:1000,953:0,980:4000,983:0",
+                                           TWINE_TEST_INPUT="700:wheeldown,1500:wheeldown")),
+        # (every weapon reached: Flashpoint's carried to Meltdown, the next-weapon button all round)
+        "p_all": Run("p_all", 6, 140, dict(base, TWINE_ENDLESS_NEXT="10:-1", TWINE_ENDLESS_TEST_EXIT="200,5000",
+                                           TWINE_TEST_INPUT=",".join("%d:wheeldown" % t for t in range(900, 2500, 100)))),
+    }
+    del runs["p_inv"].env["TWINE_ENDLESS_TEST_DRAW"]
+    camp = {"TWINE_TRACE": "select,change", "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1,
+            "TWINE_TEST_INPUT": "600:wheeldown,700:wheeldown,800:wheelup,1200:x,1300:z"}
+    runs["p_camp"] = Run("p_camp", 8, 75, camp)
+    runs["p_camp_old"] = Run("p_camp_old", 8, 75, dict(camp, TWINE_TEST_SELECT_OLD=1))
+    return runs
+
+
+def in_hand(log, level):
+    return [m for m in re.findall(r"trace: L%d f\d+ select: in hand (.+?) \(before" % level, log)]
+
+
+def strip_letters(img, y0=0.73, y1=0.81):
+    """the share of white (the strip's numbers) where the strip is drawn: on top of the game's name band, centred"""
+    if not img:
+        return 0.0
+    w, h, px = img
+    n = hit = 0
+    for y in range(int(y0 * h), int(y1 * h), 2):
+        for x in range(int(0.40 * w), int(0.60 * w), 2):
+            i = (y * w + x) * 3
+            n += 1
+            hit += min(px[i], px[i + 1], px[i + 2]) > 200
+    return hit / n if n else 0.0
+
+
+def check_select(runs):
+    r = runs["p_kr"]
+    p = r.log.split("room start: level 8 ", 1)[-1]
+    got = in_hand(p, 8)[1:]  # (the first: the carried IAC drawn as the room starts)
+    want = [x for _, _, x in SEL_INPUTS]
+    result("p", "King's Ransom, IAC + flash bang lent in one slot, only they checked: the wheel, Z/X, the d-pad step "
+           "between them, Q and L1 flip, keys 6 and 1 by group (hw, smooth)", got[:len(want)] == want,
+           "in hand: %s" % ", ".join(got) if got[:len(want)] != want else "%d changes as asked" % len(want))
+    shown = len(re.findall(r"select: strip shown", p))
+    before, on = (strip_letters(read_ppm(os.path.join(r.dir, "screen_%04d_0.ppm" % f))) for f in (895, 925))
+    band, name = (strip_letters(read_ppm(os.path.join(r.dir, "screen_%04d_0.ppm" % f)), 0.815, 0.885) for f in (895, 925))
+    named = len(re.findall(r"select: the name band for the lent weapon in the watch slot", p))
+    result("p", "HUD strip on each change, one box with the name in the game's name band's place (its band asked for the lent weapon in King's Ransom's watch "
+           "slot too; hw, smooth)", shown >= len(want) and named >= 6 and on > 0.01 and before < on / 4 and
+           name > 0.01 and band < name / 4, "%d shown, %d name bands; numbers %.3f -> %.3f, name %.3f -> %.3f" %
+           (shown, named, before, on, band, name))
+    # the checkmarks kept: the list in Meltdown and Courier as King's Ransom left it
+    lists = re.findall(r"trace: L(\d+) f\d+ select: the next-weapon button: .*?; list (.+)", runs["p_ticks"].log)
+    def marks(lst):
+        return {re.sub(r"\[-\]$", "", n.rsplit("(", 1)[0]): not n.rsplit("(", 1)[0].endswith("[-]")
+                for n in lst.split(", ")}
+    ok, det = len(lists) >= 3, []
+    for lv, lst in lists[1:]:
+        m = marks(lst)
+        bad = [n for n, t in m.items() if t != (n.lstrip("*").startswith(("IAC", "FLASH")))]
+        ok = ok and not bad
+        det.append("L%s %d weapons%s" % (lv, len(m), (": wrong " + ", ".join(bad)) if bad else " as left"))
+    result("p", "checkmarks kept for the run (King's Ransom's, in Meltdown and Courier)", ok, "; ".join(det) or "no lists")
+    lists = re.findall(r"trace: L(\d+) f\d+ select: the next-weapon button: .*?; list (.+)", runs["p_inv"].log)
+    toggled = "WOLFRAM P2K out of the weapon buttons' round" in runs["p_inv"].log
+    later = [lst for lv, lst in lists if lv == "10"]
+    result("p", "a checkmark taken off in the inventory: kept into the next mission", toggled and bool(later) and
+           "WOLFRAM P2K[-]" in later[0], "toggled %s; Meltdown: %s" % (toggled, later[0][:80] if later else "no list"))
+    a = runs["p_all"]
+    first = re.search(r"select: the next-weapon button: .*?; list (.+)", a.log.split("room start: level 10 ", 1)[-1])
+    names = [n.rsplit("(", 1)[0].lstrip("*").replace("[-]", "") for n in first.group(1).split(", ")] if first else []
+    held = set(in_hand(a.log.split("room start: level 10 ", 1)[-1], 10))
+    miss = [n for n in names if not any(h.startswith(n) for h in held)]
+    lent = re.findall(r"weapons: (.+?) (?:lent from level|waits in the pool)", a.log.split("room start: level 10 ", 1)[0].rsplit("room start:", 1)[-1] + a.log.split("room start: level 10 ", 1)[-1].split("room start:", 1)[0])
+    result("p", "Meltdown: every weapon carried (%d, %d lent) reached by the next-weapon button" % (len(names), len(lent)),
+           bool(names) and len(lent) >= 3 and not miss, "never in hand: %s" % ", ".join(miss) if miss else "all")
+    c, o = (re.findall(r"change: to (\d+) .* by the (?:next|previous)-weapon button", runs[k].log) for k in ("p_camp", "p_camp_old"))
+    result("p", "campaign: the weapon buttons step as the game's own (King's Ransom)", len(c) >= 4 and c == o,
+           "steps %s / old %s" % (" ".join(c), " ".join(o)))
+
+
 def check_campaign(runs):
     for k, r in runs.items():
         result("i", "level " + k.split("_")[1], "game main" not in r.log[:0] and not r.lines("endless:") and not r.crashed()
@@ -1141,7 +1250,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklmno", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmnop", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -1209,6 +1318,8 @@ def main():
         groups["doors"] = door_runs(rooms)
     if "o" in checks:
         groups["ramp"] = ramp_runs()
+    if "p" in checks:
+        groups["select"] = select_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.secs)  # (the long ones first)
     t0 = time.time()
@@ -1247,9 +1358,12 @@ def main():
         check_doors(groups["doors"])
     if "ramp" in groups:
         check_ramp(groups["ramp"])
+    if "select" in groups:
+        check_select(groups["select"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
-             "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp"}
+             "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp",
+             "p": "weapon list"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))
