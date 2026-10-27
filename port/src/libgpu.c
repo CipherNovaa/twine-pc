@@ -1,6 +1,7 @@
 /* libgpu on the host: the game's ordering tables, primitives, drawing/display environments and image
  * transfers go to the software GPU (gpu.c). Drawing completes immediately. Signatures follow PsyQ's
  * libgpu.h. */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "port.h"
@@ -282,6 +283,45 @@ static void lent_prim(const u32 *w, u32 len) {
     }
 }
 
+/* TWINE_TRACE_PRIMAT=x0,y0,x1,y1,f0,f1 (research): each polygon drawn in video frames f0..f1 whose corners' box
+ * overlaps that box (drawing coordinates) and covers more than 200 square pixels: its command, colour, box, texture
+ * page and colours, its packet's address and place in the ordering table's walk (which list, which code made it) */
+u32 port_video_frames(void);
+static int primat_box[6];
+static int primat_on(void) {
+    static int on = -1;
+    if (on < 0) {
+        const char *e = getenv("TWINE_TRACE_PRIMAT");
+        on = e && sscanf(e, "%d,%d,%d,%d,%d,%d", &primat_box[0], &primat_box[1], &primat_box[2], &primat_box[3],
+                         &primat_box[4], &primat_box[5]) == 6;
+    }
+    return on && (int)port_video_frames() >= primat_box[4] && (int)port_video_frames() <= primat_box[5];
+}
+static void primat(const u32 *pk, u32 len, u32 nth) {
+    const u32 *w = pk + 1;
+    u32 cmd = w[0] >> 24;
+    int tex, gour, nv, st, i, x0 = 9999, x1 = -9999, y0 = 9999, y1 = -9999;
+    if ((cmd & 0xE0) != 0x20)
+        return;
+    tex = cmd >> 2 & 1, gour = cmd >> 4 & 1, nv = cmd >> 3 & 1 ? 4 : 3, st = 1 + tex + gour;
+    for (i = 0; i < nv; i++) {
+        u32 at = 1 + i * st;
+        s16 x, y;
+        if (at >= len)
+            return;
+        x = (s16)(w[at] & 0xFFFF), y = (s16)(w[at] >> 16);
+        x0 = x < x0 ? x : x0, x1 = x > x1 ? x : x1, y0 = y < y0 ? y : y0, y1 = y > y1 ? y : y1;
+    }
+    if (x1 < primat_box[0] || x0 > primat_box[2] || y1 < primat_box[1] || y0 > primat_box[3] ||
+        (x1 - x0) * (y1 - y0) <= 200)
+        return;
+    port_log("trace: primat: v%u #%u packet %08X cmd %02X colour %06X box %d..%d %d..%d%s%s", port_video_frames(), nth,
+             (u32)(long)pk, cmd, w[0] & 0xFFFFFF, x0, x1, y0, y1, tex ? " textured" : "", lent_in ? " (lent weapon's)" : "");
+    if (tex)
+        port_log(" clut %04X tpage %04X", w[2] >> 16, w[2 + (gour ? 2 : 1) + 1] >> 16);
+    port_log("\n");
+}
+
 void DrawOTag(u32 *p) {
     u32 n = 0;
     u64 t = PT_BEGIN();
@@ -295,6 +335,8 @@ void DrawOTag(u32 *p) {
         }
         if (len && lent_in && lent_trace())
             lent_prim(p + 1, len);
+        if (len && primat_on())
+            primat(p, len, n);
         if (len)
             gpu_gp0(p + 1, len);
         if ((tag & 0xFFFFFF) == 0xFFFFFF)

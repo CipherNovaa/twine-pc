@@ -555,6 +555,16 @@ def lent_runs():
                                             TWINE_TEST_PAD=taps, TWINE_TRACE="weapon,change,sound,proj",
                                             TWINE_RENDERER="hw", TWINE_SMOOTH=1, **extra))
         del runs[name].env["TWINE_ENDLESS_TEST_MEET"]
+    # (the lent rocket's smoke trail in Courier (2:-1's hall, a long free flight): every puff drawn from a sprite entry
+    # with a texture (the playtest's "large grey box": City of Walkways' trail entry empty elsewhere, its puffs drawn
+    # from VRAM's corner), and without the fix the empty entry seen, to know the check sees it; hw renderer, smooth)
+    for name, extra in (("k_trail", {}), ("k_trail_nofix", {"TWINE_ENDLESS_TEST_NO_TRAIL_FIX": 1})):
+        runs[name] = Run(name, 5, 45, dict(base, TWINE_ENDLESS_ROOM="5:4", TWINE_ENDLESS_NEXT="2:-1",
+                                           TWINE_ENDLESS_TEST_EXIT="200,5000", TWINE_ENDLESS_TEST_DRAW="ROCKET",
+                                           TWINE_ENDLESS_TEST_PUT="-9399,-705,-11513,0", TWINE_TEST_PAD="600:4000,603:0",
+                                           TWINE_TRACE="weapon,proj", TWINE_TRACE_PROJ_ALL=1, TWINE_RENDERER="hw",
+                                           TWINE_SMOOTH=1, **extra))
+        del runs[name].env["TWINE_ENDLESS_TEST_MEET"]
     fire2 = "500:4000,503:0,560:4000,563:0"
     for name, room, draw in (("k_flash", "2:4", "FLASH"),):
         runs[name] = Run(name, int(room.split(":")[0]), 40, dict(base, TWINE_ENDLESS_ROOM=room, TWINE_ENDLESS_NEXT="8:0",
@@ -748,6 +758,15 @@ def check_lent(runs):
                and len(blasts) >= 2 and not errors and not runs["k_%s_lent" % key].crashed() and not bad,
                "; ".join(bad[:3] + errors[:1]) or "no differences (%d frames at home, %d lent; %d fired, %d went off)" %
                (hs["frames"], ls["frames"], len(pl), len(blasts)))
+    def puffs(r):  # (the sprites made from the lent rocket's launch in Courier on: (all, those with no texture))
+        log = r.log.split("launch: rocket #", 1)[1] if "launch: rocket #" in r.log else ""
+        made = re.findall(r"trace: L2 f\d+ proj: sprite \d+ made .*?; def ([0-9A-F]{40})", log)
+        return made, [d for d in made if d[24:32] == "00000000"]
+    made, bare = puffs(runs["k_trail"])
+    made_o, bare_o = puffs(runs["k_trail_nofix"])
+    result("k", "Rocket Launcher lent (Courier): its smoke trail's puffs drawn with a texture, no grey box (hw, smooth)",
+           len(made) >= 4 and not bare and bool(bare_o),
+           "%d puffs, %d without a texture (without the fix: %d of %d)" % (len(made), len(bare), len(bare_o), len(made_o)))
     def second(r):  # (the second room's part of a run's log, as a file: weapon_trace reads files)
         p = os.path.join(r.dir, "second.log")
         parts = r.log.split("room in level ")
