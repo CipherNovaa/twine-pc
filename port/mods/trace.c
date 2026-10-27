@@ -232,6 +232,26 @@ static void trace_proj(void) {
             }
         }
     }
+    if (proj_all()) { /* (research: the sprites (smoke, fire, flashes: 30 of 0xA0 bytes), each one as it's made: its
+                       * definition (+0x50), place, size, and the record's first bytes) */
+        extern u8 D_800DB884[];
+        static s32 spr_made[30];
+        for (i = 0; i < 30; i++) {
+            u8 *e = D_800DB884 + i * 0xA0;
+            if (e[0x9B] && *(s32 *)(e + 0x94) != spr_made[i]) {
+                u8 *d = *(u8 **)(e + 0x50);
+                char hex[0x40 * 2 + 1];
+                int k;
+                spr_made[i] = *(s32 *)(e + 0x94);
+                for (k = 0; k < 0x40; k++)
+                    snprintf(hex + k * 2, 3, "%02X", d && (u32)(long)d >= 0x80000000u ? d[k] : 0);
+                port_log("trace: L%d f%d proj: sprite %d made (tick %d) def %08X at %d %d %d size %d %d; def %s\n",
+                         g_Args->level, D_8009CDA8, i, spr_made[i], (u32)(long)d, ((s16 *)(e + 0x54))[0],
+                         ((s16 *)(e + 0x54))[1], ((s16 *)(e + 0x54))[2], *(s16 *)(e + 0x78), *(s16 *)(e + 0x7A), hex);
+            } else if (!e[0x9B])
+                spr_made[i] = 0;
+        }
+    }
     { /* the blasts (func_800378FC's six: a blast's reach grows over its frames, func_80037B6C hurts within it) */
         static s32 blast_time[6];
         for (i = 0; i < 6; i++) {

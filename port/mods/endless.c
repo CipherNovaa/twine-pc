@@ -1046,6 +1046,57 @@ static void donor_out(Donor *d, u8 *made) {
         *(u8 **)made = d->entry;
 }
 
+/* The lent rocket's smoke trail: the rocket's step (every mission's) leaves a puff every other frame from its sprite
+ * table's entry for it (0x14 bytes: size, mode, colour, texture place, page, colours), which City of Walkways fills
+ * (and Turncoat, Flashpoint, Masquerade, Fallen Angel, Meltdown, the same); in Courier and King's Ransom the entry is
+ * its size and mode with nothing else (colour 0, page and colours 0), so each puff was drawn from VRAM's top left
+ * corner, half transparent: a big dark-grey "house" of puffs by Bond (playtest 8: "the rocket looks wrong in
+ * Courier, a large grey box"). Such an entry is given the trail's grey and the texture of the entry after it, the
+ * mission's own smoke puff (C8 C8, mode 35: every mission's, for its blasts); City of Walkways' own numbers point
+ * elsewhere in King's Ransom's VRAM (yellow and black stripes there: TWINE_ENDLESS_TEST_TRAIL_HOME=1 shows them).
+ * TWINE_ENDLESS_TEST_NO_TRAIL_FIX=1: as it was. TWINE_TRACE=proj with TWINE_TRACE_PROJ_ALL=1 logs each puff's entry. */
+extern u8 D_800DB884[]; /* the sprites (30 of 0xA0 bytes: +0x9B in use, +0x50 its entry) */
+static void trail_entry(u8 *d) { /* (an empty entry: the next one's texture, the trail's grey) */
+    int k;
+    u8 *n = d + 0x14;
+    for (k = 5; k < 0x14 && !d[k]; k++)
+        ;
+    if (k < 0x14 || !(n[12] | n[13]) || !(n[14] | n[15]))
+        return; /* (an entry with its texture, or none after it to take one from) */
+    static const u8 home[12] = {0x80, 0x80, 0x3F, 0x3F, 0x60, 0x02, 0xC0, 0x01, 0x60, 0x02, 0x80, 0x01};
+    d[5] = d[6] = d[7] = 0x60;
+    if (getenv("TWINE_ENDLESS_TEST_TRAIL_HOME")) /* (research: City of Walkways' numbers: in King's Ransom's VRAM that
+                                                  * place holds yellow and black stripes) */
+        memcpy(d + 8, home, 12);
+    else /* (the mission's own smoke puff, the entry after: its blasts' smoke) */
+        memcpy(d + 8, n + 8, 12);
+    ELOG("weapons: the lent rocket's trail (sprite entry %08X) had no texture here: the mission's smoke puff given it",
+         (u32)(long)d);
+}
+static void rocket_trail(void) {
+    int i, k;
+    static int gen = -1;
+    if (getenv("TWINE_ENDLESS_TEST_NO_TRAIL_FIX"))
+        return;
+    if (gen != port_endless_gen()) { /* (each mission, before its first puff: its sprite table's trail entry, found
+                                      * by its shape -- 3C 3C, mode 27, then every mission's smoke entry, C8 C8, mode
+                                      * 35, white, its texture at 0,80 3F 3F; the table is made as the mission starts) */
+        u8 *a;
+        gen = port_endless_gen();
+        for (a = (u8 *)0x800C0000u; a < (u8 *)0x80100000u - 0x28; a += 4)
+            if (a[0] == 0x3C && a[2] == 0x3C && a[4] == 0x27 && a[0x14] == 0xC8 && a[0x16] == 0xC8 && a[0x18] == 0x35 &&
+                a[0x19] == 0x80 && a[0x1C] == 0 && a[0x1D] == 0x80 && a[0x1E] == 0x3F && a[0x1F] == 0x3F && !a[1] &&
+                !a[3] && !a[0x15] && !a[0x17])
+                trail_entry(a);
+    }
+    for (i = 0; i < 30; i++) { /* (and any puff's entry: in case the table wasn't found) */
+        u8 *sp = D_800DB884 + i * 0xA0, *d = *(u8 **)(sp + 0x50);
+        if (!sp[0x9B] || !d || (u32)(long)d < 0x80000000u)
+            continue;
+        trail_entry(d);
+    }
+}
+
 static void lent_rocket_launch(void) { /* (func_80038C08: the gun fire, the rocket's touches, state 8 on) */
     u8 was[256], *def = (u8 *)&g_Weapons[D_800B0DD4];
     int i, n = 0;
@@ -1057,6 +1108,7 @@ static void lent_rocket_launch(void) { /* (func_80038C08: the gun fire, the rock
         return;
     call_ps1(lent_gun_fire);
     donor_out(&rocket_type, 0);
+    rocket_trail();
     for (i = D_800B0DA8; i <= D_800B07B8 && i < 256; i++) {
         u8 *o = OBJ(i);
         if (!was[i] && o[4] && o[5] == 1 && *(void **)(o + 0x88) == g_Player) {
@@ -1281,6 +1333,8 @@ void func_800350F0(u8 *o) {
         ;
     if (g == GL_LIVE) {
         func_800350F0_orig(o);
+        if (*(u8 **)o == rocket_type.entry) /* (the lent rocket: its trail's puffs) */
+            rocket_trail();
         return;
     }
     o[7] &= 0xC0;
@@ -1444,6 +1498,7 @@ int endless_weapon_pre(void) {
     return 1;
 }
 
+static void rocket_trail(void);
 void endless_weapon_post(int token) {
     s32 home = launch_state;
     if (!token && flash_native() && !flash_vanilla() && D_800F11F0 == 0xF) { /* (at home, in a run: twice as long) */
@@ -1451,6 +1506,8 @@ void endless_weapon_post(int token) {
         if (port_endless_room(e))
             flash_fade(native_flash_count() - 1);
     }
+    if (token && home == 0x16) /* (the rocket's first puff, made as it's launched: given its texture before it's drawn) */
+        rocket_trail();
     if (!token || !home)
         return;
     launch_state = 0;
