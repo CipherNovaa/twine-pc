@@ -245,6 +245,7 @@ static int making;               /* (what spawn()/the returns are making now: 0 
 static s32 *freed_recs[16];      /* (records (their flags words) whose person free_slot took out) */
 static int freed_next;
 static s32 floor_at(s32 x, s32 y, s32 z);
+static u16 fired_by[64]; /* (each person's shots, for the people lines: people_log) */
 static void people_log(void) {
     int i;
     for (i = D_800B0DA0; i <= D_800B07B0; i++) {
@@ -253,10 +254,10 @@ static void people_log(void) {
         if (o == g_Player || !o[4])
             continue;
         ELOG("people: %d type %d %s, health %d, ai %d at %d %d %d (floor %d, yaw %d); record %08X flags %08X w4 %08X; "
-             "state +24 %08X anim %d; obj +8 %d +A4 %02X +A6 %02X +48 %08X +4C %08X +E %04X", i, o[6], made_how[i & 63] ? made_how[i & 63] : "?",
+             "state +24 %08X anim %d; obj +8 %d +A4 %02X +A6 %02X +48 %08X +4C %08X +E %04X shots %d", i, o[6], made_how[i & 63] ? made_how[i & 63] : "?",
              HEALTH(o), o[0xA7], POS(o)[0], POS(o)[1], POS(o)[2], floor_at(POS(o)[0], POS(o)[1] - 500, POS(o)[2]),
              *(s16 *)(*(u8 **)(o + 0x90) + 0x1A), (u32)src, src ? src[0] : 0, src ? src[1] : 0,
-             st ? *(s32 *)(st + 0x24) : -1, st ? *(s16 *)(st + 0x10) : -1, o[8], o[0xA4], o[0xA6], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C), *(u16 *)(o + 0xE));
+             st ? *(s32 *)(st + 0x24) : -1, st ? *(s16 *)(st + 0x10) : -1, o[8], o[0xA4], o[0xA6], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C), *(u16 *)(o + 0xE), fired_by[i & 63]);
     }
 }
 
@@ -335,6 +336,7 @@ static void take_out(u8 *o, const char *why) {
 
 /* the people's slots (port/mods/people.c: 12 with 8 MB of RAM, else the game's 6): the director's cap grows with them */
 int people_slots(void) __attribute__((weak));
+void people_guard_types(const u8 *types, int n) __attribute__((weak));
 static int people_cap(void) {
     return people_slots ? people_slots() : 6;
 }
@@ -2327,6 +2329,12 @@ static void room_start(void) {
             else
                 ELOG("room: kind type %d (script %d: not a moving guard's) not copied", kinds[i][3] & 0xFF, kinds[i][4] >> 20 & 7);
         kind_count = n;
+        if (people_guard_types) { /* (the people's extra slots, past the game's six: copies of these kinds' slots) */
+            u8 t[16];
+            for (i = 0; i < kind_count && i < 16; i++)
+                t[i] = kinds[i][3] & 0xFF;
+            people_guard_types(t, i);
+        }
     }
     no_story_people(counts);
     {   /* (the log: the mission's placed people kept and left out, its armed guards among them) */
@@ -2400,10 +2408,14 @@ static int stuck_near(s32 x, s32 z) { /* (by where one sent got stuck) */
     return 0;
 }
 
-static int lately(s32 x, s32 z) { /* (by where one of the last few came, or by where Bond came in) */
+static int lately(s32 x, s32 z) { /* (by where one of the last few came, or by where Bond came in; or someone there) */
     int k;
     if (stuck_near(x, z))
         return 1;
+    for (k = D_800B0DA0; people_cap() > 6 && k <= D_800B07B0; k++) /* (more than six slots: spawn() would refuse
+                                                                        * it; more people, more places taken) */
+        if (OBJ(k) != g_Player && OBJ(k)[4] && HEALTH(OBJ(k)) > 0 && dist2(POS(OBJ(k))[0], POS(OBJ(k))[2], x, z) < 500)
+            return 1;
     if (dist2(x, z, entry[2], entry[4]) < 3500)
         return 1;
     for (k = 0; k < 4; k++)
@@ -2591,6 +2603,12 @@ static void spawn(const char *why) {
     rec[3] &= ~0x400;           /* (and the pose's flag) */
     making = 1;
     o = func_8003C1BC(rec, mid[i][0], mid[i][1], mid[i][2]);
+    for (h = 0; !o && people_cap() > 6 && h < kind_count; h++) { /* (more than six slots: the kinds in turn with a
+                                                                * slot free, none freed while one is) */
+        rec[3] = (rec[3] & ~0x3FF) | (kinds[h][3] & 0xFF);
+        o = func_8003C1BC(rec, mid[i][0], mid[i][1], mid[i][2]);
+        rec[3] &= o ? ~0 : ~0x300;
+    }
     for (h = 0; !o && h < kind_count; h++) { /* (the kinds in turn, a slot freed for each) */
         rec[3] = (rec[3] & ~0x3FF) | (kinds[h][3] & 0xFF);
         if ((o = func_8003C1BC(rec, mid[i][0], mid[i][1], mid[i][2])))
@@ -2602,7 +2620,7 @@ static void spawn(const char *why) {
     }
     making = 0;
     if (!o) {
-        ELOG("spawn: the game made no guard (type %d: the people's six slots are full)", rec[3] & 0xFF);
+        ELOG("spawn: the game made no guard (type %d: the people's slots are full)", rec[3] & 0xFF);
         cooldown = SEC * 5;
         return;
     }
@@ -4279,9 +4297,29 @@ void endless_frame(void) {
         flood();
     if (room_frames % (getenv("TWINE_ENDLESS_PEOPLE_FAST") ? SEC / 2 : SEC * 4) == 0)
         people_log();
-    if (getenv("TWINE_ENDLESS_TEST_LOOK") && room_frames > SEC * 2) { /* (headless tests: Bond faces person N) */
-        u8 *o = OBJ(atoi(getenv("TWINE_ENDLESS_TEST_LOOK")));
-        if (o[4]) {
+    if (getenv("TWINE_ENDLESS_TEST_LOOK") && room_frames > SEC * 2) { /* (headless tests: Bond faces person N; "extra":
+                                                                        * each alive one drawn from a people's slot past
+                                                                        * the game's six in turn, 4 s each) */
+        static int look = -1;
+        u8 *o;
+        if (!strcmp(getenv("TWINE_ENDLESS_TEST_LOOK"), "extra")) {
+            int k, n;
+            u8 *sub = look > 0 ? *(u8 **)(OBJ(look) + 0x94) : NULL;
+            if (look < 0 || room_frames % (SEC * 4) == 0 || !OBJ(look)[4] || HEALTH(OBJ(look)) <= 0 || !sub || sub[0xA] < 6)
+                for (k = 1, look = look < 0 ? 0 : look, n = D_800B07B0 - D_800B0DA0 + 1; k <= n; k++) {
+                    int c = D_800B0DA0 + (look - D_800B0DA0 + k + n) % n;
+                    u8 *q = OBJ(c), *qs = *(u8 **)(q + 0x94);
+                    if (q != g_Player && q[4] && q[5] == 6 && HEALTH(q) > 0 && qs && qs[0xA] >= 6) {
+                        if (c != look)
+                            ELOG("test look: person %d (slot %d)", c, qs[0xA]);
+                        look = c;
+                        break;
+                    }
+                }
+            o = OBJ(look > 0 ? look : 0);
+        } else
+            o = OBJ(atoi(getenv("TWINE_ENDLESS_TEST_LOOK")));
+        if (o[4] && o != g_Player) {
             s32 dx = POS(o)[0] - g_Args->playerX, dz = POS(o)[2] - g_Args->playerZ, a, best = -0x7FFFFFFF, ba = 0;
             for (a = 0; a < 4096; a += 8) {
                 s32 d = (isin(a) >> 4) * (dx >> 4) + (isin(a + 0x400) >> 4) * (dz >> 4);
@@ -4804,6 +4842,7 @@ u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z) {
                     how = "placed again (its slot freed before)";
             made_how[i & 63] = how;
             made_at[i & 63] = room_frames;
+            fired_by[i & 63] = 0;
             if (*(s32 *)(o + 0x4C) & 0x02000000) { /* (made inactive: left out of the game's collisions and updates,
                                                     * so no shot touches him; the mission's script would wake him) */
                 if (!port_subframe)
@@ -5064,6 +5103,8 @@ void func_80053114(u8 *obj) {
     if (ai_on <= 0 || obj == g_Player || obj[5] != 6 || !port_endless_room(e) ||
         (*(u8 **)(obj + 0x5C) && *(u8 **)(obj + 0x5C) != g_Player) ||
         !(an = *(u8 **)(obj + 0x94))) {
+        if (obj != g_Player && (u8 *)obj >= OBJ(0) && (u8 *)obj < OBJ(64))
+            fired_by[(obj - OBJ(0)) / 0x124]++;
         func_80053114_orig(obj);
         return;
     }
@@ -5085,6 +5126,7 @@ void func_80053114(u8 *obj) {
     func_80053114_orig(obj);
     an[0] = keep;
     shots_fired++;
+    fired_by[i]++;
 }
 
 /* A script's sound at its person (op 0x1D: func_800572F4, a sound of the level's bank at him; the guards' calls and
