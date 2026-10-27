@@ -14,6 +14,11 @@
  * person  each person of type TWINE_TRACE_TYPE (default: all) whenever their script's place (its pc, from the
  *         script's start), wait, animation (asked +0x10, running +0x12, frame +0x14) or the object's flags (+0xA4)
  *         change: "trace: L<level> f<frame> person <slot> type <t>: pc ... wait ... anim ...".
+ * proj    the objects that aren't people nor pickups (projectiles, blasts, smoke, flashes: kinds 1-3, 5, 7, 8): each one as
+ *         it appears (its index, kind +5, type +7 and that type's entry in the mission's table, g_Args+0x228, 0x70
+ *         bytes: +0xB the object it brings along, +0x2D, +0x5C its sound; its model D_800D2D30[type]; +0x3A, +0x0E,
+ *         +0x68; who made it +0x88; where), a projectile (kind 1) each frame as it flies, and each as it goes (how
+ *         long it lived, where). For proving a lent launcher's rocket or round as at home (tools/lent_matrix.py).
  * (sound: port/mods/endless.c's func_80026F30 and the runtime's port_tone_play / port_voice_play log under "sound".)
  *
  * The overlay (debug menu, F9: its WEAPON TRACE page is the mod debugmenu.c's) shows the weapon line live.
@@ -39,7 +44,12 @@ extern s32 D_800DDE08, D_800DDDA4; /* the weapon buttons, previous and next, pre
 extern s32 D_8009CDA8;  /* the mission's frame */
 extern s16 D_8009CAA4;  /* a menu over the mission */
 
-static int on_weapon = -1, on_change, on_person;
+static int on_weapon = -1, on_change, on_person, on_proj;
+extern u8 *D_800AFFC8;  /* the objects (0x124 bytes each) */
+extern s16 D_800B0AA8;  /* how many */
+extern s32 D_800D2D30[]; /* the object types' models */
+extern void *g_Player;
+extern u8 D_800D30D8[]; /* the blasts (6, 0x24 bytes each) */
 static const char *change_by; /* (a mod's, this frame) */
 static s16 last_to = -1;
 static char last_line[256];
@@ -103,7 +113,6 @@ static void tone_ab(void) {
 }
 
 /* people's scripts and animations (TWINE_TRACE=person) */
-extern s32 D_800AFFC8; /* (the objects: a pointer to them, 0x124 bytes each) */
 extern s16 D_800B0DA0, D_800B07B0;
 static void trace_people(void) {
     static int type = -2;
@@ -133,6 +142,80 @@ static void trace_people(void) {
     }
 }
 
+/* TWINE_TRACE=proj: the objects that aren't people nor pickups, as they come, fly and go */
+static void trace_proj(void) {
+    static s32 seen[256], fresh = 0x7FFFFFFF;
+    static s32 at[256][3];
+    int i, n = D_800B0AA8 < 256 ? D_800B0AA8 : 256;
+    if (!D_800AFFC8)
+        return;
+    if (D_8009CDA8 < fresh) { /* (a new mission) */
+        int k;
+        for (k = 0; k < 256; k++)
+            seen[k] = -1;
+    }
+    fresh = D_8009CDA8;
+    for (i = 1; i < n; i++) {
+        u8 *o = D_800AFFC8 + i * 0x124, *m = *(u8 **)(o + 0x90);
+        int kind = o[5];
+        s32 born = *(s32 *)(o + 0x2C);
+        if (!o[4] || kind == 6 || kind == 4 || kind == 9 || kind == 0 || kind == 10 || !m) {
+            if (seen[i] >= 0)
+                port_log("trace: L%d f%d proj: #%d gone, lived %d frames, last at %d %d %d\n", g_Args->level, D_8009CDA8, i,
+                         D_8009CDA8 - seen[i], at[i][0], at[i][1], at[i][2]);
+            seen[i] = -1;
+            continue;
+        }
+        if (seen[i] != born) {
+            u8 *te = (u8 *)(long)g_Args->unk228 + o[7] * 0x70;
+            if (seen[i] >= 0)
+                port_log("trace: L%d f%d proj: #%d gone, lived %d frames, last at %d %d %d\n", g_Args->level, D_8009CDA8, i,
+                         D_8009CDA8 - seen[i], at[i][0], at[i][1], at[i][2]);
+            u8 *ent = *(u8 **)o; /* (its type's entry, 0x70 bytes) */
+            port_log("trace: L%d f%d proj: #%d new kind %d type %d/%d (entry %02X%02X%02X%02X %02X%02X%02X%02X %02X%02X%02X%02X "
+                     "+5C %d +5D %d, model %08X) 3A %d 3B %d 0E %04X 34 %d 64 %08X 68 %08X by %s at %d %d %d\n",
+                     g_Args->level, D_8009CDA8, i, kind, o[6], o[7], ent ? ent[0] : 0, ent ? ent[1] : 0,
+                     ent ? ent[2] : 0, ent ? ent[3] : 0, ent ? ent[4] : 0, ent ? ent[5] : 0, ent ? ent[6] : 0,
+                     ent ? ent[7] : 0, ent ? ent[8] : 0, ent ? ent[9] : 0, ent ? ent[10] : 0, ent ? ent[11] : 0,
+                     ent ? ent[0x5C] : 0, ent ? ent[0x5D] : 0, (u32)D_800D2D30[o[6]], o[0x3A], o[0x3B],
+                     *(u16 *)(o + 0xE), *(s32 *)(o + 0x34), *(u32 *)(o + 0x64), *(u32 *)(o + 0x68),
+                     *(void **)(o + 0x88) == g_Player ? "Bond" : *(void **)(o + 0x88) ? "another" : "none",
+                     *(s32 *)(m + 0x28), *(s32 *)(m + 0x2C), *(s32 *)(m + 0x30));
+            if (*(void **)(o + 0x88) == g_Player && kind == 1) { /* (Bond's: the object, its type's entry, its model's
+                                                                  * start, in hex: for comparing home and lent) */
+                char hex[0x124 * 2 + 1];
+                int k;
+                for (k = 0; k < 0x124; k++)
+                    snprintf(hex + k * 2, 3, "%02X", o[k]);
+                port_log("trace: L%d f%d proj: #%d object %s\n", g_Args->level, D_8009CDA8, i, hex);
+                for (k = 0; k < 0x70 && ent; k++)
+                    snprintf(hex + k * 2, 3, "%02X", ent[k]);
+                port_log("trace: L%d f%d proj: #%d entry %s\n", g_Args->level, D_8009CDA8, i, ent ? hex : "-");
+                for (k = 0; k < 0x8C; k++)
+                    snprintf(hex + k * 2, 3, "%02X", m[k]);
+                port_log("trace: L%d f%d proj: #%d part %s\n", g_Args->level, D_8009CDA8, i, hex);
+            }
+            seen[i] = born;
+        } else if (kind == 1)
+            port_log("trace: L%d f%d proj: #%d at %d %d %d (0E %04X 64 %08X 68 %08X)\n", g_Args->level, D_8009CDA8, i,
+                     *(s32 *)(m + 0x28), *(s32 *)(m + 0x2C), *(s32 *)(m + 0x30), *(u16 *)(o + 0xE), *(u32 *)(o + 0x64),
+                     *(u32 *)(o + 0x68));
+        at[i][0] = *(s32 *)(m + 0x28), at[i][1] = *(s32 *)(m + 0x2C), at[i][2] = *(s32 *)(m + 0x30);
+    }
+    { /* the blasts (func_800378FC's six: a blast's reach grows over its frames, func_80037B6C hurts within it) */
+        static s32 blast_time[6];
+        for (i = 0; i < 6; i++) {
+            u8 *b = D_800D30D8 + i * 0x24;
+            if ((*(u32 *)(b + 0x10) & 1) && *(s32 *)(b + 0x20) != blast_time[i])
+                port_log("trace: L%d f%d proj: blast %d at %d %d %d by %s, reach %d to %d, %d a frame\n", g_Args->level,
+                         D_8009CDA8, i, *(s32 *)(b + 4), *(s32 *)(b + 8), *(s32 *)(b + 0xC),
+                         *(void **)b == g_Player ? "Bond" : *(void **)b ? "another" : "none", *(u16 *)(b + 0x14),
+                         *(u16 *)(b + 0x16), *(s16 *)(b + 0x18));
+            blast_time[i] = (*(u32 *)(b + 0x10) & 1) ? *(s32 *)(b + 0x20) : 0;
+        }
+    }
+}
+
 /* each frame, at the top of the mission's frame loop (mods/savestate.c) */
 void trace_frame(void) {
     static s32 last_frame = -99999;
@@ -146,9 +229,12 @@ void trace_frame(void) {
         on_weapon = port_trace("weapon");
         on_change = port_trace("change");
         on_person = port_trace("person");
+        on_proj = port_trace("proj");
     }
     if (on_person)
         trace_people();
+    if (on_proj)
+        trace_proj();
     if (on_change && D_800B0DDC != last_to) {
         port_log("trace: L%d f%d change: to %d (%s) from %d, in hand %d, by %s\n", g_Args->level, D_8009CDA8, D_800B0DDC,
                  D_800B0DDC >= 0 && D_800B0DDC < 16 ? (char *)g_Weapons[D_800B0DDC].pad0 : "-", last_to, D_800B0DD4,

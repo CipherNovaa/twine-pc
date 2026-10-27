@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0
+ * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -335,6 +335,18 @@ static void take_out(u8 *o, const char *why) {
     func_800395E8(o);
 }
 
+/* the people's slots (port/mods/people.c: 12 with 8 MB of RAM, else the game's 6): the director's cap grows with them */
+int people_slots(void) __attribute__((weak));
+static int people_cap(void) {
+    return people_slots ? people_slots() : 6;
+}
+static int fill_test(void) { /* TWINE_ENDLESS_TEST_FILL=1 (tests): the director sends guards until every slot is taken */
+    static int on = -1;
+    if (on < 0)
+        on = getenv("TWINE_ENDLESS_TEST_FILL") != NULL;
+    return on;
+}
+
 /* the people alive (but Bond), and how many of those are the section's own */
 static int alive(int *own) {
     int i, n = 0;
@@ -591,16 +603,22 @@ static void lent_shotgun(void) {
     u8 *wb = (u8 *)w, snd = wb[0x5A];
     s32 shots = *(s32 *)((u8 *)g_Args + 0x2C8), k;
     s16 ammo, clip, reserve;
+    /* (Courier's double-barrelled Frinesi shotgun fires both barrels a press, as its own handler does
+     * (func_800391D4): six pellets, two shells, two shots counted; the auto, one shell, five pellets) */
+    int both = !strncmp((char *)w->pad0, "FRINESI SHOTGUN", 15);
     if (!lent_gun_fire)
         return;
     call_ps1(lent_gun_fire);
     ammo = w->ammo, clip = w->clip, reserve = w->reserve;
     wb[0x5A] = 0xFF;
-    for (k = 0; k < 4; k++) /* (the other pellets) */
+    for (k = 0; k < (both ? 5 : 4); k++) /* (the other pellets) */
         call_ps1(lent_gun_fire);
     wb[0x5A] = snd;
+    if (both && (w->flags >> 13 & 1) && !(*(u32 *)((u8 *)g_Args + 4) >> 14 & 1) && clip > 0) /* (the second shell,
+                                                                                          * but with the cheat) */
+        clip--, ammo = clip + reserve;
     w->ammo = ammo, w->clip = clip, w->reserve = reserve;
-    *(s32 *)((u8 *)g_Args + 0x2C8) = shots + 1;
+    *(s32 *)((u8 *)g_Args + 0x2C8) = shots + (both ? 2 : 1);
 }
 
 static int shotgun_rec(const WeaponRec *r) {
@@ -670,6 +688,551 @@ static void lent_throw(void) {
     }
     ELOG("weapons: %s fired (the mod's own %s), %d left", (char *)w->pad0,
          kind == 0 ? "grenade" : kind == 1 ? "flash bang" : kind == 2 ? "round" : kind == 3 ? "rocket" : "charge", w->ammo);
+}
+
+/* THE LAUNCHERS, LENT, AS AT HOME. Their home missions fire them through weapon states of their own, which other
+ * missions' state machines haven't (there they hit the default: state 1 at once, an error printed):
+ *  - the rocket launcher (City of Walkways, L05): its fire handler (func_80039148) sets state 0x16, which plays the
+ *    weapon's fire animation (its +0x7C) and, 5 frames into it, launches the rocket (func_80038C08: the mission's gun
+ *    fire with the rocket's own touches) and goes on in state 8 with the animation running on (func_8007DCD8); the
+ *    animation done, state 1. The rocket is one of the mission's bullets (kind 1, the model type's +0x2C), made from
+ *    the weapon's numbers as every gun's are (func_8003872C: speed +0xB2, damage +0xB4, and +0x3B bit 0 -> the
+ *    bullet's +0x64 bit 23: a blast where it hits, func_80033F38's tail: sound 0x40, func_80065614), with its hit
+ *    mask +0x3A 4 (it hurts what bullets don't), +0x0E bit 8 (no bullet hole, no reaction, no gunshot heard where
+ *    it lands) and +0x68's low bits cleared. (City of Walkways' state 0x17 is the wrench's, not the launcher's.)
+ *    Lent, the rocket is this mission's bullet with City of Walkways' bullets' type put in for it (its entry: box
+ *    and size, which the blast's reach grows from; its model): see Donor below.
+ *  - the grenade launcher (Fallen Angel, L09): see lent_gl below.
+ * Here each lent launcher's fire handler sets the home state; the state machine (quickpunch.c's func_800788E0) asks
+ * endless_weapon_pre before it runs and endless_weapon_post after: meanwhile it runs state 8, whose code is every
+ * mission's and does what the home state does but the launch (the same animation, def +0x74 + 8 = +0x7C, started
+ * the same way; done -> state 1), and the launch is done here at the home state's moment. Outside the state machine
+ * the state is the home one (the trace, the HUD, the other code see 0x16 as at home). TWINE_TRACE=weapon logs each
+ * step ("launch:"). */
+extern s16 D_800B0DA8, D_800B07B8; /* the bullets' objects (kind 1): first, last */
+extern s32 D_800F11F0;            /* the weapon's state */
+void func_80076184(s32 unit, s32 on); /* the muzzle flash shown */
+extern s16 D_8009CF48;            /* frames since a shot */
+void func_8007980C(void);           /* a thrower's next to hand (reload, state 0xB), as its throw ends */
+static int launch_trace(void) {
+    static int on = -1;
+    if (on < 0)
+        on = port_trace("weapon");
+    return on;
+}
+static int lent_launcher(void) { /* (the weapon in hand: a lent launcher? 3 the rocket launcher, 2 the grenade one) */
+    int k;
+    if (D_800B0DD4 < 0 || D_800B0DD4 >= 16 || !(lent_mask >> D_800B0DD4 & 1))
+        return -1;
+    k = throw_kind((char *)g_Weapons[D_800B0DD4].pad0);
+    return k == 2 || k == 3 ? k : -1;
+}
+static void lent_rocket_fire(void) { /* (the weapon's fire handler: func_80039148) */
+    func_8007A17C(0x16);
+    if (launch_trace())
+        port_log("trace: L%d f%d launch: rocket launcher fired: state 0x16\n", g_Args->level, D_8009CDA8);
+}
+/* a member of a mission's archive (L<nn>/LVL<nn>CD.BIN: entries of 0x1C bytes, a name and its first sector), whole,
+ * malloc'd; its size in *size */
+u32 port_disc_part(const char *name, u32 offset, u32 len, u8 **data);
+static u8 *disc_member(int lv, const char *name, u32 *size) {
+    char arcname[32];
+    u8 *arc, *e, *data = 0;
+    u32 n;
+    *size = 0;
+    snprintf(arcname, sizeof(arcname), "L%02d/LVL%02dCD.BIN", lv, lv);
+    if (!(n = port_disc_part(arcname, 0, 0x4000, &arc)))
+        return 0;
+    for (e = arc; e + 0x38 <= arc + n && *e; e += 0x1C)
+        if (!strncmp((char *)e, name, 24)) {
+            u32 at = *(u16 *)(e + 26) * 0x800u, end = *(u16 *)(e + 26 + 0x1C) * 0x800u;
+            if (end > at && !(*size = port_disc_part(arcname, at, end - at, &data)))
+                data = 0;
+            break;
+        }
+    free(arc);
+    return data;
+}
+
+/* (research, TWINE_ENDLESS_TEST_FINDTMD=<type>: that object type's model in the mission's DATA<nn>.BIN, its textured
+ * primitives' texture pages and colours, its entry; and TWINE_ENDLESS_TEST_SFX=<id,...>: those sounds' table entries) */
+extern s32 D_800D2D30[];
+static void find_tmd(void) {
+    const char *t = getenv("TWINE_ENDLESS_TEST_FINDTMD"), *sx = getenv("TWINE_ENDLESS_TEST_SFX");
+    char name[24];
+    u32 size, k, *ob;
+    u8 *data;
+    if (sx) {
+        const u8 *d = *(u8 **)((u8 *)g_Args + 0x130);
+        while (d && *sx) {
+            int id = atoi(sx);
+            ELOG("research: sound %d: %02X %02X %02X %02X %02X %02X %02X %02X", id, d[id * 8], d[id * 8 + 1],
+                 d[id * 8 + 2], d[id * 8 + 3], d[id * 8 + 4], d[id * 8 + 5], d[id * 8 + 6], d[id * 8 + 7]);
+            while (*sx && *sx != ',')
+                sx++;
+            if (*sx)
+                sx++;
+        }
+    }
+    if (!t || !(ob = (u32 *)(long)D_800D2D30[atoi(t)]))
+        return;
+    ELOG("research: type %s model %08X: verts %08X x%u normals %08X x%u prims %08X x%u scale %d", t, (u32)(long)ob,
+         ob[0], ob[1], ob[2], ob[3], ob[4], ob[5], ob[6]);
+    { /* (its entry's bytes that aren't 0: {at, value}) */
+        u8 *te = TYPE_DEF(atoi(t));
+        char line[600];
+        int m = 0;
+        for (k = 0; k < 0x70 && m < 560; k++)
+            if (te[k])
+                m += snprintf(line + m, sizeof(line) - m, "{0x%X, 0x%X}, ", k, te[k]);
+        line[m] = 0;
+        ELOG("research: its entry: %s", line);
+    }
+    snprintf(name, sizeof(name), "L%02d/DATA%02d.BIN", g_Args->level, g_Args->level);
+    if (!(data = disc_member(g_Args->level, name, &size)))
+        return;
+    for (k = 0; k + 32 <= size; k += 4)
+        if (!memcmp(data + k, (void *)(long)ob[4], 32)) {
+            u32 objtab = k - (ob[4] - (u32)(long)ob);
+            ELOG("research: its primitives at %s+0x%X: the model (its header) at +0x%X: %08X %08X %08X", name, k,
+                 objtab - 12, *(u32 *)(data + objtab - 12), *(u32 *)(data + objtab - 8), *(u32 *)(data + objtab - 4));
+        }
+    free(data);
+    if (getenv("TWINE_ENDLESS_TEST_FINDTIM")) { /* (=x,y: the TIMs of LVL<nn>TIM.BIN whose picture or colours hold it) */
+        int fx = atoi(getenv("TWINE_ENDLESS_TEST_FINDTIM")), fy = atoi(strchr(getenv("TWINE_ENDLESS_TEST_FINDTIM"), ',') + 1);
+        snprintf(name, sizeof(name), "L%02d/LVL%02dTIM.BIN", g_Args->level, g_Args->level);
+        if ((data = disc_member(g_Args->level, name, &size))) {
+            for (k = 0; k + 20 <= size; k += 4)
+                if (*(u32 *)(data + k) == 0x10 && (*(u32 *)(data + k + 4) & ~0xBu) == 0) {
+                    u8 *q = data + k + 8;
+                    u32 fl = *(u32 *)(data + k + 4);
+                    s16 cx = 0, cy = 0, cw = 0, ch = 0;
+                    if (fl & 8) {
+                        cx = *(s16 *)(q + 4), cy = *(s16 *)(q + 6), cw = *(s16 *)(q + 8), ch = *(s16 *)(q + 10);
+                        if (*(u32 *)q > 0x10000)
+                            continue;
+                        q += *(u32 *)q;
+                    }
+                    if (q + 12 > data + size)
+                        continue;
+                    {
+                        s16 x = *(s16 *)(q + 4), y = *(s16 *)(q + 6), w = *(s16 *)(q + 8), h = *(s16 *)(q + 10);
+                        if ((fx >= x && fx < x + w && fy >= y && fy < y + h) ||
+                            (fx >= cx && fx < cx + cw && fy >= cy && fy < cy + ch))
+                            ELOG("research: %s+0x%X: TIM flags %X, colours at %d,%d %dx%d, picture at %d,%d %dx%d", name, k,
+                                 fl, cx, cy, cw, ch, x, y, w, h);
+                    }
+                }
+            free(data);
+        }
+    }
+    {
+        u8 *q = (u8 *)(long)ob[4];
+        for (k = 0; k < ob[5] && k < 400; k++, q += 4 + q[1] * 4)
+            if (q[3] & 4)
+                ELOG("research: prim %u mode %02X flag %02X olen %d ilen %d: clut %04X tpage %04X uv %d,%d %d,%d", k, q[3],
+                     q[2], q[0], q[1], *(u16 *)(q + 6), *(u16 *)(q + 10), q[4], q[5], q[8], q[9]);
+            else if (k < 4)
+                ELOG("research: prim %u mode %02X flag %02X olen %d ilen %d (untextured)", k, q[3], q[2], q[0], q[1]);
+    }
+}
+
+/* THE GRENADE LAUNCHER, LENT, AS AT HOME (Fallen Angel, L09). Its fire handler (func_800398A4) sets state 0x26 (the
+ * muzzle flash shown, the fire timer reset); state 0x26 plays the fire animation (+0x7C) with the sound 0x2B as it
+ * starts; 1 frame into it the round is launched from the weapon's model (func_80076CDC: its matrix and the weapon
+ * object's +0x3C offset, between PushMatrix and PopMatrix: func_80076BF8 makes a projectile (kind 1) of the type at
+ * the weapon object's +0x3A (Fallen Angel's 32), subtype +7 0x2C, +0xA5 0x18, +0x6A 0x818, damage 20000, +0x28
+ * 2000, one off the clip; it flies at 500 pitched 0x5B up when aiming, else as Bond looks); the animation done, the
+ * next round to hand (func_8007980C: state 0xB, the reload). In flight every mission's projectile code drops it
+ * (subtype 0x2C: +0x9A += 0x10 a frame) and tells the guards near of it (func_80076B9C); where it hits, the hit loop
+ * (func_80033F38) sets it off by its subtype (Fallen Angel's func_80079BB4: func_80065614's blast, sound 0x4B, the
+ * object out), which only Fallen Angel's (and King's Ransom's, as another thing) have for 0x2C: other missions print
+ * an error and leave it be. Here: the state as the rocket's (endless_weapon_pre/post); the round made by the
+ * mission's own func_80039A9C with Fallen Angel's type entry and model put in its bullets' type for the call (the
+ * object's +0 then the entry, kept here); its blast done here as Fallen Angel's, before the mission's hit loop
+ * (func_80033F38 below) sees it. The model (DATA09.BIN, a TMD of 74 textured triangles) and its texture (a TIM of
+ * LVL09TIM.BIN) are read from the disc, the texture put where no mission of a run has anything (944,320; colours
+ * 16,508: every room's VRAM checked, TWINE_ENDLESS_TEST_VRAM) and the model's texture places moved there. Its two
+ * sounds play from Fallen Angel's bank (their entries in its sounds' table below). TWINE_TRACE=weapon logs it. */
+/* (the projectiles' types lent: a mission's object type's entry and model, put in the mission's bullets' type while
+ * its code makes the object (then the object's +0 the entry, kept here). The model, a TMD, is read from the donor's
+ * DATA<nn>.BIN; a textured one's texture from its LVL<nn>TIM.BIN, put where no mission of a run has anything and the
+ * model's texture places moved there. The entry: its bytes that aren't 0, as the donor's table has them (that
+ * table is made as the mission starts, not read from a file: TWINE_ENDLESS_TEST_FINDTMD dumps one)) */
+typedef struct {
+    const char *what;
+    int level;
+    const char *file;
+    u32 at, prims;         /* (the model in the file, its primitives) */
+    const char *tim_file;  /* (its texture: 0 none) */
+    u32 tim_at;
+    s16 pic_x, pic_y, tex_x, tex_y, clut_x, clut_y; /* (where the donor has its picture, 16x64 at 4 bits, and where
+                                                     * it goes: picture and colours) */
+    const u8 (*set)[2];
+    int nset;
+    u32 model[0xC00 / 4];
+    u16 clut[16], image[16 * 64];
+    int assets; /* (1 read, -1 not to be had) */
+    u8 entry[0x70], save[0x70];
+    s32 save_model;
+    u8 tt;
+} Donor;
+/* Fallen Angel's object type 32 (class 4, subtype 4, its box, size, +0x64) and City of Walkways' bullets' (9) */
+static const u8 gl_set[][2] = {{0, 32}, {1, 4}, {2, 4}, {0x10, 0xDD}, {0x11, 0xFF}, {0x12, 0x23}, {0x14, 0xA4},
+                               {0x15, 0xFF}, {0x16, 0x48}, {0x18, 0xDD}, {0x19, 0xFF}, {0x1A, 0x23}, {0x1C, 0xC0},
+                               {0x1E, 0x32}, {0x64, 0x4A}};
+static const u8 rocket_set[][2] = {{0, 9}, {1, 1}, {0x10, 0xE5}, {0x11, 0xFF}, {0x12, 0x1B}, {0x14, 0xE5}, {0x15, 0xFF},
+                                   {0x16, 0x1B}, {0x18, 0x77}, {0x19, 0xFD}, {0x1A, 0x03}, {0x1C, 0x90}, {0x1D, 0x02},
+                                   {0x1E, 0x8A}, {0x1F, 0x02}, {0x20, 0xEE}, {0x21, 0x02}, {0x24, 0xC8}, {0x2C, 0x01},
+                                   {0x5C, 0x29}, {0x64, 0x14}};
+static Donor gl_type = {"the grenade launcher's round (Fallen Angel's type 32)", 9, "L09/DATA09.BIN", 0x9884, 74,
+                        "L09/LVL09TIM.BIN", 0x11E24, 784, 384, 944, 320, 16, 508, gl_set,
+                        sizeof(gl_set) / sizeof(gl_set[0])};
+static Donor rocket_type = {"the rocket (City of Walkways' bullets, type 9)", 5, "L05/DATA05.BIN", 0x34A4, 20, 0, 0,
+                            0, 0, 0, 0, 0, 0, rocket_set, sizeof(rocket_set) / sizeof(rocket_set[0])};
+static const u8 gl_fire_sfx[8] = {4, 3, 0x28, 0, 0x7F, 0, 0, 0};  /* (Fallen Angel's sound 0x2B: program, tone, note,
+                                                                   * voice, volume, randomness) */
+static const u8 gl_blast_sfx[8] = {6, 7, 0x3C, 1, 0x7F, 0, 0, 0}; /* (its 0x4B) */
+#define GL_LIVE 4
+static u8 *gl_round[GL_LIVE];
+static s32 gl_round_born[GL_LIVE];
+void GsMapModelingData(u32 *p);
+void gpu_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src);
+void PushMatrix(void);
+void PopMatrix(void);
+void func_8003B53C(u8 *obj, s32 yaw, s32 pitch, s32 speed); /* a projectile sent off that way at that speed */
+void func_8003B808(s32 pos);       /* a place's pans (g_Args+0x136, +0x137) for a sound there */
+s32 func_80065614(u8 *obj, s32 a, s32 b); /* an explosion where it is (and a blast, func_800378FC): 0 none made */
+extern u8 D_800B0018[];            /* the view's rotation */
+extern u16 D_800B0C5C;             /* aimed: the yaw */
+extern s32 D_800B0C64;             /*        the pitch */
+extern s8 D_800D920C;              /* (the rumble's) */
+extern s16 D_800D9208;
+static s32 tone_as_game(int level, const u8 *d, s32 flags, int loop); /* (below: func_80026F30's way) */
+
+static void donor_load(Donor *d) {
+    u32 n = 0, tn = 0, size, i, k, *ob, ta = d->tim_at;
+    u8 *data = disc_member(d->level, d->file, &n), *tim = d->tim_file ? disc_member(d->level, d->tim_file, &tn) : 0, *q;
+    s32 du = ((d->tex_x & 63) - (d->pic_x & 63)) * 4, dv = (d->tex_y & 255) - (d->pic_y & 255);
+    d->assets = -1;
+    if (data && n > d->at + 40 && *(u32 *)(data + d->at) == 0x41 && *(u32 *)(data + d->at + 8) == 1 &&
+        (!d->tim_file || (tim && tn > ta + 0x40 + 0x800 && *(u32 *)(tim + ta) == 0x10 && *(u32 *)(tim + ta + 4) == 8 &&
+                          *(u32 *)(tim + ta + 8) == 0x2C && *(s16 *)(tim + ta + 0x10) == 16 &&
+                          *(u32 *)(tim + ta + 0x34) == 12 + 0x800 && *(s16 *)(tim + ta + 0x38) == d->pic_x &&
+                          *(s16 *)(tim + ta + 0x3A) == d->pic_y && *(s16 *)(tim + ta + 0x3C) == 16 &&
+                          *(s16 *)(tim + ta + 0x3E) == 64))) {
+        ob = (u32 *)(data + d->at + 12); /* (verts, their count, normals, theirs, primitives, theirs: from the table) */
+        q = (u8 *)ob + ob[4];
+        for (i = 0; i < ob[5] && q + 4 <= data + n; i++)
+            q += 4 + q[1] * 4;
+        size = q - (u8 *)ob;
+        if (ob[0] + ob[1] * 8 > size)
+            size = ob[0] + ob[1] * 8;
+        if (ob[2] + ob[3] * 8 > size)
+            size = ob[2] + ob[3] * 8;
+        if (ob[5] == d->prims && size + 12 <= sizeof(d->model) && d->at + 12 + size <= n) {
+            memcpy(d->model, data + d->at, size + 12);
+            if (d->tim_file) {
+                memcpy(d->clut, tim + ta + 0x14, sizeof(d->clut));
+                memcpy(d->image, tim + ta + 0x40, sizeof(d->image));
+                /* (each textured primitive's colours, texture page and places in it moved) */
+                q = (u8 *)(d->model + 3) + d->model[3 + 4];
+                for (i = 0; i < d->model[3 + 5]; i++, q += 4 + q[1] * 4)
+                    if (q[3] & 4) {
+                        *(u16 *)(q + 6) = d->clut_y << 6 | d->clut_x >> 4;
+                        *(u16 *)(q + 10) = (*(u16 *)(q + 10) & ~0x1F) | (d->tex_x / 64) | (d->tex_y / 256) << 4;
+                        for (k = 0; k < (q[3] & 8 ? 4u : 3u); k++)
+                            q[4 + k * 4] += du, q[5 + k * 4] += dv;
+                    }
+            }
+            GsMapModelingData(d->model + 1);
+            memset(d->entry, 0, sizeof(d->entry));
+            for (i = 0; i < (u32)d->nset; i++)
+                d->entry[d->set[i][0]] = d->set[i][1];
+            d->assets = 1;
+        }
+    }
+    free(data);
+    free(tim);
+    ELOG("weapons: %s %s", d->what, d->assets > 0 ? "read from its mission's files" : "NOT found on the disc");
+}
+
+/* the donor's type into this mission's type tt (its entry, its model) while the mission's code makes one: 0 if it
+ * can't be had */
+static int donor_in(Donor *d, u8 tt) {
+    if (!d->assets)
+        donor_load(d);
+    if (d->assets < 0)
+        return 0;
+    d->tt = tt;
+    memcpy(d->save, TYPE_DEF(tt), 0x70);
+    d->entry[0] = tt;
+    memcpy(TYPE_DEF(tt), d->entry, 0x70);
+    d->save_model = D_800D2D30[tt];
+    D_800D2D30[tt] = (s32)(long)(d->model + 3);
+    if (d->tim_file) { /* (again each time: what the mission loads may cover it) */
+        gpu_load_image(d->tex_x, d->tex_y, 16, 64, d->image);
+        gpu_load_image(d->clut_x, d->clut_y, 16, 1, d->clut);
+    }
+    return 1;
+}
+
+/* ... and back: the object made then given the donor's entry for good */
+static void donor_out(Donor *d, u8 *made) {
+    memcpy(TYPE_DEF(d->tt), d->save, 0x70);
+    D_800D2D30[d->tt] = d->save_model;
+    if (made)
+        *(u8 **)made = d->entry;
+}
+
+static void lent_rocket_launch(void) { /* (func_80038C08: the gun fire, the rocket's touches, state 8 on) */
+    u8 was[256], *def = (u8 *)&g_Weapons[D_800B0DD4];
+    int i, n = 0;
+    for (i = D_800B0DA8; i <= D_800B07B8 && i < 256; i++)
+        was[i] = OBJ(i)[4];
+    if (!lent_gun_fire || !donor_in(&rocket_type, D_8009CD98[0x3A])) /* (the gun fire makes the bullet of the type
+                                                                          * at the weapon object's +0x3A: City of
+                                                                          * Walkways' bullets' entry and model) */
+        return;
+    call_ps1(lent_gun_fire);
+    donor_out(&rocket_type, 0);
+    for (i = D_800B0DA8; i <= D_800B07B8 && i < 256; i++) {
+        u8 *o = OBJ(i);
+        if (!was[i] && o[4] && o[5] == 1 && *(void **)(o + 0x88) == g_Player) {
+            *(u8 **)o = rocket_type.entry;
+            o[0x3A] = 4;
+            *(u16 *)(o + 0xE) |= 0x100;
+            *(u32 *)(o + 0x68) &= ~0xFu;
+            n++;
+            if (launch_trace())
+                port_log("trace: L%d f%d launch: rocket #%d (type %d, damage %d, blast %d)\n", g_Args->level,
+                         D_8009CDA8, i, o[6], *(s32 *)(o + 0x34), *(u32 *)(o + 0x64) >> 23 & 1);
+        }
+    }
+    if ((s8)def[0x7C] != -1) { /* (func_8007DCD8: state 8, the animation asked again (+0x78 -1)) */
+        u8 *inst = *(u8 **)(D_8009CD98 + 0x114);
+        func_8007A17C(8);
+        /* (at home this is inside the state machine, before its last step (func_800755BC) takes the animation asked,
+         * +0x88, as the one running on; here that step has run already this frame: the same done) */
+        if (inst && *(s32 *)(inst + 0x88) >= 0)
+            *(s32 *)(inst + 0x78) = *(s32 *)(inst + 0x88), *(s32 *)(inst + 0x7C) = *(s32 *)(inst + 0x8C);
+    }
+    if (!n)
+        ELOG("weapons: the lent rocket launcher made no rocket (no bullet free)");
+}
+
+static void lent_gl_fire(void) { /* (func_800398A4) */
+    s32 k = ((u32)g_Weapons[D_800B0DD4].flags >> 15) & 0xF;
+    func_8007A17C(0x26);
+    if (k > 0)
+        func_80076184(k, 0);
+    D_8009CF48 = 0;
+    if (launch_trace())
+        port_log("trace: L%d f%d launch: grenade launcher fired: state 0x26\n", g_Args->level, D_8009CDA8);
+}
+
+/* the round launched from the weapon's model (func_80076CDC with func_80076BF8) */
+static void gl_launch(void) {
+    u8 *obj = D_8009CD98, *player = (u8 *)g_Player, *proj, *pm, tt;
+    Weapon *w = &g_Weapons[D_800B0DD4];
+    s32 k, m[3];
+    const s16 *r = (const s16 *)D_800B0018;
+    s16 *off;
+    if (!obj || !*(u8 **)(obj + 0x114))
+        return;
+    { /* (where: the model's matrix, its translation, and the weapon's offset turned as the view is) */
+        s32 *t = (s32 *)(*(u8 **)(obj + 0x114) + 0x38 + 0x14);
+        off = (s16 *)(obj + 0x3C);
+        for (k = 0; k < 3; k++)
+            m[k] = (r[k * 3] * off[0] + r[k * 3 + 1] * off[1] + r[k * 3 + 2] * off[2]) >> 12;
+        MAKE_AT[0] = t[0] + m[0], MAKE_AT[1] = t[1] + m[1], MAKE_AT[2] = t[2] + m[2];
+        ((s16 *)0x1F8003E0u)[0] = off[0], ((s16 *)0x1F8003E0u)[1] = off[1], ((s16 *)0x1F8003E0u)[2] = off[2];
+        ((s32 *)0x1F8003E8u)[0] = m[0], ((s32 *)0x1F8003E8u)[1] = m[1], ((s32 *)0x1F8003E8u)[2] = m[2];
+    }
+    if (w->ammo <= 0)
+        return;
+    tt = obj[0x3A]; /* (the mission's bullets' type: its entry and model Fallen Angel's round's for the call) */
+    if (!donor_in(&gl_type, tt))
+        return;
+    proj = func_80039A9C((s32)(long)player, tt, 1);
+    donor_out(&gl_type, proj);
+    if (!proj) {
+        ELOG("weapons: the lent grenade launcher made no round (no object free)");
+        return;
+    }
+    proj[7] = 0x2C;
+    proj[0xA5] = 0x18;
+    *(s16 *)(proj + 0x6A) = 0x818;
+    *(s32 *)(proj + 0x34) = 0x4E20;
+    *(s16 *)(proj + 0x28) = 0x7D0;
+    D_800D920C = 2;
+    w->clip--;
+    *(s32 *)(proj + 0x2C) = D_8009CDA8;
+    *(u16 *)(proj + 0xAC) = (u16)MAKE_AT[1];
+    D_800D9208 = (s16)(*(u32 *)((u8 *)w + 0x5C) >> 26);
+    *(s16 *)(obj + 0x38) = 500;
+    pm = *(u8 **)(player + 0x90);
+    if (D_8009CD4C)
+        func_8003B53C(proj, *(s32 *)&D_800B0C5C, D_800B0C64 + 0x5B, 500);
+    else
+        func_8003B53C(proj, *(s16 *)(pm + 0x62), *(s16 *)(pm + 0x60), 500);
+    *(s16 *)(proj + 0x56) = -1;
+    *(s16 *)(*(u8 **)(proj + 0x90) + 0x60) = 0x400;
+    *(s16 *)(*(u8 **)(proj + 0x90) + 0x62) = D_8009CD4C ? (s16)D_800B0C5C : *(s16 *)(pm + 0x62);
+    *(s32 *)(*(u8 **)(proj + 0x90) + 0x10) = 2;
+    D_8009CF48 = 0;
+    k = ((u32)w->flags >> 15) & 0xF;
+    if (k > 0)
+        func_80076184(k, 0);
+    for (k = 0; k < GL_LIVE && gl_round[k] && gl_round[k][4] && *(u8 **)gl_round[k] == gl_type.entry &&
+                *(s32 *)(gl_round[k] + 0x2C) == gl_round_born[k];
+         k++)
+        ;
+    if (k < GL_LIVE)
+        gl_round[k] = proj, gl_round_born[k] = D_8009CDA8;
+    if (launch_trace())
+        port_log("trace: L%d f%d launch: grenade round #%d (the mission's type %d as Fallen Angel's 32) at %d %d %d, clip %d\n",
+                 g_Args->level, D_8009CDA8, (int)((proj - (u8 *)(long)D_800AFFC8) / 0x124), tt, MAKE_AT[0], MAKE_AT[1],
+                 MAKE_AT[2], w->clip);
+}
+
+/* the mission's hit loop about to run: a lent launcher's round that has hit something goes off as Fallen Angel's
+ * does (func_80079BB4) */
+static int gl_live(int g) { /* (round g still that round) */
+    u8 *o = gl_round[g];
+    return o && o[4] && *(u8 **)o == gl_type.entry && *(s32 *)(o + 0x2C) == gl_round_born[g];
+}
+
+/* (the hit loop runs in the render step (the people's drawing, func_8005AEF8), so in smooth motion's extra drawings
+ * too, whose memory is put back after: there a round's hits are hidden from it (it would print its error) and left
+ * for the tick's own drawing) */
+void func_80033F38_orig(void);
+void func_80033F38(void) {
+    int g, k;
+    for (g = 0; g < GL_LIVE; g++) {
+        u8 *o = gl_round[g], *base;
+        if (!o)
+            continue;
+        if (!gl_live(g)) {
+            if (!port_subframe)
+                gl_round[g] = 0;
+            continue;
+        }
+        base = *(u8 **)(o + 0x10C);
+        if (!base || !base[0x64])
+            continue;
+        if (port_subframe) {
+            base[0x64] = 0;
+            continue;
+        }
+        base[0x64] = 0;
+        *(s16 *)(o + 0x98) = *(s16 *)(o + 0x9A) = *(s16 *)(o + 0x9C) = 0;
+        *(s16 *)(o + 0x9E) = *(s16 *)(o + 0xA0) = *(s16 *)(o + 0xA2) = 0;
+        k = func_80065614(o, 1, 5);
+        func_8003B808((s32)(long)(*(u8 **)(o + 0x90) + 0x14));
+        tone_as_game(9, gl_blast_sfx, 8, 0);
+        if (launch_trace())
+            port_log("trace: L%d f%d launch: grenade round #%d went off at %d %d %d (%s)\n", g_Args->level, D_8009CDA8,
+                     (int)((o - (u8 *)(long)D_800AFFC8) / 0x124), POS(o)[0], POS(o)[1], POS(o)[2],
+                     k ? "a blast" : "no blast: no room for its explosion");
+        func_800395E8(o);
+        if (launch_trace())
+            port_log("trace: L%d f%d launch: (the round's object after: active %d, hits %d)\n", g_Args->level, D_8009CDA8,
+                     o[4], base[0x64]);
+        gl_round[g] = 0;
+    }
+    func_80033F38_orig();
+}
+
+/* a projectile's own step each tick (func_800352B8 calls it before moving it): a lent launcher's round as Fallen
+ * Angel's (its subtype 0x2C: dropping 0x10 a tick if anyone's, the guards near told of it, func_80076A8C), where the
+ * mission's own does something else or nothing for 0x2C (King's Ransom's nothing): the mission's run with the
+ * subtype 0 meanwhile (a bullet's: nothing of its own in any mission; 4, say, is a grenade in Christmas's) */
+void func_80076A8C(u8 *o);
+void func_800350F0_orig(u8 *o);
+void func_800350F0(u8 *o) {
+    int g;
+    for (g = 0; g < GL_LIVE && !(gl_round[g] == o && gl_live(g)); g++)
+        ;
+    if (g == GL_LIVE) {
+        func_800350F0_orig(o);
+        return;
+    }
+    o[7] &= 0xC0;
+    func_800350F0_orig(o);
+    o[7] = (o[7] & 0xC0) | 0x2C;
+    if (*(s32 *)(o + 0x88))
+        *(s16 *)(o + 0x9A) += 0x10;
+    func_80076A8C(o);
+}
+
+/* the state machine about to run (quickpunch.c): a lent launcher's home state run as state 8 meanwhile; what the
+ * home state does besides, after it (endless_weapon_post) */
+static s32 launch_state;   /* (the home state put back after) */
+static int launch_action;  /* (1 the rocket launched) */
+int endless_weapon_pre(void) {
+    int k;
+    u8 *inst, *def;
+    s32 a, running, done, elapsed;
+    launch_state = 0, launch_action = 0;
+    if ((D_800F11F0 != 0x16 && D_800F11F0 != 0x26) || !D_8009CD98 || (k = lent_launcher()) < 0)
+        return 0;
+    if ((k == 3) != (D_800F11F0 == 0x16))
+        return 0;
+    inst = *(u8 **)(D_8009CD98 + 0x114);
+    def = (u8 *)&g_Weapons[D_800B0DD4];
+    if (!inst)
+        return 0;
+    a = (s8)def[0x7C];
+    running = *(s32 *)(inst + 0x78) == a;
+    done = *(s32 *)(inst + 0x80) < 2;
+    elapsed = running ? (*(u8 **)(inst + 0x74))[a] - *(s32 *)(inst + 0x80) : -1;
+    if (k == 3 && running && !done && elapsed == 5)
+        launch_action = 1;
+    if (k == 2) {
+        if (!running)
+            launch_action = 2; /* (its sound as the animation starts) */
+        else if (done)
+            launch_action = 3; /* (the next round to hand) */
+        else if (elapsed == 1) { /* (the round launched: here, before the state machine, as at home inside it before
+                                  * its last step moves the model on) */
+            PushMatrix();
+            gl_launch();
+            PopMatrix();
+        }
+    }
+    launch_state = D_800F11F0;
+    D_800F11F0 = 8;
+    return 1;
+}
+
+void endless_weapon_post(int token) {
+    s32 home = launch_state;
+    if (!token || !home)
+        return;
+    launch_state = 0;
+    if (launch_action == 3 && (D_800F11F0 == 1 || D_800F11F0 == 8)) { /* (func_8007980C, as at home inside the state
+                                                                       * machine: its last step has run already) */
+        u8 *inst = *(u8 **)(D_8009CD98 + 0x114);
+        D_800F11F0 = home;
+        func_8007980C();
+        if (inst && *(s32 *)(inst + 0x88) >= 0)
+            *(s32 *)(inst + 0x78) = *(s32 *)(inst + 0x88), *(s32 *)(inst + 0x7C) = *(s32 *)(inst + 0x8C);
+        if (launch_trace())
+            port_log("trace: L%d f%d launch: state 0x%X ends: %d (the next to hand)\n", g_Args->level, D_8009CDA8, home,
+                     D_800F11F0);
+        return;
+    }
+    if (D_800F11F0 != 8) { /* (the state machine moved on: the animation done (state 1), a change, the menu) */
+        if (launch_trace())
+            port_log("trace: L%d f%d launch: state 0x%X ends: %d\n", g_Args->level, D_8009CDA8, home, D_800F11F0);
+        return;
+    }
+    D_800F11F0 = home;
+    if (launch_action == 1)
+        lent_rocket_launch();
+    if (launch_action == 2)
+        tone_as_game(9, gl_fire_sfx, 0, 0);
 }
 
 /* a flash bang gone off (quickgrenade.c): the guards near it, who can see it, dazzled for a while (they can't shoot),
@@ -825,6 +1388,8 @@ static void lend_into(int i, int pi, int k) {
     memcpy(w, r->def, 0xB8);
     lent_gun_fire = *(u32 *)(pw + 0x3C);
     *(u32 *)(w + 0x3C) = shotgun_rec(r)               ? (u32)(long)lent_shotgun
+                         : throw_kind(r->name) == 3  ? (u32)(long)lent_rocket_fire
+                         : throw_kind(r->name) == 2  ? (u32)(long)lent_gl_fire
                          : throw_kind(r->name) != -1 ? (u32)(long)lent_throw
                                                      : lent_gun_fire; /* (this mission's guns' fire) */
     *(u32 *)(w + 0x40) = pickup;
@@ -924,6 +1489,16 @@ static void lend_weapons(void) {
             if (r)
                 ELOG("weapons: %s can't be lent here yet (not a gun)", c->weapon[j].name);
             continue;
+        }
+        { /* the frag grenade, the rocket and grenade launchers: their home missions throw and fire them through states
+           * of their own (King's Ransom's 0x18, City of Walkways' 0x16-0x17, Fallen Angel's 0x26-0x27: animation,
+           * the moment the projectile leaves, the next one drawn), which other missions' weapon state machines
+           * haven't: not lent until they are (tools/lent_matrix.py: home and lent differ) */
+            int tk = throw_kind(r->name);
+            if (tk == 0 && !getenv("TWINE_ENDLESS_TEST_LEND_ALL")) {
+                ELOG("weapons: %s not lent (its home mission's own throw/fire states)", c->weapon[j].name);
+                continue;
+            }
         }
         if (!strncmp(c->weapon[j].name, c->in_hand, 23) && pool_n) { /* (the one in his hand first: a slot for it) */
             memmove(&pool[1], &pool[0], sizeof(pool[0]) * pool_n);
@@ -1534,6 +2109,7 @@ static const char guard_scripts[12][9] = {
 /* the room as it starts: the kinds of guards, its doorways and floor */
 static int trace_sound(void);
 static void room_start(void) {
+    find_tmd();
     if (trace_sound()) { /* (the mission's sounds of program 9, its voice lines: their numbers, for muting) */
         const u8 *d = *(u8 **)((u8 *)g_Args + 0x130);
         int k;
@@ -3281,14 +3857,17 @@ void endless_frame(void) {
     i = D_800B07B0 - D_800B0DA0 + 1; /* (the people's slots but Bond's: six) */
     if (n >= i && room_frames % (SEC * 5)) /* (all taken by ones near: none can come) */
         ;
-    else if (ramp() && hunters_now() >= hunt_cap()) /* (THE RAMP: as many hunting as the wave allows) */
+    else if (fill_test() && !cooldown && room_frames > SEC * 2) { /* (TWINE_ENDLESS_TEST_FILL: every slot filled) */
+        spawn("test fill");
+        cooldown = SEC / 2;
+    } else if (ramp() && hunters_now() >= hunt_cap()) /* (THE RAMP: as many hunting as the wave allows) */
         ;
     else if (!cooldown && room_frames > SEC * 2 && burst < 3 && own + burst < 3) {
         burst++;
         spawn("few guards here");
         if (cooldown < SEC * 3 / 2)
             cooldown = SEC * 3 / 2;
-    } else if (!cooldown && budget >= SEC * 20 && n < 2 + wave) {
+    } else if (!cooldown && budget >= SEC * 20 && n < 2 + wave * people_cap() / 6) {
         spawn("director");
         budget = 0;
         cooldown = SEC * 4 + rnd() % (SEC * 4);
@@ -3321,6 +3900,19 @@ void endless_frame(void) {
         s16 at[5]; /* (headless tests: Bond onto the last drop) */
         at[0] = D_800D2F8C, at[1] = gPsi, at[2] = last_drop[0], at[3] = last_drop[1], at[4] = last_drop[2];
         func_80030FA8(at);
+    }
+    if (getenv("TWINE_ENDLESS_TEST_VRAM") && room_frames == 100) { /* (research: VRAM places no mission uses) */
+        extern u16 gpu_vram[512 * 1024];
+        static const s16 r[][4] = {{928, 320, 16, 64}, {944, 320, 16, 64}, {928, 384, 16, 64}, {944, 384, 16, 64},
+                                   {960, 320, 16, 64}, {0, 508, 16, 1}, {16, 508, 16, 1}, {0, 509, 16, 1}, {32, 508, 16, 1}};
+        unsigned q;
+        for (q = 0; q < sizeof(r) / sizeof(r[0]); q++) {
+            int x, y, used = 0;
+            for (y = r[q][1]; y < r[q][1] + r[q][3]; y++)
+                for (x = r[q][0]; x < r[q][0] + r[q][2]; x++)
+                    used += gpu_vram[y * 1024 + x] != 0;
+            ELOG("research: VRAM %d,%d %dx%d: %d used", r[q][0], r[q][1], r[q][2], r[q][3], used);
+        }
     }
     if (getenv("TWINE_ENDLESS_TEST_ARM") && room_frames == 40) { /* (headless tests: every weapon, ammo) */
         for (i = 0; i < 10; i++)
@@ -4137,43 +4729,50 @@ void port_sfx_stop(int handle);
 s32 func_80026F30_orig(u32 id, s32 flags);
 int port_trace(const char *what);
 void endless_muted_point(u32 id);
+static int trace_sound(void);
+/* a sound of another mission's (its table's entry d: program, tone, note, voice, volume, randomness) played from that
+ * mission's bank as the game plays its own (func_80026F30: the volume, the place's pans (flags 8, set by
+ * func_8003B808 for a sound at a place), the note moved by the caller's (flags 4) or at random by the table's (its own
+ * function, so the same draws)): the handle func_80026F30 gives (0x4000 marks it the runtime's), -1 none */
+static s32 tone_as_game(int level, const u8 *d, s32 flags, int loop) {
+    s32 vol = (flags & 2) ? *((u8 *)g_Args + 0x138) * *(s16 *)((u8 *)g_Args + 0x13A) / 127
+                          : *(s16 *)((u8 *)g_Args + 0x13A), l, r, note = d[2];
+    int h;
+    if (func_80026ED0() >= 0x14 || ((g_CutScene == 2 || g_CutScene == 3)))
+        return -1;
+    vol = vol * d[4] / 127;
+    if (flags & 8)
+        r = vol * ((u8 *)g_Args)[0x136] / 127, l = vol * ((u8 *)g_Args)[0x137] / 127;
+    else
+        l = r = vol;
+    l = l < 0 ? 0 : l > 127 ? 127 : l;
+    r = r < 0 ? 0 : r > 127 ? 127 : r;
+    if (flags & 4)
+        note += *(u16 *)((u8 *)g_Args + 0x134);
+    else if (d[5])
+        note += func_80026B44(d[5]);
+    note = note < 0 ? 0 : note > 127 ? 127 : note;
+    if (!l && !r)
+        return -1;
+    vol = l > r ? l : r;
+    h = port_tone_play(level, d[0], d[1], note, l, r, loop);
+    if (getenv("TWINE_ENDLESS_AMMO_LOG"))
+        ELOG("sound: a lent weapon's own (level %d program %d tone %d note %d), volume %d%s: handle %d", level, d[0], d[1],
+             note, vol, loop ? ", looping" : "", h);
+    if (trace_sound())
+        port_log("trace: L%d f%d sound: lent (level %d program %d tone %d note %d) volume %d%s: handle %d\n", g_Args->level,
+                 D_8009CDA8, level, d[0], d[1], note, vol, loop ? " looping" : "", h);
+    return h ? 0x4000 | (h & 0x3FFF) : -1;
+}
 void port_log(const char *fmt, ...);
 static int trace_sound(void);
 s32 func_80026F30(u32 id, s32 flags) {
     if (id >= LENT_SOUND && id < 0x80 && id - LENT_SOUND < 8 && lent_sound[id - LENT_SOUND].level) {
         int n = id - LENT_SOUND;
-        const u8 *d = lent_sound[n].sfx;
-        s32 vol = (flags & 2) ? *((u8 *)g_Args + 0x138) * *(s16 *)((u8 *)g_Args + 0x13A) / 127
-                              : *(s16 *)((u8 *)g_Args + 0x13A), l, r, note = d[2];
-        int h;
-        /* (as the game plays its own, func_80026F30: the volume, the place's pans (flags 8), the note moved by the
-         * caller's (flags 4) or at random by the table's (its own function, so the same draws)) */
-        if (func_80026ED0() >= 0x14 || ((g_CutScene == 2 || g_CutScene == 3)))
-            return -1;
-        vol = vol * d[4] / 127;
-        if (flags & 8)
-            r = vol * ((u8 *)g_Args)[0x136] / 127, l = vol * ((u8 *)g_Args)[0x137] / 127;
-        else
-            l = r = vol;
-        l = l < 0 ? 0 : l > 127 ? 127 : l;
-        r = r < 0 ? 0 : r > 127 ? 127 : r;
-        if (flags & 4)
-            note += *(u16 *)((u8 *)g_Args + 0x134);
-        else if (d[5])
-            note += func_80026B44(d[5]);
-        note = note < 0 ? 0 : note > 127 ? 127 : note;
-        if (!l && !r)
-            return -1;
-        vol = l > r ? l : r;
-        h = port_tone_play(lent_sound[n].level, d[0], d[1], note, l, r, lent_sound[n].loop);
-        if (getenv("TWINE_ENDLESS_AMMO_LOG"))
-            ELOG("sound: a lent weapon's own (level %d program %d tone %d note %d), volume %d%s: handle %d", lent_sound[n].level,
-                 d[0], d[1], note, vol, lent_sound[n].loop ? ", looping" : "", h);
+        s32 h = tone_as_game(lent_sound[n].level, lent_sound[n].sfx, flags, lent_sound[n].loop);
         if (trace_sound())
-            port_log("trace: L%d f%d sound: lent %u (level %d program %d tone %d note %d) volume %d%s: handle %d\n",
-                     g_Args->level, D_8009CDA8, id, lent_sound[n].level, d[0], d[1], note, vol,
-                     lent_sound[n].loop ? " looping" : "", h);
-        return h ? 0x4000 | (h & 0x3FFF) : -1;
+            port_log("trace: L%d f%d sound: (that was lent %u)\n", g_Args->level, D_8009CDA8, id);
+        return h;
     }
     {   /* the mission's story lines muted in a run, whoever plays them: King's Ransom's "hurry James" (0x65) comes
          * straight here from its mission logic (func_8006AEC0, each frame: as its stage counter D_800E3168 moves on),

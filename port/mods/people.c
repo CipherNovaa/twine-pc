@@ -1,5 +1,3 @@
-/* PARKED (step 6a, not built: not in port/Makefile PORT_MODS; add PEOPLE there to build it). Unproven: run with
- * TWINE_PEOPLE_VERIFY=1 across all levels before enabling. */
 /* People (native PC build only): the people's slots, more than the game's six when a mod asks (people_set_slots).
  *
  * A person on the map (class 6) is drawn from a GUY slot: a model instance (D_800DDFEC), bound to its texture chunk
@@ -12,11 +10,16 @@
  *
  * Here those functions are the game's own made native, each loop going to people_slots() (6 unless a mod raised it),
  * slot i below 6 the game's own memory, 6 and up this mod's (ext below); the pools grow the same way past their
- * own entries. With 6 slots they do exactly what the game's do (checked by identical runs, screenshots and logs).
- * The render list (D_800DDF08 the instances drawn, D_800DDCCC their matrices, D_800DDDEC their owners, D_800DDF24
- * the view matrices) stays the game's while it holds six at most.
+ * own entries. With 6 slots they do exactly what the game's do: TWINE_PEOPLE_VERIFY=1 runs each call twice, the
+ * game's own then this one from the same state, and logs any difference (none, over all 11 levels and every endless
+ * pool room, 2 MB and 8 MB; workbench/research/NOTES_people.md). The render list (D_800DDF08 the instances drawn,
+ * D_800DDCCC their matrices, D_800DDDEC their owners, D_800DDF24 the view matrices) stays the game's while it holds
+ * six at most; past six it is this mod's, handed to the game's code six at a time.
  *
- * MOD_REPLACES_NATIVE: func_8005B508 func_8005B584 func_8005B5AC func_8003C88C func_8005AEF8 func_8005B96C func_8005BA30 func_8005BAE8 func_800393E4 func_80033090 func_8005D5C4 func_800540CC func_80054118
+ * More than six (step 6b): with RAM past the console's 2 MB an endless run may have more (func_8002E228 below). The
+ * extra slots' instances are copies of the game's slots' (n_8005B508), the extra pool entries in the ext heap.
+ *
+ * MOD_REPLACES_NATIVE: func_8005B508 func_8005B584 func_8005B5AC func_8003C88C func_8005AEF8 func_8005B96C func_8005BA30 func_8005BAE8 func_800393E4 func_80033090 func_8005D5C4 func_800540CC func_80054118 func_8002E228 func_8005ED88
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -81,6 +84,7 @@ void port_smooth_keep(void *at, u32 size);
 s32 func_8005B584(s32 a0, u16 v, s16 i);
 void func_8005BA30(u8 *obj);
 void *memset(void *d, int c, unsigned n);
+void *memcpy(void *d, const void *s, unsigned n);
 
 #define GAME_SLOTS 6
 #define MAX_SLOTS 24
@@ -95,29 +99,57 @@ static struct {
     u8 busy[EXT];
     u8 *owner[EXT];
     u8 mat[EXT][0x20];
-    u8 rec[EXT][0x20];
-    u8 anim[EXT][ANIM_SIZE];
-    u8 ai[EXT][AI_SIZE];
     u8 *list_inst[MAX_SLOTS + 1];
     u8 list_mat[MAX_SLOTS][0x20];
     u8 *list_owner[MAX_SLOTS];
     u8 list_view[MAX_SLOTS][0x20];
 } ext;
+/* the pools' extra entries and the extra slots' model instances: in PS1 RAM past the console's 2 MB (the ext heap,
+ * port_ext_alloc), where the game's code may treat them as its own (save states and smooth motion keep them too);
+ * the ext heap starts afresh with each executable, so they're taken again for each (pools_gen) */
+typedef struct {
+    u8 anim[EXT][ANIM_SIZE];
+    u8 ai[EXT][AI_SIZE];
+} Pools;
+static Pools *pools;
+static int pools_gen = -1, clones_gen = -1;
+static u8 *clone_buf[EXT];
+static u32 clone_size[EXT];
 static int slots = GAME_SLOTS; /* the slots in use (the pools: as many more past their own) */
 static int kept;
 static int dry, would_spawn; /* (TWINE_PEOPLE_VERIFY: func_80033090 run to see whether it would send a guard) */
+static int trace = -1;       /* TWINE_PEOPLE_TRACE=1: the slots' instances, clones, counts logged */
+extern u32 port_ram_size;
+extern int port_endless;
+int port_endless_gen(void);
+void *port_ext_alloc(u32 size);
+void port_ext_free(void *p);
+void port_log(const char *fmt, ...);
+char *getenv(const char *name);
+int atoi(const char *s);
+#define TRACE (trace < 0 ? (trace = getenv("TWINE_PEOPLE_TRACE") && *getenv("TWINE_PEOPLE_TRACE") == '1') : trace)
 
 /* ---- for other mods ---- */
 int people_slots(void) {
     return slots;
 }
 
-/* n slots from now on (6..MAX_SLOTS); the extra ones start free */
+/* n slots from now on (6..MAX_SLOTS; more than 6 only with RAM past the console's 2 MB); the extra ones start free */
 void people_set_slots(int n) {
     if (n < GAME_SLOTS)
         n = GAME_SLOTS;
     if (n > MAX_SLOTS)
         n = MAX_SLOTS;
+    if (n > GAME_SLOTS && pools_gen != port_endless_gen()) {
+        pools = port_ext_alloc(sizeof(Pools));
+        pools_gen = port_endless_gen();
+        if (pools)
+            memset(pools, 0, sizeof(Pools));
+    }
+    if (n > GAME_SLOTS && !pools)
+        n = GAME_SLOTS;
+    if (n != slots && TRACE)
+        port_log("people: %d slots (pools at %08X)\n", n, (u32)pools);
     slots = n;
     if (!kept++)
         port_smooth_keep(&ext, sizeof(ext)); /* (an extra drawing puts it back as it does RAM) */
@@ -135,8 +167,8 @@ u8 **people_owner(int i) {
 u8 *people_matrix(int i) {
     return i < GAME_SLOTS ? D_800DE004 + i * 0x20 : ext.mat[i - GAME_SLOTS];
 }
-u8 *people_record(int i) {
-    return i < GAME_SLOTS ? D_800D2E84 + i * 0x20 : ext.rec[i - GAME_SLOTS];
+u8 *people_record(int i) { /* (an extra slot shares the record of the game's it copies: its type, its texture chunk) */
+    return D_800D2E84 + (i % GAME_SLOTS) * 0x20;
 }
 
 #define INST(i) (*people_inst(i))
@@ -150,12 +182,62 @@ u8 *people_record(int i) {
 
 /* ---- the slots ---- */
 
-/* each slot's instance relocated and bound to its texture chunk; all free (after a section's GUY file loads) */
+/* how long the game's slot i's model instance is: up to the next one in the section's GUY file (the instances lie
+ * one after the other in it), the last as long as the longest other */
+static u32 inst_size(int i) {
+    u32 at = (u32)INST(i), next = 0, most = 0, k, sz;
+    for (k = 0; k < GAME_SLOTS; k++) {
+        u32 o = (u32)INST(k);
+        if (o > at && (!next || o < next))
+            next = o;
+    }
+    if (next)
+        return next - at;
+    for (k = 0; k < GAME_SLOTS; k++)
+        if (k != i && (sz = inst_size(k)) > most && (u32)INST(k) < at)
+            most = sz;
+    return most ? most : 0x8000;
+}
+
+/* each slot's instance relocated and bound to its texture chunk; all free (after a section's GUY file loads). The
+ * extra slots (6 and up) get copies of the game's slots' instances (slot j the copy of j mod 6, as it shares its
+ * record), made before those are relocated in place, in the ext heap */
 static void n_8005B508(void) {
     s32 i;
+    if (TRACE)
+        for (i = 0; i < GAME_SLOTS; i++) {
+            u32 *h = (u32 *)INST(i);
+            port_log("people: slot %d inst %08X (%X bytes) chunk %d type %d: %08X n %d base %08X +C %X +10 %X +14 %X "
+                     "+18 %X +1C %X +54 %X\n", i, (u32)h, inst_size(i), REC(i)[1], HU(REC(i), 0x1C), h[0], HU(h, 4),
+                     h[2], h[3], h[4], h[5], h[6], h[7], h[0x15]);
+        }
+    if (slots > GAME_SLOTS) {
+        if (clones_gen != port_endless_gen()) { /* (a new executable: the ext heap afresh) */
+            memset(clone_buf, 0, sizeof(clone_buf));
+            memset(clone_size, 0, sizeof(clone_size));
+            clones_gen = port_endless_gen();
+        }
+        for (i = GAME_SLOTS; i < slots; i++) {
+            u32 sz = inst_size(i % GAME_SLOTS);
+            int j = i - GAME_SLOTS;
+            if (clone_size[j] < sz) {
+                if (clone_buf[j])
+                    port_ext_free(clone_buf[j]);
+                clone_buf[j] = port_ext_alloc(sz);
+                clone_size[j] = clone_buf[j] ? sz : 0;
+            }
+            ext.inst[j] = clone_buf[j];
+            if (clone_buf[j])
+                memcpy(clone_buf[j], INST(i % GAME_SLOTS), sz);
+            if (TRACE)
+                port_log("people: slot %d a copy of slot %d's instance at %08X (%X bytes)\n", i, i % GAME_SLOTS,
+                         (u32)clone_buf[j], sz);
+        }
+    }
     for (i = 0; i < slots; i++) {
-        func_8007CE30((u32)INST(i), REC(i)[1]);
-        BUSY(i) = 0;
+        if (INST(i))
+            func_8007CE30((u32)INST(i), REC(i)[1]);
+        BUSY(i) = INST(i) ? 0 : 2; /* (a slot without its copy: never free) */
     }
 }
 
@@ -356,7 +438,7 @@ static s32 n_8005D5C4(u8 *first, u8 *last) {
         return 0;
     n = slots - GAME_SLOTS;
     for (i = 0; i < n; i++)
-        if (!(W(p = ext.anim[i], 0) & 1))
+        if (!(W(p = pools->anim[i], 0) & 1))
             goto found;
     return 0;
 found:
@@ -366,7 +448,7 @@ found:
 }
 
 static u8 *ai_ctx(s32 i) {
-    return i < GAME_AIS ? D_800D9278 + i * AI_SIZE : ext.ai[i - GAME_AIS];
+    return i < GAME_AIS ? D_800D9278 + i * AI_SIZE : pools->ai[i - GAME_AIS];
 }
 
 /* a free AI context */
@@ -390,12 +472,109 @@ static void n_80054118(void) {
         *(u32 *)(ai_ctx(i) + 0x1CC) &= ~2;
 }
 
+/* ---- how many ---- */
+
+/* With RAM past the console's 2 MB (the ram_8mb setting) an endless run has 12 slots (TWINE_PEOPLE_SLOTS=n: n, 6-24,
+ * for tests); otherwise the game's 6. Decided as the mission sets its object count (func_8002E228: the people's
+ * objects, D_800B0868, then everything's), which grows by as many: the people objects 1..D_800B0868 then reach
+ * the slots. */
+#define WANT_SLOTS 12
+void func_8002E228_orig(void);
+void func_8005ED88_orig(void);
+static s16 people_objs_set; /* (what this left in D_800B0868: a mission sets its own before each call) */
+static int wanted(void) {
+    const char *e = getenv("TWINE_PEOPLE_SLOTS");
+    if (port_ram_size <= 0x200000 || !port_endless)
+        return GAME_SLOTS;
+    return e && *e ? atoi(e) : GAME_SLOTS; /* (6b: WANT_SLOTS once proven) */
+}
+void func_8002E228(void) {
+    s16 own = D_800B0868;
+    if (own == people_objs_set && own > GAME_SLOTS) /* (called again without the mission setting its own) */
+        own -= slots - GAME_SLOTS;
+    people_set_slots(wanted());
+    D_800B0868 = own + (slots - GAME_SLOTS);
+    people_objs_set = D_800B0868;
+    if (TRACE)
+        port_log("people: %d slots, %d people objects (the mission's %d)\n", slots, D_800B0868, own);
+    func_8002E228_orig();
+}
+
+/* the animation records all free (as a mission starts): the game's, and the extra ones */
+void func_8005ED88(void) {
+    int i;
+    func_8005ED88_orig();
+    if (pools && pools_gen == port_endless_gen())
+        for (i = 0; i < EXT; i++)
+            W(pools->anim[i], 0) &= ~1;
+}
+
 /* ---- drawing ---- */
+
+/* What the game's render step calls, each by its PS1 address as the game's own (recompiled) code calls it: some of
+ * them have C beside their recompiled code that doesn't do quite the same (func_80033F38's and func_8005C33C's: the
+ * people drawn a pixel or two off, TWINE_PEOPLE_VERIFY), so they're called the way the game calls them, the
+ * recompiled code where there is some (port_rc_call). Per level, from each level's recompiled func_8005AEF8:
+ * TransposeMatrix, ApplyMatrix, func_8005C33C, func_80033F38, func_800AACFC (the people's skinned models drawn),
+ * func_8004A398. */
+static const u32 draw_calls[12][6] = {
+    {0},
+    {0x8008C3E4, 0x8008C424, 0x8005C33C, 0x80033F38, 0x800AACFC, 0x8004A398},
+    {0x8009058C, 0x800905CC, 0x8005C43C, 0x800348FC, 0x800B0714, 0x8004B030},
+    {0x8008DFB8, 0x8008DFF8, 0x8005C058, 0x8003440C, 0x800AD614, 0x8004ADE0},
+    {0x8008CE44, 0x8008CE84, 0x8005B930, 0x80034400, 0x800AC7F4, 0x8004A6B8},
+    {0x80090A10, 0x80090A50, 0x8005C0E8, 0x80034630, 0x800AFE0C, 0x8004AE8C},
+    {0x8008E3C4, 0x8008E404, 0x8005C4B0, 0x800347D8, 0x800ADDC4, 0x8004AFB4},
+    {0x8009137C, 0x800913BC, 0x8005C938, 0x80034968, 0x800B149C, 0x8004B558},
+    {0x8008E7A8, 0x8008E7E8, 0x8005C5FC, 0x8003466C, 0x800ADF6C, 0x8004B0A8},
+    {0x80091080, 0x800910C0, 0x8005C72C, 0x80034B0C, 0x800B084C, 0x8004B220},
+    {0x80090594, 0x800905D4, 0x8005EB68, 0x8003466C, 0x800AFCFC, 0x8004B7B0},
+    {0x8008B9F8, 0x8008BA38, 0x80059780, 0x80033A20, 0x800AA68C, 0x80048650},
+};
+enum { C_TRANSPOSE, C_APPLY, C_LIGHTS, C_F38, C_DRAW, C_A398 };
+typedef struct {
+    u32 r[32];
+    u32 hi, lo;
+    u32 cop0[16];
+} RcCtx;
+void port_rc_call(RcCtx *c, u32 addr);
+u32 port_rc_enter(void);
+void port_rc_leave(u32 sp);
+static u32 ps1(int which, u32 a0, u32 a1, u32 a2, u32 a3) {
+    RcCtx c;
+    u32 sp;
+    memset(&c, 0, sizeof(c));
+    sp = port_rc_enter();
+    c.r[29] = sp;
+    c.r[4] = a0, c.r[5] = a1, c.r[6] = a2, c.r[7] = a3;
+    port_rc_call(&c, draw_calls[g_Args->level][which]);
+    port_rc_leave(sp);
+    return c.r[2];
+}
+
+/* more than six drawn: func_8005C33C (the people against the light beams, D_800F2FBC: points it turns into the view
+ * first, then each drawn person's bones through func_8007EC78, which finds their owners in the game's render list by
+ * a fixed address) runs on six at a time from the game's list, the beams and the GTE as they were before each */
+extern u8 D_800F2FBC[];
+extern s32 D_800F3B48;
+void port_gte_get(u32 *regs);
+void port_gte_put(const u32 *regs);
+static u8 beams[0x8C4];
+static void to_game_list(u8 **inst, u8 *mat, u8 **owner, u8 *view, s32 n) {
+    s32 k;
+    for (k = 0; k < n; k++) {
+        D_800DDF08[k] = inst[k];
+        memcpy(D_800DDCCC + k * 0x20, mat + k * 0x20, 0x20);
+        D_800DDDEC[k] = owner[k];
+        memcpy(D_800DDF24 + k * 0x20, view + k * 0x20, 0x20);
+    }
+    D_8009D8E8 = n;
+}
 
 /* the people drawn: the slots taken and shown into the render list, each one's view matrix, then drawn */
 static void n_8005AEF8(void) {
     u8 **list_inst, **list_owner, *list_mat, *list_view;
-    s32 a, i, k, n;
+    s32 a, i, k, n, b, cnt;
     u8 *e, *o, *m;
     s32 *s, *d;
     u32 ot;
@@ -406,11 +585,11 @@ static void n_8005AEF8(void) {
     D_8009D924 = a;
     if (a == 0x1000 || a == 0)
         D_8009D928 = -D_8009D928;
-    TransposeMatrix((u32)D_800B0018, (u32)D_8009D91C);
+    ps1(C_TRANSPOSE, (u32)D_800B0018, (u32)D_8009D91C, 0, 0);
     D_8009D918[0] = -HU(D_800B0018, 0x14);
     D_8009D918[1] = -HU(D_800B0018, 0x18);
     D_8009D918[2] = -HU(D_800B0018, 0x1C);
-    ApplyMatrix((u32)D_8009D91C, (u32)D_8009D918, (u32)((u8 *)D_8009D91C + 0x14));
+    ps1(C_APPLY, (u32)D_8009D91C, (u32)D_8009D918, (u32)((u8 *)D_8009D91C + 0x14), 0);
     m = (u8 *)D_8009D91C;
     for (k = 0; k < 8; k++)
         GTE_ctc2(k, W(m, k * 4));
@@ -435,7 +614,7 @@ static void n_8005AEF8(void) {
             n++;
         }
     }
-    D_8009D8E8 = n; /* (more than six: past the game's byte, see people_set_slots) */
+    D_8009D8E8 = n < 0x100 ? n : 0xFF;
 
     for (i = 0; i < n; i++) {
         e = list_mat + i * 0x20;
@@ -468,8 +647,24 @@ static void n_8005AEF8(void) {
         HU(o, 0xE) = HU(D_8009D920, 0x10);
         HU(o, 0x10) = -HU(D_8009D920, 0xE);
     }
-    func_8005C33C();
-    func_80033F38();
+    if (list_inst == D_800DDF08) {
+        ps1(C_LIGHTS, 0, 0, 0, 0);
+    } else { /* (six at a time, each from the same beams and GTE) */
+        u32 gte[64];
+        s32 nb = D_800F3B48 > 0 ? (D_800F3B48 < 33 ? D_800F3B48 : 33) * 0x44 : 0;
+        port_gte_get(gte);
+        memcpy(beams, D_800F2FBC, nb);
+        for (b = 0; b == 0 || b < n; b += GAME_SLOTS) {
+            cnt = n - b < GAME_SLOTS ? n - b : GAME_SLOTS;
+            if (b) {
+                port_gte_put(gte);
+                memcpy(D_800F2FBC, beams, nb);
+            }
+            to_game_list(list_inst + b, list_mat + b * 0x20, list_owner + b, list_view + b * 0x20, cnt);
+            ps1(C_LIGHTS, 0, 0, 0, 0);
+        }
+    }
+    ps1(C_F38, 0, 0, 0, 0);
     for (i = 0; i < n; i++) {
         s32 w, x, y, z;
         o = list_view + i * 0x20;
@@ -483,9 +678,14 @@ static void n_8005AEF8(void) {
         H(o, 0xA) = z;
     }
     ot = *(u32 *)(D_800B8F88 + D_800B8F24 * 20 + 4);
-    func_800AACFC((u32)list_inst, (u32)list_view, n, ot);
+    if (list_inst == D_800DDF08)
+        ps1(C_DRAW, (u32)list_inst, (u32)list_view, n, ot);
+    else
+        for (b = 0; b < n; b += GAME_SLOTS) /* (the game's list left with the last six, as the lights had it) */
+            ps1(C_DRAW, (u32)(list_inst + b), (u32)(list_view + b * 0x20), n - b < GAME_SLOTS ? n - b : GAME_SLOTS,
+                ot);
     if (D_8009D8F0 > 0) {
-        func_8004A398();
+        ps1(C_A398, 0, 0, 0, 0);
         D_8009D8F0 = D_8009D8F0 - 1;
         if (D_8009D8F0 <= 0)
             D_800DDDA8 = 0;
@@ -499,6 +699,8 @@ static void n_8005AEF8(void) {
 extern u32 port_ram_size;
 extern s32 D_8009CDA8;
 extern int port_subframe;
+extern volatile int port_rt_depth;
+void port_rt_leave(void);
 void port_gte_get(u32 *regs);
 void port_gte_put(const u32 *regs);
 void port_log(const char *fmt, ...);
@@ -506,6 +708,7 @@ char *getenv(const char *name);
 void *malloc(unsigned n);
 void *memcpy(void *d, const void *s, unsigned n);
 int memcmp(const void *a, const void *b, unsigned n);
+int snprintf(char *s, unsigned n, const char *fmt, ...);
 
 void func_8005B508_orig(void);
 s32 func_8005B584_orig(s32 a0, u32 v, s32 i);
@@ -528,15 +731,24 @@ static u8 *ram_pre, *ram_post;
 static u8 scr_pre[0x1000], scr_post[0x1000];
 static u32 gte_pre[64], gte_post[64];
 static u8 ext_pre[sizeof(ext)], ext_post[sizeof(ext)];
-static u32 calls, diffs;
+static u32 calls, diffs, own_calls, own_diffs;
+static const char *v_name[16];
+static u32 v_count[16];
 
+#define RCSTACK ((u8 *)0x1E000000u) /* (recompiled code's stack, recomp_rt.c: what a callee finds there unset) */
+#define RCSTACK_SIZE 0x100000u
+static u8 *rcs_pre, *rcs_post;
 static void snap(u8 *ram, u8 *scr, u32 *gte, u8 *e) {
+    if (verify == 3)
+        memcpy(ram == ram_pre ? rcs_pre : rcs_post, RCSTACK, RCSTACK_SIZE);
     memcpy(ram, RAM, port_ram_size);
     memcpy(scr, SCRATCH, 0x1000);
     port_gte_get(gte);
     memcpy(e, &ext, sizeof(ext));
 }
 static void put(u8 *ram, u8 *scr, u32 *gte, u8 *e) {
+    if (verify == 3)
+        memcpy(RCSTACK, ram == ram_pre ? rcs_pre : rcs_post, RCSTACK_SIZE);
     memcpy(RAM, ram, port_ram_size);
     memcpy(SCRATCH, scr, 0x1000);
     port_gte_put(gte);
@@ -547,16 +759,19 @@ static void put(u8 *ram, u8 *scr, u32 *gte, u8 *e) {
 static int v_begin(void) {
     if (verify < 0) {
         const char *e = getenv("TWINE_PEOPLE_VERIFY");
-        verify = e && *e == '1';
+        verify = e && *e >= '1' && *e <= '3' ? *e - '0' : 0; /* (3: as 2, the recompiled code's stack kept too) */
         if (verify) {
             ram_pre = malloc(port_ram_size);
             ram_post = malloc(port_ram_size);
-            if (!ram_pre || !ram_post)
+            if (verify == 3)
+                rcs_pre = malloc(RCSTACK_SIZE), rcs_post = malloc(RCSTACK_SIZE);
+            if (!ram_pre || !ram_post || (verify == 3 && (!rcs_pre || !rcs_post)))
                 verify = 0;
         }
     }
     if (!verify || depth || port_subframe)
         return 0;
+    port_rt_depth++; /* (no vblank in between: its handlers would change RAM under one run and not the other) */
     snap(ram_pre, scr_pre, gte_pre, ext_pre);
     return 1;
 }
@@ -564,6 +779,10 @@ static int v_begin(void) {
 static void v_mid(void) {
     snap(ram_post, scr_post, gte_post, ext_post);
     put(ram_pre, scr_pre, gte_pre, ext_pre);
+}
+/* where the game's run left what is at addr now (RAM or the scratchpad) */
+static u8 *post_of(u32 addr) {
+    return addr - 0x1F800000u < 0x1000 ? scr_post + (addr - 0x1F800000u) : ram_post + (addr & 0x7FFFFF);
 }
 static void v_end(const char *name, u32 r_orig, u32 r_new) {
     u32 i, n = 0, first = 0, last = 0, gte[64];
@@ -574,19 +793,60 @@ static void v_end(const char *name, u32 r_orig, u32 r_new) {
                 first = i;
             last = i;
         }
+    if (name[4] == 'A' && name[5] == 'E') { /* func_8005AEF8: what it works out itself (the render list, the view
+                                             * matrices), apart from what its callees draw (its own differs there
+                                             * as often, run twice: TWINE_PEOPLE_VERIFY=2) */
+        static const struct {
+            void *at;
+            u32 n;
+        } own[] = {{D_800DDF08, 24}, {D_800DDCCC, 0xC0}, {D_800DDDEC, 24}, {D_800DDF24, 0xC0}, {&D_8009D8E8, 1},
+                   {&D_8009D924, 4}, {&D_8009D928, 4}, {D_800DDE10, 0x24}};
+        u32 k, o = 0;
+        for (k = 0; k < sizeof(own) / sizeof(own[0]); k++)
+            o |= (memcmp(post_of((u32)own[k].at), own[k].at, own[k].n) != 0) << k;
+        o |= (memcmp(post_of((u32)D_8009D91C), D_8009D91C, 0x24) != 0) << 8;
+        o |= (memcmp(post_of((u32)D_8009D918), D_8009D918, 8) != 0) << 9;
+        o |= (memcmp(post_of((u32)D_8009D920), D_8009D920, 0x14) != 0) << 10;
+        own_calls++;
+        if (o) {
+            own_diffs++;
+            port_log("people verify: f%d 8005AEF8's own outputs differ (mask %X)\n", D_8009CDA8, o);
+        }
+        if (own_calls % 500 == 0)
+            port_log("people verify: 8005AEF8's own outputs: %u calls, %u differ\n", own_calls, own_diffs);
+    }
     port_gte_get(gte);
     scr = memcmp(scr_post, SCRATCH, 0x1000) != 0;
     g = memcmp(gte_post, gte, sizeof(gte)) != 0;
     e = memcmp(ext_post, &ext, sizeof(ext)) != 0;
     calls++;
     if (n || r_orig != r_new || scr || g || e) {
+        char at[160];
+        int k = 0, m = 0;
+        for (i = 0; i < port_ram_size && k < 6; i += 4)
+            if (*(u32 *)(ram_post + i) != *(u32 *)(RAM + i))
+                m += snprintf(at + m, sizeof(at) - m, " %08X:%X/%X", 0x80000000u + i, *(u32 *)(ram_post + i),
+                              *(u32 *)(RAM + i)), k++;
+        at[m] = 0;
         diffs++;
+        port_log("people verify: f%d %s at%s\n", D_8009CDA8, name, at);
         port_log("people verify: f%d %s differs: %u RAM words (%08X..%08X: %08X, ours %08X), return %08X ours %08X, "
                  "scratchpad %d, GTE %d, ext %d\n", D_8009CDA8, name, n, 0x80000000u + first, 0x80000000u + last,
                  n ? *(u32 *)(ram_post + first) : 0, n ? *(u32 *)(RAM + first) : 0, r_orig, r_new, scr, g, e);
     }
-    if (calls % 2000 == 0)
-        port_log("people verify: %u calls checked, %u differ\n", calls, diffs);
+    for (i = 0; i < 16 && v_name[i] && v_name[i] != name; i++)
+        ;
+    if (i < 16)
+        v_name[i] = name, v_count[i]++;
+    if (calls % 2000 == 0) {
+        char at[400];
+        int m = 0;
+        for (i = 0; i < 16 && v_name[i]; i++)
+            m += snprintf(at + m, sizeof(at) - m, " %s %u", v_name[i], v_count[i]);
+        at[m] = 0;
+        port_log("people verify: %u calls checked, %u differ (by function:%s)\n", calls, diffs, at);
+    }
+    port_rt_leave();
 }
 
 #define CHECKED(ret, name, params, args, ret_orig, ret_new)                                                    \
@@ -598,7 +858,10 @@ static void v_end(const char *name, u32 r_orig, u32 r_new) {
             ret_orig func_##name##_orig args;                                                                 \
             v_mid();                                                                                          \
         }                                                                                                     \
-        ret_new n_##name args;                                                                                \
+        if (chk && verify >= 2) /* (the game's twice: what the check itself can't hold the same) */          \
+            ret_new func_##name##_orig args;                                                                  \
+        else                                                                                                  \
+            ret_new n_##name args;                                                                            \
         depth--;                                                                                              \
         if (chk)                                                                                              \
             v_end(#name, r_orig, r_new);                                                                      \
@@ -612,7 +875,10 @@ static void v_end(const char *name, u32 r_orig, u32 r_new) {
             func_##name##_orig args;                                                                          \
             v_mid();                                                                                          \
         }                                                                                                     \
-        n_##name args;                                                                                        \
+        if (chk && verify >= 2)                                                                               \
+            func_##name##_orig args;                                                                          \
+        else                                                                                                  \
+            n_##name args;                                                                                    \
         depth--;                                                                                              \
         if (chk)                                                                                              \
             v_end(#name, 0, 0);                                                                               \
@@ -655,6 +921,8 @@ void func_80033090(void) {
         dry = 0;
         put(ram_pre, scr_pre, gte_pre, ext_pre);
         v = !would_spawn;
+        if (!v)
+            port_rt_leave();
     }
     depth++;
     if (v) {
