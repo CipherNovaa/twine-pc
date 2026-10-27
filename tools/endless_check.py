@@ -418,10 +418,10 @@ def lent_runs():
     # (the pause menu's INVENTORY in King's Ransom: down to its last rows, one toggled out of the round, chosen)
     inv = "800:0008,803:0,840:0040,843:0,870:4000,873:0," + ",".join("%d:0040,%d:0" % (t, t + 3) for t in range(900, 1051, 15))
     runs["k_inv"] = Run("k_inv", 2, 70, dict(runs["k_pool"].env, TWINE_TEST_PAD=inv + ",1080:8000,1083:0,1100:4000,1103:0"))
-    # (the pause menu with a lent weapon in hand in the mission's watch slot, King's Ransom's 10: the watch raised, the
+    # (the pause menu with a lent weapon (the PS100) in hand in the mission's watch slot, King's Ransom's 10: the watch raised, the
     # menu and its INVENTORY on its face, closed, the lent weapon back; as played: hw renderer, smooth motion)
     runs["k_watch"] = Run("k_watch", 5, 80, dict(base, TWINE_ENDLESS_ROOM="5:-1", TWINE_ENDLESS_NEXT="8:-1",
-                                                 TWINE_ENDLESS_TEST_EXIT=500, TWINE_ENDLESS_TEST_DRAW="ROCKET",
+                                                 TWINE_ENDLESS_TEST_EXIT=500, TWINE_ENDLESS_TEST_DRAW="BELGIQUE",
                                                  TWINE_RENDERER="hw", TWINE_SMOOTH=1, TWINE_TRACE="weapon,change",
                                                  TWINE_TEST_PAD="850:0008,853:0,900:0040,903:0,920:4000,923:0,980:1000,"
                                                                 "983:0,1010:4000,1013:0", TWINE_SHOT="840,900,960,1100"))
@@ -446,6 +446,15 @@ def lent_runs():
     runs["k_snd_ab"] = Run("k_snd_ab", 8, 25, {"TWINE_TEST_TONE_AB": 42, "TWINE_TEST_NO_CD": 1, "TWINE_TRACE": "sound,spu"})
     for k in ("k_snd_home", "k_snd_lent"):
         del runs[k].env["TWINE_ENDLESS_TEST_MEET"]
+    # (home against lent as played, hw renderer + smooth motion, both a second room carried in: idle, fire held to
+    # a reload, put away and drawn; tools/lent_matrix.py does every weapon this way)
+    for key, w, first, home, host in (("sg", "FRINESI SHOTGUN", "2:5", "2:4", "8:-1"), ("tmp", "MEYER", "6:0", "6:9", "2:4")):
+        for kind, nxt in (("home", home), ("lent", host)):
+            runs["k_%s_%s" % (key, kind)] = Run("k_%s_%s" % (key, kind), int(first.split(":")[0]), 75, dict(
+                base, TWINE_ENDLESS_ROOM=first, TWINE_ENDLESS_NEXT=nxt, TWINE_ENDLESS_TEST_EXIT="200,5000",
+                TWINE_ENDLESS_TEST_DRAW=w, TWINE_TEST_PAD="600:4000,900:0", TWINE_TEST_WEAPON="1100:1,1250:-1",
+                TWINE_TRACE="weapon,change", TWINE_RENDERER="hw", TWINE_SMOOTH=1))
+            del runs["k_%s_%s" % (key, kind)].env["TWINE_ENDLESS_TEST_MEET"]
     fire2 = "500:4000,503:0,560:4000,563:0"
     for name, room, draw in (("k_rocket", "5:-1", "ROCKET"), ("k_gl", "9:0", "GRENADE"), ("k_flash", "2:4", "FLASH")):
         runs[name] = Run(name, int(room.split(":")[0]), 40, dict(base, TWINE_ENDLESS_ROOM=room, TWINE_ENDLESS_NEXT="8:0",
@@ -554,8 +563,13 @@ def check_lent(runs):
     qh, ql = scope_picture(ph) if ph else 0, scope_picture(pl) if pl else 0
     result("k", "AR36: the scope's picture as at home", qh >= 0.85 and ql >= 0.85,
            "its marks found: home %d%%, lent %d%%" % (qh * 100, ql * 100))
-    for name, w, lv, what in (("k_rocket", "ROCKET LAUNCHER", 8, "rocket"), ("k_gl", "GRENADE LAUNCHER", 8, "round"),
-                              ("k_flash", "FLASH BANG", 8, "flash bang")):
+    for name, w in (("k_rocket", "ROCKET LAUNCHER"), ("k_gl", "GRENADE LAUNCHER")):
+        # (not lent until other missions can throw and fire them as their home missions do)
+        nl = re.search(r"weapons: %s not lent \(its home mission's own throw/fire states\)" % w, runs[name].log)
+        lent = re.search(r"weapons: %s lent from" % w, runs[name].log)
+        result("k", "%s: not lent (its home mission's own states)" % w.title(), bool(nl) and not lent,
+               nl.group(0)[9:] if nl else ("lent" if lent else "no word of it"))
+    for name, w, lv, what in (("k_flash", "FLASH BANG", 8, "flash bang"),):
         part = room_part(runs[name].log, lv)
         fired = re.findall(r"weapons: %s fired" % w, part)
         extra = re.findall(r"a flash bang went off", part) if what == "flash bang" else fired
@@ -612,6 +626,15 @@ def check_lent(runs):
     result("k", "inventory: a pool weapon chosen, in hand", bool(drawn),
            "%s" % (chosen.group(0) + (", in hand" if drawn else ", not in hand") if chosen else "none chosen"))
     import weapon_trace
+    for key, w, home, host in (("sg", "FRINESI SHOTGUN", 2, 8), ("tmp", "MEYER", 6, 2)):
+        hp, lp = (os.path.join(runs["k_%s_%s" % (key, k)].dir, "port.log") for k in ("home", "lent"))
+        hs = weapon_trace.summary(weapon_trace.frames(hp, w, home), weapon_trace.changes(hp, home))
+        ls = weapon_trace.summary(weapon_trace.frames(lp, w, host), weapon_trace.changes(lp, host))
+        bad = weapon_trace.compare(hs, ls)
+        lent = "lent from" in runs["k_%s_lent" % key].log and re.search(r"weapons: %s\S* .*lent from" % w, runs["k_%s_lent" % key].log)
+        result("k", "%s lent: as at home (trace: idle, fire, reload, put away, drawn; hw, smooth motion)" % w.title(),
+               bool(lent) and hs["frames"] > 100 and ls["frames"] > 100 and 11 in ls["states"] and not bad,
+               "; ".join(bad[:3]) or "no differences (%d frames at home, %d lent)" % (hs["frames"], ls["frames"]))
     r = runs["k_many"]
     path = os.path.join(r.dir, "port.log")
     levels = [int(x) for x in re.findall(r"room start: level (\d+) ", r.log)]
@@ -641,7 +664,7 @@ def check_lent(runs):
     r = runs["k_watch"]
     fr = weapon_trace.frames(os.path.join(r.dir, "port.log"), "", 8)
     menu = [x for x in fr if x["menu"] and x["state"] == 0x1F]  # (the watch held up)
-    after = [x for x in fr if not x["menu"] and x["state"] == 1 and x["name"].startswith("ROCKET") and
+    after = [x for x in fr if not x["menu"] and x["state"] == 1 and x["name"].startswith("BELGIQUE") and
              fr.index(x) > (fr.index(menu[-1]) if menu else 1 << 30)]
     shot = lambda f: read_ppm(os.path.join(r.dir, "screen_%04d_0.ppm" % f)) or read_ppm(os.path.join(r.dir, "screen_%04d.ppm" % f))
     m = [motorola(i) if i else 0 for i in (shot(840), shot(900), shot(960), shot(1100))]
@@ -649,7 +672,7 @@ def check_lent(runs):
            bool(menu) and all(x["file"].endswith("MOTO.HMD") for x in menu) and m[1] > 0.8 and m[2] > 0.8,
            "%d menu frames, models %s; the watch's frame on screen: menu %d%%, inventory %d%%" %
            (len(menu), "/".join(sorted({x["file"] for x in menu})) or "-", m[1] * 100, m[2] * 100))
-    result("k", "pause: the lent weapon back after the menu", bool(after) and all(x["file"] == "L05/RCAM.HMD" for x in after)
+    result("k", "pause: the lent weapon back after the menu", bool(after) and all(x["file"] == "L05/FNP90TEX.HMD" for x in after)
            and m[0] < 0.2 and m[3] < 0.2, "%d frames after, models %s; watch frame before %d%%, after %d%%" %
            (len(after), "/".join(sorted({x["file"] for x in after})) or "-", m[0] * 100, m[3] * 100))
     def measured(log, own):
