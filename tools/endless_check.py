@@ -10,6 +10,7 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
              j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching),
              k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried),
              l room starts never run out of the menu texts' letters (20 starts; past them: cut, no crash),
+             (i also: smooth motion's extra drawings never run the hit loop: per tick as without, campaign and a run)
              m a run started from the shell (main menu, mission select's ENDLESS, its briefing) with no weapons
                catalogue: the briefing seen, the survey then the first room; a survey stalled is given up after 10 s
              n exits: every pool room's doors walked to and used once the exit is open (each opens, or, kept locked
@@ -1180,11 +1181,47 @@ def check_ramp(runs):
 # ---- i: the campaign untouched ----
 
 def campaign_runs():
-    return {"campaign_%d" % l: Run("campaign_%d" % l, l, 30, {}) for l in (2, 5, 8)}
+    runs = {"campaign_%d" % l: Run("campaign_%d" % l, l, 30, {}) for l in (2, 5, 8)}
+    # (smooth motion's extra drawings and the hit loop: King's Ransom fired in, campaign and a run, smooth motion on and
+    # off, hw renderer, TWINE_TRACE=hitloop: the loop runs once a tick, never in an extra drawing, the same per tick)
+    pad = ",".join("%d:4000,%d:0" % (t, t + 20) for t in range(200, 1200, 40))
+    hl = {"TWINE_TRACE": "hitloop", "TWINE_RENDERER": "hw", "TWINE_TEST_PAD": pad}
+    run = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
+           "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_ENDLESS_ROOM": "8:-1", "TWINE_ENDLESS_TEST_DRAW": "INGALLS"}
+    for k, e in (("c", {}), ("e", run)):
+        for sm in (0, 1):
+            n = "hl_%s_%s" % (k, "smooth" if sm else "off")
+            runs[n] = Run(n, 8, 40, dict(hl, TWINE_SMOOTH=sm, **e))
+    return runs
+
+
+def hitloop_ticks(run):
+    """the hit loop's runs in a log (TWINE_TRACE=hitloop): the tick's (frame, projectiles with hits, sounds), how many
+    in extra drawings, how many extra drawings skipped it"""
+    t = [(int(f), int(n), int(s)) for f, n, s in
+         re.findall(r"trace: L\d+ f(\d+) hitloop: the tick's, (\d+) with hits, (\d+) sounds", run.log)]
+    extra = len(re.findall(r"hitloop: an extra drawing", run.log))
+    skipped = sum(int(x) for x in re.findall(r"skipping it since: (\d+)", run.log))
+    return t, extra, skipped
 
 
 def check_campaign(runs):
+    for how, k in (("campaign", "c"), ("a run", "e")):
+        (ts, xs, ss), (to, xo, so) = hitloop_ticks(runs["hl_%s_smooth" % k]), hitloop_ticks(runs["hl_%s_off" % k])
+        again = len(re.findall(r"hitloop: .*AGAIN this tick", runs["hl_%s_smooth" % k].log))
+        # (the campaign's runs go the same way tick for tick; a run's guards don't quite, smooth or not: there each
+        # tick's loop once, none in an extra drawing)
+        same = ts == to if k == "c" else bool(ts)
+        result("i", "smooth motion: the hit loop once a tick, none in extra drawings%s (%s; hw renderer)" % (
+               ", as without" if k == "c" else "", how), bool(to) and same and xs == 0 and ss > 0 and not again,
+               "with smooth motion %d ticks with hits (%d hits, %d sounds), %d in extra drawings, %d extra drawings skipping it; "
+               "without %d ticks (%d hits, %d sounds)%s" % (len(ts), sum(x[1] for x in ts), sum(x[2] for x in ts), xs + again, ss,
+                                                           len(to), sum(x[1] for x in to), sum(x[2] for x in to),
+                                                           "" if ts == to or k == "e" else "; first different tick: %s / %s" % next(
+                                                               ((a, b) for a, b in zip(ts + [None], to + [None]) if a != b), (None, None))))
     for k, r in runs.items():
+        if not k.startswith("campaign_"):
+            continue
         result("i", "level " + k.split("_")[1], "game main" not in r.log[:0] and not r.lines("endless:") and not r.crashed()
                and "Exec level" in r.log, "endless lines %d, crash %s" % (len(r.lines("endless:")), r.crashed()))
 
