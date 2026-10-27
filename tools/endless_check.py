@@ -1668,7 +1668,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklmnop", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopr", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
