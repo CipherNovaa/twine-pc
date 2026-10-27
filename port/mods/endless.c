@@ -566,8 +566,10 @@ static void weapons_capture(void) {
 
 /* The tool slots a lent weapon works from as at home, per mission: the missions' own code treats some slots by
  * their number as their tools (Courier's 1 and 5, King's Ransom's grapple at 7, Meltdown's 4-6 ...: a gun there
- * fires once, or never, or as a grapple), found by firing an automatic lent into each */
-static const u16 clean_slots[12] = {0, 0, 1 << 6 | 1 << 11, 1 << 8, 0, 1 << 7 | 1 << 9, 1 << 6 | 1 << 10 | 1 << 11,
+ * fires once, or never, or as a grapple), found by firing an automatic lent into each, then a single-shot gun (the
+ * IAC Defender): City of Walkways' 7, its flare gun's, plays the flare's reload sounds 7 and 10 frames into every
+ * shot (playtest 8: "the IAC plays its reload sound after every shot"), so not 7 there */
+static const u16 clean_slots[12] = {0, 0, 1 << 6 | 1 << 11, 1 << 8, 0, 1 << 9, 1 << 6 | 1 << 10 | 1 << 11,
                                     1 << 11 | 1 << 12, 1 << 10, 1 << 10 | 1 << 11, 1 << 9, 0};
 static struct {
     u8 level, loop;
@@ -796,6 +798,13 @@ static void find_tmd(void) {
             u32 objtab = k - (ob[4] - (u32)(long)ob);
             ELOG("research: its primitives at %s+0x%X: the model (its header) at +0x%X: %08X %08X %08X", name, k,
                  objtab - 12, *(u32 *)(data + objtab - 12), *(u32 *)(data + objtab - 8), *(u32 *)(data + objtab - 4));
+            { /* (its vertices: in memory and in the file) */
+                s16 *mv = (s16 *)(long)ob[0], *fv = (s16 *)(data + objtab + *(u32 *)(data + objtab));
+                u32 v;
+                for (v = 0; v < ob[1] && v < 12; v++)
+                    ELOG("research: vertex %u: memory %d %d %d, file %d %d %d", v, mv[v * 4], mv[v * 4 + 1], mv[v * 4 + 2],
+                         fv[v * 4], fv[v * 4 + 1], fv[v * 4 + 2]);
+            }
         }
     free(data);
     if (getenv("TWINE_ENDLESS_TEST_FINDTIM")) { /* (=x,y: the TIMs of LVL<nn>TIM.BIN whose picture or colours hold it) */
@@ -4059,6 +4068,30 @@ void endless_frame(void) {
                             ? atoi(strchr(getenv("TWINE_ENDLESS_TEST_EXIT"), ',') + 1)
                             : atoi(getenv("TWINE_ENDLESS_TEST_EXIT"))))
         open = 1, D_800D2F90 = 2, room_frames = SEC * 60; /* (headless tests: as if Bond went through a door) */
+    if (getenv("TWINE_ENDLESS_TEST_SLOTS") && (room_frames == SEC * 2 || room_frames % (SEC * 10) == 0)) {
+        /* (research: the people's six slots: each one's INI record (its texture chunk, its object type), taken or
+         * not, its owner) */
+        extern u8 D_800D2E84[], D_800DE0C8[];
+        extern u8 *D_800DDEF0[];
+        for (i = 0; i < 6; i++) {
+            u8 *ow = D_800DDEF0[i];
+            int k = ow ? (int)((ow - OBJ(0)) / 0x124) : -1;
+            ELOG("slots: game slot %d: type %d (chunk %d), taken %d, owner %d%s type %d health %d at %d %d %d", i,
+                 D_800D2E84[i * 0x20 + 0x1C], D_800D2E84[i * 0x20 + 1], D_800DE0C8[i], k, ow && !ow[4] ? " (gone)" : "",
+                 ow ? ow[6] : -1, ow ? HEALTH(ow) : 0, ow ? POS(ow)[0] : 0, ow ? POS(ow)[1] : 0, ow ? POS(ow)[2] : 0);
+        }
+    }
+    if (getenv("TWINE_ENDLESS_TEST_PUT") && room_frames == SEC * 2) { /* (headless tests: x,y,z,yaw: Bond put there,
+                                                                     * facing that way) */
+        const char *pt = getenv("TWINE_ENDLESS_TEST_PUT");
+        s16 at[5];
+        int n;
+        at[0] = D_800D2F8C;
+        for (n = 0; n < 4 && pt; n++, pt = strchr(pt, ',') ? strchr(pt, ',') + 1 : 0)
+            at[n == 3 ? 1 : n + 2] = (s16)atoi(pt);
+        func_80030FA8(at);
+        ELOG("test: Bond put at %d %d %d, yaw %d", at[2], at[3], at[4], at[1]);
+    }
     if (getenv("TWINE_ENDLESS_TEST_NEAR") && room_frames == SEC * 2) { /* (headless tests: Bond put before the first
                                                                     * person of that type, facing her) */
         for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
@@ -4409,7 +4442,8 @@ static int door_refusal(const char *t) { /* (the missions' messages for a door t
     if (strstr(t, "UNLOCKED")) /* ("DOOR UNLOCKED", "ALREADY UNLOCKED": a door opening) */
         return 0;
     return strstr(t, "LOCKED") || strstr(t, "DENIED") || strstr(t, "CANNOT REACH LOCK") || strstr(t, "UNLOCK DOOR") ||
-           strstr(t, "LOCATOR CARD") || (!strncmp(t, "NEED ", 5) && (strstr(t, "CARD") || strstr(t, "KEY") ||
+           strstr(t, "LOCATOR CARD") || strstr(t, "MUST BE OFFLINE") || /* (Flashpoint 6:13's channel doors) */
+           (!strncmp(t, "NEED ", 5) && (strstr(t, "CARD") || strstr(t, "KEY") ||
                                                                      strstr(t, "FINGERPRINT")));
 }
 s32 func_80048B4C(char *text, u8 prio, u8 flag) {
@@ -4782,8 +4816,8 @@ static s32 tone_as_game(int level, const u8 *d, s32 flags, int loop) {
         ELOG("sound: a lent weapon's own (level %d program %d tone %d note %d), volume %d%s: handle %d", level, d[0], d[1],
              note, vol, loop ? ", looping" : "", h);
     if (trace_sound())
-        port_log("trace: L%d f%d sound: lent (level %d program %d tone %d note %d) volume %d%s: handle %d\n", g_Args->level,
-                 D_8009CDA8, level, d[0], d[1], note, vol, loop ? " looping" : "", h);
+        port_log("trace: L%d f%d sound: lent (level %d program %d tone %d note %d) flags %X volume %d%s: handle %d\n",
+                 g_Args->level, D_8009CDA8, level, d[0], d[1], note, flags, vol, loop ? " looping" : "", h);
     return h ? 0x4000 | (h & 0x3FFF) : -1;
 }
 void port_log(const char *fmt, ...);
