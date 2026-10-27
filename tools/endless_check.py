@@ -1109,7 +1109,7 @@ def check_texts(runs):
                (CHAIN_ROOMS[k % 2][:11], starts), ok,
                "%d starts, crash %s, MAX_TEXT %s, cut %d, most letters logged %d%s" %
                (starts, r.crashed(), "MAX_TEXT" in r.log, len(r.lines(r"text: .* cut to")), worst,
-                "; " + "; ".join(l.split("endless: ")[-1][:120] for l in r.lines(r"text \(last|the game ends with"))
+                "; " + "; ".join(l.split("endless: ")[-1][:200] for l in r.lines(r"text \(last|the game ends with"))
                 if "MAX_TEXT" in r.log else ""))
     f = runs["text_forced"]
     result("l", "past the letters: cut, no crash", bool(f.lines(r"text: .* cut to")) and not f.crashed() and
@@ -1187,10 +1187,16 @@ def check_people(runs):
                 d.setdefault(int(m.group(1)), {})[int(m.group(2))] = m.group(3, 4, 5, 6)
             fa[part is first] = d
         f0 = min(fa[False]) if fa[False] else -1
-        same = f0 in fa[True] and fa[True][f0] == fa[False][f0]
-        n = sum(1 for v in fa[False].get(f0, {}).values() if int(v[0]) > 0)
+        # (the first people line after the load comes a few frames after the state's own; those frames advance by the
+        # vblanks each one took, which a loaded run under load needn't repeat: the same people, the same health, each
+        # within a step or two of where the first pass had him)
+        a, b = fa[True].get(f0, {}), fa[False].get(f0, {})
+        moved = max((max(abs(int(a[k][j]) - int(b[k][j])) for j in (1, 2, 3)) for k in a if k in b), default=0)
+        same = bool(a) and set(a) == set(b) and all(a[k][0] == b[k][0] for k in a) and moved <= 300
+        n = sum(1 for v in b.values() if int(v[0]) > 0)
         ok = same and n >= 10 and not r.crashed() and "people: 12 slots" in r.log
-        detail = "back at f%d: %d alive, as when saved %s, crash %s" % (f0, n, same, r.crashed())
+        detail = "back at f%d: %d alive, as when saved %s (the same people and health, moved at most %d), crash %s" % (
+            f0, n, same, moved, r.crashed())
     result("p", "a save state with 12 about: loaded as it was", ok, detail)
     r = runs["n_long"]
     rooms = len(r.lines(r"room start: level"))

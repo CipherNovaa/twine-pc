@@ -224,8 +224,14 @@ def compare(h, l):
         for rate in sorted({r for r, _ in a["steps"]} & {r for r, _ in b["steps"]}):  # (the game's rate: frames)
             sa = Counter({st: n for (r, st), n in a["steps"].items() if r == rate})
             sb = Counter({st: n for (r, st), n in b["steps"].items() if r == rate})
-            if sum(sa.values()) >= 4 and sum(sb.values()) >= 4 and common(sa) != common(sb):
-                bad.append(f"state {k} at rate {rate}: playhead {common(sa)} a frame at home, {common(sb)} lent")
+            # (the playhead's mean step a frame: a slow animation steps 1, 0, 1, 1, 0 ..., so the most common step
+            # of a few frames at a rate the game only drops to under load can flip either way)
+            na, nb = sum(sa.values()), sum(sb.values())
+            ma = sum(st * n for st, n in sa.items()) / na if na else 0
+            mb = sum(st * n for st, n in sb.items()) / nb if nb else 0
+            if na >= 4 and nb >= 4 and abs(ma - mb) > 0.35:
+                bad.append(f"state {k} at rate {rate}: playhead {ma:.2f} a frame at home, {mb:.2f} lent "
+                           f"({na} and {nb} frames)")
     bad += jumpy(l, "lent") + jumpy(h, "at home")
     hf, lf = common(h["files"]), common(l["files"])
     if hf and lf and hf.split("/")[-1] != lf.split("/")[-1]:

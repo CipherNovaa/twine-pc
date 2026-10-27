@@ -550,6 +550,12 @@ static u8 *n_800540CC(void) {
     for (i = 0; i < n; i++) {
         a = ai_ctx(i);
         if (!((*(u32 *)(a + 0x1CC) >> 1) & 1)) {
+            if (i >= GAME_AIS) { /* (an extra one as fresh as the game's are at a mission's start: its last guard's
+                                  * state (a script waiting in a mode the new one never leaves: the guard stood, never
+                                  * firing, for a minute) isn't his; the game sets what it needs, func_80057A24) */
+                memset(a, 0, 0x1CC);
+                memset(a + 0x1D0, 0, AI_SIZE - 0x1D0);
+            }
             *(u32 *)(a + 0x1CC) |= 2;
             return a;
         }

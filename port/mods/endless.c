@@ -254,10 +254,12 @@ static void people_log(void) {
         if (o == g_Player || !o[4])
             continue;
         ELOG("people: %d type %d %s, health %d, ai %d at %d %d %d (floor %d, yaw %d); record %08X flags %08X w4 %08X; "
-             "state +24 %08X anim %d; obj +8 %d +A4 %02X +A6 %02X +48 %08X +4C %08X +E %04X shots %d", i, o[6], made_how[i & 63] ? made_how[i & 63] : "?",
+             "state +24 %08X anim %d; obj +8 %d +A4 %02X +A6 %02X +48 %08X +4C %08X +E %04X ai +4 %08X +54 %d +A4 %08X shots %d", i, o[6], made_how[i & 63] ? made_how[i & 63] : "?",
              HEALTH(o), o[0xA7], POS(o)[0], POS(o)[1], POS(o)[2], floor_at(POS(o)[0], POS(o)[1] - 500, POS(o)[2]),
              *(s16 *)(*(u8 **)(o + 0x90) + 0x1A), (u32)src, src ? src[0] : 0, src ? src[1] : 0,
-             st ? *(s32 *)(st + 0x24) : -1, st ? *(s16 *)(st + 0x10) : -1, o[8], o[0xA4], o[0xA6], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C), *(u16 *)(o + 0xE), fired_by[i & 63]);
+             st ? *(s32 *)(st + 0x24) : -1, st ? *(s16 *)(st + 0x10) : -1, o[8], o[0xA4], o[0xA6], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C), *(u16 *)(o + 0xE), *(u8 **)(o + 0x118) ? *(u32 *)(*(u8 **)(o + 0x118) + 4) : 0,
+             *(u8 **)(o + 0x118) ? *(s32 *)(*(u8 **)(o + 0x118) + 0x54) : -1,
+             *(u8 **)(o + 0x118) ? *(u32 *)(*(u8 **)(o + 0x118) + 0xA4) : 0, fired_by[i & 63]);
     }
 }
 
@@ -541,6 +543,9 @@ void func_800291B0(char *s, s16 x, s16 y, s32 *n, s32 arg4, s32 pal) {
     }
     func_800291B0_orig(s, x, y, n, arg4, pal);
     text_last[me].after = *n;
+    if (getenv("TWINE_TEXT_TRACE")) /* (each text drawn: its letters' count before and after, where it's kept) */
+        ELOG("text: \"%s\" at %d,%d: %d -> %d letters (count at %08X; ra %08X sp %08X%s)", s, x, y, text_last[me].n, *n,
+             (u32)n, text_last[me].ra, text_last[me].sp, port_subframe ? ", an extra drawing" : "");
 }
 static void lent_ots(void);
 
@@ -4853,8 +4858,9 @@ u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z) {
                 return 0;
             }
             if (!port_subframe)
-                ELOG("made: person %d type %d %s at %d %d %d, record %08X flags %08X w4 %08X; ai %d +48 %08X +4C %08X", i, t,
-                     how, x, y, z, (u32)&rec[3], w3, w4, o[0xA7], *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C));
+                ELOG("made: person %d type %d %s at %d %d %d, record %08X flags %08X w4 %08X; ai %d +48 %08X +4C %08X; slot %d, "
+                     "ai context %08X", i, t, how, x, y, z, (u32)&rec[3], w3, w4, o[0xA7], *(s32 *)(o + 0x48),
+                     *(s32 *)(o + 0x4C), *(u8 **)(o + 0x94) ? (*(u8 **)(o + 0x94))[0xA] : -1, *(u32 *)(o + 0x118));
         }
         return o;
     }
