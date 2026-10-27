@@ -11,6 +11,9 @@
  *         the fire timer (D_8009CF48), a menu over the mission (D_8009CAA4).
  * change  each change of the weapon to change to, and who asked: a mod (trace_change_by: endless's carry, pool,
  *         inventory; the number keys) or the weapon buttons (pressed that frame), else the game.
+ * person  each person of type TWINE_TRACE_TYPE (default: all) whenever their script's place (its pc, from the
+ *         script's start), wait, animation (asked +0x10, running +0x12, frame +0x14) or the object's flags (+0xA4)
+ *         change: "trace: L<level> f<frame> person <slot> type <t>: pc ... wait ... anim ...".
  * (sound: port/mods/endless.c's func_80026F30 and the runtime's port_tone_play / port_voice_play log under "sound".)
  *
  * The overlay (debug menu, F9: its WEAPON TRACE page is the mod debugmenu.c's) shows the weapon line live.
@@ -36,7 +39,7 @@ extern s32 D_800DDE08, D_800DDDA4; /* the weapon buttons, previous and next, pre
 extern s32 D_8009CDA8;  /* the mission's frame */
 extern s16 D_8009CAA4;  /* a menu over the mission */
 
-static int on_weapon = -1, on_change;
+static int on_weapon = -1, on_change, on_person;
 static const char *change_by; /* (a mod's, this frame) */
 static s16 last_to = -1;
 static char last_line[256];
@@ -99,6 +102,37 @@ static void tone_ab(void) {
         port_tone_play_pcm(g_Args->level, d[id].prog, d[id].tone, d[id].note, vol * 0x7F, 0);
 }
 
+/* people's scripts and animations (TWINE_TRACE=person) */
+extern s32 D_800AFFC8; /* (the objects: a pointer to them, 0x124 bytes each) */
+extern s16 D_800B0DA0, D_800B07B0;
+static void trace_people(void) {
+    static int type = -2;
+    static u32 last[64][7];
+    int i;
+    if (type == -2)
+        type = getenv("TWINE_TRACE_TYPE") ? atoi(getenv("TWINE_TRACE_TYPE")) : -1;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = (u8 *)D_800AFFC8 + i * 0x124, *an = *(u8 **)(o + 0x94), *ctx = *(u8 **)(o + 0x118);
+        u32 now[7];
+        if (!o[4] || o[5] != 6 || (type >= 0 && o[6] != type))
+            continue;
+        now[0] = ctx ? *(u32 *)(ctx + 0xA4) - *(u32 *)(ctx + 0xA0) : 0xFFFFFFFF;
+        now[1] = ctx ? *(u32 *)(ctx + 0x1C4) : 0;
+        now[2] = an ? (u32)(u16)*(s16 *)(an + 0x10) << 16 | (u16)*(s16 *)(an + 0x12) : 0;
+        now[3] = an ? *(u16 *)(an + 0x14) : 0;
+        now[4] = *(u32 *)(o + 0xA4);
+        now[5] = *(u32 *)(o + 0x34);
+        now[6] = ctx ? *(u32 *)ctx : 0;
+        if (now[0] == last[i][0] && now[2] == last[i][2] && now[4] == last[i][4] &&
+            now[5] == last[i][5] && now[6] == last[i][6])
+            continue;
+        port_log("trace: L%d f%d person %d type %d: pc %04X wait %d anim %d/%d frame %d flags %08X health %d script flags %08X\n",
+                 g_Args->level, D_8009CDA8, i, o[6], now[0], (s32)now[1], (s16)(now[2] >> 16), (s16)now[2], now[3],
+                 now[4], (s32)now[5], now[6]);
+        { int k; for (k = 0; k < 7; k++) last[i][k] = now[k]; }
+    }
+}
+
 /* each frame, at the top of the mission's frame loop (mods/savestate.c) */
 void trace_frame(void) {
     static s32 last_frame = -99999;
@@ -111,7 +145,10 @@ void trace_frame(void) {
     if (on_weapon < 0) {
         on_weapon = port_trace("weapon");
         on_change = port_trace("change");
+        on_person = port_trace("person");
     }
+    if (on_person)
+        trace_people();
     if (on_change && D_800B0DDC != last_to) {
         port_log("trace: L%d f%d change: to %d (%s) from %d, in hand %d, by %s\n", g_Args->level, D_8009CDA8, D_800B0DDC,
                  D_800B0DDC >= 0 && D_800B0DDC < 16 ? (char *)g_Weapons[D_800B0DDC].pad0 : "-", last_to, D_800B0DD4,
