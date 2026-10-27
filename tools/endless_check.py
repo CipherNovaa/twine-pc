@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Endless mode's regression suite: headless runs of the native port, checked from their logs and screenshots.
 
-Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
-  -j JOBS    runs at once (default 4, at most 5)
+Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-p]
+  -j JOBS    runs at once (default 4; at most 12, paced at most 5). A turbo run takes a whole core while it runs: 8 suit
+             the 16-core machine when it is otherwise quiet; a run waits to start while the load is over the core count
   -k CHECKS  the checks to run, letters from abcdefghijkl (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression,
@@ -15,6 +16,9 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
   -o         every run with the game's own enemy AI (enemy_ai = original; default: the port's, IMPROVED)
+  -p         paced: every run in real time, as played (default: TWINE_TURBO, game time as fast as the machine
+             runs it; the same frames, vblanks, controls and sound, irq.c). Either way each run lasts its seconds
+             of game time (TWINE_TEST_VBLANKS); build/endless_check/times.txt has each run's time on the wall clock
 
 Environment:
   TWINE_DISC         the disc image (default: the first .bin in workbench/disc/)
@@ -24,7 +28,7 @@ Environment:
 
 Each run has its own folders (config, data, state, cards) and runs as "twinechk" (a link to build/port/twine), so
 it never touches the user's settings or cards and isn't mistaken for the game. Runs are headless with SDL's dummy
-sound driver (they never connect to the computer's sound server), at most 5 at once. Exit code 0 when every check passed.
+sound driver (they never connect to the computer's sound server). Exit code 0 when every check passed.
 Nothing here holds game data: it all comes from the disc at run time.
 """
 import concurrent.futures as cf
@@ -62,14 +66,31 @@ def pool_rooms():
 
 
 class Run:
-    """one headless run: level, seconds, extra environment; .log is its port.log afterwards"""
+    """one headless run: level, seconds of game time, extra environment; .log is its port.log afterwards.
+    The run ends itself when the game's vblank count reaches the seconds' worth (TWINE_TEST_VBLANKS, 59.94 a second),
+    paced or not; the seconds on the wall clock only bound a run that never gets there (stuck)."""
 
     def __init__(self, name, level, secs, env=None, card=None, config=None):
         self.name, self.level, self.secs, self.env, self.card, self.config = name, level, secs, env or {}, card, config
         self.dir = os.path.join(WORK, name)
         self.log = ""
+        self.timed_out = False
+        self.wall = 0.0
+
+    def cost(self):
+        """a guess at its time on the wall clock, for starting the longest first: smooth motion's extra drawings take
+        host time whatever the clock (about 4 ms each, 10 a tick); otherwise a turbo run takes a fraction of its secs"""
+        if not TURBO:
+            return self.secs
+        smooth = str(self.env.get("TWINE_SMOOTH", "0")) == "1"
+        return self.secs * (1.0 if smooth else 0.15) + 3
 
     def go(self):
+        if TURBO:  # (a turbo run takes a whole core: none started while the machine is busy, up to 10 min)
+            for _ in range(300):
+                if os.getloadavg()[0] < (os.cpu_count() or 4) - 1:
+                    break
+                time.sleep(2)
         shutil.rmtree(self.dir, ignore_errors=True)
         for d in ("conf/twine", "data/twine", "state"):
             os.makedirs(os.path.join(self.dir, d), exist_ok=True)
@@ -92,21 +113,31 @@ class Run:
         else:
             env["TWINE_CARD1"] = "none"
         env.update({k: str(v) for k, v in self.env.items()})
+        env["TWINE_TEST_VBLANKS"] = str(int(round(self.secs * 59.94)))
+        if TURBO:  # (game time: as fast as the machine runs it, the same frames, vblanks, controls and sound)
+            env["TWINE_TURBO"] = "1"
         if RAM8:
             env["TWINE_RAM_8MB"] = "1"
         if AI_ORIGINAL and "TWINE_ENEMY_AI" not in self.env:
             env["TWINE_ENEMY_AI"] = "original"
+        t0 = time.time()
         with open(os.path.join(self.dir, "out.txt"), "w") as out:
-            child = subprocess.Popen(["nice", exe], cwd=self.dir, env=env, stdout=out, stderr=subprocess.STDOUT)
+            # (setarch -R: the same addresses every run. Some of the game's code reads memory it never set (a blast's
+            # debris in Fallen Angel at f1088 of k_gl_lent comes out in one of three places), finding there what the
+            # host's address randomization left: with it, two runs of the same build can differ)
+            child = subprocess.Popen(["nice"] + SETARCH + [exe], cwd=self.dir, env=env, stdout=out,
+                                     stderr=subprocess.STDOUT)
             try:
-                child.wait(timeout=self.secs)
+                child.wait(timeout=self.secs * 2 + 60)
             except subprocess.TimeoutExpired:  # (only this run's own process is stopped)
+                self.timed_out = True
                 child.terminate()
                 try:
                     child.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     child.kill()
                     child.wait()
+        self.wall = time.time() - t0
         try:
             self.log = open(os.path.join(self.dir, "port.log"), errors="replace").read()
         except OSError:
@@ -184,6 +215,9 @@ def people(run):
 
 
 RESULTS = []
+SETARCH = ["setarch", "-R"] if shutil.which("setarch") else []
+JOBS_MAX = 12
+TURBO = True
 RAM8 = False
 AI_ORIGINAL = False
 
@@ -994,7 +1028,7 @@ def main():
     while args:
         a = args.pop(0)
         if a == "-j":
-            jobs = min(int(args.pop(0)), 5)  # (never more than 5 at once: the machine's sound and desktop stay well)
+            jobs = int(args.pop(0))
         elif a == "-k":
             checks = args.pop(0)
         elif a == "-r":
@@ -1007,8 +1041,12 @@ def main():
         elif a == "-o":
             global AI_ORIGINAL
             AI_ORIGINAL = True
+        elif a == "-p":
+            global TURBO
+            TURBO = False
         else:
             sys.exit(__doc__)
+    jobs = max(1, min(jobs, JOBS_MAX if TURBO else 5))  # (never more at once: the machine's desktop stays well)
     if not os.path.exists(BIN):
         sys.exit("endless_check: build the port first (make -C port)")
     WORK = os.environ.get("TWINE_CHECK_DIR", os.path.join(ROOT, "build", "endless_check"))
@@ -1049,12 +1087,18 @@ def main():
     if "m" in checks:
         groups["shell"] = shell_runs()
     every = [r for g in groups.values() for r in g.values()]
-    every.sort(key=lambda r: -r.secs)  # (the long ones first)
+    every.sort(key=lambda r: -r.cost())  # (the long ones first)
     t0 = time.time()
-    print("endless_check: %d runs, %d at once ..." % (len(every), jobs), flush=True)
+    print("endless_check: %d runs, %d at once%s ..." % (len(every), jobs, "" if TURBO else ", paced (real time)"), flush=True)
     with cf.ThreadPoolExecutor(jobs) as ex:
         for r in ex.map(Run.go, every):
             pass
+    open(os.path.join(WORK, "times.txt"), "w").write("".join(
+        "%-24s %6.1f s wall for %3d s of game time%s\n" % (r.name, r.wall, r.secs, " (stopped: never reached its end)"
+                                                            if r.timed_out else "") for r in every))
+    stuck = [r.name for r in every if r.timed_out]
+    if stuck:
+        print("endless_check: stopped on the wall clock, never reaching their vblanks: " + ", ".join(stuck), flush=True)
     if "rooms" in groups:
         for room, r in groups["rooms"].items():
             check_room(r, room, checks)

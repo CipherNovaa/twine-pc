@@ -39,6 +39,12 @@ void port_pad_motors(u8 *small, u8 *large);
 
 static u32 frames;
 static int headless;
+
+/* ms on the game's clock (irq.c: the host's, or game time with TWINE_TURBO), for what is drawn over the picture
+ * for a while (hints, messages, the debug text, a flash bang's white): the screen shots then show them as long */
+static Uint64 ui_ms(void) {
+    return port_clock_ns() / 1000000;
+}
 static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture;
@@ -488,9 +494,9 @@ static int test_look(float *yaw, float *pitch) {
     if (!test)
         return 0;
     if (!start)
-        start = SDL_GetTicksNS();
+        start = port_clock_ns();
     sscanf(test, "%d,%d", &y, &p);
-    ticks = (float)(SDL_GetTicksNS() - start) / 50e6f;
+    ticks = (float)(port_clock_ns() - start) / 50e6f;
     *yaw = y * ticks;
     *pitch = p * ticks;
     return 1;
@@ -1172,7 +1178,7 @@ void port_fnt_flush(void) {
         return;
     memcpy(dbg_shown, dbg_text, sizeof(dbg_shown));
     dbg_text[0] = 0;
-    dbg_until = SDL_GetTicks() + 1000;
+    dbg_until = ui_ms() + 1000;
     dbg_flushed = 1;
     if (getenv("TWINE_TEST_DEBUG_PAGE")) { /* headless tests: the page's text in the log, now and then */
         static int n;
@@ -1198,9 +1204,9 @@ static void draw_debug_text(void) {
     const char *p = dbg_shown;
     float sx, sy;
     int col = 0, row = 0;
-    if (SDL_GetTicks() >= dbg_until || gpu_display.w <= 0 || gpu_display.h <= 0)
+    if (ui_ms() >= dbg_until || gpu_display.w <= 0 || gpu_display.h <= 0)
         return;
-    if (!font || made_for + 1000 < SDL_GetTicks()) { /* again when the menu opens again */
+    if (!font || made_for + 1000 < ui_ms()) { /* again when the menu opens again */
         static u32 px[128 * 32];
         u16 clut[16];
         int x, y;
@@ -1220,7 +1226,7 @@ static void draw_debug_text(void) {
         }
         SDL_UpdateTexture(font, NULL, px, 128 * 4);
     }
-    made_for = SDL_GetTicks();
+    made_for = ui_ms();
     sx = dst.w / gpu_display.w;
     sy = dst.h / gpu_display.h;
     for (; *p; p++) {
@@ -1248,17 +1254,17 @@ static void draw_help(void) {
     SDL_FRect r;
     if (port_module && !strcmp(port_module->name, "shell") && !hinted_shell) {
         hinted_shell = port_module;
-        hint_until = SDL_GetTicks() + 8000;
+        hint_until = ui_ms() + 8000;
     }
     if (port_module && port_module->level && !hinted_level) {
         hinted_level = port_module;
-        hint_until = SDL_GetTicks() + 8000;
+        hint_until = ui_ms() + 8000;
     }
     SDL_GetCurrentRenderOutputSize(renderer, &ww, &wh);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     if (!help_shown) {
-        const char *text = SDL_GetTicks() < message_until ? message : "F1: controls";
-        if (SDL_GetTicks() >= hint_until && text != message)
+        const char *text = ui_ms() < message_until ? message : "F1: controls";
+        if (ui_ms() >= hint_until && text != message)
             return;
         scale = (float)(wh / 360 > 1 ? wh / 360 : 1);
         SDL_SetRenderScale(renderer, scale, scale);
@@ -1333,7 +1339,7 @@ static Uint64 flash_until, flash_len; /* port_video_flash's */
 /* a flash bang's: the picture whited out, fading over ms (endless mode's lent flash bangs) */
 void port_video_flash(int ms) {
     flash_len = (Uint64)ms;
-    flash_until = SDL_GetTicks() + flash_len;
+    flash_until = ui_ms() + flash_len;
 }
 
 static void present_rect(s32 rx, s32 ry, int rgb24) {
@@ -1368,9 +1374,9 @@ static void present_rect(s32 rx, s32 ry, int rgb24) {
         SDL_SetRenderScale(renderer, 1, 1);
     } else if (!gpu_display.blank)
         draw_picture(pic, &src, &dst);
-    if (SDL_GetTicks() < flash_until && flash_len) {
+    if (ui_ms() < flash_until && flash_len) {
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, (Uint8)(255 * (flash_until - SDL_GetTicks()) / flash_len));
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, (Uint8)(255 * (flash_until - ui_ms()) / flash_len));
         SDL_RenderFillRect(renderer, &dst);
     }
     draw_debug_text();
@@ -1520,7 +1526,7 @@ u32 port_video_frames(void) {
 /* a line at the window's top left for a few seconds (the save states' "State saved", ...) */
 void port_video_message(const char *text) {
     snprintf(message, sizeof(message), "%s", text);
-    message_until = SDL_GetTicks() + 2500;
+    message_until = ui_ms() + 2500;
     port_log("message: %s\n", text);
 }
 

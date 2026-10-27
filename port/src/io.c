@@ -75,10 +75,9 @@ static u32 lane(u32 reg, u32 off, int size) {
     return (reg & lane_mask(off, size)) >> (off & 3) * 8;
 }
 
-static u64 sysclock(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ((u64)ts.tv_sec * 1000000000ull + ts.tv_nsec) * 33868800ull / 1000000000ull;
+static u64 sysclock(void) { /* (on the game's clock: irq.c; the root counters and DMA are what the game polls) */
+    u64 ns = port_clock_poll();
+    return (ns / 1000000000ull) * 33868800ull + (ns % 1000000000ull) * 33868800ull / 1000000000ull;
 }
 
 /* ---- GPU ---- */

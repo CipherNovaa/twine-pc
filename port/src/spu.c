@@ -789,10 +789,8 @@ static void render(s16 *out, int frames) {
 
 /* ---- clock and locking ---- */
 
-static u64 host_ns(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (u64)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+static u64 host_ns(void) { /* (the game's clock: irq.c) */
+    return port_clock_ns();
 }
 
 int spu_set_clock(int mode) {

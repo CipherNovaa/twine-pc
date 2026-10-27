@@ -6,10 +6,13 @@
  * arrives meanwhile is held and delivered when the runtime returns to game code. */
 #define _GNU_SOURCE
 #include <errno.h>
+#include <pthread.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
+#include <ucontext.h>
 #include <unistd.h>
 #include "port.h"
 #include "module.h"
@@ -77,6 +80,165 @@ static void on_timer(int sig) {
     run_vblank();
 }
 
+/* ---- the game's clock: the host's, or game time (TWINE_TURBO) ----
+ * With TWINE_TURBO=1 (headless runs only: tests) no timer gives vblanks. The clock stands still while the game works and
+ * moves on only where it waits: to the next vblank in port_wait_vblank, by a wait loop's pass in port_spin, by an
+ * extra drawing's fixed cost and to its due time in smooth motion (interp.c). Each vblank whose time the clock
+ * passes comes as the timer's would (held while the game masks it or runtime code runs, as many as 8). So the
+ * game sees the frames, vblanks, controls and sound it would on an infinitely fast machine, as fast as this one
+ * can run them. The sound chip's samples (spu.c), the CD drive's and the root counters' time (cdrom.c, io.c) and
+ * the port's on-screen messages (video.c) all keep to this clock.
+ * TWINE_TEST_VBLANKS=<n> (either clock): the run ends (exit 0) at the first wait once n vblanks have come, its
+ * last log line "test: the run's <n> vblanks are over". */
+#define VBLANK_PERIOD_NS 16683333ull /* NTSC: 59.94 Hz */
+int port_turbo PORT_NOSAVE;
+static int irq_started PORT_NOSAVE;
+static u64 virt_ns PORT_NOSAVE, virt_vblank_due PORT_NOSAVE;
+static u32 polls PORT_NOSAVE, poll_moves PORT_NOSAVE;
+static u32 end_vblanks PORT_NOSAVE;
+
+__attribute__((constructor)) static void clock_init(void) {
+    const char *t = getenv("TWINE_TURBO"), *e = getenv("TWINE_TEST_VBLANKS");
+    port_turbo = t && atoi(t) && getenv("TWINE_HEADLESS");
+    end_vblanks = e ? (u32)strtoul(e, NULL, 10) : 0;
+}
+
+static u64 host_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (u64)ts.tv_sec * 1000000000ull + (u64)ts.tv_nsec;
+}
+
+u64 port_clock_ns(void) {
+    return port_turbo ? virt_ns : host_ns();
+}
+
+/* turbo: the clock on to `to`, the vblanks due on the way delivered (or held) as the timer's signal would */
+static volatile int in_advance PORT_NOSAVE;
+static volatile u32 progress PORT_NOSAVE, spins PORT_NOSAVE, spin_at PORT_NOSAVE, kicks PORT_NOSAVE, kick_at PORT_NOSAVE;
+static u32 spins_told PORT_NOSAVE, kicks_told PORT_NOSAVE;
+
+static void turbo_advance(u64 to) {
+    polls = 0;
+    in_advance = 1;
+    progress++;
+    while (irq_started && virt_vblank_due <= to) {
+        virt_ns = virt_vblank_due;
+        virt_vblank_due += VBLANK_PERIOD_NS;
+        in_advance = 0;
+        on_timer(0);
+        in_advance = 1;
+    }
+    if (to > virt_ns)
+        virt_ns = to;
+    in_advance = 0;
+    if (spins != spins_told || kicks != kicks_told) {
+        if (spins != spins_told)
+            port_log("turbo: %u vblanks so far to busy waits of the game's own (the last at %08X)\n", spins, spin_at);
+        if (kicks != kicks_told)
+            port_log("turbo: %u vblanks so far given on the host's time, the game neither waiting nor spinning "
+                     "(the last at %08X): from there on the run is the host's timing, as when paced\n", kicks, kick_at);
+        spins_told = spins;
+        kicks_told = kicks;
+    }
+}
+
+/* turbo: a busy wait of the game's own (decompiled C at -O0 spinning on a variable its vblank handler changes, as
+ * LEVEL07's func_8002A61C does on g_Args->unk2DC before a CD search) gets no vblank from a clock that only moves
+ * when told. A timer looks at the game's thread every 1 ms of host time (TWINE_TURBO_LOOK_NS) while the clock
+ * stands still: when its registers, all of them, and the 4 KB of stack above are found again as they were at one of
+ * the last 8 looks, three looks running, in the program's own code (not a system call's; not in RT_ENTER), it is a
+ * loop that changes nothing: the vblank due comes there (whenever the host gets to see it, the game is in the same
+ * state: the run stays the same). As a last resort a still clock gets its vblank after 200 ms all the same
+ * (logged: the run is then the host's timing; never seen in the suite). */
+#define LOOKS 8
+static u32 look_stack_top PORT_NOSAVE; /* (the game's thread's stack's end) */
+static int look_fallback PORT_NOSAVE = 200; /* (looks in 200 ms) */
+static void on_turbo_check(int sig, siginfo_t *si, void *ctx) {
+    static u32 seen;
+    static int still, n, at, repeats;
+    static greg_t look[LOOKS][11];
+    extern char __executable_start[], etext[];
+    greg_t *g = ((ucontext_t *)ctx)->uc_mcontext.gregs, cur[11];
+    int i, again = 0;
+    (void)sig;
+    (void)si;
+    if (in_advance || progress != seen || port_rt_depth || in_irq) {
+        seen = progress;
+        still = n = repeats = 0;
+        return;
+    }
+    cur[0] = g[REG_EDI], cur[1] = g[REG_ESI], cur[2] = g[REG_EBP], cur[3] = g[REG_ESP], cur[4] = g[REG_EBX];
+    cur[5] = g[REG_EDX], cur[6] = g[REG_ECX], cur[7] = g[REG_EAX], cur[8] = g[REG_EIP], cur[9] = g[REG_EFL];
+    { /* (and the stack above, 4 KB of it: a loop that works (its counters at -O0 there, the recompiled code's
+       * registers in its wrapper's frame) comes back to the same registers now and then (GTE_cmd's end, called
+       * over and over), a busy wait leaves all of it as it was) */
+        const u32 *p = (const u32 *)cur[3], *end = (const u32 *)((u32)cur[3] + 4096);
+        u32 h = 2166136261u;
+        if ((u32)end > look_stack_top)
+            end = (const u32 *)look_stack_top;
+        for (; p < end; p++)
+            h = (h ^ *p) * 16777619u;
+        cur[10] = (greg_t)h;
+    }
+    if ((char *)cur[8] >= __executable_start && (char *)cur[8] < etext && !irq_masked)
+        for (i = 0; i < n && !again; i++)
+            again = !memcmp(look[i], cur, sizeof(cur));
+    memcpy(look[at], cur, sizeof(cur));
+    at = (at + 1) % LOOKS;
+    if (n < LOOKS)
+        n++;
+    repeats = again ? repeats + 1 : 0;
+    if (repeats >= 3) {
+        spins++;
+        spin_at = (u32)cur[8];
+    } else if (++still >= look_fallback) {
+        kicks++;
+        kick_at = (u32)cur[8];
+    } else
+        return;
+    still = n = repeats = 0;
+    virt_ns = virt_vblank_due;
+    virt_vblank_due += VBLANK_PERIOD_NS;
+    on_timer(0);
+}
+
+u64 port_clock_poll(void) {
+    if (port_turbo && ++polls >= 4096) { /* (polled 4096 times and still: a wait of its own; 50 us on) */
+        if (!poll_moves++)
+            port_log("turbo: the clock moved on by polling (vblank %u)\n", vblank_count);
+        turbo_advance(virt_ns + 50000);
+    }
+    return port_clock_ns();
+}
+
+void port_clock_sleep_until(u64 ns) {
+    struct timespec ts;
+    if (port_turbo) {
+        turbo_advance(ns);
+        return;
+    }
+    ts.tv_sec = (time_t)(ns / 1000000000ull);
+    ts.tv_nsec = (long)(ns % 1000000000ull);
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL); /* (a vblank's signal may end it early) */
+}
+
+void port_clock_spend(u64 ns) {
+    if (port_turbo)
+        turbo_advance(virt_ns + ns);
+}
+
+u32 port_video_frames(void);
+
+/* TWINE_TEST_VBLANKS: the run over (from the game's thread, not in an interrupt or runtime code) */
+static void check_end(void) {
+    if (end_vblanks && vblank_count >= end_vblanks && !in_irq && !port_rt_depth) {
+        port_log("test: the run's %u vblanks are over (frame %u%s)\n", end_vblanks, port_video_frames(),
+                 port_turbo ? ", turbo" : "");
+        _exit(0);
+    }
+}
+
 void port_rt_leave(void) {
     if (--port_rt_depth == 0 && irq_pending)
         deliver_pending();
@@ -87,9 +249,38 @@ void port_irq_start(void) {
     timer_t t;
     struct sigevent sev;
     struct itimerspec its;
+    irq_started = 1;
+    if (port_turbo) { /* (the vblanks come as the clock passes their time; the timer only checks it moves) */
+        virt_vblank_due = virt_ns + VBLANK_PERIOD_NS;
+        port_log("turbo: game time (TWINE_TURBO)\n");
+    }
     memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = on_timer;
-    sa.sa_flags = SA_RESTART;
+    if (port_turbo) {
+        /* (the look runs on a stack of its own: on the game's, its frame would be left below the game's stack
+         * pointer at whatever moment the host's timer chose, and some of the game's code reads locals it never set
+         * (a run's outcome changes with where the stack is: tools/endless_check.py runs them with the addresses
+         * fixed, setarch -R); there, what it found would be the host's timing) */
+        stack_t ss;
+        pthread_attr_t at;
+        void *base;
+        size_t size;
+        if (!pthread_getattr_np(pthread_self(), &at)) {
+            if (!pthread_attr_getstack(&at, &base, &size))
+                look_stack_top = (u32)base + (u32)size;
+            pthread_attr_destroy(&at);
+        }
+        if (!look_stack_top) /* (unknown: no further than this frame's 64 KB above) */
+            look_stack_top = (u32)&at + 65536;
+        ss.ss_size = 256 * 1024;
+        ss.ss_sp = malloc(ss.ss_size);
+        ss.ss_flags = 0;
+        sigaltstack(&ss, NULL);
+        sa.sa_sigaction = on_turbo_check;
+        sa.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
+    } else {
+        sa.sa_handler = on_timer;
+        sa.sa_flags = SA_RESTART;
+    }
     sigemptyset(&sa.sa_mask);
     sigaction(SIGALRM, &sa, NULL);
     memset(&sev, 0, sizeof(sev));
@@ -100,6 +291,13 @@ void port_irq_start(void) {
     timer_create(CLOCK_MONOTONIC, &sev, &t);
     its.it_value.tv_sec = 0;
     its.it_value.tv_nsec = 16683333; /* NTSC: 59.94 Hz */
+    if (port_turbo) /* (the look at the game's thread; TWINE_TURBO_LOOK_NS: tests) */
+    {
+        its.it_value.tv_nsec = getenv("TWINE_TURBO_LOOK_NS") ? atol(getenv("TWINE_TURBO_LOOK_NS")) : 1000000;
+        if (!its.it_value.tv_nsec) /* (0: no look, for tests: a busy wait of the game's then waits for ever) */
+            return;
+        look_fallback = (int)(200000000 / its.it_value.tv_nsec);
+    }
     its.it_interval = its.it_value;
     timer_settime(t, 0, &its, NULL);
 }
@@ -125,10 +323,13 @@ void port_wait_vblank(void) {
     while (vblank_count == v) {
         if (irq_pending && !irq_masked)
             deliver_pending();
+        else if (port_turbo)
+            turbo_advance(virt_vblank_due);
         else
             usleep(200);
     }
     poll_input_once();
+    check_end();
 }
 
 /* Code that waits in a loop of fixed length (a timeout counted in passes) runs far faster here than on the
@@ -138,6 +339,11 @@ void port_spin(u32 ns) {
     static u64 owed, since;
     struct timespec ts;
     u64 now, due;
+    if (port_turbo) { /* (the pass takes its time on the clock of game time; the work around it none) */
+        turbo_advance(virt_ns + ns);
+        check_end();
+        return;
+    }
     clock_gettime(CLOCK_MONOTONIC, &ts);
     now = (u64)ts.tv_sec * 1000000000ull + ts.tv_nsec;
     if (!owed)
@@ -151,6 +357,7 @@ void port_spin(u32 ns) {
     ts.tv_nsec = due % 1000000000ull;
     while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL) == EINTR)
         ;
+    check_end();
 }
 
 /* ---- libapi / BIOS ---- */
@@ -297,8 +504,11 @@ void port_state_frame(void);
  * VSync(1): don't wait, return the horizontal line count (approximated); VSync(-1): vblank counter. */
 s32 VSync(s32 mode) {
     u32 target;
-    if (mode < 0)
+    if (mode < 0) {
+        if (port_turbo) /* (a loop of the game's own waiting on the count) */
+            port_clock_poll();
         return vblank_count;
+    }
     if (mode == 1)
         return 0;
     if (port_subframe) /* an extra drawing between ticks (interp.c): nothing to wait for or show */
