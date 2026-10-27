@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0
+ * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 func_80053804 func_8005519C
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -159,7 +159,6 @@ void func_80053DE4(s16 type, s16 sub, s32 x, s32 y, s32 z); /* an event on the A
 extern u8 *D_8009CD98;     /* the weapon in Bond's hands (an object) */
 extern s32 D_8009CD4C;
 #define OBJ(i) ((u8 *)D_800AFFC8 + (i) * 0x124)
-static s32 dazzled[64]; /* (till when a flash bang has a guard dazzled: endless_flash) */
 static s32 hp_seen[64]; /* (headless tests: each person's health as the frame began, for the damage a hit did) */
 #define TYPE_DEF(t) ((u8 *)g_Args->unk228 + (t) * 0x70) /* the object types: +1 their class (6 people), +2 (0x22 a door's zone) */
 #define HEALTH(o) (*(s32 *)((u8 *)(o) + 0x34))
@@ -224,7 +223,6 @@ static void nav_reset(void);
 static void grenade_reset(void);
 static void callouts_reset(void);
 static void callout_hit(void);
-static int flash_call; /* (a flash bang gone off: a dazzled guard's "my eyes!" to come) */
 static void blast_frame(void);
 static int blast_active(void);
 
@@ -746,6 +744,53 @@ static void find_tmd(void) {
                 sx++;
         }
     }
+    if (getenv("TWINE_ENDLESS_TEST_ANIMS")) { /* (the people's animations: each one's frames and a hash of its data) */
+        extern u8 **D_800DDEE4;
+        extern u8 *D_800DDEE0;
+        s32 n = (s32)((u8 **)(void *)D_800DDEE0 - D_800DDEE4), i;
+        ELOG("research: animations: table %08X, next %08X: %d", (u32)(long)D_800DDEE4, (u32)(long)D_800DDEE0, n);
+        for (i = 0; i < n && i < 400; i++) {
+            u8 *e = D_800DDEE4[i];
+            u32 h = 2166136261u, j, fr;
+            if ((u32)(long)e < 0x80000000u || (u32)(long)e >= 0x80800000u) {
+                ELOG("research: animation %d: at %08X", i, (u32)(long)e);
+                continue;
+            }
+            fr = *(u16 *)e;
+            for (j = 2; j < fr * 0x4C && j < 0x20000; j++)
+                h = (h ^ e[j]) * 16777619u;
+            ELOG("research: animation %d: %u frames, hash %08X", i, fr, h);
+        }
+        if (getenv("TWINE_ENDLESS_TEST_ANIMFIND")) { /* (=id,...: where those animations' frames and root motion
+                                                       * are in the mission's archive's files) */
+            const char *s = getenv("TWINE_ENDLESS_TEST_ANIMFIND");
+            static const char *const files[] = {"DATA%02d.BIN", "GUY%02d1.BIN", 0};
+            while (*s) {
+                int id = atoi(s), f;
+                u8 *e = D_800DDEE4[id], *m = ((u8 **)(void *)D_800DDEE0)[id];
+                for (f = 0; files[f]; f++) {
+                    char nm[32], fn[24];
+                    u32 size, k;
+                    u8 *data;
+                    snprintf(fn, sizeof(fn), files[f], g_Args->level);
+                    snprintf(nm, sizeof(nm), "L%02d/%s", g_Args->level, fn);
+                    if (!(data = disc_member(g_Args->level, nm, &size)))
+                        continue;
+                    for (k = 0; k + 64 <= size; k += 2) {
+                        if (!memcmp(data + k, e, 64))
+                            ELOG("research: animation %d (%08X) frames at %s+0x%X", id, (u32)(long)e, nm, k);
+                        if (!memcmp(data + k, m, 24))
+                            ELOG("research: animation %d (%08X) root motion at %s+0x%X", id, (u32)(long)m, nm, k);
+                    }
+                    free(data);
+                }
+                while (*s && *s != ',')
+                    s++;
+                if (*s)
+                    s++;
+            }
+        }
+    }
     if (!t || !(ob = (u32 *)(long)D_800D2D30[atoi(t)]))
         return;
     ELOG("research: type %s model %08X: verts %08X x%u normals %08X x%u prims %08X x%u scale %d", t, (u32)(long)ob,
@@ -1138,6 +1183,108 @@ void func_800350F0(u8 *o) {
     func_80076A8C(o);
 }
 
+/* THE FLASH BANG, LENT, AS AT HOME (Courier, L02). Its fire handler (func_800397C4) sets weapon state 15 and takes one
+ * from the ammo. State 15 (Courier's jump table, jtgt_8007CAD4) plays the weapon's fire animation (+0x7C) and, as it
+ * starts, sound 0x34 with a counter (D_800A1198) at 0; each frame of the state: the screen's fade colour for a frame
+ * (func_8004B4F8 = LEVEL01's func_8004A8A8: counter 0, 1, 3 white FF FF FF, 2 E1 E1 FF, 4 C3 C3 FF) and its two
+ * prims (LEVEL01's D_800D77B8) drawn solid for counters 0-3, see-through again at 4 (func_80048B0C: SetSemiTrans);
+ * the counter up one; the animation done: sound 0xD, state 1, the counter -1, and no ammo left: the weapon out of the
+ * round (func_8007DEF4: flags bit 12 off). A guard seeing Bond (the AI's look, func_80053DF0 = LEVEL01's
+ * func_80051AE0, as it finds him seen: func_8005584C = func_80053804) while the counter is 1 gets AI flag 0x40000, and
+ * his script (Courier's GOON1.AIB, 0x41D: an interrupt on that flag) does the rest: within 5000 he is blinded (his
+ * "my eyes!" (Courier's sound 0x6A) at his place, the blinded animation at rate 2 or 6 (half and half: rand), into his
+ * standing one, then his recovering one; his combat state +0x3C 0 meanwhile, so he can't shoot); between 5000 and
+ * 12000 nothing (his main routine again); further, he stands a while (60 frames). Only Courier and Flashpoint (whose
+ * state 15 and scripts are the same: counter D_8009EF40, its own "my eyes!", 0x60) have any of this: elsewhere
+ * state 15 is the default's (state 1 at once, an error printed) and no script has the flag's interrupt.
+ * Lent, elsewhere: the fire handler as at home; state 15 run as state 8 (every mission's: the same animation, started
+ * the same way; done -> 1, see endless_weapon_pre) with the rest done here at its moments (the sounds from Courier's
+ * bank, the fade with the mission's own function and prims); the guard's flag set as at home (func_80053804 below)
+ * and his blinding run by the game's own script interpreter from a copy of Courier's routine (THE FLASH BANG'S GUARDS,
+ * below). In Courier and Flashpoint the game does it all. TWINE_TRACE=flash logs each step (and mods/trace.c the
+ * state, fade and the guards, at home and lent alike). */
+static const u8 cour_flash_sfx[8] = {4, 0x0C, 0x7E, 0, 0x7F, 0, 0, 0};    /* (Courier's sound 0x34: program, tone, note,
+                                                                           * voice, volume, randomness) */
+static const u8 cour_flash_end_sfx[8] = {1, 0x0C, 0x7E, 0, 0x7F, 0, 0, 0}; /* (its 0x0D) */
+static s32 flash_count = -1; /* (Courier's D_800A1198, for a lent flash bang) */
+static int flash_starting, flash_done;
+void func_8004A8A8(s8 r, s8 g, s8 b, s16 frames); /* the screen's fade colour for a while */
+extern u8 D_800D77B8[];                         /* its two prims (0x18 bytes each, one a buffer) */
+static int flash_trace(void) {
+    static int on = -1;
+    if (on < 0)
+        on = port_trace("flash");
+    return on;
+}
+/* In a run the flash is made to last twice as long (the playtest's ask): the white over the screen 8 frames solid and
+ * 2 see-through (Courier's 4 and 1: each colour of its sequence twice), at home too; a blinded guard twice as long
+ * (THE FLASH BANG'S GUARDS), at home too (Courier's and Flashpoint's guards then run the same commands). Courier's
+ * own: TWINE_ENDLESS_TEST_FLASH_VANILLA=1 (for comparing home and lent, tools/flash_trace.py). */
+static int flash_vanilla(void) {
+    static int v = -1;
+    if (v < 0)
+        v = getenv("TWINE_ENDLESS_TEST_FLASH_VANILLA") && atoi(getenv("TWINE_ENDLESS_TEST_FLASH_VANILLA"));
+    return v;
+}
+/* the fade for state 15's counter c (before it goes up): Courier's, or twice as long */
+static void flash_fade(s32 c) {
+    static const u8 fade[5][3] = {{0xFF, 0xFF, 0xFF}, {0xFF, 0xFF, 0xFF}, {0xE1, 0xE1, 0xFF}, {0xFF, 0xFF, 0xFF},
+                                  {0xC3, 0xC3, 0xFF}};
+    int b, k = flash_vanilla() ? c : c / 2, semi = flash_vanilla() ? c == 4 : c >= 8;
+    if (c < 0 || k > 4)
+        return;
+    for (b = 0; b < 2; b++) /* (func_80048B0C: SetSemiTrans) */
+        D_800D77B8[b * 0x18 + 7] = semi ? D_800D77B8[b * 0x18 + 7] | 2 : D_800D77B8[b * 0x18 + 7] & ~2;
+    func_8004A8A8(fade[k][0], fade[k][1], fade[k][2], 1);
+}
+static int flash_native(void) { /* (the mission's own state 15 and scripts) */
+    return g_Args->level == 2 || g_Args->level == 6;
+}
+static int lent_flash(void) { /* (a lent flash bang in hand) */
+    return D_800B0DD4 >= 0 && D_800B0DD4 < 16 && (lent_mask >> D_800B0DD4 & 1) &&
+           throw_kind((char *)g_Weapons[D_800B0DD4].pad0) == 1;
+}
+static s32 native_flash_count(void) { /* (Courier's D_800A1198, Flashpoint's D_8009EF40) */
+    return g_Args->level == 2 ? *(s16 *)0x800A1198u : g_Args->level == 6 ? *(s16 *)0x8009EF40u : -1;
+}
+/* (mods/trace.c) the lent flash bang's counter, as Courier's D_800A1198; -99 none lent here */
+s32 endless_flash_count(void) {
+    return flash_native() ? -99 : flash_count;
+}
+static void lent_flash_fire(void) { /* (func_800397C4) */
+    func_8007A17C(0xF);
+    g_Weapons[D_800B0DD4].ammo--;
+    ELOG("weapons: %s fired (state 15, as at home), %d left", (char *)g_Weapons[D_800B0DD4].pad0, g_Weapons[D_800B0DD4].ammo);
+    if (flash_trace())
+        port_log("trace: L%d f%d flash: fired: state 15 (%s)\n", g_Args->level, D_8009CDA8,
+                 flash_native() ? "the mission's own" : "run as state 8, the rest as Courier's");
+}
+/* state 15's own, each frame of it (after the state machine ran it as state 8) */
+static void flash_state_post(void) {
+    s32 c;
+    if (flash_starting) {
+        tone_as_game(2, cour_flash_sfx, 0, 0);
+        flash_count = 0;
+    }
+    c = flash_count;
+    flash_fade(c);
+    flash_count++;
+    if (flash_trace())
+        port_log("trace: L%d f%d flash: state 15 counter %d -> %d%s%s\n", g_Args->level, D_8009CDA8, c, flash_count,
+                 flash_starting ? ", its animation started, sound 0x34 (Courier's)" : "", flash_done ? ", done" : "");
+    if (flash_done) {
+        Weapon *w = &g_Weapons[D_800B0DD4];
+        tone_as_game(2, cour_flash_end_sfx, 0, 0);
+        D_800F11F0 = 1;
+        flash_count = -1;
+        if (w->ammo < 1)
+            w->flags &= ~0x1000;
+        if (flash_trace())
+            port_log("trace: L%d f%d flash: state 15 ends: sound 0xD (Courier's), state 1, ammo %d\n", g_Args->level,
+                     D_8009CDA8, w->ammo);
+    }
+}
+
 /* the state machine about to run (quickpunch.c): a lent launcher's home state run as state 8 meanwhile; what the
  * home state does besides, after it (endless_weapon_post) */
 static s32 launch_state;   /* (the home state put back after) */
@@ -1147,6 +1294,17 @@ int endless_weapon_pre(void) {
     u8 *inst, *def;
     s32 a, running, done, elapsed;
     launch_state = 0, launch_action = 0;
+    if (D_800F11F0 == 0xF && !flash_native() && D_8009CD98 && lent_flash() &&
+        (inst = *(u8 **)(D_8009CD98 + 0x114))) { /* (the lent flash bang's state 15) */
+        def = (u8 *)&g_Weapons[D_800B0DD4];
+        a = (s8)def[0x7C];
+        running = *(s32 *)(inst + 0x78) == a;
+        flash_starting = !running;
+        flash_done = running && *(s32 *)(inst + 0x80) < 2;
+        launch_state = 0xF;
+        D_800F11F0 = 8;
+        return 1;
+    }
     if ((D_800F11F0 != 0x16 && D_800F11F0 != 0x26) || !D_8009CD98 || (k = lent_launcher()) < 0)
         return 0;
     if ((k == 3) != (D_800F11F0 == 0x16))
@@ -1180,9 +1338,22 @@ int endless_weapon_pre(void) {
 
 void endless_weapon_post(int token) {
     s32 home = launch_state;
+    if (!token && flash_native() && !flash_vanilla() && D_800F11F0 == 0xF) { /* (at home, in a run: twice as long) */
+        s16 e[5];
+        if (port_endless_room(e))
+            flash_fade(native_flash_count() - 1);
+    }
     if (!token || !home)
         return;
     launch_state = 0;
+    if (home == 0xF) {
+        if (D_800F11F0 == 8 || flash_done) {
+            D_800F11F0 = 0xF;
+            flash_state_post();
+        } else if (flash_trace()) /* (the state machine moved on: a change, the menu) */
+            port_log("trace: L%d f%d flash: state 15 left: %d\n", g_Args->level, D_8009CDA8, D_800F11F0);
+        return;
+    }
     if (launch_action == 3 && (D_800F11F0 == 1 || D_800F11F0 == 8)) { /* (func_8007980C, as at home inside the state
                                                                        * machine: its last step has run already) */
         u8 *inst = *(u8 **)(D_8009CD98 + 0x114);
@@ -1205,31 +1376,6 @@ void endless_weapon_post(int token) {
         lent_rocket_launch();
     if (launch_action == 2)
         tone_as_game(9, gl_fire_sfx, 0, 0);
-}
-
-/* a flash bang gone off (quickgrenade.c): the guards near it, who can see it, dazzled for a while (they can't shoot),
- * and Bond's view whited out if he faces it near */
-void port_video_flash(int ms);
-void endless_flash(const s32 *pos) {
-    int i, n = 0;
-    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
-        u8 *o = OBJ(i);
-        s32 dx, dz;
-        if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0)
-            continue;
-        dx = POS(o)[0] - pos[0], dz = POS(o)[2] - pos[2];
-        if (dx > -4000 && dx < 4000 && dz > -4000 && dz < 4000) {
-            dazzled[i] = room_frames + SEC * 4;
-            n++;
-        }
-    }
-    {
-        s32 dx = POS(g_Player)[0] - pos[0], dz = POS(g_Player)[2] - pos[2];
-        if (dx > -2500 && dx < 2500 && dz > -2500 && dz < 2500)
-            port_video_flash(1500);
-    }
-    ELOG("weapons: a flash bang went off: %d guards dazzled", n);
-    flash_call = n > 0;
 }
 
 /* the lent frag grenade and the quick throw's count kept as one */
@@ -1362,6 +1508,7 @@ static void lend_into(int i, int pi, int k) {
     *(u32 *)(w + 0x3C) = shotgun_rec(r)               ? (u32)(long)lent_shotgun
                          : throw_kind(r->name) == 3  ? (u32)(long)lent_rocket_fire
                          : throw_kind(r->name) == 2  ? (u32)(long)lent_gl_fire
+                         : throw_kind(r->name) == 1  ? (u32)(long)lent_flash_fire
                          : throw_kind(r->name) != -1 ? (u32)(long)lent_throw
                                                      : lent_gun_fire; /* (this mission's guns' fire) */
     *(u32 *)(w + 0x40) = pickup;
@@ -2080,6 +2227,7 @@ static const char guard_scripts[12][9] = {
 #define FIXED_SCRIPT(w4) (g_Args->level >= 1 && g_Args->level <= 11 && !guard_scripts[g_Args->level][(w4) >> 20 & 7])
 /* the room as it starts: the kinds of guards, its doorways and floor */
 static int trace_sound(void);
+static void flash_reset(void);
 static void room_start(void) {
     find_tmd();
     if (trace_sound()) { /* (the mission's sounds of program 9, its voice lines: their numbers, for muting) */
@@ -2092,7 +2240,7 @@ static void room_start(void) {
     }
     s32 i, j, counts[256];
     room_frames = carried = budget = open = kills_scored = said = burst = at_entry = 0;
-    memset(dazzled, 0, sizeof(dazzled));
+    flash_reset();
     draw_slot = -1;
     kind_count = copy_next = door_count = stuck_count = seated_said = 0;
     for (i = 0; i < 64; i++)
@@ -2673,9 +2821,10 @@ static int ai_improved(void) {
     return ai_on;
 }
 
+static u8 blind_now[64]; /* (blinded by a flash bang: the port's AI keeps off him, THE FLASH BANG'S GUARDS) */
 static int hunter(u8 *o) {
     s32 *src = *(s32 **)(o + 0x60);
-    if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0 || !*(u8 **)(o + 0x118))
+    if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0 || !*(u8 **)(o + 0x118) || blind_now[(o - OBJ(0)) / 0x124 & 63])
         return 0;
     if (is_copy(o))
         return 1;
@@ -2965,7 +3114,7 @@ static void grenade_frame(void) {
     int n = port_live_grenades(g, 8), i, k;
     for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
         u8 *o = OBJ(i);
-        if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0 || !*(u8 **)(o + 0x118))
+        if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0 || !*(u8 **)(o + 0x118) || blind_now[i])
             continue;
         if (room_frames < scatter_until[i]) { /* (running from it) */
             steer_to(o, scatter_to[i][0], scatter_to[i][2], 2);
@@ -3027,7 +3176,7 @@ static void drive_frame(void) {
         int h = i & 7, f;
         s32 dx, dz, a, best, ba = 0, goal[3];
         s16 run;
-        if (!o[4] || o[5] != 6)
+        if (!o[4] || o[5] != 6 || blind_now[i])
             continue;
         learn_run(i, o);
         if (room_frames < hold_ground[i] && *(u8 **)(o + 0x118)) { /* (wedged: standing, not walked back into it by his
@@ -3221,11 +3370,12 @@ static int floor_near_free(s32 x, s32 z, s32 y, int me) {
 /* CALLOUTS (IMPROVED): the guards call out as they fight, in lines their own missions' guards have (each mission's voice
  * program 9; any mission's line can be lent to another, as the "grenade!" above): on catching sight of Bond after a
  * while, "I see him!", "intruder!", "over there!" ... ("he's up there!" when he is well above); as they go after him
- * unseen, "get him!", "surrender!" ...; when Bond is hit (now and then), "I've got him!"; dazzled by a flash bang, "my eyes!". Each guard
+ * unseen, "get him!", "surrender!" ...; when Bond is hit (now and then), "I've got him!" (a flash bang's "my eyes!" is the
+ * script's own: THE FLASH BANG'S GUARDS). Each guard
  * keeps one mission's voice where it has a line for the call; a call at most every 2 s, a guard's every 8 s. (Which
  * guards are men isn't known yet: step 10.) */
 typedef struct { u8 level, tone; const char *text; } Line;
-enum { CALL_SPOT, CALL_ABOVE, CALL_CHASE, CALL_HIT, CALL_EYES, CALLS };
+enum { CALL_SPOT, CALL_ABOVE, CALL_CHASE, CALL_HIT, CALLS };
 static const Line call_lines[CALLS][12] = {
     {{2, 0, "what the?"}, {2, 5, "intruder!"}, {6, 0, "what the!"}, {6, 3, "I see him!"}, {9, 0, "I see him!"},
      {7, 5, "halt!"}, {9, 1, "stop right there!"}, {8, 0, "he's over there!"}, {3, 5, "he's over there!"},
@@ -3234,7 +3384,6 @@ static const Line call_lines[CALLS][12] = {
     {{9, 2, "get him!"}, {7, 2, "kill him!"}, {8, 1, "let's get him"}, {2, 4, "surrender!"}, {6, 2, "surrender!"},
      {10, 2, "surrender!"}, {3, 0, "don't let him escape!"}, {2, 1, "raise the alarm!"}},
     {{8, 3, "I've got him!"}, {10, 6, "I think I got him!"}},
-    {{2, 2, "my eyes!"}, {6, 1, "my eyes!"}},
 };
 static const u8 call_voices[] = {2, 3, 6, 7, 8, 9, 10};
 static s32 last_call = -SEC * 10, call_at[64], unseen_since[64];
@@ -3258,8 +3407,8 @@ static int call_out(int i, int call, const char *why) {
     const Line *l = call_lines[call], *pick = 0;
     int n = 0, k, voice = call_voices[(i * 7 + o[6]) % sizeof(call_voices)];
     s32 d;
-    if (call != CALL_EYES && (room_frames - last_call < SEC * 2 || room_frames - call_at[i] < SEC * 8))
-        return 0; /* (but a dazzled man cries out at once) */
+    if (room_frames - last_call < SEC * 2 || room_frames - call_at[i] < SEC * 8)
+        return 0;
     while (n < 12 && l[n].text)
         n++;
     for (k = 0; k < n && !pick; k++)
@@ -3279,9 +3428,6 @@ static void callout_frame(void) {
     int i;
     for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
         u8 *o = OBJ(i);
-        if (flash_call && dazzled[i] > room_frames && o[4] && o[5] == 6 && HEALTH(o) > 0 && fighter_type(o[6], 0) &&
-            call_out(i, CALL_EYES, "dazzled by a flash bang"))
-            flash_call = 0;
         if (!hunter(o) || HEALTH(o) <= 0 || room_frames < scatter_until[i])
             continue;
         if (react[i] == 1 && room_frames - unseen_since[i] > SEC * 10) /* (he's seen Bond, the first time a while) */
@@ -3311,6 +3457,354 @@ static void callout_hit(void) {
     }
     if (best >= 0 && call_out(best, CALL_HIT, "Bond hit"))
         last_hit_call = room_frames;
+}
+
+/* THE FLASH BANG'S GUARDS, LENT (see THE FLASH BANG above). Courier's GOON1.AIB from its interrupt on 0x40000 (script
+ * offset 0x41D words): distance (+0x110: his script's vars[4]) over 5000 -> over 12000 stand 60 frames (anim 25 looped),
+ * else back to the main routine; within: his interrupts on 0x40000 and 0x80 (seeing Bond) off, +0x10 bit 4 set,
+ * anim+3 1 (no root motion), "my eyes!" (0x6A at his place), vars[5] = rand() % 0x1000, rate 2 if under 0x800 else 6,
+ * vars[7] (+0x3C, his combat state) 0, the blinded animation (78) whole, a blend from its last frame into his standing
+ * one (25) and that whole; then a jump (op 0, to 0x461: rate 2, root motion on, every interrupt on again: a flash now
+ * blinds him again), vars[7] 3, his recovering one (15) frames 0-1, vars[7] 2, vars[8] up one, the rest of it, rate
+ * 2, then his attack routine (0x3B5): 65 frames of animation at his rate, 130 or 334 frames in all. (Its HEADGOON's
+ * guards: rate 2 always, the blinded animation into 49, his interrupt on again, his main routine.) Lent, the same
+ * commands (in the mod's memory, run by the game's own
+ * interpreter: the same handlers, the game's rand) with the mission's numbers for those animations, Courier's own
+ * frames (from its DATA02.BIN) where the mission has none the same (only Flashpoint has the blinded one; Christmas's
+ * and Meltdown's recovering one differ): put after the mission's table (D_800DDEE4, root motion D_800DDEE0) in
+ * copies of it; the voice from Courier's bank (or Flashpoint's "my eyes!", for a guard with its voice: CALLOUTS).
+ * Not the same: his own script resumes where it was (not the attack routine: no other mission's script has one at a
+ * known place), with his interrupts back on and +0x10 bit 4 as before; meanwhile only interrupts of the kinds Courier's
+ * guards have stay on (the jump to 0x461 leaves the rest off: none of Courier's guards has them); the jump's other
+ * resets (script flags +0x18 off +0x10, vars by mask +0x1C, the call stack) aren't done; the 5000-12000 case leaves
+ * him be; a flash as he recovers blinds him again only within 5000. */
+typedef struct { u32 at, mat; u16 frames; } FlashAnim;
+static const FlashAnim cour_anims[3] = {{0x5CF7C, 0x5D81C, 29}, {0x49760, 0x49DA0, 21}, {0x473B0, 0x477E0, 14}};
+static const char *const cour_anim_names[3] = {"blinded", "standing", "recovering"};
+static u8 *cour_anim[3], *cour_mot[3];
+static int cour_anims_read; /* (1 read, -1 not to be had) */
+static u8 **anim_orig, *mot_orig; /* (the mission's tables, before the copies) */
+static u8 *anim_ext[512], *mot_ext[512];
+static int anim_ids[3] = {-1, -1, -1}, anim_extended, anim_n;
+/* (mods/trace.c) the animations' table's count while it is the copy here; -1 not */
+int endless_anim_count(void) {
+    extern u8 **D_800DDEE4;
+    return anim_extended && D_800DDEE4 == anim_ext ? anim_n : -1;
+}
+static u32 blind_code[48], far_code[2];
+static u32 blind_recover, blind_end; /* (the recovering part's start, the end, in blind_code) */
+static const u8 eyes_sfx[2][8] = {{9, 2, 0x1E, 0, 0x7F, 0, 0, 0},  /* (Courier's 0x6A) */
+                                  {9, 1, 0x14, 0, 0x7F, 0, 0, 0}}; /* (Flashpoint's 0x60) */
+static struct {
+    u8 on, far;
+    s32 since;
+    u32 pc, items, flags10;
+} blind[64];
+
+static int flash_anims(void) {
+    extern u8 **D_800DDEE4;
+    extern u8 *D_800DDEE0;
+    int k, j, n, extra = 0;
+    if (D_800DDEE4 == anim_ext && anim_extended)
+        return 1;
+    if (D_800DDEE4 == anim_orig && !anim_extended && anim_ids[0] >= 0)
+        return 1;
+    if (!cour_anims_read) { /* (Courier's frames and root motion, from its DATA02.BIN) */
+        u32 size;
+        u8 *data = disc_member(2, "L02/DATA02.BIN", &size);
+        cour_anims_read = -1;
+        if (data) {
+            for (k = 0; k < 3; k++) {
+                u32 fl = cour_anims[k].frames * 0x4Cu, ml = cour_anims[k].frames * 6u;
+                if (cour_anims[k].mat + ml > size || *(u16 *)(data + cour_anims[k].at) != cour_anims[k].frames)
+                    break;
+                cour_anim[k] = malloc(fl), cour_mot[k] = malloc(ml);
+                memcpy(cour_anim[k], data + cour_anims[k].at, fl);
+                memcpy(cour_mot[k], data + cour_anims[k].mat, ml);
+            }
+            if (k == 3)
+                cour_anims_read = 1;
+            free(data);
+        }
+        ELOG("ai: Courier's flash-bang animations %s", cour_anims_read > 0 ? "read from its DATA02.BIN" : "NOT found");
+    }
+    if (cour_anims_read < 0)
+        return 0;
+    if (D_800DDEE4 == anim_ext) /* (the copies, but the mission's were put back since: as they are) */
+        return 1;
+    anim_orig = D_800DDEE4, mot_orig = D_800DDEE0;
+    n = (int)((u8 **)(void *)D_800DDEE0 - D_800DDEE4); /* (the root motion's table follows the frames') */
+    if (n <= 0 || n + 3 > 512)
+        return 0;
+    for (k = 0; k < 3; k++) { /* (the mission's own where it has the same, frame for frame) */
+        u32 fl = cour_anims[k].frames * 0x4Cu, ml = cour_anims[k].frames * 6u;
+        anim_ids[k] = -1;
+        for (j = 0; j < n && anim_ids[k] < 0; j++)
+            if (*(u16 *)D_800DDEE4[j] == cour_anims[k].frames && !memcmp(D_800DDEE4[j], cour_anim[k], fl) &&
+                !memcmp(((u8 **)(void *)D_800DDEE0)[j], cour_mot[k], ml))
+                anim_ids[k] = j;
+        if (anim_ids[k] < 0)
+            anim_ids[k] = n + extra++;
+    }
+    anim_extended = extra > 0;
+    anim_n = n + extra;
+    if (anim_extended) {
+        memcpy(anim_ext, D_800DDEE4, n * sizeof(u8 *));
+        memcpy(mot_ext, D_800DDEE0, n * sizeof(u8 *));
+        for (k = 0; k < 3; k++)
+            if (anim_ids[k] >= n)
+                anim_ext[anim_ids[k]] = cour_anim[k], mot_ext[anim_ids[k]] = cour_mot[k];
+        D_800DDEE4 = anim_ext;
+        D_800DDEE0 = (u8 *)mot_ext;
+    }
+    { /* Courier's GOON1.AIB 0x41D (as above), the mission's numbers for the animations; in a run (not
+         * TWINE_ENDLESS_TEST_FLASH_VANILLA) the blinded pose held on its last frame as long again as the whole routine
+         * (rate 2: 130 frames more, rate 6: 334), the playtest's ask: twice as long blinded */
+        u32 B = anim_ids[0], I = anim_ids[1], R = anim_ids[2], *c = blind_code, n2 = 0, jb, je;
+        int hold = !flash_vanilla();
+#define EMIT(w) (c[n2++] = (w))
+        EMIT(0x0000000C), EMIT(4);                   /* +0x10 |= 4 */
+        EMIT(0x00000131);                            /* anim+3 = 1 */
+        EMIT(0x00290508), EMIT(0), EMIT(0x1000);     /* vars[5] = rand() % 0x1000 */
+        EMIT(0x09000406), EMIT(5), EMIT(0x800);      /* vars[5] < 0x800: the next skipped */
+        jb = n2, EMIT(0x00000001);                   /* -> rate 6 */
+        EMIT(0x0000FF19);                            /* rate 2 */
+        EMIT(0x00090709), EMIT(0);                   /* vars[7] = 0 */
+        EMIT(0xFF00001B | B << 8);                   /* B 0..last */
+        if (hold)
+            EMIT(0xFFFF001B | B << 8), EMIT(128 << 16 | 0x1C); /* (held: 2 + 128) */
+        EMIT(0x0000001A), EMIT(B | 0xFF00 | I << 16); /* B last -> I 0 */
+        EMIT(0xFF00001B | I << 8);                   /* I 0..last */
+        je = n2, EMIT(0x00000001);                   /* -> the end */
+        c[jb] |= (n2 - jb) << 16;
+        EMIT(0x00000619);                            /* rate 6 */
+        EMIT(0x00090709), EMIT(0);                   /* vars[7] = 0 */
+        EMIT(0xFF00001B | B << 8);                   /* B */
+        if (hold)
+            EMIT(0xFFFF001B | B << 8), EMIT(328 << 16 | 0x1C); /* (6 + 328) */
+        EMIT(0x0000001A), EMIT(B | 0xFF00 | I << 16); /* B -> I */
+        EMIT(0xFF00001B | I << 8);                   /* I */
+        c[je] |= (n2 - je) << 16;
+        blind_recover = n2;
+        EMIT(0x0000FF19);                            /* rate 2  } (Courier's: a jump, op 0, to 0x461, which */
+        EMIT(0x00000031);                            /* anim+3 0 }  resets these on the way) */
+        EMIT(0x00090709), EMIT(3);                   /* vars[7] = 3 */
+        EMIT(0x0100001B | R << 8);                   /* R 0..1 */
+        EMIT(0x00090709), EMIT(2);                   /* vars[7] = 2 */
+        EMIT(0x0009080A), EMIT(1);                   /* vars[8] += 1 */
+        EMIT(0xFF02001B | R << 8);                   /* R 2..last */
+        EMIT(0x0000FF19);                            /* rate 2 */
+        blind_end = n2;
+        EMIT(0x00000007);                            /* the end (here: his own script again, func_8005519C) */
+#undef EMIT
+        far_code[0] = 0xFF00001B | I << 8; /* (I looped) */
+        far_code[1] = 0xFFFF0001;
+    }
+    ELOG("ai: flash-bang animations: blinded %d, standing %d, recovering %d (the mission's %d; %d of Courier's put after)",
+         anim_ids[0], anim_ids[1], anim_ids[2], n, extra);
+    return 1;
+}
+
+/* his "my eyes!" at his place, as the script's sound command plays it (func_80027248): the mission's own at home
+ * (Courier's 0x6A, Flashpoint's 0x60), else from Courier's bank, or Flashpoint's for a guard with its voice; 1 if
+ * Flashpoint's */
+static int flash_cry(int i, u8 *obj) {
+    u8 *pos = *(u8 **)(obj + 0x90) + 0x14;
+    int voice = flash_native() ? g_Args->level == 6 : call_voices[(i * 7 + obj[6]) % sizeof(call_voices)] == 6;
+    if (flash_native()) {
+        func_80027248(g_Args->level == 6 ? 0x60 : 0x6A, (s32)(long)pos, 0);
+        return voice;
+    }
+    func_8003B808((s32)(long)pos);
+    tone_as_game(voice ? 6 : 2, eyes_sfx[voice], 8, 0);
+    return voice;
+}
+
+/* the guard seen to see Bond (the AI's look, func_80051AE0): with the lent flash bang's counter at 1, AI flag 0x40000
+ * as at home, and his script's interrupt for it (Courier's) */
+void func_80053804_orig(u8 *obj);
+void func_80053804(u8 *obj) {
+    u8 *ctx = *(u8 **)(obj + 0x118);
+    int i, k, voice = 0;
+    s32 d;
+    func_80053804_orig(obj);
+    if ((flash_native() ? (flash_vanilla() ? -1 : native_flash_count()) : flash_count) != 1 || !ctx ||
+        !port_endless_room(entry))
+        return; /* (at home, in a run, the same commands as lent: the mission's own interrupt for the flag is put off
+                 * with the others not of Courier's kinds, its routine never runs; TWINE_ENDLESS_TEST_FLASH_VANILLA
+                 * leaves the mission's own) */
+    *(u32 *)ctx |= 0x40000;
+    i = (int)((obj - OBJ(0)) / 0x124);
+    d = *(s32 *)(obj + 0x110);
+    if (flash_trace())
+        port_log("trace: L%d f%d flash: #%d type %d flagged 0x40000 (distance %d, script %d)\n", g_Args->level, D_8009CDA8,
+                 i, obj[6], d, obj[0xA7]);
+    if (i < 0 || i >= 64)
+        return;
+    if (blind[i].on) { /* (his interrupt for it off meanwhile, as at home; on again from his recovering (Courier's jump
+                        * to it, op 0, puts every interrupt on): the routine again) */
+        u32 pc = *(u32 *)(ctx + 0xA4);
+        if (blind[i].far || pc <= (u32)(long)&blind_code[blind_recover + 1] || pc > (u32)(long)&blind_code[blind_end] || d > 5000)
+            return;
+        *(u32 *)(ctx + 0xA4) = (u32)(long)blind_code;
+        *(s32 *)(ctx + 0x1C4) = 0;
+        flash_cry(i, obj);
+        ELOG("ai: type %d flashed at %d again as he recovers: blinded again", obj[6], d);
+        if (flash_trace())
+            port_log("trace: L%d f%d flash: #%d blinded again (recovering)\n", g_Args->level, D_8009CDA8, i);
+        return;
+    }
+    if (g_Args->level < 1 || g_Args->level > 11 || !guard_scripts[g_Args->level][obj[0xA7] & 7]) {
+        ELOG("ai: type %d flashed: not a guard's script (%d), as Courier's civilians", obj[6], obj[0xA7]);
+        return;
+    }
+    if (d > 5000 && d <= 12000) {
+        ELOG("ai: type %d flashed at %d: too far to be blinded (as at home)", obj[6], d);
+        return;
+    }
+    if (!flash_anims()) {
+        ELOG("ai: type %d flashed: no animations for it", obj[6]);
+        return;
+    }
+    blind[i].on = 1, blind[i].far = d > 12000, blind[i].since = room_frames;
+    blind_now[i] = 1;
+    blind[i].pc = *(u32 *)(ctx + 0xA4), blind[i].flags10 = *(u32 *)(ctx + 0x10) & 4, blind[i].items = 0;
+    for (k = 0; k < 32 && (u32)k < *(u32 *)(ctx + 0xAC); k++) { /* (his interrupts: only those of the kinds Courier's
+                                                                   * guards have on meanwhile, its trace says: on
+                                                                   * flags 1, 4, 0x4000 (his target down), 0x10000,
+                                                                   * 0x08000000; none on seeing Bond or not, a timer) */
+        u32 *item = (u32 *)(ctx + 0xB0 + k * 8), *cmd = (u32 *)(long)item[1];
+        if (!item[0] && cmd && (((u16 *)cmd)[1] != 1 || (cmd[1] & ~0x08014005u)))
+            item[0] = 1, blind[i].items |= 1u << k;
+    }
+    if (flash_trace()) /* (his interrupts: on or off, their conditions and what they do) */
+        for (k = 0; k < 32 && (u32)k < *(u32 *)(ctx + 0xAC); k++) {
+            u32 *item = (u32 *)(ctx + 0xB0 + k * 8), *cmd = (u32 *)(long)item[1];
+            if (cmd)
+                port_log("trace: L%d f%d flash: #%d interrupt %d %s: %08X %08X %08X %08X%s\n", g_Args->level, D_8009CDA8,
+                         i, k, item[0] ? "off" : "on", cmd[0], cmd[1], cmd[2], cmd[3],
+                         blind[i].items >> k & 1 ? " (put off)" : "");
+        }
+    *(u32 *)(ctx + 0xA4) = (u32)(long)(blind[i].far ? far_code : blind_code);
+    *(s32 *)(ctx + 0x1C4) = 0;
+    if (!blind[i].far)
+        voice = flash_cry(i, obj);
+    ELOG("ai: type %d flashed at %d: %s%s", obj[6], d, blind[i].far ? "stands a while (as at home: far)" : "blinded, crying out",
+         blind[i].far ? "" : voice ? " (Flashpoint's voice)" : " (Courier's voice)");
+    if (flash_trace())
+        port_log("trace: L%d f%d flash: #%d %s (pc %08X kept; interrupts off %08X; voice level %d)\n", g_Args->level,
+                 D_8009CDA8, i, blind[i].far ? "far: stands 60 frames" : "blinded: Courier's routine",
+                 blind[i].pc, blind[i].items, blind[i].far ? 0 : voice ? 6 : 2);
+}
+
+/* a guard back to his script where it was: his interrupts on again, +0x10 bit 4 as before */
+static void blind_back(int i, u8 *ctx, const char *how) {
+    int k;
+    *(u32 *)(ctx + 0xA4) = blind[i].pc;
+    *(s32 *)(ctx + 0x1C4) = 0;
+    for (k = 0; k < 32; k++)
+        if (blind[i].items >> k & 1)
+            *(u32 *)(ctx + 0xB0 + k * 8) = 0;
+    *(u32 *)(ctx + 0x10) = (*(u32 *)(ctx + 0x10) & ~4u) | blind[i].flags10;
+    blind[i].on = blind_now[i] = 0;
+    ELOG("ai: type %d back to his script after %d frames %s", OBJ(i)[6], room_frames - blind[i].since, how);
+    if (flash_trace())
+        port_log("trace: L%d f%d flash: #%d back to his script after %d frames (%s)\n", g_Args->level, D_8009CDA8, i,
+                 room_frames - blind[i].since, how);
+}
+
+/* the script command "the end" (op 7): at the blinded routine's end, his own script again, at once (the interpreter
+ * runs on while his wait is 0: as Courier's routine's last command, a jump, has him at his attack routine the same
+ * frame) */
+s32 func_8005519C_orig(u32 *cmd, u8 *obj, u8 *chr);
+s32 func_8005519C(u32 *cmd, u8 *obj, u8 *chr) {
+    int i;
+    if (cmd == &blind_code[blind_end] && obj && chr && (i = (int)((chr - OBJ(0)) / 0x124)) >= 0 && i < 64 && blind[i].on &&
+        *(u8 **)(chr + 0x118) == obj) {
+        blind_back(i, obj, "blinded");
+        return 1;
+    }
+    return func_8005519C_orig(cmd, obj, chr);
+}
+
+/* each frame: a far guard's 60 frames over, back to his script; one a handler of his took, let go */
+static void blind_frame(void) {
+    extern u8 **D_800DDEE4;
+    int i;
+    if (anim_extended && D_800DDEE4 != anim_ext && D_800DDEE4 == anim_orig) { /* (the mission put its own back) */
+        extern u8 *D_800DDEE0;
+        D_800DDEE4 = anim_ext;
+        D_800DDEE0 = (u8 *)mot_ext;
+    }
+    if (flash_native()) /* (at home the game's own routine: the port's AI keeps off him as lent, while his animation is
+                         * one of it (Courier's 78 25 49 15, Flashpoint's 85 30 63 17), from the flag on) */
+        for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+            static const s16 own[2][4] = {{78, 25, 49, 15}, {85, 30, 63, 17}};
+            u8 *o = OBJ(i), *ctx = *(u8 **)(o + 0x118), *an = *(u8 **)(o + 0x94);
+            const s16 *a = own[g_Args->level == 6];
+            s16 asked;
+            if (!o[4] || o[5] != 6 || !ctx || !an || HEALTH(o) <= 0) {
+                blind_now[i] = 0;
+                continue;
+            }
+            if (!blind_now[i] && ((*(u32 *)ctx | *(u32 *)(ctx + 4)) & 0x40000) && *(s32 *)(o + 0x110) <= 5000 &&
+                guard_scripts[g_Args->level][o[0xA7] & 7])
+                blind_now[i] = 1, blind[i].since = room_frames;
+            asked = *(s16 *)(an + 0x12);
+            if (blind_now[i] && room_frames - blind[i].since > 2 && asked != a[0] && asked != a[1] && asked != a[2] &&
+                asked != a[3])
+                blind_now[i] = 0;
+        }
+    for (i = 0; i < 64; i++) {
+        u8 *o, *ctx;
+        u32 pc;
+        int end;
+        if (!blind[i].on)
+            continue;
+        o = OBJ(i);
+        ctx = *(u8 **)(o + 0x118);
+        if (!o[4] || HEALTH(o) <= 0 || !ctx) {
+            blind[i].on = blind_now[i] = 0;
+            continue;
+        }
+        pc = *(u32 *)(ctx + 0xA4);
+        if (blind[i].far ? pc - (u32)(long)far_code >= sizeof(far_code)
+                         : pc - (u32)(long)blind_code >= sizeof(blind_code)) { /* (a handler of his took him) */
+            blind[i].on = blind_now[i] = 0;
+            if (flash_trace())
+                port_log("trace: L%d f%d flash: #%d left the routine (a handler of his script's) after %d frames: script "
+                         "+%X, his flags %08X %08X %08X\n", g_Args->level, D_8009CDA8, i, room_frames - blind[i].since,
+                         (pc - *(u32 *)(ctx + 0xA0)) / 4, *(u32 *)ctx, *(u32 *)(ctx + 4), *(u32 *)(ctx + 0x10));
+            continue;
+        }
+        end = blind[i].far ? room_frames - blind[i].since >= 60 : pc == (u32)(long)&blind_code[blind_end];
+        if (end) /* (the far one's time up; or the routine's end not run by the interpreter yet: as it would) */
+            blind_back(i, ctx, blind[i].far ? "standing" : "blinded");
+    }
+}
+
+/* THE DOUBLE-BARRELLED SHOTGUN, STRONGER IN A RUN (the playtest: undertuned for its slow reload, even in the game):
+ * Courier's Frinesi shotgun (both barrels a press, 6 pellets) does twice its damage a pellet (the weapon's +0xAC, which
+ * the guns' fire, func_8003872C, gives each bullet as its +0x34), at home and lent. TWINE_ENDLESS_TEST_SHOTGUN_VANILLA=1
+ * leaves it as it is. */
+static void shotgun_frame(void) {
+    static s16 boosted[16];
+    int i;
+    if (getenv("TWINE_ENDLESS_TEST_SHOTGUN_VANILLA") && atoi(getenv("TWINE_ENDLESS_TEST_SHOTGUN_VANILLA")))
+        return;
+    for (i = 0; i < 16; i++) {
+        s16 *dmg = (s16 *)((u8 *)&g_Weapons[i] + 0xAC);
+        if (strncmp((char *)g_Weapons[i].pad0, "FRINESI SHOTGUN", 15) || *dmg == boosted[i] || *dmg <= 0)
+            continue;
+        ELOG("weapons: FRINESI SHOTGUN (slot %d): %d damage a pellet -> %d (a run's)", i, *dmg, *dmg * 2);
+        *dmg = boosted[i] = *dmg * 2;
+    }
+}
+
+static void flash_reset(void) {
+    memset(blind, 0, sizeof(blind));
+    memset(blind_now, 0, sizeof(blind_now));
+    flash_count = -1;
 }
 
 static void ai_frame(void) {
@@ -3513,6 +4007,8 @@ void endless_frame(void) {
         }
     }
     room_frames++;
+    blind_frame(); /* (a lent flash bang's blinded guards) */
+    shotgun_frame();
     blast_frame(); /* (a guard's grenade sparing his friends: over) */
     if (room_frames % (SEC * 10) == 0)
         flood();
@@ -4195,10 +4691,6 @@ void func_80053114(u8 *obj) {
         return;
     }
     i = (obj - OBJ(0)) / 0x124 & 63;
-    if (dazzled[i] > room_frames) { /* (a flash bang's: he can't see to shoot) */
-        shots_held++;
-        return;
-    }
     if (!((func_80051728 && (func_80051728(obj, g_Player) & 0x40)) || sight(obj))) {
         /* (the game's own test of his seeing Bond, walls and all; Meltdown has none: the section's walls) */
         shots_held++;
@@ -4383,8 +4875,12 @@ static s32 tone_as_game(int level, const u8 *d, s32 flags, int loop) {
     s32 vol = (flags & 2) ? *((u8 *)g_Args + 0x138) * *(s16 *)((u8 *)g_Args + 0x13A) / 127
                           : *(s16 *)((u8 *)g_Args + 0x13A), l, r, note = d[2];
     int h;
-    if (func_80026ED0() >= 0x14 || ((g_CutScene == 2 || g_CutScene == 3)))
+    if (func_80026ED0() >= 0x14 || ((g_CutScene == 2 || g_CutScene == 3))) {
+        if (trace_sound()) /* (not played, as the game's own aren't then: logged all the same, as theirs are) */
+            port_log("trace: L%d f%d sound: lent (level %d program %d tone %d note %d) not played (%s): handle -1\n",
+                     g_Args->level, D_8009CDA8, level, d[0], d[1], d[2], g_CutScene ? "a cut scene" : "no voice free");
         return -1;
+    }
     vol = vol * d[4] / 127;
     if (flags & 8)
         r = vol * ((u8 *)g_Args)[0x136] / 127, l = vol * ((u8 *)g_Args)[0x137] / 127;

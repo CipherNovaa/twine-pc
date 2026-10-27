@@ -15,7 +15,8 @@ os.makedirs(ec.WORK, exist_ok=True)
 W = [("KOFFLER", "3:-1", "2:4", "8:0"), ("INGALLS", "9:0", "8:-1", "2:4"), ("AR36", "3:-1", "8:-1", "2:4"),
      ("BELGIQUE", "5:-1", "10:-1", "8:-1"), ("FRINESI AUTO", "10:-1", "8:-1", "3:-1"), ("IAC", "10:4", "10:-1", "8:-1"),
      ("KAZAKOVICH", "9:2", "9:0", "8:-1"), ("FRINESI SHOTGUN", "2:5", "2:4", "8:-1"), ("ROCKET", "5:4", "5:-1", "2:4"),
-     ("GRENADE LAUNCHER", "9:2", "9:0", "8:0"), ("FRAG", "8:3", "8:-1", "2:4"), ("MEYER", "6:0", "6:9", "2:4")]
+     ("GRENADE LAUNCHER", "9:2", "9:0", "8:0"), ("FRAG", "8:3", "8:-1", "2:4"), ("MEYER", "6:0", "6:9", "2:4"),
+     ("FLASH BANG", "6:0", "2:4", "8:0")]
 def pad(t0):
     return ",".join(["%d:4000" % (t0 + 100), "%d:0" % (t0 + 400)])
 base = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,

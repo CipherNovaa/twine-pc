@@ -16,6 +16,15 @@
  *         bytes: +0xB the object it brings along, +0x2D, +0x5C its sound; its model D_800D2D30[type]; +0x3A, +0x0E,
  *         +0x68; who made it +0x88; where), a projectile (kind 1) each frame as it flies, and each as it goes (how
  *         long it lived, where). For proving a lent launcher's rocket or round as at home (tools/lent_matrix.py).
+ * flash   the flash bang (Courier's, lent or at home; Flashpoint's): each frame of weapon state 15, its counter (Courier's
+ *         D_800A1198, Flashpoint's D_8009EF40, a lent one's endless_flash_count()), the screen fade (D_800D8150 on,
+ *         its colour D_8009D008, frames D_8009D00C) and its two prims' see-through bit (D_800D77B8 +7 bit 1); each
+ *         person flagged 0x40000 by the AI (seen at the frame's top: the AI's flags of the frame before, +0 or +4)
+ *         and, for 30 s after, each change of his animation (the one asked, +0x12, and the one it blends from, +0x10:
+ *         their numbers, frames and a hash of their data, the same in every mission for the same animation), its rate
+ *         (+0x20), root motion off (+3), his combat state (the script's vars[7], +0x3C), his script's place (+0xA4
+ *         from its start +0xA0, or "mod" in the mod's memory).
+ *         For proving the lent flash bang as at home (tools/flash_trace.py).
  * (sound: port/mods/endless.c's func_80026F30 and the runtime's port_tone_play / port_voice_play log under "sound".)
  *
  * The overlay (debug menu, F9: its WEAPON TRACE page is the mod debugmenu.c's) shows the weapon line live.
@@ -41,7 +50,7 @@ extern s32 D_800DDE08, D_800DDDA4; /* the weapon buttons, previous and next, pre
 extern s32 D_8009CDA8;  /* the mission's frame */
 extern s16 D_8009CAA4;  /* a menu over the mission */
 
-static int on_weapon = -1, on_change, on_proj;
+static int on_weapon = -1, on_change, on_proj, on_flash;
 extern u8 *D_800AFFC8;  /* the objects (0x124 bytes each) */
 extern s16 D_800B0AA8;  /* how many */
 extern s32 D_800D2D30[]; /* the object types' models */
@@ -183,6 +192,101 @@ static void trace_proj(void) {
     }
 }
 
+/* TWINE_TRACE=flash: state 15, the fade, the people flagged by it and their animations after */
+s32 endless_flash_count(void) __attribute__((weak));
+extern s8 D_800D8150;   /* the fade on */
+extern u8 D_8009D008[]; /* its colour */
+extern s16 D_8009D00C;  /* its frames */
+extern u8 D_800D77B8[]; /* its two prims */
+extern u8 **D_800DDEE4; /* the people's animations (frames of 0x4C bytes, the first u16 their count) */
+extern s16 D_800B0DA0, D_800B07B0; /* the first and last person */
+extern u8 *D_800DDEE0;  /* (their root motion's table, after it) */
+int endless_anim_count(void) __attribute__((weak)); /* (the table's count while endless.c's copy is in use) */
+static u32 anim_hash(s32 id, u32 *frames) {
+    s32 n = endless_anim_count ? endless_anim_count() : -1;
+    u8 *e;
+    u32 h = 2166136261u, j, fr;
+    if (n < 0)
+        n = (u32)(long)D_800DDEE4 - 0x80000000u < 0x800000u ? (s32)((u8 **)(void *)D_800DDEE0 - D_800DDEE4) : 0;
+    e = id >= 0 && id < n && n < 600 ? D_800DDEE4[id] : 0;
+    *frames = 0;
+    if (!e)
+        return 0;
+    fr = *(u16 *)e;
+    *frames = fr;
+    for (j = 2; j < fr * 0x4C && j < 0x20000; j++)
+        h = (h ^ e[j]) * 16777619u;
+    return h;
+}
+static void trace_flash(void) {
+    static s32 follow[64], last[64][5], flagged[64], fresh = 0x7FFFFFFF, after = -1;
+    s32 c = -99;
+    int i;
+    if (D_8009CDA8 < fresh) {
+        for (i = 0; i < 64; i++)
+            follow[i] = -1, flagged[i] = -9;
+        after = -1;
+    }
+    fresh = D_8009CDA8;
+    if (endless_flash_count && endless_flash_count() != -99)
+        c = endless_flash_count();
+    else if (g_Args->level == 2)
+        c = *(s16 *)0x800A1198u;
+    else if (g_Args->level == 6)
+        c = *(s16 *)0x8009EF40u;
+    if (D_800F11F0 == 15)
+        after = D_8009CDA8 + 4;
+    if (D_800F11F0 == 15 || D_8009CDA8 <= after)
+        port_log("trace: L%d f%d flash: weapon state %d counter %d, fade %s %02X %02X %02X for %d, prims %s %s\n",
+                 g_Args->level, D_8009CDA8, D_800F11F0, c, D_800D8150 ? "on" : "off", D_8009D008[0], D_8009D008[1],
+                 D_8009D008[2], D_8009D00C, D_800D77B8[7] & 2 ? "see-through" : "solid",
+                 D_800D77B8[0x18 + 7] & 2 ? "see-through" : "solid");
+    if (!D_800AFFC8)
+        return;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = D_800AFFC8 + i * 0x124, *ctx = *(u8 **)(o + 0x118), *an = *(u8 **)(o + 0x94);
+        s32 k[5];
+        if (!o[4] || o[5] != 6 || !ctx || !an || o == (u8 *)g_Player || *(s32 *)(o + 0x34) <= 0) {
+            if (follow[i] >= D_8009CDA8)
+                port_log("trace: L%d f%d flash: #%d gone (out or down)\n", g_Args->level, D_8009CDA8, i);
+            follow[i] = -1;
+            continue;
+        }
+        if (((*(u32 *)ctx | *(u32 *)(ctx + 4)) & 0x40000) && D_8009CDA8 - flagged[i] > 1) { /* (+4: the flags of the
+                                                                              * frame before, func_8005772C) */
+            flagged[i] = D_8009CDA8;
+            port_log("trace: L%d f%d flash: #%d type %d flagged 0x40000 (distance %d, combat state %d, health %d)\n",
+                     g_Args->level, D_8009CDA8, i, o[6], *(s32 *)(o + 0x110), *(s32 *)(ctx + 0x3C), *(s32 *)(o + 0x34));
+            if (follow[i] < D_8009CDA8)
+                last[i][1] = -1;
+            for (k[0] = 0; k[0] < 32 && (u32)k[0] < *(u32 *)(ctx + 0xAC); k[0]++) { /* (his script's interrupts) */
+                u32 *item = (u32 *)(ctx + 0xB0 + k[0] * 8), *cmd = (u32 *)(long)item[1];
+                if (cmd)
+                    port_log("trace: L%d f%d flash: #%d interrupt %d %s: %08X %08X %08X %08X\n", g_Args->level,
+                             D_8009CDA8, i, k[0], item[0] ? "off" : "on", cmd[0], cmd[1], cmd[2], cmd[3]);
+            }
+            follow[i] = D_8009CDA8 + 600;
+        }
+        if (follow[i] < D_8009CDA8)
+            continue;
+        k[0] = *(s16 *)(an + 0x10), k[1] = *(s16 *)(an + 0x12), k[2] = *(s32 *)(an + 0x20), k[3] = an[3];
+        k[4] = *(s32 *)(ctx + 0x3C);
+        if (k[1] != last[i][1] || k[2] != last[i][2] || k[3] != last[i][3] || k[4] != last[i][4]) { /* (not the blend's
+                                                                                * from: it follows playback) */
+            u32 f0, f1, h0 = anim_hash(k[0], &f0), h1 = anim_hash(k[1], &f1), pc = *(u32 *)(ctx + 0xA4),
+                base = *(u32 *)(ctx + 0xA0);
+            char at[16];
+            if (pc - base < 0x10000)
+                snprintf(at, sizeof(at), "+%X", (pc - base) / 4);
+            else
+                snprintf(at, sizeof(at), "mod");
+            port_log("trace: L%d f%d flash: #%d anim %d (%u frames %08X) -> %d (%u frames %08X) rate %d keep %d, combat "
+                     "state %d, script %s\n", g_Args->level, D_8009CDA8, i, k[0], f0, h0, k[1], f1, h1, k[2], k[3], k[4], at);
+            last[i][0] = *(s16 *)(an + 0x10), last[i][1] = k[1], last[i][2] = k[2], last[i][3] = k[3], last[i][4] = k[4];
+        }
+    }
+}
+
 /* each frame, at the top of the mission's frame loop (mods/savestate.c) */
 void trace_frame(void) {
     static s32 last_frame = -99999;
@@ -196,7 +300,10 @@ void trace_frame(void) {
         on_weapon = port_trace("weapon");
         on_change = port_trace("change");
         on_proj = port_trace("proj");
+        on_flash = port_trace("flash");
     }
+    if (on_flash)
+        trace_flash();
     if (on_proj)
         trace_proj();
     if (on_change && D_800B0DDC != last_to) {

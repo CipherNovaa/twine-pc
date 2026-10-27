@@ -118,3 +118,37 @@ level04 func_800291B0 func_800291B0
 level07 func_800291B0 func_800291B0
 # a projectile's own step each tick (port/mods/endless.c: the lent grenade launcher's round)
 level05 func_800350F0 func_800357E8
+# the AI's look finding Bond seen (endless.c: a lent flash bang's guards flagged 0x40000 there, as Courier's do)
+level02 func_80053804 func_8005584C
+level03 func_80053804 func_8005530C
+level04 func_80053804 func_80054C30
+level05 func_80053804 func_800555FC
+level06 func_80053804 func_80055734
+level07 func_80053804 func_80055C10
+level08 func_80053804 func_80055890
+level09 func_80053804 func_800559F0
+level10 func_80053804 func_80055FA0
+level11 func_80053804 func_80050AC0
+# the screen fade's two prims (endless.c: a lent flash bang's, solid for its first frames)
+level11 D_800D77B8 D_800DAB14
+# the screen fade's colour, frames and on (mods/trace.c: the flash bang's)
+level07 D_8009D008 D_800A1FA0
+level07 D_8009D00C D_800A1FA4
+level07 D_800D8150 D_800DEE18
+level10 D_8009D008 D_800A11B4
+level10 D_8009D00C D_800A11B8
+level10 D_800D8150 D_800DF564
+level11 D_8009D008 D_8009C6A8
+level11 D_8009D00C D_8009C6AC
+level11 D_800D8150 D_800DB4AC
+# the AI script's "the end" command, op 7 (endless.c: a lent flash bang's blinded routine's end, the guard's own script again)
+level02 func_8005519C func_8005720C
+level03 func_8005519C func_80056E28
+level04 func_8005519C func_80056700
+level05 func_8005519C func_80056EB8
+level06 func_8005519C func_80057254
+level07 func_8005519C func_800576BC
+level08 func_8005519C func_800573AC
+level09 func_8005519C func_800574FC
+level10 func_8005519C func_80057978
+level11 func_8005519C func_800525E0

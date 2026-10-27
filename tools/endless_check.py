@@ -455,16 +455,28 @@ def lent_runs():
                                       ("gl", "GRENADE LAUNCHER", "9:2", "9:0", "6:0")):
         for kind, nxt in (("home", home), ("lent", host)):
             runs["k_%s_%s" % (key, kind)] = Run("k_%s_%s" % (key, kind), int(first.split(":")[0]), 75, dict(
-                base, TWINE_ENDLESS_ROOM=first, TWINE_ENDLESS_NEXT=nxt, TWINE_ENDLESS_TEST_EXIT="200,5000",
+                base, TWINE_ENDLESS_TEST_SHOTGUN_VANILLA=1, TWINE_ENDLESS_ROOM=first, TWINE_ENDLESS_NEXT=nxt, TWINE_ENDLESS_TEST_EXIT="200,5000",
                 TWINE_ENDLESS_TEST_DRAW=w, TWINE_TEST_PAD="600:4000,900:0", TWINE_TEST_WEAPON="1100:1,1250:-1",
                 TWINE_TRACE="weapon,change" + (",proj" if key in ("rocket", "gl") else ""), TWINE_RENDERER="hw",
                 TWINE_SMOOTH=1))
             del runs["k_%s_%s" % (key, kind)].env["TWINE_ENDLESS_TEST_MEET"]
-    fire2 = "500:4000,503:0,560:4000,563:0"
-    for name, room, draw in (("k_flash", "2:4", "FLASH"),):
-        runs[name] = Run(name, int(room.split(":")[0]), 40, dict(base, TWINE_ENDLESS_ROOM=room, TWINE_ENDLESS_NEXT="8:0",
-                                                                TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW=draw,
-                                                                TWINE_TEST_PAD=fire2))
+    # (the flash bang at home (Courier) and lent (King's Ransom), as played: hw renderer, smooth motion; thrown every
+    # 90 frames, a guard sent put by Bond (TEST_MEET); traced: state 15, the fade, the guards flagged and blinded, the
+    # sounds; tools/flash_trace.py compares them)
+    flashes = ",".join("%d:4000,%d:0" % (t, t + 3) for t in range(300, 2400, 90))
+    fl = dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_TEST_DRAW="FLASH", TWINE_TEST_PAD=flashes,
+              TWINE_TRACE="flash,sound", TWINE_RENDERER="hw", TWINE_SMOOTH=1, TWINE_ENDLESS_TEST_FLASH_VANILLA=1)
+    runs["k_flash_home"] = Run("k_flash_home", 2, 60, fl)
+    runs["k_flash"] = Run("k_flash", 2, 70, dict(fl, TWINE_ENDLESS_NEXT="8:0", TWINE_ENDLESS_TEST_EXIT="300,5000"))
+    # (and to Fallen Angel: which guards come near enough to be blinded varies with the runs' pace)
+    runs["k_flash_b"] = Run("k_flash_b", 2, 70, dict(fl, TWINE_ENDLESS_NEXT="9:0", TWINE_ENDLESS_TEST_EXIT="300,5000"))
+    # (a run's flash, twice as long: at home 40 s, then lent in King's Ransom)
+    lf = dict(fl, TWINE_ENDLESS_NEXT="8:0", TWINE_ENDLESS_TEST_EXIT="800,5000")
+    del lf["TWINE_ENDLESS_TEST_FLASH_VANILLA"]
+    runs["k_flash_long"] = Run("k_flash_long", 2, 100, lf)
+    # (Courier's double-barrelled shotgun, its damage twice in a run: guards met and shot)
+    runs["k_sg_dmg"] = Run("k_sg_dmg", 2, 45, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_TEST_DRAW="FRINESI",
+                                                   TWINE_TEST_PAD=",".join("%d:4000,%d:0" % (t, t + 3) for t in range(240, 900, 40))))
     # (lent satchels as at home: a charge thrown, the detonator in hand by itself; fired, the charges back; then the
     # weapon buttons step all round: the detonator never comes with no charge out. As played: hw renderer, smooth)
     runs["k_satchel"] = Run("k_satchel", 8, 70, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="9:0",
@@ -475,10 +487,70 @@ def lent_runs():
     runs["k_shotgun"] = Run("k_shotgun", 8, 45, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="3:-1",
                                                     TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW="FRINESI",
                                                     TWINE_TEST_PAD="200:4000,240:0,520:4000,560:0"))
-    for k in ("k_flash", "k_satchel", "k_shotgun"):
+    for k in ("k_satchel", "k_shotgun"):
         del runs[k].env["TWINE_ENDLESS_TEST_MEET"]
     del runs["k_ammo"].env["TWINE_ENDLESS_TEST_MEET"]
     return runs
+
+
+def check_flash(runs):
+    """the flash bang lent (King's Ransom, Fallen Angel) as at home (Courier): tools/flash_trace.py on the runs' traces"""
+    import flash_trace
+    hp = os.path.join(runs["k_flash_home"].dir, "port.log")
+    part = room_part(runs["k_flash"].log, 8)
+    fired = re.findall(r"weapons: FLASH BANG fired \(state 15", part)
+    result("k", "Flash Bang: lent, fires as at home (its state 15)", len(fired) >= 2 and not runs["k_flash"].crashed(),
+           "%d fired in King's Ransom" % len(fired))
+    try:
+        h = flash_trace.parse(hp, 2)
+        ls = [flash_trace.parse(os.path.join(runs[k].dir, "port.log"), lv) for k, lv in (("k_flash", 8), ("k_flash_b", 9))]
+    except OSError as e:
+        for c in ("state 15", "guards blinded", "no callout"):
+            result("k", "Flash Bang lent: " + c, False, str(e))
+        return
+    l = {"flashes": [f for x in ls for f in x["flashes"]], "blinded": [b for x in ls for b in x["blinded"]],
+         "callouts": sum(x["callouts"] for x in ls)}
+    d = [x for y in ls for x in flash_trace.compare(h, y) if x != "no lent guard blinded"]
+    if not l["blinded"]:
+        d.append("no lent guard blinded")
+    how = " (trace; hw renderer, smooth motion)"
+    st = [x for x in d if "flash" in x and "guard" not in x]
+    result("k", "Flash Bang lent: state 15 as at home (its frames, counter, fade and prims, Courier's sounds)" + how,
+           bool(h["flashes"]) and bool(l["flashes"]) and not st,
+           "%d flashes home, %d lent%s" % (len(h["flashes"]), len(l["flashes"]), "; " + "; ".join(st)[:300] if st else ""))
+    gd = [x for x in d if "guard" in x or "my eyes" in x and "callouts" not in x]
+    result("k", "Flash Bang lent: guards who see it blinded as at home (flag 0x40000, Courier's animations, rate, "
+           "duration, a \"my eyes!\" each)" + how, not gd,
+           "home: %s; lent: %s%s" % (", ".join("%s %d frames" % (flash_trace.kind(b), b["len"]) for b in h["blinded"][:4]),
+                                     ", ".join("rate %d %d frames" % (b["rate"], b["len"]) for b in l["blinded"][:4]),
+                                     "; " + "; ".join(gd)[:300] if gd else ""))
+    result("k", "Flash Bang: no \"my eyes!\" callout of the port's on top of the game's line", not h["callouts"] and not l["callouts"],
+           "home %d, lent %d" % (h["callouts"], l["callouts"]))
+    lp = os.path.join(runs["k_flash_long"].dir, "port.log")
+    try:
+        rs = [flash_trace.parse(lp, 2), flash_trace.parse(lp, 8)]
+    except OSError as e:
+        rs, err = [], str(e)
+    pr = [p for r in rs for p in flash_trace.long_problems(r)]
+    fl = [f for r in rs for f in r["flashes"] if f["end"] is not None]
+    bl = [b for r in rs for b in r["blinded"]]
+    van = [flash_trace.fade_frames(f)[0] for f in h["flashes"] if f["end"] is not None]
+    result("k", "Flash Bang (a run's): the white twice as long, at home and lent (Courier's: %s frames solid)" % sorted(set(van)),
+           len({r["level"] for r in rs if r["flashes"]}) == 2 and not [p for p in pr if p.startswith("flash")] and set(van) == {4},
+           "%d flashes, %s frames solid%s" % (len(fl), sorted(set(flash_trace.fade_frames(f)[0] for f in fl)),
+                                              "; " + "; ".join(p for p in pr if p.startswith("flash"))[:200] if pr else ""))
+    result("k", "Flash Bang (a run's): guards blinded twice as long (260 or 668 frames, Courier's 130 or 334), a \"my eyes!\" each",
+           bool(bl) and not [p for p in pr if not p.startswith("flash")],
+           "%s%s" % (", ".join("L%d %d" % (r["level"], b["len"]) for r in rs for b in r["blinded"]),
+                     "; " + "; ".join(p for p in pr if not p.startswith("flash"))[:200] if pr else ""))
+    sg = runs["k_sg_dmg"].log
+    up = re.search(r"FRINESI SHOTGUN \(slot \d+\): (\d+) damage a pellet -> (\d+)", sg)
+    hits = [(int(f), int(p)) for f, p in re.findall(r" f(\d+) v\d+ hit: person (\d+) by FRINESI SHOTGUN", sg)]
+    kills = [int(f) for f in re.findall(r" f(\d+) v\d+ kill: guard .* with FRINESI SHOTGUN", sg)]
+    one = [f for f, p in hits if f + 1 in kills or f in kills]
+    result("k", "Frinesi Shotgun (a run's): twice the damage a pellet, a close hit downs a guard",
+           bool(up) and int(up.group(2)) == 2 * int(up.group(1)) and bool(one),
+           "%s; %d hits, %d downing at once" % ("%s -> %s a pellet" % up.groups() if up else "not raised", len(hits), len(one)))
 
 
 def check_pool_models(run, how):
@@ -568,17 +640,7 @@ def check_lent(runs):
     qh, ql = scope_picture(ph) if ph else 0, scope_picture(pl) if pl else 0
     result("k", "AR36: the scope's picture as at home", qh >= 0.85 and ql >= 0.85,
            "its marks found: home %d%%, lent %d%%" % (qh * 100, ql * 100))
-    for name, w, lv, what in (("k_flash", "FLASH BANG", 8, "flash bang"),):
-        part = room_part(runs[name].log, lv)
-        fired = re.findall(r"weapons: %s fired" % w, part)
-        extra = re.findall(r"a flash bang went off", part) if what == "flash bang" else fired
-        result("k", "%s: lent, fires its %s" % (w.title(), what), len(fired) >= 2 and len(extra) >= 1 and not runs[name].crashed(),
-               "%d fired in King's Ransom%s" % (len(fired), ", %d went off" % len(extra) if what == "flash bang" else ""))
-        if what == "flash bang":
-            eyes = re.findall(r'calls out "my eyes!"', part)
-            dazzled = re.findall(r"a flash bang went off: [1-9]", part)
-            result("k", "Flash Bang: a dazzled guard cries out", None if AI_ORIGINAL or not dazzled else bool(eyes),
-                   "%d dazzling, %d \"my eyes!\"%s" % (len(dazzled), len(eyes), " (the game's own AI: none)" if AI_ORIGINAL else ""))
+    check_flash(runs)
     part = room_part(runs["k_satchel"].log, 9)
     fr = lambda pat: [int(x) for x in re.findall(r" f(\d+) v\d+ weapons: " + pat, part)]
     thrown, det_in, boom, back = (fr(r"SATCHEL CHARGE fired"), fr(r"SATCHEL DETONATOR into slot \d+ \(a charge out"),
