@@ -319,6 +319,18 @@ static void take_out(u8 *o, const char *why) {
     func_800395E8(o);
 }
 
+/* the people's slots (port/mods/people.c: 12 with 8 MB of RAM, else the game's 6): the director's cap grows with them */
+int people_slots(void) __attribute__((weak));
+static int people_cap(void) {
+    return people_slots ? people_slots() : 6;
+}
+static int fill_test(void) { /* TWINE_ENDLESS_TEST_FILL=1 (tests): the director sends guards until every slot is taken */
+    static int on = -1;
+    if (on < 0)
+        on = getenv("TWINE_ENDLESS_TEST_FILL") != NULL;
+    return on;
+}
+
 /* the people alive (but Bond), and how many of those are the section's own */
 static int alive(int *own) {
     int i, n = 0;
@@ -3614,12 +3626,15 @@ void endless_frame(void) {
     i = D_800B07B0 - D_800B0DA0 + 1; /* (the people's slots but Bond's: six) */
     if (n >= i && room_frames % (SEC * 5)) /* (all taken by ones near: none can come) */
         ;
-    else if (!cooldown && room_frames > SEC * 2 && burst < 3 && own + burst < 3) {
+    else if (fill_test() && !cooldown && room_frames > SEC * 2) { /* (TWINE_ENDLESS_TEST_FILL: every slot filled) */
+        spawn("test fill");
+        cooldown = SEC / 2;
+    } else if (!cooldown && room_frames > SEC * 2 && burst < 3 && own + burst < 3) {
         burst++;
         spawn("few guards here");
         if (cooldown < SEC * 3 / 2)
             cooldown = SEC * 3 / 2;
-    } else if (!cooldown && budget >= SEC * 20 && n < 2 + wave) {
+    } else if (!cooldown && budget >= SEC * 20 && n < 2 + wave * people_cap() / 6) {
         spawn("director");
         budget = 0;
         cooldown = SEC * 4 + rnd() % (SEC * 4);
