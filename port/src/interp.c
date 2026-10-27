@@ -28,6 +28,7 @@ void port_video_present_draw(int index, s32 x, s32 y);
 float port_video_refresh(void);
 
 int port_subframe;        /* while an extra drawing runs */
+int port_smooth_t;        /* ... and how far into the tick it is (0-4096), for what fades with time (weaponkeys.c) */
 int port_smooth_shown;    /* the render step has shown this tick's frame (video.c then doesn't at VSync) */
 static int enabled = -1;
 static u64 tick_start;    /* host time the game's last VSync returned */
@@ -154,6 +155,7 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
     if (now > end)
         now = end;
     *t = (s32)((now - tick_start) * 4096 / (end - tick_start));
+    port_smooth_t = *t;
     port_mouse_pending(yaw, pitch);
     RT_ENTER(); /* holds the vblank interrupt */
     extra_t = PT_BEGIN();

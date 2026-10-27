@@ -14,8 +14,10 @@ typedef struct {
         char name[24]; /* the weapon slot's name: the same weapon in another mission has the same name */
         int owned;
         short ammo, clip, reserve;
+        short unticked; /* left out of the weapon buttons' round (the inventory's checkmark off): kept for the run */
     } weapon[ENDLESS_WEAPONS];
     char in_hand[24]; /* the weapon he held */
+    char before[24];  /* the one he held before it (Q, the last weapon: port/mods/weaponkeys.c) */
 } EndlessCarry;
 
 typedef struct {

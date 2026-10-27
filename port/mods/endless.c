@@ -46,6 +46,7 @@ void *memset(void *d, int c, unsigned n);
 void *memmove(void *d, const void *s, unsigned n);
 char *strncpy(char *d, const char *s, unsigned n);
 int strncmp(const char *a, const char *b, unsigned n);
+int strcmp(const char *a, const char *b);
 unsigned strlen(const char *s);
 char *strchr(const char *s, int c);
 char *strstr(const char *s, const char *t);
@@ -417,6 +418,8 @@ static int draw_slot = -1; /* (a slot to change to, as soon as the game lets him
 static int draw_hidden;     /* (the gun hidden while the carried one loads) */
 static int draw_direct;     /* (this frame: a room's start in a mission loaded afresh, draw_slot taken out at once) */
 static const char *detonator_charges(int slot);
+static void carry_ticks(void);
+static u32 user_out; /* (the slots out of the weapon buttons' round by Bond's checkmark: the inventory's, carried in) */
 static void carry_out(void) {
     EndlessCarry *c = &port_endless_carry;
     int i, j;
@@ -437,10 +440,13 @@ static void carry_out(void) {
             c->weapon[j].name[23] = 0;
         }
         c->weapon[j].owned = (w->flags & 0x800) != 0 /* (owned: bit 12 only says in the weapon buttons' round) */;
+        if (c->weapon[j].owned && strncmp(c->weapon[j].name, "SATCHEL DET", 11)) /* (its checkmark, for the run) */
+            c->weapon[j].unticked = !(w->flags >> 12 & 1);
         c->weapon[j].ammo = w->ammo;
         c->weapon[j].clip = w->clip;
         c->weapon[j].reserve = w->reserve;
     }
+    carry_ticks(); /* (the lent ones waiting out of a slot: their checkmarks) */
     {   /* the weapon in his hand now (or the one he is changing to: ours, or the game's) */
         int h = draw_slot >= 0 ? draw_slot : D_800B0DDC >= 0 && D_800B0DDC < SLOTS ? D_800B0DDC : D_800B0DD4;
         if (h < 0 || h >= SLOTS || g_Weapons[h].pad0[0] < 'A' || g_Weapons[h].pad0[0] > 'Z')
@@ -1451,10 +1457,31 @@ static void flash_state_post(void) {
  * home state does besides, after it (endless_weapon_post) */
 static s32 launch_state;   /* (the home state put back after) */
 static int launch_action;  /* (1 the rocket launched) */
+/* THE WEAPON'S NAME ON A CHANGE: as a put-away ends the state machine waits for the next one (state 6) and has the
+ * HUD show its name in a band at the bottom (D_8009EED0, 100 frames: func_800463C8), but not for the mission's watch
+ * slot (its constant there: straight to state 5, the menu's watch shows no name). A lent weapon in that slot (King's
+ * Ransom's only shared one) went unnamed: its name shown as any other weapon's (TWINE_TEST_NO_WATCH_NAME=1: not). */
+extern s32 D_8009EED0;
+extern s16 D_8009EEC4, D_800B0DD8;
+static const u8 watch_slots[12];
+static int watch_on;
+static s32 band_from;
+static void band_name(void) {
+    int w = g_Args->level < 12 ? watch_slots[g_Args->level] : 0;
+    if (band_from == 3 && D_800F11F0 == 5 && w && (D_800B0DDC == w || D_800B0DD8 == w) && (lent_mask >> w & 1) &&
+        !D_8009CAA4 && !watch_on && D_8009EEC4 < 0 && D_8009EED0 <= 0 && !getenv("TWINE_TEST_NO_WATCH_NAME")) {
+        D_8009EED0 = 100;
+        if (port_trace("select"))
+            port_log("trace: L%d f%d select: the name band for the lent weapon in the watch slot %d\n", g_Args->level,
+                     D_8009CDA8, w);
+    }
+}
+
 int endless_weapon_pre(void) {
     int k;
     u8 *inst, *def;
     s32 a, running, done, elapsed;
+    band_from = D_800F11F0;
     launch_state = 0, launch_action = 0;
     if (D_800F11F0 == 0xF && !flash_native() && D_8009CD98 && lent_flash() &&
         (inst = *(u8 **)(D_8009CD98 + 0x114))) { /* (the lent flash bang's state 15) */
@@ -1508,6 +1535,7 @@ void endless_weapon_post(int token) {
     }
     if (token && home == 0x16) /* (the rocket's first puff, made as it's launched: given its texture before it's drawn) */
         rocket_trail();
+    band_name();
     if (!token || !home)
         return;
     launch_state = 0;
@@ -1754,6 +1782,7 @@ static void lend_weapons(void) {
     memset(lent_sound, 0, sizeof(lent_sound));
     memset(slot_pool, -1, sizeof(slot_pool));
     pool_n = 0;
+    user_out = 0;
     if (!c->valid || pistol_slot() < 0 || !D_8009D0FC)
         return;
     for (j = 0; j < c->weapons && pool_n < 16; j++) {
@@ -1819,8 +1848,10 @@ static void lend_weapons(void) {
             }
             break;
         }
-    for (j = 0; j < pool_n; j++) { /* (in the weapon buttons' round to begin with, as a weapon picked up is) */
-        pool_round[j] = 1;
+    for (j = 0; j < pool_n; j++) { /* (in the weapon buttons' round as he left the last room: its checkmark; a weapon
+                                    * new to him is in it, as a weapon picked up is) */
+        int ce = carry_entry(pool[j].name);
+        pool_round[j] = !(ce >= 0 && c->weapon[ce].unticked);
         if (!strncmp(pool[j].name, "SATCHEL CHARGE", 14))
             sat_pi = j;
         if (!strncmp(pool[j].name, "SATCHEL DET", 11))
@@ -1855,6 +1886,12 @@ extern s32 D_800F11F0; /* the weapon's state */
  * state 5): its put-away animation, sound and ammo are its own, then the new one's model is loaded (the slot's model
  * type number stays, so the one loaded is marked stale: func_80075FE4 says no, and the state machine loads) */
 static int pool_pending_slot = -1, pool_pending_pi, pool_pending_put;
+static int select_old(void) {
+    static int v = -1;
+    if (v < 0)
+        v = getenv("TWINE_TEST_SELECT_OLD") && atoi(getenv("TWINE_TEST_SELECT_OLD"));
+    return v;
+}
 static void pool_later(int c, int pi) {
     pool_pending_slot = c, pool_pending_pi = pi, pool_pending_put = 0;
     if (D_800E2F58 == ((u8 *)&g_Weapons[c])[0x5B])
@@ -1909,8 +1946,9 @@ static void pool_step(void) {
         ELOG("pool: change from %d to %d (in hand %d), lent %d, pool %d, buttons %d %d, draw_slot %d", c, D_800B0DDC,
              D_800B0DD4, c >= 0 && c < 16 ? (int)(lent_mask >> c & 1) : -1, c >= 0 && c < 16 ? slot_pool[c] : -9,
              D_800DDE08, D_800DDDA4, draw_slot);
+    /* (the old way, before the weapons Bond carries were one list: TWINE_TEST_SELECT_OLD=1, with weaponkeys.c's) */
     if ((st == 3 || st == 6) && last_state != 3 && last_state != 6 && c >= 0 && c < 16 && (lent_mask >> c & 1) &&
-        slot_pool[c] >= 0 && D_800B0DDC != c && (D_800DDE08 || D_800DDDA4) && draw_slot < 0) {
+        slot_pool[c] >= 0 && D_800B0DDC != c && (D_800DDE08 || D_800DDDA4) && draw_slot < 0 && select_old()) {
         dir = D_800DDDA4 ? 1 : -1;
         pi = slot_pool[c] + dir; /* (the next one in a slot already: the game steps on to it) */
         while (pi >= 0 && pi < pool_n && !pool_round[pi] && !pool_shown(pi)) /* (one left out of the round) */
@@ -1925,6 +1963,161 @@ static void pool_step(void) {
         }
     }
     last_state = st;
+}
+
+/* THE WEAPONS BOND CARRIES, ONE LIST (port/mods/weaponkeys.c steps through it: the weapon buttons, the number keys, Q;
+ * the inventory shows it). Each weapon he owns is an entry of its own, whether it is in a slot (the mission's own, or a
+ * lent one in a shared slot) or waits in the pool out of one, and has a checkmark of its own (the inventory's toggle:
+ * in the weapon buttons' round or not; kept for the run in Bond's carry). Taking a pool weapon puts it into a shared
+ * slot first, one not in hand if there is one (the change then draws it, as the game draws any slot); into the slot in
+ * hand it goes once the weapon there is put away (pool_later). Either way the game's own put-away and draw: the same
+ * animations and sounds as any change. The lent detonator is his only while charges are out (as at home). */
+static struct { s8 slot, pi; } car[64];
+static int car_n;
+static int car_owned_pool(int pi) { /* (a pool weapon of his, waiting out of a slot) */
+    EndlessCarry *c = &port_endless_carry;
+    int j;
+    if (pool_shown(pi))
+        return 0;
+    if (pi == det_pi)
+        return charges_out > 0;
+    return (j = carry_entry(pool[pi].name)) >= 0 && c->weapon[j].owned;
+}
+static int car_build(void) {
+    s16 e5[5];
+    int i;
+    if (!port_endless_room(e5) || !g_Player || select_old())
+        return -1;
+    car_n = 0;
+    for (i = 0; i < SLOTS && car_n < 64; i++)
+        if (g_Weapons[i].pad0[0] >= 'A' && g_Weapons[i].pad0[0] <= 'Z' && (g_Weapons[i].flags & 0x800))
+            car[car_n].slot = (s8)i, car[car_n++].pi = -1;
+    for (i = 0; i < pool_n && car_n < 64; i++)
+        if (car_owned_pool(i))
+            car[car_n].slot = -1, car[car_n++].pi = (s8)i;
+    return car_n;
+}
+/* how many (-1: not in a run, the game's own list of slots) */
+int endless_carried(void) {
+    return car_build();
+}
+const char *endless_carried_name(int e) {
+    if (e < 0 || e >= car_n)
+        return "";
+    return car[e].slot >= 0 ? (const char *)g_Weapons[(int)car[e].slot].pad0 : pool[(int)car[e].pi].name;
+}
+int endless_carried_ticked(int e) { /* (its checkmark: in the weapon buttons' round) */
+    if (e < 0 || e >= car_n)
+        return 0;
+    if (car[e].slot >= 0)
+        return g_Weapons[(int)car[e].slot].flags >> 12 & 1;
+    return car[e].pi == det_pi ? 1 : pool_round[(int)car[e].pi];
+}
+/* the weapon in hand, or the one a change is drawing next (a pool weapon going into the slot in hand included) */
+int endless_carried_current(void) {
+    int i, s = D_800B0DDC >= 0 && D_800B0DDC < SLOTS ? D_800B0DDC : D_800B0DD4;
+    for (i = 0; i < car_n; i++)
+        if (pool_pending_slot >= 0 ? car[i].pi == pool_pending_pi && car[i].slot < 0 : car[i].slot == s)
+            return i;
+    return -1;
+}
+/* the shared slot a pool weapon goes into: a lent one, not the one in hand if another is, nor the lent detonator's
+ * while charges are out (-1: none) */
+static int pool_slot_for(int pi) {
+    int i, best = -1, score = -1;
+    (void)pi;
+    for (i = 0; i < SLOTS && i < 16; i++)
+        if ((lent_mask >> i & 1) && slot_pool[i] >= 0) {
+            int sc = (i != D_800B0DD4) * 4 + (slot_pool[i] != det_pi || !charges_out) * 2 + (i != D_800B0DDC);
+            if (sc > score)
+                score = sc, best = i;
+        }
+    return best;
+}
+static void trace_select(const char *fmt, const char *a, int n) {
+    if (port_trace("select"))
+        port_log("trace: L%d f%d select: %s%s %d\n", g_Args->level, D_8009CDA8, fmt, a, n);
+}
+/* entry e to be the weapon changed to (the change itself begun by the caller, as the game's buttons begin one):
+ * 1 a change to begin, 0 none (it is the one in hand) */
+int endless_carried_take(int e, const char *why) {
+    int s, pi;
+    if (e < 0 || e >= car_n)
+        return 0;
+    if (car[e].slot >= 0) {
+        s = car[e].slot;
+        if (pool_pending_slot >= 0) { /* (a pool weapon was to go into the slot in hand: not now) */
+            trace_select("a pool weapon's going in called off: ", pool[pool_pending_pi].name, pool_pending_slot);
+            pool_pending_slot = -1;
+        }
+        D_800B0DDC = (s16)s;
+        trace_select("to slot: ", (const char *)g_Weapons[s].pad0, s);
+        return s != D_800B0DD4;
+    }
+    pi = car[e].pi;
+    if ((s = pool_slot_for(pi)) < 0)
+        return 0;
+    if (s == D_800B0DD4) { /* (the slot in hand: in as the weapon there is put away) */
+        pool_later(s, pi);
+        D_800B0DDC = (s16)s;
+        ELOG("weapons: the pool's %s into slot %d (%s; as the one in hand is put away)", pool[pi].name, s, why);
+    } else {
+        if (pool_pending_slot >= 0)
+            pool_pending_slot = -1;
+        lent_ammo_out(s);
+        lend_into(s, pi, slot_idx[s]);
+        lent_ammo_in(s);
+        D_800B0DDC = (s16)s;
+        ELOG("weapons: the pool's %s into slot %d (%s)", pool[pi].name, s, why);
+    }
+    trace_select("a pool weapon into a shared slot: ", pool[pi].name, s);
+    return 1;
+}
+/* Q's weapon (the one held before), kept in the carry for the run */
+const char *endless_carried_before(void) {
+    return port_endless_carry.before;
+}
+void endless_carried_set_before(const char *name) {
+    snprintf(port_endless_carry.before, sizeof(port_endless_carry.before), "%s", name);
+}
+/* the room's carried weapon still to be drawn (Bond's hand not his own yet) */
+int endless_room_drawing(void) {
+    return draw_slot >= 0 || draw_direct || draw_hidden;
+}
+static void test_ticks(const char *t) {
+    int i, n = car_build();
+    if (atoi(t) != g_Args->level || !(t = strchr(t, ':')))
+        return;
+    for (i = 0; i < n; i++) {
+        const char *nm = endless_carried_name(i), *p = t + 1;
+        int want = 0;
+        while (*p) {
+            int k = 0;
+            while (p[k] && p[k] != '|' && nm[k] == p[k])
+                k++;
+            if (!p[k] || p[k] == '|')
+                want = 1;
+            while (*p && *p != '|')
+                p++;
+            if (*p)
+                p++;
+        }
+        if (car[i].slot >= 0) {
+            g_Weapons[(int)car[i].slot].flags = (g_Weapons[(int)car[i].slot].flags & ~0x1000) | want << 12;
+            user_out = (user_out & ~(1u << car[i].slot)) | (u32)!want << car[i].slot;
+        }
+        else if (car[i].pi != det_pi)
+            pool_round[(int)car[i].pi] = (u8)want;
+        ELOG("weapons: %s %s the weapon buttons' round (test)", nm, want ? "in" : "out of");
+    }
+}
+/* (Bond leaving: the lent weapons waiting out of a slot keep their checkmarks) */
+static void carry_ticks(void) {
+    EndlessCarry *c = &port_endless_carry;
+    int pi, j;
+    for (pi = 0; pi < pool_n; pi++)
+        if (pi != det_pi && !pool_shown(pi) && (j = carry_entry(pool[pi].name)) >= 0 && c->weapon[j].owned)
+            c->weapon[j].unticked = !pool_round[pi];
 }
 
 /* The pause menu's inventory (func_80042E6C draws it, func_80043078 runs it) in a run: the pool's weapons waiting
@@ -1962,16 +2155,20 @@ static int inv_round(int e) { /* (in the weapon buttons' round: flags bit 12, sh
     return e >= 0 ? (int)(g_Weapons[e].flags >> 12 & 1) : pool_round[-1 - e];
 }
 
+int weaponkeys_rank(const char *name) __attribute__((weak)); /* (the weapons' order: weaponkeys.c's groups) */
 static void inv_draw(void) {
-    EndlessCarry *c = &port_endless_carry;
     int i, j, v;
+    s32 rank[48];
     inv_n = 0;
-    for (i = 0; i < SLOTS && inv_n < 48; i++)
-        if (g_Weapons[i].flags >> 11 & 1)
-            inv_entry[inv_n++] = (s16)i;
-    for (i = 0; i < pool_n && inv_n < 48; i++)
-        if (!pool_shown(i) && i != det_pi && (j = carry_entry(pool[i].name)) >= 0 && c->weapon[j].owned)
-            inv_entry[inv_n++] = (s16)(-1 - i);
+    car_build(); /* (every weapon he carries, in a slot or not, in the order the weapon buttons step through them) */
+    for (i = 0; i < car_n && inv_n < 48; i++) {
+        s16 en = car[i].slot >= 0 ? car[i].slot : (s16)(-1 - car[i].pi);
+        s32 r = (weaponkeys_rank ? weaponkeys_rank(endless_carried_name(i)) : 0) * 64 + i;
+        for (j = inv_n; j > 0 && rank[j - 1] > r; j--)
+            inv_entry[j] = inv_entry[j - 1], rank[j] = rank[j - 1];
+        inv_entry[j] = en, rank[j] = r;
+        inv_n++;
+    }
     v = inv_n < INV_ROWS ? inv_n : INV_ROWS;
     if (inv_top > inv_n - v)
         inv_top = inv_n - v;
@@ -2007,7 +2204,7 @@ static void inv_draw(void) {
 
 void func_80042E6C(void) {
     s16 e[5];
-    if (!port_endless_room(e) || !pool_n) {
+    if (!port_endless_room(e) || !g_Player || (select_old() && !pool_n)) {
         func_80042E6C_orig();
         return;
     }
@@ -2020,7 +2217,7 @@ void func_80043078(void) {
     s16 e[5];
     s32 sel;
     int v, at;
-    if (!port_endless_room(e) || !pool_n) {
+    if (!port_endless_room(e) || !g_Player || (select_old() && !pool_n)) {
         func_80043078_orig();
         return;
     }
@@ -2053,12 +2250,8 @@ void func_80043078(void) {
         int en = inv_entry[at], slot = en;
         func_80026F30(menu_sound(1), 0);
         if (en < 0) { /* a pool weapon: into a shared slot, not the one in hand if another is lent */
-            int i, pi = -1 - en;
-            slot = -1;
-            for (i = 0; i < SLOTS && i < 16; i++)
-                if ((lent_mask >> i & 1) && slot_pool[i] >= 0 && (slot < 0 || slot == D_800B0DD4))
-                    slot = i;
-            if (slot < 0)
+            int pi = -1 - en;
+            if ((slot = pool_slot_for(pi)) < 0)
                 return;
             if (slot == D_800B0DD4) /* (the one in hand: in as it's put away) */
                 pool_later(slot, pi);
@@ -2075,10 +2268,14 @@ void func_80043078(void) {
         int en = inv_entry[at];
         func_80026F30(menu_sound(2), 0);
         func_8007F0D8(0);
-        if (en >= 0)
+        if (en >= 0) {
             g_Weapons[en].flags ^= 0x1000;
-        else
+            user_out = (user_out & ~(1u << en)) | (u32)!(g_Weapons[en].flags & 0x1000) << en;
+        } else if (-1 - en != det_pi) /* (the lent detonator: his, in the round, while charges are out) */
             pool_round[-1 - en] ^= 1;
+        if (port_trace("select"))
+            port_log("trace: L%d select: inventory: %s %s the weapon buttons' round\n", g_Args->level,
+                     en >= 0 ? (char *)g_Weapons[en].pad0 : pool[-1 - en].name, inv_round(en) ? "into" : "out of");
         Menu_ResetState();
         inv_draw();
     }
@@ -2138,7 +2335,10 @@ static void carry_in(void) {
             continue;
         if (c->weapon[j].owned && strncmp((char *)w->pad0, "SATCHEL DET", 11)) /* (a mission's own detonator: its
                                                                                 * code makes it his as a charge is set) */
-            w->flags |= 0x1800;
+            w->flags = (w->flags & ~0x1000) | 0x800 | (!c->weapon[j].unticked) << 12; /* (owned, and in the weapon
+                                                                       * buttons' round as he left it: the checkmark) */
+        if (c->weapon[j].owned && c->weapon[j].unticked && i < 32)
+            user_out |= 1u << i;
         if (c->weapon[j].ammo > w->ammo) {
             w->ammo = c->weapon[j].ammo;
             w->clip = c->weapon[j].clip;
@@ -2162,7 +2362,7 @@ static void draw_weapon(void) {
         if (!strncmp((char *)w->pad0, want, 23)) {
             if (!c->valid) /* (the run's first room: the pistol his) */
                 w->flags |= 0x1800;
-            if ((w->flags & 0x1800) == 0x1800) {
+            if (w->flags & 0x800) { /* (owned: in the round or not) */
                 if (i != D_800B0DD4)
                     draw_slot = i;
                 ELOG("weapon: %s drawn", want);
@@ -2926,8 +3126,10 @@ static void drop(u8 *o) {
                 continue;
             w = &g_Weapons[sl];
             nm = (char *)w->pad0;
-            if ((w->flags & 0x1800) != 0x1800 || !combat_item(nm) || !strncmp(nm, "UNARMED", 7) ||
-                !strncmp(nm, "SATCHEL DET", 11))
+            if (!(w->flags & 0x800) || /* (his: in the weapon buttons' round, or out of it by his checkmark only (one the
+                                        * mission keeps out itself, King's Ransom's frag grenade, as before)) */
+                (!(w->flags & 0x1000) && !(user_out >> sl & 1) && !(lent_mask >> sl & 1)) ||
+                !combat_item(nm) || !strncmp(nm, "UNARMED", 7) || !strncmp(nm, "SATCHEL DET", 11))
                 continue;
             cap = *(s16 *)&w->maxAmmo, have = w->reserve;
             if (cap > 0 && have >= cap)
@@ -4605,12 +4807,17 @@ void endless_frame(void) {
             ELOG("research: VRAM %d,%d %dx%d: %d used", r[q][0], r[q][1], r[q][2], r[q][3], used);
         }
     }
-    if (getenv("TWINE_ENDLESS_TEST_ARM") && room_frames == 40) { /* (headless tests: every weapon, ammo) */
+    if (getenv("TWINE_ENDLESS_TEST_ARM") && room_frames == 40 && /* (headless tests: every weapon, ammo; "first": in the
+                                                                   * run's first room only) */
+        (strcmp(getenv("TWINE_ENDLESS_TEST_ARM"), "first") || port_endless_wave() == 1)) {
         for (i = 0; i < 10; i++)
             if (g_Weapons[i].pad0[0] >= 'A' && g_Weapons[i].pad0[0] <= 'Z')
                 g_Weapons[i].flags |= 0x1800, g_Weapons[i].ammo += 20, g_Weapons[i].reserve += 20;
         log_weapons("armed (test)");
     }
+    if (getenv("TWINE_ENDLESS_TEST_TICKS") && room_frames == 41) /* (headless tests: <level>:<name>|<name>...: in that
+                                                                   * mission's rooms, only these checked in the inventory) */
+        test_ticks(getenv("TWINE_ENDLESS_TEST_TICKS"));
     if (getenv("TWINE_ENDLESS_AI_DUMP") && room_frames == SEC * 3) /* (a guard's script: its handlers and code) */
         for (i = D_800B0DA0; i <= D_800B07B0; i++) {
             u8 *o = OBJ(i), *ctx = *(u8 **)(o + 0x118);
