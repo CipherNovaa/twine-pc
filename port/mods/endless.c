@@ -1155,11 +1155,57 @@ static int gl_live(int g) { /* (round g still that round) */
     return o && o[4] && *(u8 **)o == gl_type.entry && *(s32 *)(o + 0x2C) == gl_round_born[g];
 }
 
-/* (the hit loop runs in the render step (the people's drawing, func_8005AEF8), so in smooth motion's extra drawings
- * too, whose memory is put back after: there a round's hits are hidden from it (it would print its error) and left
- * for the tick's own drawing) */
+/* THE HIT LOOP ONLY IN THE TICK'S OWN DRAWING (campaign and runs alike): the game's hit loop (each projectile's hits:
+ * the person or thing hit hurt, the impact's sound, spark and blast) runs in its render step (the people's drawing,
+ * func_8005AEF8), so smooth motion's extra drawings (port/src/interp.c, mods/smooth.c), which run the render step
+ * again before the tick's own, ran it too, each time on the tick's hits: its memory was put back after, but what it
+ * did outside PS1 RAM stayed (the sound trace saw an impact's sound called 10+ times a tick; host-played sounds,
+ * the lent weapons', would play again), and it cost each drawing. Game logic, not drawing: now skipped there.
+ * TWINE_TEST_SMOOTH_HITS=1 runs it in every drawing again (to show the bug). TWINE_TRACE=hitloop logs each tick's
+ * run: projectiles with hits, sounds asked for meanwhile, extra drawings that skipped it. */
+static int hitloop_sounds; /* (sounds asked for while the hit loop runs: func_80026F30) */
+static int hitloop_in;
+static int hitloop_trace(void) {
+    static int on = -1;
+    if (on < 0)
+        on = port_trace("hitloop");
+    return on;
+}
 void func_80033F38_orig(void);
+static void hit_loop(void);
 void func_80033F38(void) {
+    static int test = -1;
+    static s32 skipped, last_tick = -1;
+    if (test < 0)
+        test = getenv("TWINE_TEST_SMOOTH_HITS") && atoi(getenv("TWINE_TEST_SMOOTH_HITS"));
+    if (port_subframe && !test) {
+        skipped++;
+        return;
+    }
+    if (hitloop_trace()) {
+        int i, n = 0;
+        for (i = D_800B0DA8; i <= D_800B07B8 && i < 256; i++) { /* (projectiles with hits: +0x108's +0x64) */
+            u8 *o = OBJ(i), *b = *(u8 **)(o + 0x10C);
+            if (o[4] && b && b[0x64])
+                n++;
+        }
+        hitloop_sounds = 0, hitloop_in = 1;
+        hit_loop();
+        hitloop_in = 0;
+        if (n || hitloop_sounds || port_subframe)
+            port_log("trace: L%d f%d hitloop: %s, %d with hits, %d sounds%s (extra drawings skipping it since: %d)\n",
+                     g_Args->level, D_8009CDA8, port_subframe ? "an extra drawing's (TWINE_TEST_SMOOTH_HITS)" : "the tick's",
+                     n, hitloop_sounds, D_8009CDA8 == last_tick && !port_subframe ? ", AGAIN this tick" : "", skipped);
+        if (!port_subframe)
+            last_tick = D_8009CDA8;
+        skipped = 0;
+        return;
+    }
+    hit_loop();
+}
+
+/* (the lent grenade round's hits, then the game's loop) */
+static void hit_loop(void) {
     int g, k;
     for (g = 0; g < GL_LIVE; g++) {
         u8 *o = gl_round[g], *base;
@@ -5333,6 +5379,7 @@ static s32 tone_as_game(int level, const u8 *d, s32 flags, int loop) {
 void port_log(const char *fmt, ...);
 static int trace_sound(void);
 s32 func_80026F30(u32 id, s32 flags) {
+    hitloop_sounds += hitloop_in; /* (every sound comes here, a sound at a place too) */
     if (id >= LENT_SOUND && id < 0x80 && id - LENT_SOUND < 8 && lent_sound[id - LENT_SOUND].level) {
         int n = id - LENT_SOUND;
         s32 h = tone_as_game(lent_sound[n].level, lent_sound[n].sfx, flags, lent_sound[n].loop);
