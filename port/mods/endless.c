@@ -1130,6 +1130,24 @@ void func_80033F38(void) {
         skipped++;
         return;
     }
+    if (getenv("TWINE_ENDLESS_AMMO_LOG") && !port_subframe) { /* (headless tests: each of Bond's bullets that hits a person,
+                                                               * its own damage (+0x34, the weapon's +0xAC): the hit's
+                                                               * health drop is that times where it hit) */
+        int i, k;
+        for (i = D_800B0DA8; i <= D_800B07B8 && i < 256; i++) {
+            u8 *o = OBJ(i), *b = *(u8 **)(o + 0x10C);
+            if (!o[4] || !b || *(void **)(o + 0x88) != (void *)g_Player)
+                continue;
+            for (k = 0; k < b[0x64] && k < 8; k++) {
+                u8 *t = *(u8 **)(b + k * 0x14 + 0xC);
+                if (t && t[4] && t[5] == 6 && t != (u8 *)g_Player) {
+                    ELOG("bullet: %s's hit person %d: its damage %d", D_800B0DD4 >= 0 ? (char *)g_Weapons[D_800B0DD4].pad0 : "-",
+                         (int)((t - OBJ(0)) / 0x124), *(s32 *)(o + 0x34));
+                    break;
+                }
+            }
+        }
+    }
     if (hitloop_trace()) {
         int i, n = 0;
         for (i = D_800B0DA8; i <= D_800B07B8 && i < 256; i++) { /* (projectiles with hits: +0x108's +0x64) */
