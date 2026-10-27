@@ -448,15 +448,20 @@ def lent_runs():
         del runs[k].env["TWINE_ENDLESS_TEST_MEET"]
     # (home against lent as played, hw renderer + smooth motion, both a second room carried in: idle, fire held to
     # a reload, put away and drawn; tools/lent_matrix.py does every weapon this way)
-    for key, w, first, home, host in (("sg", "FRINESI SHOTGUN", "2:5", "2:4", "8:-1"), ("tmp", "MEYER", "6:0", "6:9", "2:4")):
+    # (the launchers too, with Bond's projectiles traced (TWINE_TRACE=proj): the rocket lent to Courier, the grenade
+    # launcher's round to Christmas (whose own subtype 4 is a grenade; 0x2C, the round's, is no mission's but Fallen Angel's))
+    for key, w, first, home, host in (("sg", "FRINESI SHOTGUN", "2:5", "2:4", "8:-1"), ("tmp", "MEYER", "6:0", "6:9", "2:4"),
+                                      ("rocket", "ROCKET LAUNCHER", "5:4", "5:-1", "2:4"),
+                                      ("gl", "GRENADE LAUNCHER", "9:2", "9:0", "6:0")):
         for kind, nxt in (("home", home), ("lent", host)):
             runs["k_%s_%s" % (key, kind)] = Run("k_%s_%s" % (key, kind), int(first.split(":")[0]), 75, dict(
                 base, TWINE_ENDLESS_ROOM=first, TWINE_ENDLESS_NEXT=nxt, TWINE_ENDLESS_TEST_EXIT="200,5000",
                 TWINE_ENDLESS_TEST_DRAW=w, TWINE_TEST_PAD="600:4000,900:0", TWINE_TEST_WEAPON="1100:1,1250:-1",
-                TWINE_TRACE="weapon,change", TWINE_RENDERER="hw", TWINE_SMOOTH=1))
+                TWINE_TRACE="weapon,change" + (",proj" if key in ("rocket", "gl") else ""), TWINE_RENDERER="hw",
+                TWINE_SMOOTH=1))
             del runs["k_%s_%s" % (key, kind)].env["TWINE_ENDLESS_TEST_MEET"]
     fire2 = "500:4000,503:0,560:4000,563:0"
-    for name, room, draw in (("k_rocket", "5:-1", "ROCKET"), ("k_gl", "9:0", "GRENADE"), ("k_flash", "2:4", "FLASH")):
+    for name, room, draw in (("k_flash", "2:4", "FLASH"),):
         runs[name] = Run(name, int(room.split(":")[0]), 40, dict(base, TWINE_ENDLESS_ROOM=room, TWINE_ENDLESS_NEXT="8:0",
                                                                 TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW=draw,
                                                                 TWINE_TEST_PAD=fire2))
@@ -470,7 +475,7 @@ def lent_runs():
     runs["k_shotgun"] = Run("k_shotgun", 8, 45, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="3:-1",
                                                     TWINE_ENDLESS_TEST_EXIT=300, TWINE_ENDLESS_TEST_DRAW="FRINESI",
                                                     TWINE_TEST_PAD="200:4000,240:0,520:4000,560:0"))
-    for k in ("k_rocket", "k_gl", "k_flash", "k_satchel", "k_shotgun"):
+    for k in ("k_flash", "k_satchel", "k_shotgun"):
         del runs[k].env["TWINE_ENDLESS_TEST_MEET"]
     del runs["k_ammo"].env["TWINE_ENDLESS_TEST_MEET"]
     return runs
@@ -563,12 +568,6 @@ def check_lent(runs):
     qh, ql = scope_picture(ph) if ph else 0, scope_picture(pl) if pl else 0
     result("k", "AR36: the scope's picture as at home", qh >= 0.85 and ql >= 0.85,
            "its marks found: home %d%%, lent %d%%" % (qh * 100, ql * 100))
-    for name, w in (("k_rocket", "ROCKET LAUNCHER"), ("k_gl", "GRENADE LAUNCHER")):
-        # (not lent until other missions can throw and fire them as their home missions do)
-        nl = re.search(r"weapons: %s not lent \(its home mission's own throw/fire states\)" % w, runs[name].log)
-        lent = re.search(r"weapons: %s lent from" % w, runs[name].log)
-        result("k", "%s: not lent (its home mission's own states)" % w.title(), bool(nl) and not lent,
-               nl.group(0)[9:] if nl else ("lent" if lent else "no word of it"))
     for name, w, lv, what in (("k_flash", "FLASH BANG", 8, "flash bang"),):
         part = room_part(runs[name].log, lv)
         fired = re.findall(r"weapons: %s fired" % w, part)
@@ -635,6 +634,25 @@ def check_lent(runs):
         result("k", "%s lent: as at home (trace: idle, fire, reload, put away, drawn; hw, smooth motion)" % w.title(),
                bool(lent) and hs["frames"] > 100 and ls["frames"] > 100 and 11 in ls["states"] and not bad,
                "; ".join(bad[:3]) or "no differences (%d frames at home, %d lent)" % (hs["frames"], ls["frames"]))
+    # (the launchers: their home missions' own weapon states (City of Walkways' 0x16, Fallen Angel's 0x26) run lent,
+    # and what they fire as at home: the rocket (City of Walkways' bullet: its mask, blast, speed) and the round
+    # (Fallen Angel's type 32: its drop, its blast where it hits); port/mods/endless.c THE LAUNCHERS)
+    for key, w, home, host, state, what in (("rocket", "ROCKET LAUNCHER", 5, 2, 22, "its rocket and blast"),
+                                            ("gl", "GRENADE LAUNCHER", 9, 6, 38, "its round, its drop and blast")):
+        hp, lp = (os.path.join(runs["k_%s_%s" % (key, k)].dir, "port.log") for k in ("home", "lent"))
+        hs = weapon_trace.summary(weapon_trace.frames(hp, w, home), weapon_trace.changes(hp, home))
+        ls = weapon_trace.summary(weapon_trace.frames(lp, w, host), weapon_trace.changes(lp, host))
+        ph, pl = weapon_trace.projectiles(hp, home), weapon_trace.projectiles(lp, host)
+        bad = weapon_trace.compare(hs, ls) + weapon_trace.compare_projectiles(ph, pl)
+        log = runs["k_%s_lent" % key].log
+        lent = re.search(r"weapons: %s .*lent from" % w, log)
+        blasts = [p for p in pl if p["blast"]]
+        errors = re.findall(r"CT_LAUNCHED_GRENADE: MISSING|NOT found on the disc", log)
+        result("k", "%s lent: as at home (trace: its own state, fire, %s; hw, smooth motion)" % (w.title(), what),
+               bool(lent) and hs["frames"] > 100 and ls["frames"] > 100 and state in ls["states"] and len(pl) >= 2
+               and len(blasts) >= 2 and not errors and not runs["k_%s_lent" % key].crashed() and not bad,
+               "; ".join(bad[:3] + errors[:1]) or "no differences (%d frames at home, %d lent; %d fired, %d went off)" %
+               (hs["frames"], ls["frames"], len(pl), len(blasts)))
     r = runs["k_many"]
     path = os.path.join(r.dir, "port.log")
     levels = [int(x) for x in re.findall(r"room start: level (\d+) ", r.log)]

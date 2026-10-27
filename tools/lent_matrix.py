@@ -4,7 +4,8 @@ first, then its home mission or one it's lent to (the same way in: carried, take
 held to a reload, put away and drawn (number key 1, then Q). Each pair compared by tools/weapon_trace.py.
 
 Usage: tools/lent_matrix.py [WORKDIR [8 [NAME...]]]   (8: 8 MB of RAM; NAMEs: only those runs)
-Runs at most 5 at once, headless, with SDL's dummy sound driver (tools/endless_check.py's Run)."""
+With TWINE_TRACE=proj too: Bond's projectiles (the launchers' rocket and round) compared as well (weapon_trace.py).
+Runs at most 4 at once, headless, with SDL's dummy sound driver (tools/endless_check.py's Run)."""
 import sys, os, subprocess, concurrent.futures as cf
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import endless_check as ec
@@ -13,12 +14,12 @@ ec.DISC = ec.disc(); ec.RAM8 = len(sys.argv) > 2 and sys.argv[2] == "8"
 os.makedirs(ec.WORK, exist_ok=True)
 W = [("KOFFLER", "3:-1", "2:4", "8:0"), ("INGALLS", "9:0", "8:-1", "2:4"), ("AR36", "3:-1", "8:-1", "2:4"),
      ("BELGIQUE", "5:-1", "10:-1", "8:-1"), ("FRINESI AUTO", "10:-1", "8:-1", "3:-1"), ("IAC", "10:4", "10:-1", "8:-1"),
-     ("KAZAKOVICH", "9:2", "9:0", "8:-1"), ("FRINESI SHOTGUN", "2:5", "2:4", "8:-1"), ("ROCKET", "5:4", "5:-1", "8:0"),
+     ("KAZAKOVICH", "9:2", "9:0", "8:-1"), ("FRINESI SHOTGUN", "2:5", "2:4", "8:-1"), ("ROCKET", "5:4", "5:-1", "2:4"),
      ("GRENADE LAUNCHER", "9:2", "9:0", "8:0"), ("FRAG", "8:3", "8:-1", "2:4"), ("MEYER", "6:0", "6:9", "2:4")]
 def pad(t0):
     return ",".join(["%d:4000" % (t0 + 100), "%d:0" % (t0 + 400)])
 base = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
-        "TWINE_TRACE": "weapon,change", "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1}
+        "TWINE_TRACE": "weapon,change,proj", "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1}
 runs = []
 def key(w):
     return w.split()[0].lower() + ("_" + w.split()[1].lower() if " " in w else "")
@@ -31,7 +32,7 @@ for w, first, home, host in W:
 only = sys.argv[3:] 
 if only:
     runs = [r for r in runs if any(o in r.name for o in only)]
-with cf.ThreadPoolExecutor(5) as ex:
+with cf.ThreadPoolExecutor(4) as ex:
     list(ex.map(lambda r: r.go(), runs))
 for w, first, home, host in W:
     k = key(w)

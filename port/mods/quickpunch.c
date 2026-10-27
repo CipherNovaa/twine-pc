@@ -82,6 +82,9 @@ void GsSortUnit(void *, void *, void *);
 void func_80077764(void *obj);
 void func_8007A554(void *);
 void quick_grenade(void);
+/* endless mode's lent launchers: their home missions' own weapon states (port/mods/endless.c) */
+int endless_weapon_pre(void) __attribute__((weak));
+void endless_weapon_post(int token) __attribute__((weak));
 void grenades_draw(void);
 void func_8007A580(void *);
 
@@ -273,7 +276,12 @@ void func_800788E0(void) {
     }
     fist_frame = D_8009CDA8;
     fists_reach();
-    func_800788E0_orig();
+    {
+        int token = endless_weapon_pre ? endless_weapon_pre() : 0;
+        func_800788E0_orig();
+        if (endless_weapon_post)
+            endless_weapon_post(token);
+    }
 #ifdef MOD_QUICKGRENADE
     if (D_8009CD98 && g_CutScene == 0)
         quick_grenade();
