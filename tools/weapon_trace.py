@@ -134,9 +134,9 @@ def compare(h, l):
         bad.append(f"model file {hf} at home, {lf} lent")
     if len(l["files"]) > 1:
         bad.append(f"more than one model file while idle (lent): {dict(l['files'])}")
-    idle = l["states"].get(1)
-    if idle and idle["flash"] > 2:
-        bad.append(f"muzzle flash shown {idle['flash']} frames while idle (lent)")
+    idle, hidle = l["states"].get(1), h["states"].get(1)
+    if idle and idle["flash"] > 2 + (hidle["flash"] if hidle else 0):  # (the flash fading as the shot's frame ends: home too)
+        bad.append(f"muzzle flash shown {idle['flash']} frames while idle (lent; at home {hidle['flash'] if hidle else 0})")
     if l["churn"] > 3:
         bad.append(f"the game changed weapons {l['churn']} times in a row (lent)")
     return bad

@@ -587,16 +587,22 @@ static void lent_shotgun(void) {
     u8 *wb = (u8 *)w, snd = wb[0x5A];
     s32 shots = *(s32 *)((u8 *)g_Args + 0x2C8), k;
     s16 ammo, clip, reserve;
+    /* (Courier's double-barrelled Frinesi shotgun fires both barrels a press, as its own handler does
+     * (func_800391D4): six pellets, two shells, two shots counted; the auto, one shell, five pellets) */
+    int both = !strncmp((char *)w->pad0, "FRINESI SHOTGUN", 15);
     if (!lent_gun_fire)
         return;
     call_ps1(lent_gun_fire);
     ammo = w->ammo, clip = w->clip, reserve = w->reserve;
     wb[0x5A] = 0xFF;
-    for (k = 0; k < 4; k++) /* (the other pellets) */
+    for (k = 0; k < (both ? 5 : 4); k++) /* (the other pellets) */
         call_ps1(lent_gun_fire);
     wb[0x5A] = snd;
+    if (both && (w->flags >> 13 & 1) && !(*(u32 *)((u8 *)g_Args + 4) >> 14 & 1) && clip > 0) /* (the second shell,
+                                                                                          * but with the cheat) */
+        clip--, ammo = clip + reserve;
     w->ammo = ammo, w->clip = clip, w->reserve = reserve;
-    *(s32 *)((u8 *)g_Args + 0x2C8) = shots + 1;
+    *(s32 *)((u8 *)g_Args + 0x2C8) = shots + (both ? 2 : 1);
 }
 
 static int shotgun_rec(const WeaponRec *r) {
@@ -920,6 +926,16 @@ static void lend_weapons(void) {
             if (r)
                 ELOG("weapons: %s can't be lent here yet (not a gun)", c->weapon[j].name);
             continue;
+        }
+        { /* the frag grenade, the rocket and grenade launchers: their home missions throw and fire them through states
+           * of their own (King's Ransom's 0x18, City of Walkways' 0x16-0x17, Fallen Angel's 0x26-0x27: animation,
+           * the moment the projectile leaves, the next one drawn), which other missions' weapon state machines
+           * haven't: not lent until they are (tools/lent_matrix.py: home and lent differ) */
+            int tk = throw_kind(r->name);
+            if ((tk == 0 || tk == 2 || tk == 3) && !getenv("TWINE_ENDLESS_TEST_LEND_ALL")) {
+                ELOG("weapons: %s not lent (its home mission's own throw/fire states)", c->weapon[j].name);
+                continue;
+            }
         }
         if (!strncmp(c->weapon[j].name, c->in_hand, 23) && pool_n) { /* (the one in his hand first: a slot for it) */
             memmove(&pool[1], &pool[0], sizeof(pool[0]) * pool_n);
