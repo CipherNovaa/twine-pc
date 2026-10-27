@@ -1,4 +1,5 @@
-/* TWINE_TIMING=1: where the time of each tick (VSync to VSync) goes, summed over 2 s of host time and logged as
+/* TWINE_TIMING=1: where the time of each tick (VSync to VSync) goes, summed over 2 s of the game's clock (host time,
+ * or with TWINE_TURBO game time: irq.c; the sections are always host time) and logged as
  * "timing:" lines, in ms per tick: the tick, the time VSync waited (to spare), smooth motion's extra drawings and
  * their machine copies, the GPU's command lists (DrawOTag), a lent weapon's VRAM swaps, sound banks read and
  * decoded, frames shown; with counts (extra drawings, VRAM read back under lent images, sound banks read) and the
@@ -10,7 +11,7 @@
 #include "port.h"
 
 int port_timing_on;
-static u64 sum[PT_IDS], tick_start, period_start, longest;
+static u64 sum[PT_IDS], tick_start, period_start, longest, period_clock;
 static u32 ticks;
 
 static const char *const names[PT_SECTIONS] = {"tick", "waiting", "extra drawings", "their copies", "DrawOTag",
@@ -39,10 +40,11 @@ __attribute__((constructor)) static void timing_init(void) {
 }
 
 void port_timing_tick(void) {
-    u64 now;
+    u64 now, clock;
     if (!port_timing_on)
         return;
     now = port_timing_now();
+    clock = port_clock_ns();
     if (tick_start) {
         u64 t = now - tick_start;
         sum[PT_TICK] += t;
@@ -52,8 +54,8 @@ void port_timing_tick(void) {
     }
     tick_start = now;
     if (!period_start)
-        period_start = now;
-    if (now - period_start >= 2000000000ull && ticks) {
+        period_start = now, period_clock = clock;
+    if (clock - period_clock >= 2000000000ull && ticks) {
         char line[512];
         int n = 0, i;
         for (i = 0; i < PT_SECTIONS && n < (int)sizeof(line) - 64; i++)
@@ -65,7 +67,7 @@ void port_timing_tick(void) {
             sum[i] = 0;
         ticks = 0;
         longest = 0;
-        period_start = now;
+        period_start = now, period_clock = clock;
     }
 }
 

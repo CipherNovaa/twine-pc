@@ -83,10 +83,21 @@ void port_smooth_forget(void) {
     }
 }
 
-static u64 now_ns(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (u64)ts.tv_sec * 1000000000ull + (u64)ts.tv_nsec;
+static u64 now_ns(void) { /* (the game's clock: irq.c) */
+    return port_clock_ns();
+}
+
+/* TWINE_TURBO (game time, irq.c): an extra drawing takes no time on the game's clock, so each is charged this
+ * much of it (TWINE_TURBO_DRAW_NS; by default 4 ms, about what one takes on the host, and the drawing's cost this
+ * file starts from): a tick of 3 vblanks gets the same number of them every time, as many as a host drawing
+ * each in 4 ms would make. */
+static u64 turbo_draw_ns(void) {
+    static u64 ns;
+    if (!ns) {
+        const char *s = getenv("TWINE_TURBO_DRAW_NS");
+        ns = s && atoll(s) > 0 ? (u64)atoll(s) : 4000000;
+    }
+    return ns;
 }
 
 static int smooth_enabled(void) {
@@ -130,12 +141,9 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
      * room for the rest) */
     if (room >= 0 && spacing && shown_at && now + (cost < spacing ? cost : spacing) < shown_at + spacing) {
         u64 at = shown_at + spacing - (cost < spacing ? cost : spacing);
-        struct timespec ts;
         if (at + room * cost + 1000000 > end)
             return 0;
-        ts.tv_sec = (time_t)(at / 1000000000ull);
-        ts.tv_nsec = (long)(at % 1000000000ull);
-        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL);
+        port_clock_sleep_until(at);
         now = now_ns();
     }
     if (getenv("TWINE_SMOOTH_LOG"))
@@ -175,7 +183,9 @@ int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
 
 /* After an extra drawing: put the machine back, and show the drawing. */
 void port_smooth_end(void) {
-    u64 now = now_ns();
+    u64 now;
+    port_clock_spend(turbo_draw_ns()); /* (turbo: its cost on the game's clock; a vblank passed is held until RT_LEAVE) */
+    now = now_ns();
     s32 x, y;
     int i;
     cost = (cost * 3 + (now - began)) / 4;

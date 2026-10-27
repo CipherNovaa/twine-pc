@@ -980,6 +980,8 @@ static struct timespec pace_start;
 static void pace(void) {
     struct timespec now, due;
     u64 due_ns, now_ns, start_ns;
+    if (port_turbo) /* (TWINE_TURBO: as fast as it goes) */
+        return;
     clock_gettime(CLOCK_MONOTONIC, &now);
     if (paced_frames == 0)
         pace_start = now;

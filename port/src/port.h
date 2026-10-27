@@ -34,6 +34,18 @@ u32 port_vblank_count(void);
 void port_wait_vblank(void);
 void port_spin(u32 ns);      /* a pass of a counted wait loop takes this long, as on the console */
 
+/* The clock the game's time is on (irq.c): the host's (CLOCK_MONOTONIC, ns), or with TWINE_TURBO=1 (headless only)
+ * a clock of game time that moves only while the game waits (port_wait_vblank, port_spin, smooth motion's
+ * waits), its vblank due every 16683333 ns of it: the game runs as fast as the machine allows, seeing what it
+ * would on a machine infinitely fast. port_clock_poll: the same, read by code that may be waiting on it in a loop
+ * of its own (a status polled): after many such reads with the clock still, it moves on (so a wait no one told
+ * the clock of still ends). */
+extern int port_turbo;
+u64 port_clock_ns(void);
+u64 port_clock_poll(void);
+void port_clock_sleep_until(u64 ns);
+void port_clock_spend(u64 ns); /* turbo: time taken (an extra drawing's), the vblanks it passes delivered */
+
 void port_pad_vblank(void);  /* pad.c: per-vblank controller update */
 void port_cd_irq(void);      /* cdrom.c: CD completion callbacks */
 void port_dma_irq(void);     /* io.c: MDEC transfer completion callbacks */

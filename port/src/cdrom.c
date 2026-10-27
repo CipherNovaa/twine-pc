@@ -74,10 +74,8 @@ static const char *disc_path(void) {
     return p ? p : "workbench/disc/007 - The World Is Not Enough (USA).bin";
 }
 
-static u64 host_ns(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (u64)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+static u64 host_ns(void) { /* (the game's clock: irq.c; the drive's status is what the game polls) */
+    return port_clock_poll();
 }
 
 static int read_raw(u32 lba, u8 *raw) {

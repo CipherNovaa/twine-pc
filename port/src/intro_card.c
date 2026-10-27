@@ -417,7 +417,7 @@ void intro_card_run(void) {
             SDL_RenderTexture(r, tex, &src, &dst);
         }
         SDL_RenderPresent(r);
-        if (SDL_GetTicksNS() - last < 4000000) /* no vsync after all: don't spin faster than 250 Hz */
+        if (!port_turbo && SDL_GetTicksNS() - last < 4000000) /* no vsync after all: don't spin faster than 250 Hz */
             SDL_DelayNS(4000000 - (SDL_GetTicksNS() - last));
         last = SDL_GetTicksNS();
     }
