@@ -11,6 +11,9 @@
  *         the fire timer (D_8009CF48), a menu over the mission (D_8009CAA4).
  * change  each change of the weapon to change to, and who asked: a mod (trace_change_by: endless's carry, pool,
  *         inventory; the number keys) or the weapon buttons (pressed that frame), else the game.
+ * person  each person of type TWINE_TRACE_TYPE (default: all) whenever their script's place (its pc, from the
+ *         script's start), wait, animation (asked +0x10, running +0x12, frame +0x14) or the object's flags (+0xA4)
+ *         change: "trace: L<level> f<frame> person <slot> type <t>: pc ... wait ... anim ...".
  * proj    the objects that aren't people nor pickups (projectiles, blasts, smoke, flashes: kinds 1-3, 5, 7, 8): each one as
  *         it appears (its index, kind +5, type +7 and that type's entry in the mission's table, g_Args+0x228, 0x70
  *         bytes: +0xB the object it brings along, +0x2D, +0x5C its sound; its model D_800D2D30[type]; +0x3A, +0x0E,
@@ -41,7 +44,7 @@ extern s32 D_800DDE08, D_800DDDA4; /* the weapon buttons, previous and next, pre
 extern s32 D_8009CDA8;  /* the mission's frame */
 extern s16 D_8009CAA4;  /* a menu over the mission */
 
-static int on_weapon = -1, on_change, on_proj;
+static int on_weapon = -1, on_change, on_person, on_proj;
 extern u8 *D_800AFFC8;  /* the objects (0x124 bytes each) */
 extern s16 D_800B0AA8;  /* how many */
 extern s32 D_800D2D30[]; /* the object types' models */
@@ -107,6 +110,36 @@ static void tone_ab(void) {
         port_tone_play(g_Args->level, d[id].prog, d[id].tone, d[id].note, vol, vol, 0);
     else
         port_tone_play_pcm(g_Args->level, d[id].prog, d[id].tone, d[id].note, vol * 0x7F, 0);
+}
+
+/* people's scripts and animations (TWINE_TRACE=person) */
+extern s16 D_800B0DA0, D_800B07B0;
+static void trace_people(void) {
+    static int type = -2;
+    static u32 last[64][7];
+    int i;
+    if (type == -2)
+        type = getenv("TWINE_TRACE_TYPE") ? atoi(getenv("TWINE_TRACE_TYPE")) : -1;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = (u8 *)D_800AFFC8 + i * 0x124, *an = *(u8 **)(o + 0x94), *ctx = *(u8 **)(o + 0x118);
+        u32 now[7];
+        if (!o[4] || o[5] != 6 || (type >= 0 && o[6] != type))
+            continue;
+        now[0] = ctx ? *(u32 *)(ctx + 0xA4) - *(u32 *)(ctx + 0xA0) : 0xFFFFFFFF;
+        now[1] = ctx ? *(u32 *)(ctx + 0x1C4) : 0;
+        now[2] = an ? (u32)(u16)*(s16 *)(an + 0x10) << 16 | (u16)*(s16 *)(an + 0x12) : 0;
+        now[3] = an ? *(u16 *)(an + 0x14) : 0;
+        now[4] = *(u32 *)(o + 0xA4);
+        now[5] = *(u32 *)(o + 0x34);
+        now[6] = ctx ? *(u32 *)ctx : 0;
+        if (now[0] == last[i][0] && now[2] == last[i][2] && now[4] == last[i][4] &&
+            now[5] == last[i][5] && now[6] == last[i][6])
+            continue;
+        port_log("trace: L%d f%d person %d type %d: pc %04X wait %d anim %d/%d frame %d flags %08X health %d script flags %08X\n",
+                 g_Args->level, D_8009CDA8, i, o[6], now[0], (s32)now[1], (s16)(now[2] >> 16), (s16)now[2], now[3],
+                 now[4], (s32)now[5], now[6]);
+        { int k; for (k = 0; k < 7; k++) last[i][k] = now[k]; }
+    }
 }
 
 /* TWINE_TRACE=proj: the objects that aren't people nor pickups, as they come, fly and go */
@@ -195,8 +228,11 @@ void trace_frame(void) {
     if (on_weapon < 0) {
         on_weapon = port_trace("weapon");
         on_change = port_trace("change");
+        on_person = port_trace("person");
         on_proj = port_trace("proj");
     }
+    if (on_person)
+        trace_people();
     if (on_proj)
         trace_proj();
     if (on_change && D_800B0DDC != last_to) {
