@@ -716,9 +716,21 @@ def room_part(log, level):
 
 
 def fire_rate(part, weapon):
-    """the most shots in any 20 frames (the room's frames), from the clip's count going down"""
-    t = [int(m.group(1)) for m in re.finditer(r"ammo: %s[^:]*? clip \d+ at frame (\d+)" % weapon, part)]
+    """the most shots in any 20 frames (the room's frames), from the clip's count going down (only down: a clip filled
+    from a pickup of its ammo, as one is taken mid-burst, logs a change too, and was counted as a shot)"""
+    t, last = [], None
+    for m in re.finditer(r"ammo: %s[^:]*? clip (\d+) at frame (\d+)" % weapon, part):
+        c, f = int(m.group(1)), int(m.group(2))
+        if last is not None and c < last:
+            t.append(f)
+        last = c
     return max((sum(1 for u in t if v <= u < v + 20) for v in t), default=0) - (1 if t else 0)
+
+
+def bullet_damage(part, weapon):
+    """the damage of each of Bond's bullets that hit a person (endless.c: the bullet's own, +0x34, before where it hit
+    multiplies it)"""
+    return [int(x) for x in re.findall(r"bullet: %s[^']*'s hit person \d+: its damage (\d+)" % weapon, part)]
 
 
 def damage(part, weapon):
@@ -759,11 +771,13 @@ def check_lent(runs):
         sh = re.search(r"sound: a lent weapon's own \(level %d" % lv_home, l)
         result("k", "%s: its own fire sound" % label, bool(sh), sh.group(0)[7:] if sh else "no lent sound played")
     h, l = room_part(runs["k_home_ingalls"].log, 8), room_part(runs["k_lent_ingalls"].log, 2)
+    # (each bullet's own damage, as it hits: the health a hit takes is that times where it hit (500, 1000, 2500 seen
+    # from 500 bullets), so a few hits' drops alone can't tell; their greatest common divisor is shown too)
+    bh, bl = bullet_damage(h, "INGALLS"), bullet_damage(l, "INGALLS")
     (dh, nh), (dl, nl) = damage(h, "INGALLS"), damage(l, "INGALLS")
-    # (where a bullet hits multiplies its damage: few hits can show only a multiple; the same bullet if one divides the other)
-    result("k", "Ingalls: damage as at home", nh > 1 and nl > 1 and dh and dl and max(dh, dl) % min(dh, dl) == 0
-           and max(dh, dl) // min(dh, dl) <= 2,
-           "a bullet's damage: home %d (%d hits), lent %d (%d hits)" % (dh, nh, dl, nl))
+    result("k", "Ingalls: damage as at home", bool(bh) and bool(bl) and set(bh) == set(bl),
+           "its bullets' damage: home %s (%d hit), lent %s (%d hit); the hits' common divisor home %d (%d), lent %d (%d)" %
+           (sorted(set(bh)), len(bh), sorted(set(bl)), len(bl), dh, nh, dl, nl))
     h, l = room_part(runs["k_home_ar36"].log, 8), room_part(runs["k_lent_ar36"].log, 2)
     sc = lambda p: [int(x) for x in re.findall(r"weapon state (\d+) at", p) if int(x) in (33, 34, 35, 36)]
     result("k", "AR36: the scope's states as at home", set(sc(h)) == set(sc(l)) == {33, 34, 35, 36},
