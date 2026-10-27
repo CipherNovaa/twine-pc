@@ -599,6 +599,17 @@ def lent_runs():
     # (Courier's double-barrelled shotgun, its damage twice in a run: guards met and shot)
     runs["k_sg_dmg"] = Run("k_sg_dmg", 2, 45, dict(base, TWINE_ENDLESS_ROOM="2:4", TWINE_ENDLESS_TEST_DRAW="FRINESI",
                                                    TWINE_TEST_PAD=",".join("%d:4000,%d:0" % (t, t + 3) for t in range(240, 900, 40))))
+    # (a lent weapon's shots sound as at home, Bond's own sounds by state: the IAC Defender lent into City of Walkways,
+    # whose slot 7 (its flare gun's) played the flare's reload with every shot (playtest 8); and lent into that slot,
+    # to see the comparison catch it)
+    taps = ",".join("%d:4000,%d:0" % (t, t + 3) for t in range(600, 1000, 30))
+    for name, nxt, extra in (("k_iacs_home", "10:-1", {}), ("k_iacs_lent", "5:-1", {}),
+                             ("k_iacs_slot7", "5:-1", {"TWINE_ENDLESS_TEST_LENDAT": 7})):
+        runs[name] = Run(name, 10, 75, dict(base, TWINE_ENDLESS_ROOM="10:4", TWINE_ENDLESS_NEXT=nxt,
+                                            TWINE_ENDLESS_TEST_EXIT="200,5000", TWINE_ENDLESS_TEST_DRAW="IAC",
+                                            TWINE_TEST_PAD=taps, TWINE_TRACE="weapon,change,sound,proj",
+                                            TWINE_RENDERER="hw", TWINE_SMOOTH=1, **extra))
+        del runs[name].env["TWINE_ENDLESS_TEST_MEET"]
     # (lent satchels as at home: a charge thrown, the detonator in hand by itself; fired, the charges back; then the
     # weapon buttons step all round: the detonator never comes with no charge out. As played: hw renderer, smooth)
     runs["k_satchel"] = Run("k_satchel", 8, 70, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="9:0",
@@ -837,6 +848,22 @@ def check_lent(runs):
                and len(blasts) >= 2 and not errors and not runs["k_%s_lent" % key].crashed() and not bad,
                "; ".join(bad[:3] + errors[:1]) or "no differences (%d frames at home, %d lent; %d fired, %d went off)" %
                (hs["frames"], ls["frames"], len(pl), len(blasts)))
+    def second(r):  # (the second room's part of a run's log, as a file: weapon_trace reads files)
+        p = os.path.join(r.dir, "second.log")
+        parts = r.log.split("room in level ")
+        open(p, "w").write("room in level " + "room in level ".join(parts[2:]) if len(parts) > 2 else "")
+        return p
+    hp, lp, cp = (second(runs[k]) for k in ("k_iacs_home", "k_iacs_lent", "k_iacs_slot7"))
+    sh, sl, sc = (weapon_trace.sounds(p, "IAC", lv) for p, lv in ((hp, 10), (lp, 5), (cp, 5)))
+    bad, caught = weapon_trace.compare_sounds(sh, sl), weapon_trace.compare_sounds(sh, sc)
+    slot = re.search(r"IAC DEFENDER lent from level \d+ into slot (\d+)", runs["k_iacs_lent"].log)
+    shots = sl.get(8, [0])[0]
+    result("k", "IAC Defender lent (City of Walkways): Bond's sounds by state as at home (hw, smooth; its flare gun's "
+           "slot not used)", bool(slot) and slot.group(1) != "7" and shots >= 6 and not bad,
+           "slot %s, %d shots; %s; lent into slot 7 the comparison sees: %s" %
+           (slot.group(1) if slot else "-", shots, "; ".join(bad) or "no differences", "; ".join(caught) or "nothing"))
+    result("k", "Bond's sounds by state compared: the flare gun slot's reload sound caught", bool(caught),
+           "; ".join(caught) or "not caught")
     r = runs["k_many"]
     path = os.path.join(r.dir, "port.log")
     levels = [int(x) for x in re.findall(r"room start: level (\d+) ", r.log)]
@@ -1290,6 +1317,14 @@ def door_runs(rooms):
                                                            "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1,
                                                            "TWINE_ENDLESS_TEST_DOORS": 1,
                                                            "TWINE_ENDLESS_TEST_DOORS_LEAVE": 1})
+    # (Flashpoint 6:13's channel doors, "CHANNELS MUST BE OFFLINE" (the playtest's): beyond the walker's flood, so Bond
+    # is put in the door's zone where the playtest's was, use held (hw renderer, smooth motion); the exit open: he
+    # leaves by it, and the mission's way: it refuses)
+    ch = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "6:13", "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1,
+          "TWINE_TEST_PAD": "160:2000", "TWINE_ENDLESS_TEST_PUT": "-15927,-1410,-11766,2679",
+          "TWINE_ENDLESS_TEST_OPEN": 30, "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1}
+    runs["doors_613_leave"] = Run("doors_613_leave", 6, 45, ch)
+    runs["doors_613_mission"] = Run("doors_613_mission", 6, 45, dict(ch, TWINE_ENDLESS_TEST_NO_LOCKED_EXIT=1))
     return runs
 
 
@@ -1312,6 +1347,17 @@ def check_doors(runs):
     refused = m.lines(r"doortest: .*refused:")
     result("n", "7:7 the mission's way: its locked doors refuse (as the playtest)", bool(refused),
            "; ".join(re.search(r'refused: "([^"]*)"', l).group(1) for l in refused) or "none refused")
+    m = runs["doors_613_mission"]
+    result("n", "6:13 the mission's way: its channel doors refuse (CHANNELS MUST BE OFFLINE, as the playtest)",
+           bool(m.lines(r'message shown: "CHANNELS MUST BE OFFLINE"')), "%d shown" %
+           len(m.lines(r'message shown: "CHANNELS MUST BE OFFLINE"')))
+    v = runs["doors_613_leave"]
+    left = v.lines(r"room left \(a door the mission keeps locked, the exit open\)")
+    after = v.log[v.log.find("keeps locked, the exit open"):] if left else ""
+    result("n", "6:13 left by a channel door the mission keeps locked (hw, smooth; use held)",
+           bool(v.lines(r'door: the mission.s "CHANNELS MUST BE OFFLINE" \(the exit open')) and bool(left) and
+           "room in level" in after and not v.crashed(), "left %d, the next room %s" %
+           (len(left), "started" if "room in level" in after else "not started"))
     v = runs["doors_77_leave"]
     left = v.lines(r"room left \(a door the mission keeps locked, the exit open\)")
     result("n", "7:7 left by a door the mission keeps locked", bool(left) and "room in level" in

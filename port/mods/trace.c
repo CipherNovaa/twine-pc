@@ -97,6 +97,8 @@ s32 func_80026F30(u32 id, s32 flags);
 int port_tone_play(int level, int program, int tone, int note, s32 l, s32 r, int loop);
 int port_tone_play_pcm(int level, int program, int tone, int note, s32 vol, int loop);
 char *getenv(const char *name);
+extern u8 *D_800B0AB4;   /* the model effects (muzzle flashes: 0x34 bytes each) */
+extern s16 D_800B0C84;   /* how many */
 int atoi(const char *s);
 static void tone_ab(void) {
     static int on = -1;
@@ -151,6 +153,13 @@ static void trace_people(void) {
     }
 }
 
+static int proj_all(void) { /* (TWINE_TRACE_PROJ_ALL=1: every kind of object, people and effects too: research) */
+    static int on = -1;
+    if (on < 0)
+        on = getenv("TWINE_TRACE_PROJ_ALL") != 0;
+    return on;
+}
+
 /* TWINE_TRACE=proj: the objects that aren't people nor pickups, as they come, fly and go */
 static void trace_proj(void) {
     static s32 seen[256], fresh = 0x7FFFFFFF;
@@ -168,7 +177,7 @@ static void trace_proj(void) {
         u8 *o = D_800AFFC8 + i * 0x124, *m = *(u8 **)(o + 0x90);
         int kind = o[5];
         s32 born = *(s32 *)(o + 0x2C);
-        if (!o[4] || kind == 6 || kind == 4 || kind == 9 || kind == 0 || kind == 10 || !m) {
+        if (!o[4] || ((kind == 6 || kind == 4 || kind == 9 || kind == 0 || kind == 10) && !proj_all()) || !m) {
             if (seen[i] >= 0)
                 port_log("trace: L%d f%d proj: #%d gone, lived %d frames, last at %d %d %d\n", g_Args->level, D_8009CDA8, i,
                          D_8009CDA8 - seen[i], at[i][0], at[i][1], at[i][2]);
@@ -206,10 +215,22 @@ static void trace_proj(void) {
             }
             seen[i] = born;
         } else if (kind == 1)
-            port_log("trace: L%d f%d proj: #%d at %d %d %d (0E %04X 64 %08X 68 %08X)\n", g_Args->level, D_8009CDA8, i,
-                     *(s32 *)(m + 0x28), *(s32 *)(m + 0x2C), *(s32 *)(m + 0x30), *(u16 *)(o + 0xE), *(u32 *)(o + 0x64),
-                     *(u32 *)(o + 0x68));
+            port_log("trace: L%d f%d proj: #%d at %d %d %d (0E %04X 64 %08X 68 %08X model %08X)\n", g_Args->level,
+                     D_8009CDA8, i, *(s32 *)(m + 0x28), *(s32 *)(m + 0x2C), *(s32 *)(m + 0x30), *(u16 *)(o + 0xE),
+                     *(u32 *)(o + 0x64), *(u32 *)(o + 0x68), *(u32 *)(m + 8));
         at[i][0] = *(s32 *)(m + 0x28), at[i][1] = *(s32 *)(m + 0x2C), at[i][2] = *(s32 *)(m + 0x30);
+    }
+    if (proj_all() && D_800B0AB4) { /* (research: the model effects, muzzle flashes: each one as it's made) */
+        static s32 eff_made[64];
+        for (i = 0; i < D_800B0C84 && i < 64; i++) {
+            u8 *e = D_800B0AB4 + i * 0x34, *pt = *(u8 **)(e + 0x1C);
+            if (e[1] && pt && *(s32 *)(e + 0x18) != eff_made[i]) {
+                eff_made[i] = *(s32 *)(e + 0x18);
+                port_log("trace: L%d f%d proj: effect %d made (tick %d) model %08X at %d %d %d, +0 %02X%02X%02X%02X\n",
+                         g_Args->level, D_8009CDA8, i, eff_made[i], *(u32 *)(pt + 8), *(s32 *)(pt + 0x28),
+                         *(s32 *)(pt + 0x2C), *(s32 *)(pt + 0x30), e[0], e[1], e[2], e[3]);
+            }
+        }
     }
     { /* the blasts (func_800378FC's six: a blast's reach grows over its frames, func_80037B6C hurts within it) */
         static s32 blast_time[6];

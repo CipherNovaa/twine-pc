@@ -20,7 +20,11 @@ With TWINE_TRACE=proj in both logs, Bond's projectiles are compared too (what hi
 rocket, a grenade launcher's round, a gun's bullets): each one's subtype, hit mask (+0x3A), +0x0E, blast flag (+0x64
 bit 23), damage (+0x34), +0x68 and its type's entry (but its number, each mission's own), how fast it flies (its
 speed along the ground a frame) and drops (its height's change from frame to frame), and the blast where it went
-off (the reach it starts and ends at, and grows by)."""
+off (the reach it starts and ends at, and grows by).
+
+With TWINE_TRACE=sound in both logs, Bond's own sounds (played straight, flags 0, the game's or lent) are compared
+by state: a sound that plays most times a state runs, at a frame into it, at home but not lent or lent but not at home
+(e.g. a mission's code playing a tool's sounds for the slot a weapon is lent into: City of Walkways' flare gun slot)."""
 import re
 import sys
 from collections import defaultdict, Counter
@@ -246,6 +250,66 @@ def compare(h, l):
     return bad
 
 
+BLAST_AT = re.compile(r"trace: L(\d+) f(-?\d+) (?:proj: blast|launch: .* went off)")
+SND = re.compile(r"trace: L(\d+) f(-?\d+) sound: (?:\d+|lent \(.*?\)) flags 0 ")
+
+
+def sounds(log, name, level=None):
+    """Bond's own sounds (TWINE_TRACE=sound: the sounds played straight, flags 0, the game's or lent) while the
+    weapon NAME is in hand, by its state: {state: (times the state was entered, Counter(frame into it: times a sound
+    played then))}; idle (state 1) left out"""
+    state, snd, blasts = {}, Counter(), set()
+    for line in open(log, errors="replace"):
+        m = LINE.search(line)
+        if m and (level is None or int(m.group(1)) == level):
+            state[int(m.group(2))] = int(m.group(7)) if m.group(6).startswith(name) else -1
+            continue
+        m = SND.search(line)
+        if m and (level is None or int(m.group(1)) == level):
+            snd[int(m.group(2))] += 1
+            continue
+        m = BLAST_AT.search(line)
+        if m and (level is None or int(m.group(1)) == level):
+            blasts.add(int(m.group(2)))
+    for f in list(snd):  # (an explosion's own sounds (debris: the mission's explosion code, func_80065614) left out)
+        if any(f - k in blasts for k in range(5)):
+            del snd[f]
+    out, start = {}, None
+    for f in sorted(state):
+        st = state[f]
+        if st != state.get(f - 1):
+            start = f
+            if st > 1:
+                out.setdefault(st, [0, Counter()])[0] += 1
+        if st > 1 and snd[f]:
+            out[st][1][f - start] += 1
+    return out
+
+
+def regular(runs, at):
+    """the frames into a state a sound plays at in most of its runs (60%, at least 3 of 4 or more; a frame either side
+    counted together)"""
+    if runs < 4:
+        return set()
+    return {k for k in at if at[k] + at.get(k - 1, 0) * (k - 1 not in at or at[k - 1] < at[k]) >= max(3, runs * 0.6)}
+
+
+def compare_sounds(h, l):
+    """differences between Bond's own sounds per state at home and lent ([] when alike): a sound that plays most
+    times a state runs, at one but not the other (within a frame)"""
+    bad = []
+    for st in sorted(set(h) & set(l)):
+        rh, rl = regular(*h[st]), regular(*l[st])
+        only_l = [k for k in rl if not {k - 1, k, k + 1} & rh]
+        only_h = [k for k in rh if not {k - 1, k, k + 1} & rl]
+        if only_l or only_h:
+            bad.append("state %d: Bond's sound %s (of %d runs at home, %d lent)" %
+                       (st, "; ".join(["at +%d lent only (%d times)" % (k, l[st][1][k]) for k in sorted(only_l)] +
+                                      ["at +%d at home only (%d times)" % (k, h[st][1][k]) for k in sorted(only_h)]),
+                        h[st][0], l[st][0]))
+    return bad
+
+
 def main():
     a = sys.argv[1:]
     proj_all = "--proj" in a
@@ -274,6 +338,10 @@ def main():
     # are made in, so whether any is seen at all is chance: shown, compared with --proj)
     if a[2].startswith(("ROCKET", "GRENADE LAUNCHER")) or proj_all:
         bad += compare_projectiles(ph, pl)
+    sh, sl = sounds(a[0], a[2], hl), sounds(a[1], a[2], ll)  # (with TWINE_TRACE=sound in both logs)
+    for t, sd in (("home", sh), ("lent", sl)):
+        print("%s: Bond's sounds by state: %s" % (t, {k: (v[0], dict(v[1])) for k, v in sorted(sd.items())} or "none traced"))
+    bad += compare_sounds(sh, sl)
     print("differences:" if bad else "no differences")
     for b in bad:
         print("  " + b)
