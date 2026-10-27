@@ -71,8 +71,16 @@ static s32 angle_diff(s32 a, s32 b) {
 /* What moves. Every pose is the matrix of a coordinate system (a MATRIX: 3x3 s16, then the position, 3 s32),
  * kept with where it lives and what it belongs to. */
 #define MAX_POSES 2048
-#define CHAR_SLOTS 6
-#define IN_RAM(p) ((u32)(p) - 0x80000000u < 0x200000u)
+#define CHAR_SLOTS 24 /* (the game's 6; more with port/mods/people.c's slots: people_slots()) */
+extern u32 port_ram_size;
+#define IN_RAM(p) ((u32)(p) - 0x80000000u < port_ram_size)
+int people_slots(void) __attribute__((weak));
+u8 **people_owner(int i) __attribute__((weak));
+u8 *people_matrix(int i) __attribute__((weak));
+static int char_slots(void) {
+    int n = people_slots ? people_slots() : 6;
+    return n < CHAR_SLOTS ? n : CHAR_SLOTS;
+}
 
 typedef struct {
     s16 m[9];
@@ -174,12 +182,13 @@ static void keep_poses(Poses *p) {
                 keep(p, parts + k * 0x8C + 0x14, obj, *(s32 *)(obj + 0x2C), parts, n);
         }
         /* (a free slot can keep its last owner) */
-        for (i = 0; i < CHAR_SLOTS; i++) {
-            obj = D_800DDEF0[i];
+        for (i = 0; i < CHAR_SLOTS; i++)
             p->anim[i].inst = NULL;
+        for (i = 0; i < char_slots(); i++) {
+            obj = people_owner ? *people_owner(i) : D_800DDEF0[i];
             if (!IN_RAM(obj) || obj[4] == 0)
                 continue;
-            keep(p, D_800DE004 + i * 0x20, obj, *(s32 *)(obj + 0x2C), NULL, 0);
+            keep(p, people_matrix ? people_matrix(i) : D_800DE004 + i * 0x20, obj, *(s32 *)(obj + 0x2C), NULL, 0);
             if (IN_RAM(*(u8 **)(obj + 0xC0))) {
                 p->anim[i].inst = *(u8 **)(obj + 0xC0);
                 p->anim[i].owner = obj;

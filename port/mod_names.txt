@@ -152,3 +152,34 @@ level08 func_8005519C func_800573AC
 level09 func_8005519C func_800574FC
 level10 func_8005519C func_80057978
 level11 func_8005519C func_800525E0
+# the people's animation pool reset and the object count (port/mods/people.c)
+level02 func_8005ED88 func_8005EDC8
+level03 func_8005ED88 func_8005EB30
+level04 func_8005ED88 func_8005E3FC
+level05 func_8005ED88 func_8005EB54
+level06 func_8005ED88 func_8005EDF4
+level07 func_8005ED88 func_8005F394
+level08 func_8005ED88 func_8005F040
+level09 func_8005ED88 func_8005F048
+level10 func_8005ED88 func_80061554
+level11 func_8005ED88 func_8005C038
+level04 func_8002E228 func_8002E1C0
+level11 func_8002E228 func_8002E3FC
+level02 func_8002E228 func_8002E38C
+level03 func_8002E228 func_8002E1F8
+level05 func_8002E228 func_8002E2A8
+level06 func_8002E228 func_8002E2AC
+level07 func_8002E228 func_8002E1CC
+level08 func_8002E228 func_8002E2F0
+level09 func_8002E228 func_8002E360
+level10 func_8002E228 func_8002E3C4
+# every voice but one stopped (port/mods/endless.c: the runtime's own sounds with them): the same address, not placed
+level02 func_80026C90 func_80026C90
+level03 func_80026C90 func_80026C90
+level04 func_80026C90 func_80026C90
+level05 func_80026C90 func_80026C90
+level06 func_80026C90 func_80026C90
+level07 func_80026C90 func_80026C90
+level08 func_80026C90 func_80026C90
+level09 func_80026C90 func_80026C90
+level10 func_80026C90 func_80026C90

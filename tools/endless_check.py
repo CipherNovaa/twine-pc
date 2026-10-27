@@ -3,14 +3,19 @@
 
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v]
   -j JOBS    runs at once (default 4, at most 5)
-  -k CHECKS  the checks to run, letters from abcdefghijkl (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijklmno (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
-             d room rules, e menus, f restart, g weapon carry, h card save, i campaign regression,
+             d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
+             the menu), g weapon carry, h card save, i campaign regression,
              j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching),
              k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried),
              l room starts never run out of the menu texts' letters (20 starts; past them: cut, no crash),
              m a run started from the shell (main menu, mission select's ENDLESS, its briefing) with no weapons
                catalogue: the briefing seen, the survey then the first room; a survey stalled is given up after 10 s
+             n exits: every pool room's doors walked to and used once the exit is open (each opens, or, kept locked
+               by the mission, leads out all the same; none just refuses), and the entry's way out
+             o the early waves' ramp: Meltdown 4 (six guards of its own) as waves 1, 3 and 5 against no ramp: the
+               damage Bond takes standing still, its bursts, the hunters at once
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -264,9 +269,15 @@ def check_rules(runs):
     co = runs["rules_courier"]
     civ = [l for l in co.lines(r"made: person \d+ type 5 placed")]
     result("d", "2:-1 civilians kept", len(civ) > 0, "%d bank staff made" % len(civ))
-    seated = co.lines(r"receptionist kept seated")
     made60 = co.lines(r"made: person \d+ type 60 placed")
-    result("d", "2:-1 receptionist seated", bool(made60) and bool(seated), "made %d, kept seated %d" % (len(made60), len(seated)))
+    her = co.lines(r"trace: L2 f\d+ person \d+ type 60: ")
+    anims = Counter(re.search(r"anim (-?\d+/-?\d+)", l).group(1) for l in her)
+    near = co.lines(r"test: Bond put \d+ from person \d+ \(type 60\)")
+    last = max([int(f) for f in re.findall(r"endless: \S+ f(\d+) ", co.log)] or [0])
+    result("d", "2:-1 receptionist seated, still (Bond armed before her; hw, smooth)",
+           bool(made60) and bool(near) and bool(her) and set(anims) == {"60/60"} and last > 400,
+           "made %d, Bond before her %d, her animations (asked/running) %s to frame %d" %
+           (len(made60), len(near), dict(anims), last))
     result("d", "2:-1 no story people made", True, "story people left out: %d" % len(co.lines(r"story person")))
 
 
@@ -324,6 +335,56 @@ def restart_runs():
             "restart_no": Run("restart_no", 2, 45, dict(env, TWINE_TEST_PAD=pad + ",600:4000,603:0"))}
 
 
+def sound_stop_runs():
+    """a lent automatic's looping fire (King's Ransom's Ingalls lent in City of Walkways) held as Bond goes
+    through a door, as RESTART MISSION comes, as the menu opens (hw renderer, smooth motion, pad-held fire)"""
+    env = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
+           "TWINE_ENDLESS_TEST_DRAW": "INGALLS", "TWINE_ENDLESS_ROOM": "8:-1", "TWINE_ENDLESS_NEXT": "5:-1,6:0",
+           "TWINE_TRACE": "weapon,voices,sound", "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1}
+    return {"snd_door": Run("snd_door", 8, 50, dict(env, TWINE_ENDLESS_TEST_EXIT="200,300", TWINE_TEST_PAD="600:4000,700:0")),
+            "snd_restart": Run("snd_restart", 8, 50, dict(env, TWINE_ENDLESS_TEST_EXIT="200,5000",
+                                                          TWINE_ENDLESS_TEST_RESTART=250, TWINE_TEST_PAD="540:4000,800:0")),
+            "snd_menu": Run("snd_menu", 8, 45, dict(env, TWINE_ENDLESS_TEST_EXIT="200,5000",
+                                                    TWINE_TEST_PAD="500:4000,600:4008,603:0,800:8,803:0"))}
+
+
+def firing_lent(log, level):
+    """the lent Ingalls firing (its looping sound keyed, state 9) at the last weapon frame traced in level"""
+    w = re.findall(r"trace: L%d f\d+ weapon: slot \d+ \(.*?\) INGALLS TYPE 20, state (\d+)" % level, log)
+    return bool(w) and w[-1] == "9" and bool(re.search(r"trace: L%d f\d+ sound: lent .* looping" % level, log))
+
+
+def leftovers(log, level):
+    """the voices lines of level's first room after the change: (lines, those with sounds from before it)"""
+    after = log.split("room in level %d " % level, 1)[1] if "room in level %d " % level in log else ""
+    lines = re.findall(r"voices: room frame \d+: .*keyed on before this executable: (\d+)(.*)", after)
+    return lines, [l for l in lines if l[0] != "0"]
+
+
+def check_sound_stop(runs):
+    d, r, m = runs["snd_door"], runs["snd_restart"], runs["snd_menu"]
+    lines, bad = leftovers(d.log, 6)
+    pre = firing_lent(d.log.split("room in level 6 ", 1)[0], 5)
+    result("f", "a lent automatic's fire held through a door: no sound left on (hw, smooth)",
+           None if not pre else len(lines) >= 3 and not bad,
+           ("firing as Bond left: %s; next room: %d checks, %d with a sound from before%s" %
+            (pre, len(lines), len(bad), (" (" + bad[0][1][:80] + ")") if bad else "")))
+    two = r.log.split("restart: RESTART MISSION: the run begins again", 1)
+    m2 = re.search(r"restart: a fresh run from level (\d+)", r.log)
+    lines, bad = leftovers(two[1], int(m2.group(1))) if len(two) > 1 and m2 else ([], [])
+    pre = len(two) > 1 and firing_lent(two[0], 5)
+    result("f", "a lent automatic's fire held as RESTART MISSION comes: no sound left on (hw, smooth)",
+           None if not pre else len(lines) >= 3 and not bad,
+           "firing as it came: %s; the fresh run's first room: %d checks, %d with a sound from before" %
+           (pre, len(lines), len(bad)))
+    menu = re.findall(r"trace: L5 f\d+ voices: the menu up \(call (\d+)\): .*the runtime's (\d+);", m.log)
+    stopped = m.lines(r"L5 f\d+ sound: all voices stopped: \d+ of the runtime's own")
+    later = [n for c, n in menu if int(c) > 1]
+    result("f", "a lent automatic's fire held as the menu opens: stopped with the game's (hw, smooth)",
+           None if not stopped and not (menu and menu[0][1] != "0") else len(later) >= 3 and set(later) == {"0"},
+           "lent sounds stopped as it opened: %d; in the menu after: %s" % (len(stopped), ",".join(later[:8])))
+
+
 def check_restart(runs):
     y, n = runs["restart_yes"], runs["restart_no"]
     result("f", "YES: a fresh run", bool(y.lines("watch's RESTART MISSION asked")) and bool(y.lines("a fresh run from")),
@@ -339,6 +400,28 @@ def carry_runs():
                                          "TWINE_ENDLESS_TEST_ARM": 1, "TWINE_ENDLESS_TEST_DRAW": "FRINESI AUTO",
                                          "TWINE_ENDLESS_TEST_DOOR": 2, "TWINE_ENDLESS_TEST_EXIT": 150,
                                          "TWINE_ENDLESS_TEST_GOD": 1})}
+
+
+def iris_runs():  # (the second room's mission: the carried PS100, lent, in hand as its opening iris opens)
+    return {"carry_iris": Run("carry_iris", 10, 60, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "10:4",
+                                                     "TWINE_ENDLESS_NEXT": "2:6", "TWINE_ENDLESS_SEED": 4,
+                                                     "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
+                                                     "TWINE_ENDLESS_TEST_DRAW": "BELGIQUE", "TWINE_ENDLESS_TEST_EXIT": 200,
+                                                     "TWINE_TRACE": "weapon,change", "TWINE_RENDERER": "hw",
+                                                     "TWINE_SMOOTH": 1})}
+
+
+def check_iris(runs):
+    r = runs["carry_iris"]
+    two = r.log.split("room in level 2 ", 1)[1] if "room in level 2 " in r.log else ""
+    first = re.search(r"trace: L2 f(\d+) weapon: slot (\d+) \(before -?\d+, to -?\d+\) ([A-Z0-9 ]+), state (\d+)", two)
+    asked = re.search(r"trace: L2 f(\d+) weapon: model asked \(\w+\) for slot (\d+) \(BELGIQUE", two)
+    ok = bool(first and asked) and first.group(3).startswith("BELGIQUE") and first.group(4) == "1" and \
+        int(asked.group(1)) <= 2
+    result("g", "a new mission: the carried weapon taken out in its opening iris (hw, smooth)", ok,
+           "model asked at f%s; the controls' first frame f%s: %s, state %s" %
+           (asked.group(1) if asked else "-", first.group(1) if first else "-", first.group(3) if first else "-",
+            first.group(4) if first else "-"))
 
 
 def lend_runs():
@@ -383,7 +466,8 @@ def burst(pad_from, frames=40):
 
 def lent_runs():
     base = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
-            "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_ENDLESS_AMMO_LOG": 1}
+            "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_ENDLESS_AMMO_LOG": 1,
+            "TWINE_ENDLESS_TEST_NO_RAMP": 1}  # (the weapons measured against guards as many as before the ramp: o's)
     shots = ",".join(burst(t, 30) for t in range(260, 1000, 50))  # (the room's first: from frame 200 on)
     later = ",".join(burst(t, 30) for t in range(760, 1500, 50))  # (the room after it: from about frame 622)
     aim = "200:0800,250:4800,254:0800,300:4800,304:0800,350:4800,354:0800,400:0"
@@ -755,8 +839,10 @@ def check_lent(runs):
     result("k", "pause: the lent weapon back after the menu", bool(after) and all(x["file"] == "L05/FNP90TEX.HMD" for x in after)
            and m[0] < 0.2 and m[3] < 0.2, "%d frames after, models %s; watch frame before %d%%, after %d%%" %
            (len(after), "/".join(sorted({x["file"] for x in after})) or "-", m[0] * 100, m[3] * 100))
-    def measured(log, own):
-        """each program 4 tone 13 (the IAC's shot) keyed on: its first half second as spu.c measured it"""
+    def measured(log, own, want=()):
+        """each program 4 tone 13 (the IAC's shot) keyed on: its first half second as spu.c measured it (lent: of
+        the next two lent voices measured, the one as at home if either is: a guard's callout, also a lent voice, may
+        be measured in between)"""
         out, lines = [], log.splitlines()
         for i, x in enumerate(lines):
             m = re.search(r"sound: (\d+) flags \w+ \(program 4 tone 13 .*handle (\d+)", x) if own else \
@@ -764,13 +850,12 @@ def check_lent(runs):
             if not m:
                 continue
             pat = r"spu: voice %s's first half second: (.*)" % m.group(2) if own else r"lent voice \d+'s first half second: (.*)"
-            for y in lines[i:i + 600]:
-                k = re.search(pat, y)
-                if k:
-                    out.append(k.group(1))
-                    break
+            got = [k.group(1) for k in (re.search(pat, y) for y in lines[i:i + 600]) if k][:1 if own else 2]
+            if got:
+                out.append(next((g for g in got if g in want), got[0]))
         return out
-    h, l = measured(runs["k_snd_home"].log, True), measured(runs["k_snd_lent"].log, False)
+    h = measured(runs["k_snd_home"].log, True)
+    l = measured(runs["k_snd_lent"].log, False, set(h))
     lent_room = room_part(runs["k_snd_lent"].log, 8)
     result("k", "IAC Defender lent: its shot's sound sample for sample as at home", bool(h) and bool(l) and
            set(h) == set(l) and "lent from" in runs["k_snd_lent"].log,
@@ -982,12 +1067,21 @@ STRESS_ROOMS = [(7, 6)] * 8 + [(2, 6), (3, 11), (5, 4), (6, 13), (8, 3), (9, 2),
                                (8, 4), (6, 9)]
 
 
+CHAINS = 2
+CHAIN_ROOMS = ("7:2,7:6,2:6,7:6,10:4,7:2,8:3,7:6,3:11,7:2,7:6,9:2,7:6,6:13",
+               "7:6,7:2,7:6,5:4,7:2,10:2,7:6,2:4,7:2,8:4,7:6,6:9,7:2,7:6")
+
+
 def text_runs():
     runs = {}
     for k, (l, p) in enumerate(STRESS_ROOMS):  # (each its first start too: the catalogue's survey, then the room)
         runs["text_%d_%d_%d" % (l, p, k)] = Run("text_%d_%d_%d" % (l, p, k), l, 30, {
             "TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "%d:%d" % (l, p), "TWINE_ENDLESS_SEED": 7 + k % 3,
             "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_PEOPLE_FAST": 1})
+    for k in range(CHAINS):  # (one run, room after room: missions started again and again, Masquerade's among them)
+        runs["text_chain_%d" % k] = Run("text_chain_%d" % k, 7, 230, {
+            "TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "7:6" if k % 2 == 0 else "7:2", "TWINE_ENDLESS_SEED": 11 + k,
+            "TWINE_ENDLESS_NEXT": CHAIN_ROOMS[k % 2], "TWINE_ENDLESS_TEST_EXIT": "120,120", "TWINE_ENDLESS_TEST_GOD": 1})
     runs["text_forced"] = Run("text_forced", 7, 25, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "7:6",
                                                      "TWINE_ENDLESS_SEED": 7, "TWINE_ENDLESS_TEST_GOD": 1,
                                                      "TWINE_ENDLESS_TEST_TEXTS": 12})
@@ -995,11 +1089,22 @@ def text_runs():
 
 
 def check_texts(runs):
-    bad = [r.name for k, r in runs.items() if k != "text_forced" and (r.crashed() or "MAX_TEXT" in r.log or
-                                                                       "room start:" not in r.log)]
-    cut = [r.name for k, r in runs.items() if k != "text_forced" and r.lines(r"text: .* cut to")]
-    result("l", "%d room starts: no crash, letters to spare" % (len(runs) - 1), not bad and not cut,
+    singles = {k: r for k, r in runs.items() if k.startswith("text_") and k != "text_forced" and "chain" not in k}
+    bad = [r.name for k, r in singles.items() if r.crashed() or "MAX_TEXT" in r.log or "room start:" not in r.log]
+    cut = [r.name for k, r in singles.items() if r.lines(r"text: .* cut to")]
+    result("l", "%d room starts: no crash, letters to spare" % len(singles), not bad and not cut,
            "crashed or not started: %s; letters cut: %s" % (", ".join(bad) or "none", ", ".join(cut) or "none"))
+    for k in range(CHAINS):  # (room after room in one run: each a mission started afresh)
+        r = runs["text_chain_%d" % k]
+        starts = len(r.lines(r"room start: level"))
+        worst = max([int(m) for l in r.lines(r"text: \d+ letters in") for m in re.findall(r"text: (\d+) letters", l)] or [0])
+        ok = starts >= 12 and not r.crashed() and "MAX_TEXT" not in r.log and not r.lines(r"text: .* cut to")
+        result("l", "room after room (%s...): %d room starts, no crash, letters to spare" %
+               (CHAIN_ROOMS[k % 2][:11], starts), ok,
+               "%d starts, crash %s, MAX_TEXT %s, cut %d, most letters logged %d%s" %
+               (starts, r.crashed(), "MAX_TEXT" in r.log, len(r.lines(r"text: .* cut to")), worst,
+                "; " + "; ".join(l.split("endless: ")[-1][:120] for l in r.lines(r"text \(last|the game ends with"))
+                if "MAX_TEXT" in r.log else ""))
     f = runs["text_forced"]
     result("l", "past the letters: cut, no crash", bool(f.lines(r"text: .* cut to")) and not f.crashed() and
            "MAX_TEXT" not in f.log, "%d cut, crash %s" % (len(f.lines(r"text: .* cut to")), f.crashed()))
@@ -1037,6 +1142,103 @@ def check_shell(runs):
            (bool(after), "room start:" in after, seen))
 
 
+# ---- n: exits: every pool room's doors used once the exit is open ----
+
+def door_runs(rooms):
+    runs = {}
+    for l, p in rooms:
+        n = "doors_%d_%d" % (l, p if p >= 0 else 99)
+        runs[n] = Run(n, l, 100, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "%d:%d" % (l, p), "TWINE_ENDLESS_SEED": 4,
+                                 "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_DOORS": 1})
+    # (Masquerade 7:7, the playtest's: its doors the mission's way, refusing; and left by one of them)
+    runs["doors_77_mission"] = Run("doors_77_mission", 7, 75, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "7:7",
+                                                               "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1,
+                                                               "TWINE_ENDLESS_TEST_DOORS": 1,
+                                                               "TWINE_ENDLESS_TEST_NO_LOCKED_EXIT": 1})
+    runs["doors_77_leave"] = Run("doors_77_leave", 7, 75, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "7:7",
+                                                           "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1,
+                                                           "TWINE_ENDLESS_TEST_DOORS": 1,
+                                                           "TWINE_ENDLESS_TEST_DOORS_LEAVE": 1})
+    return runs
+
+
+def check_doors(runs):
+    for k, r in sorted(runs.items()):
+        if not re.match(r"doors_\d+_\d+$", k):
+            continue
+        first = r.log.split("room left (", 1)  # (the room's own: the next one tests its doors too)
+        tried = re.findall(r"doortest: door \d+ .*", first[0])
+        opens = [l for l in tried if ": opens," in l]
+        leaves = [l for l in tried if ": leaves (" in l]
+        refused = [re.search(r'refused: "([^"]*)"', l).group(1) for l in tried if "refused:" in l]
+        entry = len(first) > 1 and first[1].startswith("the use button at the entry)")
+        room = k[6:].replace("_99", "_-1").replace("_", ":")
+        result("n", room + " exits", not refused and entry and not r.crashed(),
+               "%d doors by his floor: %d open, %d kept locked by the mission lead out, %d refuse%s; entry's way out %s"
+               % (len(tried), len(opens), len(leaves), len(refused), (" (" + ", ".join(refused) + ")") if refused else "",
+                  "works" if entry else "NOT TAKEN"))
+    m = runs["doors_77_mission"]
+    refused = m.lines(r"doortest: .*refused:")
+    result("n", "7:7 the mission's way: its locked doors refuse (as the playtest)", bool(refused),
+           "; ".join(re.search(r'refused: "([^"]*)"', l).group(1) for l in refused) or "none refused")
+    v = runs["doors_77_leave"]
+    left = v.lines(r"room left \(a door the mission keeps locked, the exit open\)")
+    result("n", "7:7 left by a door the mission keeps locked", bool(left) and "room in level" in
+           v.log[v.log.find("keeps locked, the exit open"):] and not v.crashed(),
+           "left %d, the next room %s" % (len(left), "started" if left and "room start:" in
+                                        v.log[v.log.find("keeps locked, the exit open"):] else "not started"))
+
+
+# ---- o: the early waves' ramp (Meltdown 4: six guards of its own, all hunting at once in the playtest's first wave) ----
+
+RAMP_WAVES = (1, 3, 5)
+
+
+def ramp_runs():
+    base = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "10:4", "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1}
+    runs = {"ramp_w%d" % w: Run("ramp_w%d" % w, 10, 75, dict(base, TWINE_ENDLESS_TEST_WAVE=w)) for w in RAMP_WAVES}
+    runs["ramp_none"] = Run("ramp_none", 10, 75, dict(base, TWINE_ENDLESS_TEST_WAVE=1, TWINE_ENDLESS_TEST_NO_RAMP=1))
+    return runs
+
+
+def damage_profile(run):
+    """(Bond's damage each 10 s of the room's first minute, the longest run of frames hit in a row, the most in 2 s,
+    the most hunters at once)"""
+    st = re.search(r"f(\d+) v\d+ room start", run.log)
+    f0 = int(st.group(1)) if st else 0
+    dm = [(int(f), int(x)) for f, x in re.findall(r"f(\d+) v\d+ damage: (\d+):", run.log)]
+    per = [sum(x for f, x in dm if 0 <= (f - f0) // 200 == k) for k in range(6)]
+    frames, longest, cur, prev = sorted({f for f, _ in dm if f - f0 < 1200}), 0, 0, -9
+    for f in frames:
+        cur = cur + 1 if f - prev <= 1 else 1
+        prev, longest = f, max(longest, cur)
+    most2 = max([sum(x for g, x in dm if f <= g < f + 40) for f, _ in dm if f - f0 < 1200] or [0])
+    hunters = max([int(h) for h in re.findall(r"ai: (\d+) hunters", run.log)] or [-1])
+    return per, longest, most2, hunters
+
+
+def check_ramp(runs):
+    prof = {k: damage_profile(r) for k, r in runs.items()}
+    for k in sorted(prof):
+        per, longest, most2, hunters = prof[k]
+        result("o", "damage over time, %s" % ("no ramp, wave 1" if k == "ramp_none" else "wave " + k[6:]),
+               not runs[k].crashed() and "room start:" in runs[k].log,
+               "per 10 s %s = %d; longest burst %d frames; most in 2 s %d; hunters at once %s" %
+               (per, sum(per), longest, most2, hunters if hunters >= 0 else "-"))
+    w1, none, w5 = prof["ramp_w1"], prof["ramp_none"], prof["ramp_w5"]
+    caps = {1: 2, 3: 4, 5: 64}
+    hunters_ok = all(prof["ramp_w%d" % w][3] <= caps[w] for w in RAMP_WAVES)
+    # (the game's own AI (-o) presses far less (no hunters: Meltdown 4's guards keep to their places): gentler, not
+    # halved)
+    result("o", "the first wave gentler: %s, short bursts, 2 hunters" % ("less damage" if AI_ORIGINAL else
+                                                                         "half the damage or less"),
+           (sum(w1[0]) <= sum(none[0]) if AI_ORIGINAL else sum(w1[0]) * 2 <= sum(none[0])) and w1[1] <= 12 and hunters_ok,
+           "wave 1 %d against %d with no ramp; bursts %d frames (no ramp %d); most in 2 s %d (%d)" %
+           (sum(w1[0]), sum(none[0]), w1[1], none[1], w1[2], none[2]))
+    result("o", "rising by wave", sum(w5[0]) > sum(w1[0]),
+           "damage in the first minute: " + ", ".join("wave %d %d" % (w, sum(prof["ramp_w%d" % w][0])) for w in RAMP_WAVES))
+
+
 # ---- i: the campaign untouched ----
 
 def campaign_runs():
@@ -1052,7 +1254,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklm", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmno", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -1083,7 +1285,12 @@ def main():
     if "d" in checks:
         groups["rules"] = {"rules_kr": Run("rules_kr", 8, 150, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:4",
                                                                "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1}),
-                           "rules_courier": Run("rules_courier", 2, 30, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "2:-1"}),
+                           # (the bank's receptionist watched: Bond put before her, armed, hw renderer, smooth motion)
+                           "rules_courier": Run("rules_courier", 2, 40, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "2:-1",
+                                                                       "TWINE_ENDLESS_TEST_GOD": 1,
+                                                                       "TWINE_ENDLESS_TEST_NEAR": 60,
+                                                                       "TWINE_TRACE": "person", "TWINE_TRACE_TYPE": 60,
+                                                                       "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1}),
                            # (King's Ransom's "hurry James", its mission logic's line at f1020 in 8:5: muted; as played,
                            # hw renderer, smooth motion, Bond aiming and firing)
                            "rules_hurry": Run("rules_hurry", 8, 75, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:5",
@@ -1095,8 +1302,10 @@ def main():
         groups["menus"] = menu_runs()
     if "f" in checks:
         groups["restart"] = restart_runs()
+        groups["sound_stop"] = sound_stop_runs()
     if "g" in checks:
         groups["carry"] = carry_runs()
+        groups["iris"] = iris_runs()
         groups["lend"] = lend_runs()
     if "h" in checks:
         groups["card"] = card_runs()
@@ -1110,6 +1319,10 @@ def main():
         groups["texts"] = text_runs()
     if "m" in checks:
         groups["shell"] = shell_runs()
+    if "n" in checks:
+        groups["doors"] = door_runs(rooms)
+    if "o" in checks:
+        groups["ramp"] = ramp_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.secs)  # (the long ones first)
     t0 = time.time()
@@ -1126,8 +1339,12 @@ def main():
         check_menus(groups["menus"])
     if "restart" in groups:
         check_restart(groups["restart"])
+    if "sound_stop" in groups:
+        check_sound_stop(groups["sound_stop"])
     if "carry" in groups:
         check_carry(groups["carry"])
+    if "iris" in groups:
+        check_iris(groups["iris"])
     if "lend" in groups:
         check_lend(groups["lend"])
     if "card" in groups:
@@ -1142,9 +1359,13 @@ def main():
         check_texts(groups["texts"])
     if "shell" in groups:
         check_shell(groups["shell"])
+    if "doors" in groups:
+        check_doors(groups["doors"])
+    if "ramp" in groups:
+        check_ramp(groups["ramp"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
-             "k": "lent weapons", "l": "text letters", "m": "shell start"}
+             "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))

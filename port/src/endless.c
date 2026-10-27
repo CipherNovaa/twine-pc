@@ -464,6 +464,8 @@ void port_endless_score(int points) {
 
 /* the level's mod: the run's wave (1 in the first room) */
 int port_endless_wave(void) {
+    if (getenv("TWINE_ENDLESS_TEST_WAVE")) /* (tests: the run as if that many rooms were behind it) */
+        return port_endless_run.rooms + atoi(getenv("TWINE_ENDLESS_TEST_WAVE"));
     return port_endless_run.rooms + 1;
 }
 

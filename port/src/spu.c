@@ -75,6 +75,7 @@ typedef struct {
 } Voice;
 
 static Voice voices[24];
+static u32 exe_gen, v_gen[24]; /* (executables started; the one each voice was keyed on in) */
 static u32 endx;
 static s32 main_vol[2];
 static u32 main_vol_counter[2];
@@ -362,6 +363,7 @@ static void key_on(int n) {
     memset(v->buf, 0, sizeof(v->buf));
     decode_block(v, n);
     endx &= ~(1u << n);
+    v_gen[n] = exe_gen;
 }
 
 static void key_off(int n) {
@@ -604,6 +606,7 @@ static struct {
     u32 size, loop;  /* (bytes; the loop's block, from its loop-start flag) */
     u16 regs[8];     /* (as a voice's registers: V_VOLL, V_VOLR, V_PITCH, -, V_ADSR1, V_ADSR2) */
     int reverb, handle;
+    u32 gen;         /* (the executable it was keyed on in: port_spu_exe_started) */
 } xv[XVOICES];
 
 static void xv_decode(int k) {
@@ -874,6 +877,7 @@ int port_xvoice_play(const u8 *adpcm, u32 size, u16 pitch, u16 adsr1, u16 adsr2,
     xv[c].regs[V_PITCH] = pitch, xv[c].regs[V_ADSR1] = adsr1, xv[c].regs[V_ADSR2] = adsr2;
     xv[c].regs[V_VOLL] = voll, xv[c].regs[V_VOLR] = volr;
     xv[c].reverb = reverb;
+    xv[c].gen = exe_gen;
     xv[c].v.phase = ENV_ATTACK;
     xv_decode(c);
     memset(&meter[24 + c], 0, sizeof(meter[24 + c]));
@@ -882,6 +886,79 @@ int port_xvoice_play(const u8 *adpcm, u32 size, u16 pitch, u16 adsr1, u16 adsr2,
     xv[c].handle = sfx_handles = sfx_handles % 0x3FFF + 1; /* (one count with port_sfx_play's: port_sfx_stop either) */
     unlock();
     return xv[c].handle;
+}
+
+/* The runtime's own sounds keyed off (the extra voices: their release; port_sfx's: cut), but the one with handle
+ * keep, as the game keys off all of its voices (endless.c: SsUtAllKeyOff at the mission's end, func_80026C90 as the
+ * menu opens) or an executable starts. The count. */
+static int runtime_off(int keep) {
+    int c, n = 0;
+    for (c = 0; c < XVOICES; c++)
+        if (xv[c].data && xv[c].handle != keep && xv[c].v.phase != ENV_OFF && xv[c].v.phase != ENV_RELEASE) {
+            xv[c].v.phase = ENV_RELEASE;
+            xv[c].v.env_counter = 0;
+            n++;
+        }
+    for (c = 0; c < SFX_CHANNELS; c++)
+        if (sfx[c].pcm && sfx[c].handle != keep)
+            sfx[c].pcm = NULL, n++;
+    return n;
+}
+
+int port_spu_runtime_off(int keep) {
+    int n;
+    lock();
+    n = runtime_off(keep);
+    unlock();
+    return n;
+}
+
+/* An executable starts (main.c run_main: a mission, the front end, a restart): the runtime's own sounds of the last
+ * one are stopped. Their handles went with its memory: nothing there could stop them now -- a lent automatic
+ * weapon's looping fire, held through a door, looped on for good, through RESTART MISSION too (playtest 8). The
+ * game's own voices are its sound library's to stop, as on the PS1. TWINE_TEST_SOUND_KEEP=1: kept (the bug). */
+void port_spu_exe_started(void) {
+    int n = 0;
+    lock();
+    exe_gen++;
+    if (!getenv("TWINE_TEST_SOUND_KEEP"))
+        n = runtime_off(0);
+    unlock();
+    if (n && port_trace("sound"))
+        port_log("trace: sound: %d of the runtime's own sounds stopped as an executable starts\n", n);
+}
+
+/* What sounds now (TWINE_TRACE=voices): the game's voices and the extra ones keyed on, and of them those keyed on
+ * before this executable started (a sound left on from the last mission). Into buf; the count from before. */
+int port_spu_sounding(char *buf, int size) {
+    char list[512];
+    int c, game = 0, lent = 0, old = 0, len = 0;
+    list[0] = 0;
+    lock();
+    for (c = 0; c < 24; c++)
+        if (voices[c].phase != ENV_OFF) {
+            game++;
+            if (v_gen[c] != exe_gen && len < (int)sizeof(list))
+                old++, len += snprintf(list + len, sizeof(list) - len, " voice %d (%s, adsr %04X %04X)", c,
+                                       voices[c].phase == ENV_RELEASE ? "releasing" : "on", spu_regs[c * 8 + V_ADSR1],
+                                       spu_regs[c * 8 + V_ADSR2]);
+            else if (v_gen[c] != exe_gen)
+                old++;
+        }
+    for (c = 0; c < XVOICES; c++)
+        if (xv[c].data && xv[c].v.phase != ENV_OFF) {
+            lent++;
+            if (xv[c].gen != exe_gen && len < (int)sizeof(list))
+                old++, len += snprintf(list + len, sizeof(list) - len, " lent voice %d (handle %d, %s)", c, xv[c].handle,
+                                       xv[c].v.phase == ENV_RELEASE ? "releasing" : "on");
+            else if (xv[c].gen != exe_gen)
+                old++;
+        }
+    for (c = 0; c < SFX_CHANNELS; c++)
+        lent += sfx[c].pcm != NULL;
+    unlock();
+    snprintf(buf, size, "game voices %d, the runtime's %d; keyed on before this executable: %d%s", game, lent, old, list);
+    return old;
 }
 
 void port_sfx(const s16 *pcm, u32 n, u32 rate, s32 vol) {

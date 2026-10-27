@@ -43,6 +43,8 @@ void port_log(const char *fmt, ...) {
 /* a mod's last word before the game ends (what it knows of how it came to that: endless.c's texts) */
 void (*port_fatal_hook)(void);
 void port_smooth_forget(void);
+void port_spu_exe_started(void);
+int port_spu_sounding(char *buf, int size);
 
 /* TWINE_CORE=1: abort (for a core dump) rather than exit */
 void port_fatal(const char *fmt, ...) {
@@ -352,6 +354,12 @@ static s32 run_main(const PortModule *m, s32 argc, u32 argv) {
     port_log("Exec %s\n", m->name);
     port_module = m;
     port_smooth_forget(); /* (interp.c: the last executable's mods' memory) */
+    if (port_trace("voices")) { /* (what still sounds of the last executable's, before and after its own stopped) */
+        char what[640];
+        port_spu_sounding(what, sizeof(what));
+        port_log("trace: voices: as %s starts, before: %s\n", m->name, what);
+    }
+    port_spu_exe_started(); /* (spu.c: the runtime's own sounds of the last one stopped: their handles are gone) */
     install_trampolines(m);
     memset((void *)m->bss_start, 0, m->bss_end - m->bss_start);
     port_state_started(argc, argv);

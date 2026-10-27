@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 func_80053804 func_8005519C
+ * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 SsUtAllKeyOff func_80026C90 func_80053804 func_8005519C
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -87,6 +87,7 @@ extern s32 D_800E2F54;   /* the section's floor (its contour polygons) */
 extern s16 D_8009CAA4;   /* a menu over the mission (its frame loop runs the menu alone) */
 extern s32 g_DevMenu[];
 extern u32 g_PadPressed; /* the buttons pressed this frame */
+extern u32 g_PadHeld;
 u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z); /* makes a placed thing from its record */
 u8 *func_8003C1BC_orig(s32 *rec, s32 x, s32 y, s32 z);
 u8 *func_80039A9C(s32 arg0, u8 type, s32 kind);  /* makes an object of a kind (4: a pickup) at MAKE_AT */
@@ -196,6 +197,7 @@ static int faces;
 /* its doorways (its door zones: load points' and locked doors') */
 #define DOORS 48
 static s32 doors[DOORS][3];
+static u8 door_pt[DOORS], door_type[DOORS]; /* (each zone's load point, its type) */
 static int door_count;
 /* the copies' records (the objects made from them keep pointing at them: +0x60) */
 #define COPIES 64
@@ -218,6 +220,9 @@ typedef struct {
 static AiEvent hunt_ev[64];
 static s32 last_seen_at = -1, bond_still_since, nav_goal[8][3], drive_rest[64], spread_until[64], shots_held, shots_fired;
 static u8 driving[64], seen_for[64], react[64];
+static u8 hunt_on[64]; /* (THE RAMP: allowed to hunt now) */
+static s32 shot_last[64], shot_burst[64], shot_rest[64]; /* (THE RAMP: his last shot, his burst's start, resting till) */
+static int ramp_off = -1;
 static u8 *cover_state_ptr(void);
 static void nav_reset(void);
 static void grenade_reset(void);
@@ -258,6 +263,17 @@ static void people_log(void) {
 static s16 entry[5];
 static s32 was_alive[64]; /* each person's health last frame (a guard falling leaves pickups) */
 static s32 was_at[3], said; /* where Bond was as the last frame began; when a message was last given */
+/* LOCKED DOORS: a door the mission keeps shut (its own message: "DOOR IS LOCKED", "ACCESS DENIED", a key or card
+ * wanted, ...) is a way on like any other once the room's exit is open: Bond using it leaves (no automatic exits:
+ * only by his use); before that, the mod's "EXIT LOCKED" in place of the mission's message */
+static s32 door_msg_at = -1, locked_exit_at = -1; /* (a door's refusal heard; Bond asking to leave by one) */
+static char door_msg_text[32];
+extern u16 port_pad_buttons[2];
+extern u8 port_pad_sticks[2][4]; /* (RX RY LX LY) */
+static int dt_on = -1, dt_n, dt_list[DOORS], dt_floor[DOORS], dt_done; /* (TWINE_ENDLESS_TEST_DOORS) */
+static const char *dt_result;
+extern s8 D_8009CABF; /* (the mission's loop leaves the controls unread: its opening iris) */
+static int wave_due; /* (the room's "WAVE N" for when the opening iris is over) */
 static s32 last_frame = -1, room_frames, carried, kills_at_start, kills_scored, budget, cooldown, open;
 static s32 burst, segment, last_section = -1, loading, at_entry, survey_left, seen_gen = -1;
 int port_endless_gen(void);
@@ -315,6 +331,18 @@ static void take_out(u8 *o, const char *why) {
     ELOG("removed: type %d (%s), health %d, %d off, %s", o[6], why, HEALTH(o),
          dist2(g_Args->playerX, g_Args->playerZ, POS(o)[0], POS(o)[2]), seen(o) ? "Bond could see him" : "out of Bond's sight");
     func_800395E8(o);
+}
+
+/* the people's slots (port/mods/people.c: 12 with 8 MB of RAM, else the game's 6): the director's cap grows with them */
+int people_slots(void) __attribute__((weak));
+static int people_cap(void) {
+    return people_slots ? people_slots() : 6;
+}
+static int fill_test(void) { /* TWINE_ENDLESS_TEST_FILL=1 (tests): the director sends guards until every slot is taken */
+    static int on = -1;
+    if (on < 0)
+        on = getenv("TWINE_ENDLESS_TEST_FILL") != NULL;
+    return on;
 }
 
 /* the people alive (but Bond), and how many of those are the section's own */
@@ -2251,9 +2279,13 @@ static void room_start(void) {
     last_seen_at = -1, bond_still_since = 0;
     memset(hunters, 0, sizeof(hunters));
     memset(returns, 0, sizeof(returns));
+    memset(hunt_on, 1, sizeof(hunt_on)); /* (THE RAMP: decided in its first frame) */
+    memset(shot_burst, 0, sizeof(shot_burst)), memset(shot_rest, 0, sizeof(shot_rest));
     cooldown = SEC * 5;
     kills_at_start = *(u16 *)((u8 *)g_Args + 0x2C4);
-    rng ^= D_8009CDA8 * 2654435761u ^ entry[2] ^ D_800D2F8C;
+    rng ^= (D_8009CABF ? 61 : D_8009CDA8) * 2654435761u ^ entry[2] ^ D_800D2F8C; /* (begun in the opening iris: drawn
+                                                                                 * as when rooms began with the controls,
+                                                                                 * at frame 61) */
     last_section = D_800D2F8C;
     for (i = 0; i < 256; i++)
         counts[i] = 0;
@@ -2268,6 +2300,7 @@ static void room_start(void) {
                 doors[door_count][0] = p[0] + D_800D2FB0[0];
                 doors[door_count][1] = p[1] + D_800D2FB0[1];
                 doors[door_count][2] = p[2] + D_800D2FB0[2];
+                door_pt[door_count] = (u32)p[3] >> 27, door_type[door_count] = (u8)t;
                 door_count++;
             }
             if (!fighter_type(t, 0) || kind_count == KINDS) /* (copies only of armed guards) */
@@ -2822,13 +2855,59 @@ static int ai_improved(void) {
 }
 
 static u8 blind_now[64]; /* (blinded by a flash bang: the port's AI keeps off him, THE FLASH BANG'S GUARDS) */
-static int hunter(u8 *o) {
+static int any_hunter(u8 *o) { /* (one who would hunt Bond: a copy, or one of the room's own moving guards) */
     s32 *src = *(s32 **)(o + 0x60);
     if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0 || !*(u8 **)(o + 0x118) || blind_now[(o - OBJ(0)) / 0x124 & 63])
         return 0;
     if (is_copy(o))
         return 1;
     return src && !FIXED_SCRIPT(src[1]) && fighter_type(o[6], 0);
+}
+
+/* THE RAMP: the early waves gentler. As many hunt Bond at once as the wave allows (the room's own guards counted
+ * with the director's: 2 in the first wave, one more a wave, all from the fifth), the nearest first; the others keep
+ * to their places (they hear no distant gunshots: func_80053ED8) and fight only when they see him. And as many
+ * shoot at once as the wave allows (1 in the first two waves, 2 in the next two, 3, then all from the seventh), each
+ * in bursts (half a second at first, a second from the fifth wave) with a rest between (two seconds at first, down to
+ * half a second): func_80053114. TWINE_ENDLESS_TEST_NO_RAMP=1: as before (tests). */
+static int ramp(void) {
+    if (ramp_off < 0)
+        ramp_off = getenv("TWINE_ENDLESS_TEST_NO_RAMP") != 0;
+    return !ramp_off;
+}
+static int hunt_cap(void) {
+    int w = port_endless_wave();
+    return !ramp() || w >= 5 ? 64 : 1 + w;
+}
+static int shoot_cap(void) {
+    int w = port_endless_wave();
+    return !ramp() || w >= 7 ? 64 : 1 + (w - 1) / 2;
+}
+static int hunter(u8 *o) {
+    if (!any_hunter(o))
+        return 0;
+    return hunt_on[((o - OBJ(0)) / 0x124) & 63];
+}
+static int no_way(int i) { /* (resting from a way to Bond that wasn't there: his part of the floor doesn't reach) */
+    return drive_rest[i] > room_frames;
+}
+static void ramp_hunters(void) { /* (who may hunt: the nearest as many as the wave allows; every half second) */
+    int i, j, n = 0, cap = hunt_cap(), order[64];
+    s32 d[64];
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = OBJ(i);
+        hunt_on[i] = 0;
+        if (!any_hunter(o))
+            continue;
+        d[i] = dist2(POS(o)[0], POS(o)[2], g_Args->playerX, g_Args->playerZ) - (react[i] ? 100000 : 0) +
+               (no_way(i) ? 1000000 : 0);
+        for (j = n; j > 0 && d[order[j - 1]] > d[i]; j--) /* (those who see him first, then the nearest; last those
+                                                          * with no way to him) */
+            order[j] = order[j - 1];
+        order[j] = i, n++;
+    }
+    for (j = 0; j < n && j < cap; j++)
+        hunt_on[order[j]] = 1;
 }
 
 /* the reachable floor polygon nearest (x, z) on Bond's floor (-1 none) */
@@ -3812,6 +3891,8 @@ static void ai_frame(void) {
     s32 bx = g_Args->playerX, by = g_Args->playerY, bz = g_Args->playerZ;
     if (!ai_improved())
         return;
+    if (!(room_frames % (SEC / 2)) || room_frames < 3)
+        ramp_hunters();
     bond_speed = (bond_speed * 3 + dist2(bx, bz, bond_prev[0], bond_prev[2])) / 4; /* (per frame, smoothed) */
     bond_prev[0] = bx, bond_prev[2] = bz;
     if (dist2(bx, bz, bond_was[0], bond_was[2]) > 800)
@@ -3943,6 +4024,11 @@ AiEvent *func_80053ED8(u8 *obj) { /* the event a person reacts to: a hunter's ow
     int i;
     if (ai_on > 0 && port_endless_room(e) && obj >= OBJ(0) && obj < OBJ(64)) {
         i = (obj - OBJ(0)) / 0x124;
+        if (i >= D_800B0DA0 && i <= D_800B07B0 && any_hunter(obj) && !hunter(obj) && !react[i]) {
+            AiEvent *g = func_80053ED8_orig(obj); /* (one waiting his turn: at his place till he sees Bond, deaf to
+                                                   * what goes on further off) */
+            return g && dist2(g->x, g->z, POS(obj)[0], POS(obj)[2]) > 3000 ? 0 : g;
+        }
         if (i >= D_800B0DA0 && i <= D_800B07B0 && hunt_ev[i].type == 0 && driving[i] && hunter(obj)) {
             AiEvent *g = func_80053ED8_orig(obj);
             static int told;
@@ -3954,6 +4040,164 @@ AiEvent *func_80053ED8(u8 *obj) { /* the event a person reacts to: a hunter's ow
     return func_80053ED8_orig(obj);
 }
 
+/* TWINE_ENDLESS_TEST_DOORS=1 (headless tests): every door of the room, as Bond would try it once the exit is open:
+ * each door zone by the floor he can reach, in turn (5 s each from frame 80): Bond put a little way before it, facing
+ * it, walks into it (the pad's up) pressing use now and then; logged "doortest: door K ...: opens, to load point N" (the
+ * load undone), "leaves (a locked door's ...)", "refused: \"MESSAGE\"" or "nothing" */
+void func_80030FA8(s16 *at);
+static s32 face(s32 fx, s32 fz, s32 x, s32 z) { /* (the yaw from (fx, fz) to (x, z)) */
+    s32 dx = x - fx, dz = z - fz, a, best = -0x7FFFFFFF, ba = 0;
+    for (a = 0; a < 4096; a += 8) {
+        s32 d = (isin(a) >> 4) * (dx >> 4) + (isin(a + 0x400) >> 4) * (dz >> 4);
+        if (d > best)
+            best = d, ba = a;
+    }
+    return ba;
+}
+extern s32 D_800DF0F8;
+extern u16 D_800B0C5C, D_800B0AEC;
+static void steer(s32 yaw) { /* (Bond turned to yaw, as func_80030FA8 turns him) */
+    *(s16 *)(*(u8 **)((u8 *)g_Player + 0x90) + 0x62) = (s16)yaw;
+    gPsi = yaw, D_800DF0F8 = yaw << 6, *(s32 *)&D_800B0C5C = yaw, D_800B0AEC = (u16)yaw, g_Camera.rotY = yaw;
+}
+static void door_test(void) {
+    s32 t = room_frames - 80, k, ph;
+    int i;
+    if (room_frames == 60) {
+        open = 1;
+        dt_n = dt_done = 0;
+        flood();
+        for (k = 0; k < door_count; k++) { /* (by the floor he can reach: a polygon of it near, about level) */
+            s32 best = 0x7FFFFFFF, b = -1, bn = 0x7FFFFFFF, near = -1;
+            for (i = 0; i < faces; i++) {
+                s32 e = dist2(doors[k][0], doors[k][2], mid[i][0], mid[i][2]);
+                if (!reach[i] || shut[i] || mid[i][1] - doors[k][1] > 1500 || doors[k][1] - mid[i][1] > 1500)
+                    continue;
+                if (e < bn)
+                    bn = e, near = i;
+                if (e >= 500 && e <= 1400 && e < best)
+                    best = e, b = i;
+            }
+            if (near >= 0 && bn < 1800)
+                dt_list[dt_n] = k, dt_floor[dt_n++] = b >= 0 ? b : near;
+        }
+        dt_list[dt_n] = -1;
+        ELOG("doortest: %d doors by the floor Bond can reach (of %d door zones), use button %04X", dt_n, door_count,
+             *(u16 *)((u8 *)g_Args + 0x14E));
+        if (!dt_n)
+            dt_list[0] = -1;
+        return;
+    }
+    if (t >= 0 && (dt_list[0] < 0 || t / 100 >= dt_n)) { /* (the doors done: then the way out by the entry) */
+        s32 e = t - dt_n * 100;
+        u16 use = *(u16 *)((u8 *)g_Args + 0x14E);
+        if (!dt_done++) {
+            ELOG("doortest: done; to the entry");
+            func_80030FA8(entry);
+        }
+        port_pad_buttons[0] = (u16) ~(e % 20 == 10 ? (u16)(use << 8 | use >> 8) : 0);
+        port_pad_sticks[0][3] = 0x80;
+        return;
+    }
+    if (t < 0)
+        return;
+    i = t / 100, ph = t % 100, k = dt_list[i];
+    if (ph == 0) {
+        s16 at[5];
+        s32 f = dt_floor[i];
+        at[0] = D_800D2F8C, at[1] = face(mid[f][0], mid[f][2], doors[k][0], doors[k][2]);
+        at[2] = mid[f][0], at[3] = mid[f][1], at[4] = mid[f][2];
+        func_80030FA8(at);
+        dt_result = 0, door_msg_at = -1;
+        return;
+    }
+    if (ph < 99) {
+        if (dt_result) { /* (decided: Bond stands still the rest of his turn) */
+            port_pad_buttons[0] = 0xFFFF, port_pad_sticks[0][3] = 0x80;
+            return;
+        }
+        u16 use = *(u16 *)((u8 *)g_Args + 0x14E); /* (the game's order: the pad's two bytes swapped) */
+        s32 f = dt_floor[i], ax = doors[k][0] - mid[f][0], az = doors[k][2] - mid[f][2], al = dist2(0, 0, ax, az), tx, tz, d;
+        if (al < 1)
+            al = 1;
+        tx = doors[k][0] + ax * 800 / al, tz = doors[k][2] + az * 800 / al; /* (on through the zone, 800 past it) */
+        d = dist2(g_Args->playerX, g_Args->playerZ, tx, tz);
+        if (d > 150) /* (walking; there, still) */
+            steer(face(g_Args->playerX, g_Args->playerZ, tx, tz));
+        port_pad_buttons[0] = (u16) ~(ph % 20 == 10 ? (u16)(use << 8 | use >> 8) : 0);
+        port_pad_sticks[0][3] = d > 150 ? 0x40 : 0x80; /* (the left stick forward) */
+        if (getenv("TWINE_ENDLESS_TEST_DOORS_LOG") && ph % 10 == 5)
+            ELOG("doortest: door %d, Bond at %d %d %d yaw %d, pad held %04X", k, g_Args->playerX, g_Args->playerY,
+                 g_Args->playerZ, gPsi, g_PadHeld);
+        return;
+    }
+    port_pad_buttons[0] = 0xFFFF, port_pad_sticks[0][3] = 0x80;
+    ELOG("doortest: door %d (type %d cb %08X) at %d %d %d (load point %d), Bond from %d %d now at %d %d (%d off): %s%s%s", k,
+         door_type[k], *(u32 *)(TYPE_DEF(door_type[k]) + 0x38), doors[k][0], doors[k][1], doors[k][2], door_pt[k], mid[dt_floor[i]][0], mid[dt_floor[i]][2],
+         g_Args->playerX, g_Args->playerZ, dist2(g_Args->playerX, g_Args->playerZ, doors[k][0], doors[k][2]),
+         dt_result ? dt_result : door_msg_at >= 0 ? "refused: \"" : "nothing",
+         !dt_result && door_msg_at >= 0 ? door_msg_text : "", !dt_result && door_msg_at >= 0 ? "\"" : "");
+}
+
+static int hunters_now(void) { /* (those who would hunt, about: alive, near enough to make the fight) */
+    int i, n = 0;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++)
+        n += any_hunter(OBJ(i)) && dist2(g_Args->playerX, g_Args->playerZ, POS(OBJ(i))[0], POS(OBJ(i))[2]) <= 12000 &&
+             !no_way(i); /* (one with no way to him makes no fight) */
+    return n;
+}
+
+static void draw_frame(void) { /* (the weapon he came in with taken out: each frame, from the mission's first) */
+    if (draw_slot >= 0 && D_800B0DD4 == draw_slot && D_800F11F0 != 5 && D_800B0DDC == draw_slot)
+        draw_slot = -1; /* (in hand: his to change from as he likes) */
+    if (draw_slot >= 0 && D_800B0DD4 != draw_slot && draw_direct && D_8009CD98 &&
+        !(*(u32 *)(D_8009CD98 + 0x7C) & 0x80000000)) {
+        *(u32 *)(D_8009CD98 + 0x7C) |= 0x80000000; /* (the mission's own not shown while his comes: from the first
+                                                     * frame, the opening iris's) */
+        draw_hidden = 1;
+    }
+    if (draw_slot >= 0 && D_800B0DD4 != draw_slot && draw_direct && (D_800F11F0 == 1 || D_800F11F0 == 7) &&
+        !D_800DDEEC) {
+        /* (a room's start, a mission loaded afresh: the weapon he came in with is the one taken out, its model loaded
+         * and drawn (state 5), without the mission's own first put away before it) */
+#ifdef MOD_TRACE
+        trace_change_by("endless: the weapon carried in, taken out at the start");
+#endif
+        D_800B0DD8 = D_800B0DD4;
+        D_800B0DDC = (s16)draw_slot;
+        if (D_8009CD98 && !(*(u32 *)(D_8009CD98 + 0x7C) & 0x80000000)) {
+            *(u32 *)(D_8009CD98 + 0x7C) |= 0x80000000; /* (the mission's own not shown meanwhile) */
+            draw_hidden = 1;
+        }
+        func_8007A17C(5);
+        draw_slot = -1;
+    }
+    if (!D_8009CABF) /* (kept through the opening iris, till the weapon's state machine lets it be taken out) */
+        draw_direct = 0;
+    if (draw_hidden && draw_slot < 0 && D_800F11F0 != 5) { /* (loaded: shown, drawn) */
+        draw_hidden = 0;
+        if (D_8009CD98)
+            *(u32 *)(D_8009CD98 + 0x7C) &= 0x7FFFFFFF;
+    }
+    if (draw_slot >= 0 && D_800B0DD4 != draw_slot && !draw_direct) {
+#ifdef MOD_TRACE
+        trace_change_by("endless: the weapon carried in, drawn");
+#endif
+#ifdef MOD_WEAPONKEYS
+        if (weapon_change_to(draw_slot))
+#endif
+            draw_slot = -1;
+    }
+}
+
+int port_spu_sounding(char *buf, int size);
+static int trace_voices(void) {
+    static int on = -1;
+    if (on < 0)
+        on = port_trace("voices");
+    return on;
+}
+
 void endless_frame(void) {
     int own, n, wave, i;
     s32 kills, back;
@@ -3961,6 +4205,14 @@ void endless_frame(void) {
         return;
     if (port_endless_room(entry) && g_Player)
         watch_frame();
+    if (trace_voices() && D_8009CAA4 && port_endless_room(entry)) { /* (the watch's menu up: what sounds meanwhile) */
+        static int menu_calls;
+        char what[640];
+        if (++menu_calls % 25 == 1) {
+            port_spu_sounding(what, sizeof(what));
+            port_log("trace: L%d f%d voices: the menu up (call %d): %s\n", g_Args->level, D_8009CDA8, menu_calls, what);
+        }
+    }
     if (getenv("TWINE_ENDLESS_DUMP"))
         dump();
     if (!port_endless_room(entry) || !g_Player)
@@ -3992,7 +4244,10 @@ void endless_frame(void) {
         for (i = 0; i < 64; i++)
             was_alive[i] = 0;
         snprintf(msg_wave, sizeof(msg_wave), "WAVE %d", port_endless_wave());
-        func_80048B4C(msg_wave, 0x80, 0);
+        if (D_8009CABF) /* (the opening iris: shown as it opens) */
+            wave_due = 1;
+        else
+            func_80048B4C(msg_wave, 0x80, 0);
         ELOG("room ready: health %d armour %d, weapon %s, floor Bond can reach: %d polygons", bond_health(),
              D_8009CFF0, weapon_name(), flood());
         strip_tools();
@@ -4006,9 +4261,19 @@ void endless_frame(void) {
             pickup(D_8009D106, x, y == -0x7FFF ? g_Args->playerY : y, z, "heavy armour (the first room's)");
         }
     }
+    if (wave_due && !D_8009CABF) {
+        wave_due = 0;
+        func_80048B4C(msg_wave, 0x80, 0);
+    }
     room_frames++;
     blind_frame(); /* (a lent flash bang's blinded guards) */
     shotgun_frame();
+    if (trace_voices() && (room_frames == 1 || room_frames == 20 || room_frames == 40 || room_frames % 100 == 0)) {
+        char what[640]; /* (TWINE_TRACE=voices: what sounds; a sound left on from the last mission, the playtest's
+                         * endless SMG fire, shows as keyed on before this executable) */
+        port_spu_sounding(what, sizeof(what));
+        port_log("trace: L%d f%d voices: room frame %d: %s\n", g_Args->level, D_8009CDA8, room_frames, what);
+    }
     blast_frame(); /* (a guard's grenade sparing his friends: over) */
     if (room_frames % (SEC * 10) == 0)
         flood();
@@ -4110,12 +4375,17 @@ void endless_frame(void) {
     i = D_800B07B0 - D_800B0DA0 + 1; /* (the people's slots but Bond's: six) */
     if (n >= i && room_frames % (SEC * 5)) /* (all taken by ones near: none can come) */
         ;
+    else if (fill_test() && !cooldown && room_frames > SEC * 2) { /* (TWINE_ENDLESS_TEST_FILL: every slot filled) */
+        spawn("test fill");
+        cooldown = SEC / 2;
+    } else if (ramp() && hunters_now() >= hunt_cap()) /* (THE RAMP: as many hunting as the wave allows) */
+        ;
     else if (!cooldown && room_frames > SEC * 2 && burst < 3 && own + burst < 3) {
         burst++;
         spawn("few guards here");
         if (cooldown < SEC * 3 / 2)
             cooldown = SEC * 3 / 2;
-    } else if (!cooldown && budget >= SEC * 20 && n < 2 + wave) {
+    } else if (!cooldown && budget >= SEC * 20 && n < 2 + wave * people_cap() / 6) {
         spawn("director");
         budget = 0;
         cooldown = SEC * 4 + rnd() % (SEC * 4);
@@ -4168,19 +4438,6 @@ void endless_frame(void) {
                 g_Weapons[i].flags |= 0x1800, g_Weapons[i].ammo += 20, g_Weapons[i].reserve += 20;
         log_weapons("armed (test)");
     }
-    if (g_Args->level == 2) /* the bank's receptionist (type 60, placed seated at her desk): in the seated animation
-                             * the opening cutscene leaves her in (0x3C), which her script, without it, never takes */
-        for (i = D_800B0DA0; i <= D_800B07B0; i++) {
-            u8 *o = OBJ(i), *an = *(u8 **)(o + 0x94);
-            s32 *src = *(s32 **)(o + 0x60);
-            if (o != g_Player && o[4] && o[6] == 60 && HEALTH(o) > 0 && an && src && (src[0] & 0x400) &&
-                *(s16 *)(an + 0x10) != 0x3C) {
-                if (!seated_said++)
-                    ELOG("room: the receptionist kept seated (her script's animation %d)", *(s16 *)(an + 0x10));
-                *(s16 *)(an + 0x10) = *(s16 *)(an + 0x12) = 0x3C;
-                an[0x14] = 0, an[0x16] = 1, *(s16 *)(an + 0x18) = 0;
-            }
-        }
     if (getenv("TWINE_ENDLESS_AI_DUMP") && room_frames == SEC * 3) /* (a guard's script: its handlers and code) */
         for (i = D_800B0DA0; i <= D_800B07B0; i++) {
             u8 *o = OBJ(i), *ctx = *(u8 **)(o + 0x118);
@@ -4241,39 +4498,7 @@ void endless_frame(void) {
         for (i = 0; i < SLOTS; i++)
             if (!strncmp((char *)g_Weapons[i].pad0, getenv("TWINE_ENDLESS_TEST_DRAW"), strlen(getenv("TWINE_ENDLESS_TEST_DRAW"))))
                 draw_slot = i;
-    if (draw_slot >= 0 && D_800B0DD4 == draw_slot && D_800F11F0 != 5 && D_800B0DDC == draw_slot)
-        draw_slot = -1; /* (in hand: his to change from as he likes) */
-    if (draw_slot >= 0 && D_800B0DD4 != draw_slot && draw_direct && (D_800F11F0 == 1 || D_800F11F0 == 7) &&
-        !D_800DDEEC) {
-        /* (a room's start, a mission loaded afresh: the weapon he came in with is the one taken out, its model loaded
-         * and drawn (state 5), without the mission's own first put away before it) */
-#ifdef MOD_TRACE
-        trace_change_by("endless: the weapon carried in, taken out at the start");
-#endif
-        D_800B0DD8 = D_800B0DD4;
-        D_800B0DDC = (s16)draw_slot;
-        if (D_8009CD98 && !(*(u32 *)(D_8009CD98 + 0x7C) & 0x80000000)) {
-            *(u32 *)(D_8009CD98 + 0x7C) |= 0x80000000; /* (the mission's own not shown meanwhile) */
-            draw_hidden = 1;
-        }
-        func_8007A17C(5);
-        draw_slot = -1;
-    }
-    draw_direct = 0;
-    if (draw_hidden && D_800F11F0 != 5) { /* (loaded: shown, drawn) */
-        draw_hidden = 0;
-        if (D_8009CD98)
-            *(u32 *)(D_8009CD98 + 0x7C) &= 0x7FFFFFFF;
-    }
-    if (draw_slot >= 0 && D_800B0DD4 != draw_slot) {
-#ifdef MOD_TRACE
-        trace_change_by("endless: the weapon carried in, drawn");
-#endif
-#ifdef MOD_WEAPONKEYS
-        if (weapon_change_to(draw_slot))
-#endif
-            draw_slot = -1;
-    }
+    draw_frame();
     if (getenv("TWINE_ENDLESS_AMMO_LOG") && room_frames == 41) /* (headless tests: which of his weapons drops can feed) */
         for (i = 0; i < SLOTS; i++)
             if ((g_Weapons[i].flags & 0x1800) == 0x1800 && *(s16 *)&g_Weapons[i].maxAmmo > 0)
@@ -4330,9 +4555,52 @@ void endless_frame(void) {
                             ? atoi(strchr(getenv("TWINE_ENDLESS_TEST_EXIT"), ',') + 1)
                             : atoi(getenv("TWINE_ENDLESS_TEST_EXIT"))))
         open = 1, D_800D2F90 = 2, room_frames = SEC * 60; /* (headless tests: as if Bond went through a door) */
+    if (getenv("TWINE_ENDLESS_TEST_NEAR") && room_frames == SEC * 2) { /* (headless tests: Bond put before the first
+                                                                    * person of that type, facing her) */
+        for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+            u8 *o = OBJ(i);
+            s32 best = 0x7FFFFFFF, b = -1, f;
+            if (o == g_Player || !o[4] || o[6] != atoi(getenv("TWINE_ENDLESS_TEST_NEAR")))
+                continue;
+            for (f = 0; f < faces; f++) {
+                s32 d = dist2(POS(o)[0], POS(o)[2], mid[f][0], mid[f][2]) - 1300;
+                if (d < 0)
+                    d = -d;
+                if (mid[f][1] - POS(o)[1] < 600 && POS(o)[1] - mid[f][1] < 600 && d < best)
+                    best = d, b = f;
+            }
+            if (b >= 0) {
+                s16 at[5];
+                at[0] = D_800D2F8C, at[1] = face(mid[b][0], mid[b][2], POS(o)[0], POS(o)[2]);
+                at[2] = mid[b][0], at[3] = mid[b][1], at[4] = mid[b][2];
+                func_80030FA8(at);
+                ELOG("test: Bond put %d from person %d (type %d), facing her", dist2(mid[b][0], mid[b][2], POS(o)[0], POS(o)[2]), i, o[6]);
+            }
+            break;
+        }
+    }
+    if (dt_on < 0)
+        dt_on = getenv("TWINE_ENDLESS_TEST_DOORS") != 0;
+    if (dt_on && !segment)
+        door_test();
+    if (locked_exit_at >= 0 && open && !(g_Args->flags & 0x40) && !loading) {
+        locked_exit_at = -1;
+        if (dt_on && dt_list[0] >= 0 && !dt_done && !getenv("TWINE_ENDLESS_TEST_DOORS_LEAVE")) /* (the test: noted,
+                                                                                                  * not left) */
+            dt_result = "leaves (a locked door's, the exit open)";
+        else {
+            D_8009CFFC = 1; /* (the fade out) */
+            segment = 0;
+            leave(wave, dist2(g_Args->playerX, g_Args->playerZ, entry[2], entry[4]) < 1500
+                            ? "the use button at the entry" /* (the door he came in by, locked behind him) */
+                            : "a door the mission keeps locked, the exit open");
+            return;
+        }
+    }
+    locked_exit_at = -1;
     /* the way out by the entry (for a room whose doors lead nowhere: a story's, a lift's, or only for show): once the
      * exit is open, standing where he came in, Bond is told he may leave, and leaves with the use button */
-    if (open && !(g_Args->flags & 0x40) && !loading &&
+    if (open && !(g_Args->flags & 0x40) && !loading && (!dt_on || dt_done) &&
         dist2(g_Args->playerX, g_Args->playerZ, entry[2], entry[4]) < 1500) {
         if (!at_entry++) {
             func_80048B4C(msg_leave, 0x80, 0);
@@ -4349,7 +4617,14 @@ void endless_frame(void) {
         s16 *to = *(s16 **)(D_8009E9C4 + 8);
         int point = to ? (to - (D_8009E9C4 + 0xC)) / 8 : -1;
         back = dist2(g_Args->playerX, g_Args->playerZ, entry[2], entry[4]) < 3000 && room_frames < SEC * 60;
-        if (open && !back) { /* the room cleared */
+        if (open && !back && dt_on && dt_list[0] >= 0) { /* (the door test: noted, the load undone) */
+            static char r[48];
+            snprintf(r, sizeof(r), "opens, to load point %d (section %d)", point, to ? to[0] : -1);
+            dt_result = r;
+            D_800D2F90 = 0;
+            D_8009CFFC = -1;
+            *(s32 *)(D_8009E9C4 + 8) = 0;
+        } else if (open && !back) { /* the room cleared */
             ELOG("door: open, to load point %d (section %d)", point, to ? to[0] : -1);
             if (port_endless_segment(point)) { /* the mission's next section, as the next room */
                 port_endless_score(500 + 250 * wave);
@@ -4376,6 +4651,58 @@ void endless_frame(void) {
         }
     }
     was_at[0] = POS(g_Player)[0], was_at[1] = POS(g_Player)[1], was_at[2] = POS(g_Player)[2];
+}
+
+/* THE CARRIED WEAPON FROM THE MISSION'S FIRST FRAME: endless_frame runs at the top of each frame, from Pad_Update,
+ * which the mission's loop doesn't call while its opening iris plays (D_8009CABF): the room started at frame 61, the
+ * mission's own weapon shown till then. func_8004900C (each frame of the mission's, before its weapon's state machine
+ * runs) starts the room in the mission's first frame instead: its weapons lent, Bond's carried in, the one in his hand
+ * taken out (endless_frame once; then from frame 61 on as ever) */
+void func_8004900C_orig(void);
+void func_8004900C(void) {
+    s16 e[5];
+    if (getenv("TWINE_ENDLESS_TEST_IRIS_LOG") && port_endless_room(e) && D_8009CDA8 < 70)
+        ELOG("iris: frame %d, pad skipped %d, cut scene %d, weapon slot %d state %d, to %d", D_8009CDA8, D_8009CABF,
+             g_CutScene, D_800B0DD4, D_800F11F0, D_800B0DDC);
+    if (!port_subframe && port_endless_room(e) && g_Player && !getenv("TWINE_ENDLESS_TEST_LATE_DRAW") &&
+        (port_endless_gen() != seen_gen || D_8009CDA8 < last_frame || last_frame < 0))
+        endless_frame(); /* (a mission's first frame: the room started now) */
+    else if (!port_subframe && port_endless_room(e) && g_Player && D_8009CABF && carried && !getenv("TWINE_ENDLESS_TEST_LATE_DRAW"))
+        draw_frame(); /* (its opening iris: endless_frame waits for the controls, the carried weapon is taken out) */
+    func_8004900C_orig();
+}
+
+/* THE BANK'S RECEPTIONIST (Courier, type 60, placed seated at her desk): seated, still, as in the campaign. Her
+ * script (RECEPT) takes its seated loop (its animation 0x3C) once the opening cutscene is marked seen (func_80054414
+ * below), and leaves it, cowering (animation 0x28, up and down: the flicker the playtest saw against a seated pose
+ * forced on her each frame, now gone) when its handlers (func_80057750: run each frame against what she perceives,
+ * the script's flags) see Bond with a gun in his hand (flags 0x480: 0x80 she sees him, 0x400 armed), something heard
+ * (0x80000000), a fright (0x40000) or an alarm (third word 0x800). In a run Bond is always armed and the room always
+ * fighting: those are not passed to her script, which keeps her seated (her being hit still is: flag 1). */
+#define RECEPT_FRIGHT0 (0x80000000u | 0x40000 | 0x400 | 0x200 | 0x80)
+#define RECEPT_FRIGHT4 0x800u
+void func_80057750_orig(u32 *sub, u8 *obj);
+void func_80057750(u32 *sub, u8 *obj) {
+    s16 e[5];
+    if (obj && obj[6] == 60 && g_Args->level == 2 && port_endless_room(e)) {
+        s32 *src = *(s32 **)(obj + 0x60);
+        u32 pc = sub[0xA4 / 4] - sub[0xA0 / 4];
+        if (getenv("TWINE_ENDLESS_TEST_RECEPT_LOG")) {
+            static u32 l0, l4, lpc;
+            if (sub[0] != l0 || sub[4] != l4 || pc != lpc)
+                ELOG("recept: f%d pc %04X flags %08X %08X %08X", D_8009CDA8, pc, sub[0], sub[2], sub[4]);
+            l0 = sub[0], l4 = sub[4], lpc = pc;
+        }
+        if (src && (src[0] & 0x400) && !getenv("TWINE_ENDLESS_TEST_RECEPT_FREE") &&
+            ((sub[0] & RECEPT_FRIGHT0) || (sub[4] & RECEPT_FRIGHT4))) {
+            if (!seated_said++)
+                ELOG("room: the receptionist kept seated (what would frighten her not passed to her script: flags %08X %08X, "
+                     "her script at %04X)", sub[0], sub[4], pc);
+            sub[0] &= ~RECEPT_FRIGHT0;
+            sub[4] &= ~RECEPT_FRIGHT4;
+        }
+    }
+    func_80057750_orig(sub, obj);
 }
 
 /* The mission failed (text: why): in a run, only by Bond's death */
@@ -4574,9 +4901,32 @@ void func_8002E318(void) {
 
 /* A HUD message: in a run, not the story's (objectives, failures; the game's own short notes, such as a pickup's or
  * a locked door's, stay) */
+static int door_refusal(const char *t) { /* (the missions' messages for a door that won't open) */
+    if (strstr(t, "UNLOCKED")) /* ("DOOR UNLOCKED", "ALREADY UNLOCKED": a door opening) */
+        return 0;
+    return strstr(t, "LOCKED") || strstr(t, "DENIED") || strstr(t, "CANNOT REACH LOCK") || strstr(t, "UNLOCK DOOR") ||
+           strstr(t, "LOCATOR CARD") || (!strncmp(t, "NEED ", 5) && (strstr(t, "CARD") || strstr(t, "KEY") ||
+                                                                     strstr(t, "FINGERPRINT")));
+}
 s32 func_80048B4C(char *text, u8 prio, u8 flag) {
     s16 e[5];
     s32 r;
+    if (text && port_endless_room(e) && text != msg_locked && text != msg_open && text != msg_back &&
+        text != msg_leave && door_refusal(text) && !port_subframe) {
+        /* a door the mission keeps shut: once the exit is open, a way on (endless_frame leaves); before, the room's
+         * own "EXIT LOCKED" */
+        int keep = getenv("TWINE_ENDLESS_TEST_NO_LOCKED_EXIT") != 0; /* (tests: the mission's way, as before) */
+        if (door_msg_at != room_frames)
+            ELOG("door: the mission's \"%s\" (%s)", text, keep ? "kept (test)" : open ? "the exit open: Bond leaves by it" : "exit locked");
+        door_msg_at = room_frames;
+        snprintf(door_msg_text, sizeof(door_msg_text), "%s", text);
+        if (!keep && open) {
+            locked_exit_at = room_frames;
+            return 0;
+        }
+        if (!keep)
+            text = msg_locked;
+    }
     if (text && port_endless_room(e)) {
         int story = prio != 0x80 || scripted || strstr(text, "MISSION") || strstr(text, "FAILED") || strstr(text, "ESCAPED") ||
                     strstr(text, "OBJECTIVE") || strstr(text, "ALARM");
@@ -4679,11 +5029,38 @@ static void dump(void) {
  * half of his animation record's first byte, which is lowered for the shot (1 past 8000, 2 past 12000, 1 more for a
  * running Bond). */
 void func_80053114_orig(u8 *obj);
+static int ramp_shot(int i) { /* (THE RAMP's shooting: may guard i fire now?) */
+    int w = port_endless_wave(), j, n = 0;
+    s32 len = w >= 5 ? SEC : SEC / 2, rest = w >= 6 ? SEC / 2 : SEC * 2 - (w - 1) * SEC * 3 / 10;
+    if (!ramp() || shoot_cap() >= 64)
+        return 1;
+    if (room_frames < shot_rest[i])
+        return 0;
+    if (!shot_burst[i] || room_frames - shot_last[i] > SEC / 2) { /* (a new burst: if few others are in one) */
+        for (j = D_800B0DA0; j <= D_800B07B0 && j < 64; j++)
+            n += j != i && OBJ(j)[4] && HEALTH(OBJ(j)) > 0 && shot_burst[j] && room_frames - shot_last[j] <= SEC / 2;
+        if (n >= shoot_cap())
+            return 0;
+        shot_burst[i] = room_frames + 1;
+    }
+    if (room_frames + 1 - shot_burst[i] > len) { /* (his burst over: a rest) */
+        shot_rest[i] = room_frames + rest;
+        shot_burst[i] = 0;
+        return 0;
+    }
+    shot_last[i] = room_frames;
+    return 1;
+}
 void func_80053114(u8 *obj) {
     s16 e[5];
     u8 *an, keep;
     int i, pen = 0;
     s32 d;
+    if (obj != g_Player && obj >= OBJ(0) && obj < OBJ(64) && obj[5] == 6 && port_endless_room(e) &&
+        (!*(u8 **)(obj + 0x5C) || *(u8 **)(obj + 0x5C) == g_Player) && !ramp_shot((obj - OBJ(0)) / 0x124 & 63)) {
+        shots_held++; /* (THE RAMP: his turn to shoot not come, or resting) */
+        return;
+    }
     if (ai_on <= 0 || obj == g_Player || obj[5] != 6 || !port_endless_room(e) ||
         (*(u8 **)(obj + 0x5C) && *(u8 **)(obj + 0x5C) != g_Player) ||
         !(an = *(u8 **)(obj + 0x94))) {
@@ -5001,6 +5378,33 @@ void func_80081458(s32 voice) {
     }
     else
         func_80081458_orig(voice);
+}
+
+/* The game keys all its voices off (SsUtAllKeyOff: the mission's end; func_80026C90(-1): every voice but one stopped,
+ * as the menu over the mission opens): the runtime's own (a lent weapon's sound, a callout) with them, as more of the
+ * SPU's voices. A lent automatic's looping fire played on through the menu (its stop comes from the weapon's state
+ * machine, which the menu holds still) and, held through a door, on through the next missions (playtest 8; spu.c
+ * also stops them as an executable starts). TWINE_TEST_SOUND_KEEP=1: not (the bug, for tests). */
+int port_spu_runtime_off(int keep);
+static void runtime_off(const char *why, int keep) {
+    int n;
+    if (getenv("TWINE_TEST_SOUND_KEEP"))
+        return;
+    n = port_spu_runtime_off(keep);
+    if (n && trace_sound())
+        port_log("trace: L%d f%d sound: %s: %d of the runtime's own with them\n", g_Args->level, D_8009CDA8, why, n);
+}
+
+void SsUtAllKeyOff_orig(s32 mode);
+void SsUtAllKeyOff(s32 mode) {
+    runtime_off("all keyed off", 0);
+    SsUtAllKeyOff_orig(mode);
+}
+
+void func_80026C90_orig(s32 keep);
+void func_80026C90(s32 keep) {
+    runtime_off("all voices stopped", keep >= 0 && (keep & 0x4000) ? keep & 0x3FFF : 0);
+    func_80026C90_orig(keep);
 }
 
 /* A lent sniper rifle's scope: its home mission's code raises the scope (the weapon's state 0x21, then 0x22) where
