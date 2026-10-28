@@ -34,6 +34,12 @@
  * hits    each bullet that reaches a person, its damage, health before and after, a hit that does nothing and why,
  *         health put back, people hit 5, 10, ... times still up; path: sent guards hunting Bond that hardly move in
  *         3 s (port/mods/endless.c's func_80034A48, hits_frame).
+ * aim     auto-aim (the pause menu's option, g_Args->flags2 bit 4; the crosshair option bit 0): each frame anything of
+ *         it changes, and once a second: the person locked (func_80036938's g_Player+0x5C), his health, the
+ *         yaw/pitch help (+0xC4/+0xC6) and distance (+0x110), aiming (D_8009CD4C), the weapon in hand and its crosshair
+ *         bit (flags bit 23), whether a lent weapon's (endless_slot_lent), and the crosshair's colour as made
+ *         (func_80049A88's lines, D_800D7C24: red on a target, green not) and whether the HUD shows it:
+ *         "trace: L<level> f<frame> aim: ...".
  * (sound: port/mods/endless.c's func_80026F30 and the runtime's port_tone_play / port_voice_play log under "sound".)
  * (music: port/mods/endless.c's func_80026D08, the mission's songs started and stopped, logs under "music".)
  *
@@ -60,7 +66,7 @@ extern s32 D_800DDE08, D_800DDDA4; /* the weapon buttons, previous and next, pre
 extern s32 D_8009CDA8;  /* the mission's frame */
 extern s16 D_8009CAA4;  /* a menu over the mission */
 
-static int on_weapon = -1, on_change, on_person, on_proj, on_flash;
+static int on_weapon = -1, on_change, on_person, on_proj, on_flash, on_aim;
 extern u8 *D_800AFFC8;  /* the objects (0x124 bytes each) */
 extern s16 D_800B0AA8;  /* how many */
 extern s32 D_800D2D30[]; /* the object types' models */
@@ -419,6 +425,112 @@ static void ram_hash(void) {
     port_log("trace: L%d f%d ramhash %08X: %s\n", g_Args->level, D_8009CDA8, all, line);
 }
 
+/* auto-aim (TWINE_TRACE=aim): the target the last frame's func_80036938 locked, the crosshair it made */
+extern s32 D_8009CD4C;     /* aiming (the sniper's view) */
+extern u8 D_800D7C24[][0x10]; /* the crosshair's lines (2 a frame buffer) */
+extern s8 D_8009CABF;      /* the HUD hidden */
+int endless_slot_lent(int slot) __attribute__((weak));
+s32 ratan2(s32 y, s32 x);
+s32 SquareRoot0(s32 a);
+void func_8005ADD4(void *, s32, s32 *);
+u8 *func_80050A70(s32 *a, s32 *b, u8 *obj, s32 player);
+s32 func_800746D0(s32 mesh, s32 *from, s32 *to, s16 *normal, s16 *hit, s32 *flags);
+extern s32 D_800E2F2C; /* the walls' mesh */
+void *memcpy(void *d, const void *s, unsigned n);
+static void trace_aim(void) {
+    static char last[400];
+    char line[400];
+    u8 *pl = (u8 *)g_Player, *t = pl ? *(u8 **)(pl + 0x5C) : NULL;
+    Weapon *w = D_800B0DD4 >= 0 && D_800B0DD4 < 16 ? &g_Weapons[D_800B0DD4] : NULL;
+    u8 *c = D_800D7C24[0];
+    int idx = t && D_800AFFC8 ? (int)((t - D_800AFFC8) / 0x124) : -1;
+    int cross = w && (w->flags >> 23 & 1), shown = (g_Args->flags2 & 1) && !D_8009CD4C && cross && !D_8009CABF &&
+                                                    !g_CutScene && pl && *(s32 *)(pl + 0x34) > 0;
+    if (!pl)
+        return;
+    if (D_8009CDA8 == 100) { /* (each weapon's crosshair bit, once a room) */
+        int i, n = 0;
+        for (i = 0; i < 16 && n < (int)sizeof(line) - 40; i++)
+            if (g_Weapons[i].pad0[0] >= 'A' && g_Weapons[i].pad0[0] <= 'Z')
+                n += snprintf(line + n, sizeof(line) - n, "%d:%s%s %d; ", i, (char *)g_Weapons[i].pad0,
+                              endless_slot_lent && endless_slot_lent(i) ? " (lent)" : "", g_Weapons[i].flags >> 23 & 1);
+        port_log("trace: L%d f%d aim: crosshair bits: %s\n", g_Args->level, D_8009CDA8, line);
+        if (D_800AFFC8) { /* (and the things near him that block the sight test: +0x48 0x400) */
+            int k;
+            s32 *bp = (s32 *)(*(u8 **)(pl + 0x90) + 0x28);
+            for (k = 0; k < D_800B0AA8 && k < 400; k++) {
+                u8 *q = D_800AFFC8 + k * 0x124;
+                s32 *qp;
+                if (!q[4] || !(*(s32 *)(q + 0x48) & 0x400) || !*(u8 **)(q + 0x90))
+                    continue;
+                qp = (s32 *)(*(u8 **)(q + 0x90) + 0x28);
+                if ((qp[0] > bp[0] ? qp[0] - bp[0] : bp[0] - qp[0]) + (qp[2] > bp[2] ? qp[2] - bp[2] : bp[2] - qp[2]) < 20000)
+                    port_log("trace: L%d f%d aim: in sight's way: %d type %d kind %d at %d %d %d, +48 %08X, R %d, box %d %d %d %d "
+                             "%d %d\n", g_Args->level, D_8009CDA8, k, q[6], q[5], qp[0], qp[1], qp[2], *(u32 *)(q + 0x48),
+                             *(u16 *)(q + 0x2A), *(s16 *)(q + 0x1C), *(s16 *)(q + 0x1E), *(s16 *)(q + 0x20), *(s16 *)(q + 0x22),
+                             *(s16 *)(q + 0x24), *(s16 *)(q + 0x26));
+            }
+        }
+    }
+    snprintf(line, sizeof(line), "option %s, crosshair option %s; %s; slot %d %s%s crosshair bit %d; target %d health %d, "
+             "help yaw %d pitch %d dist %d; Bond's pitch %d; crosshair %s (%d,%d,%d) %s",
+             g_Args->flags2 >> 4 & 1 ? "on" : "off", g_Args->flags2 & 1 ? "on" : "off", D_8009CD4C ? "aiming" : "hip",
+             D_800B0DD4, w ? (char *)w->pad0 : "-", endless_slot_lent && endless_slot_lent(D_800B0DD4) ? " (lent)" : "",
+             cross, idx, t ? *(s32 *)(t + 0x34) : 0, *(s16 *)(pl + 0xC4), *(s16 *)(pl + 0xC6),
+             *(s32 *)(pl + 0x110), *(s16 *)(*(u8 **)(pl + 0x90) + 0x60), c[4] == 0xFF && !c[5] ? "RED" : !c[4] && c[5] == 0xFF ? "GREEN" : "other", c[4], c[5],
+             c[6], shown ? "shown" : "hidden");
+    if (!t && D_800AFFC8) { /* (none locked: the nearest person up, and what func_80036938 tests of him) */
+        extern s16 D_800B0DA0, D_800B07B0;
+        int k, best = -1;
+        s32 bd = 0x7FFFFFFF, *bp = (s32 *)(*(u8 **)(pl + 0x90) + 0x28);
+        for (k = D_800B0DA0; k <= D_800B07B0; k++) {
+            u8 *q = D_800AFFC8 + k * 0x124;
+            s32 *qp, dx, dz, d;
+            if (q == pl || !q[4] || q[5] != 6 || *(s32 *)(q + 0x34) <= 0 || !*(u8 **)(q + 0x90))
+                continue;
+            qp = (s32 *)(*(u8 **)(q + 0x90) + 0x28), dx = qp[0] - bp[0], dz = qp[2] - bp[2];
+            d = (dx < 0 ? -dx : dx) + (dz < 0 ? -dz : dz);
+            if (d < bd)
+                bd = d, best = k;
+        }
+        if (best >= 0) {
+            u8 *q = D_800AFFC8 + best * 0x124;
+            int n = (int)__builtin_strlen(line);
+            s32 *qp = (s32 *)(*(u8 **)(q + 0x90) + 0x28);
+            s32 yaw = *(s16 *)(*(u8 **)(pl + 0x90) + 0x62), dx = qp[0] - bp[0], dz = qp[2] - bp[2];
+            s32 yd = (ratan2(dx, dz) - yaw) & 0xFFF, off[3], tx, ty, tz, h, pd, wall;
+            u8 *blocker;
+            yd = yd > 0x800 ? yd - 0x1000 : yd;
+            func_8005ADD4(*(void **)(q + 0xC0), 7, off); /* (the point the game aims at: his part 7, from the camera) */
+            tx = qp[0] + off[0] - g_Camera.posX, ty = qp[1] + off[1] - g_Camera.posY, tz = qp[2] + off[2] - g_Camera.posZ;
+            h = SquareRoot0(tx * tx + tz * tz);
+            pd = (ratan2(-ty, h) - *(s16 *)(*(u8 **)(pl + 0x90) + 0x60)) & 0xFFF;
+            pd = pd > 0x800 ? pd - 0x1000 : pd;
+            { /* (the sight test func_80050A10: something in the way (func_80050A70), the walls (func_800746D0)) */
+                static u8 keep[0x400];
+                static s32 from[4], to[4], fl;
+                static s16 nn[4], hh[4];
+                memcpy(keep, (void *)0x1F800000u, 0x400);
+                from[0] = g_Camera.posX, from[1] = g_Camera.posY, from[2] = g_Camera.posZ;
+                to[0] = qp[0] + off[0], to[1] = qp[1] + off[1], to[2] = qp[2] + off[2], fl = 0;
+                blocker = func_80050A70(from, to, q, (s32)pl);
+                wall = func_800746D0(D_800E2F2C, to, from, nn, hh, &fl);
+                memcpy((void *)0x1F800000u, keep, 0x400);
+            }
+            snprintf(line + n, sizeof(line) - n, "; nearest person %d type %d: +A %02X +A6 %d +A4 %02X, %d off, yaw %d off; "
+                     "his part 7 %d from the camera, pitch %d off; in the way: %d (type %d kind %d at %d %d %d, +48 %08X, R %d), walls %d", best, q[6], q[0xA], q[0xA6],
+                     q[0xA4], bd, yd, h, pd, blocker ? (int)((blocker - D_800AFFC8) / 0x124) : -1, blocker ? blocker[6] : -1, blocker ? blocker[5] : -1,
+                     blocker ? *(s32 *)(*(u8 **)(blocker + 0x90) + 0x28) : 0, blocker ? *(s32 *)(*(u8 **)(blocker + 0x90) + 0x2C) : 0,
+                     blocker ? *(s32 *)(*(u8 **)(blocker + 0x90) + 0x30) : 0, blocker ? *(u32 *)(blocker + 0x48) : 0,
+                     blocker ? *(u16 *)(blocker + 0x2A) : 0, wall);
+        }
+    }
+    if (strcmp(line, last) || D_8009CDA8 % 60 == 0) {
+        port_log("trace: L%d f%d aim: %s\n", g_Args->level, D_8009CDA8, line);
+        snprintf(last, sizeof(last), "%s", line);
+    }
+}
+
 /* each frame, at the top of the mission's frame loop (mods/savestate.c) */
 void trace_frame(void) {
     static s32 last_frame = -99999;
@@ -435,7 +547,10 @@ void trace_frame(void) {
         on_person = port_trace("person");
         on_proj = port_trace("proj");
         on_flash = port_trace("flash");
+        on_aim = port_trace("aim");
     }
+    if (on_aim)
+        trace_aim();
     {   /* (TWINE_TRACE=strip, weaponkeys.c's HUD strip: a menu over the mission opened and closed, for the strip after) */
         static int menu_was, on_strip = -1;
         if (on_strip < 0)

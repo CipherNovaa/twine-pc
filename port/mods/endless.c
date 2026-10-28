@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 SsUtAllKeyOff func_80026C90 func_80053804 func_8005519C func_80034A48 func_80026D08 func_800272A4
+ * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 SsUtAllKeyOff func_80026C90 func_80053804 func_8005519C func_80034A48 func_80026D08 func_800272A4 func_80036938
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -529,6 +529,9 @@ static int pistol_slot(void) {
 }
 
 static u32 lent_mask; /* (the slots lent to this mission: theirs are another's) */
+int endless_slot_lent(int slot) { /* (trace.c's aim trace) */
+    return slot >= 0 && slot < 32 && (lent_mask >> slot & 1);
+}
 static u32 lent_work[0xE000 / 4]; /* (a lent weapon's model: func_800753F0) */
 static u8 lent_work_type; /* (the model type whose file is in it) */
 static char lent_work_path[24]; /* (and that file) */
@@ -4730,6 +4733,26 @@ static int trace_voices(void) {
 }
 
 static void test_story_flag(void);
+/* TWINE_TEST_CHEAT=action@frame,... (headless tests): in the run's first room, the game's cheat action (Cheat_DoAction:
+ * what a developers' code does; 3 invincibility, 7 ammo, 8 all weapons, 0 the debug menu) at that room frame */
+extern int port_endless_invincible;
+void Cheat_DoAction(s32 action);
+static void test_cheats(void) {
+    const char *s = getenv("TWINE_TEST_CHEAT");
+    if (!s || port_endless_wave() != 1)
+        return;
+    while (*s) {
+        int a = atoi(s), f = strchr(s, '@') ? atoi(strchr(s, '@') + 1) : -1;
+        if (f == room_frames) {
+            ELOG("test: cheat action %d (as a developers' code)", a);
+            Cheat_DoAction(a);
+        }
+        if (!strchr(s, ','))
+            break;
+        s = strchr(s, ',') + 1;
+    }
+}
+
 void endless_frame(void) {
     int own, n, wave, i;
     s32 kills, back;
@@ -4785,6 +4808,12 @@ void endless_frame(void) {
         ELOG("room ready: health %d armour %d, weapon %s, floor Bond can reach: %d polygons", bond_health(),
              D_8009CFF0, weapon_name(), flood());
         strip_tools();
+        if (port_endless_invincible && !g_Invincible) { /* (invincibility turned on in a room before: still on, as
+                                                         * through a mission's own checkpoints; Cheat_DoAction's 3) */
+            g_Invincible = g_GodMode = 1;
+            *(s16 *)((u8 *)g_Player + 0xE) = 0x7FFF;
+            ELOG("cheats: invincibility kept on from the room before");
+        }
         draw_weapon();
         draw_direct = !segment;
         log_weapons("as the room starts");
@@ -4800,6 +4829,8 @@ void endless_frame(void) {
         func_80048B4C(msg_wave, 0x80, 0);
     }
     room_frames++;
+    port_endless_invincible = g_Invincible != 0; /* (the debug menu's, a code's or the bonus cheat's: for the next room) */
+    test_cheats();
     blind_frame(); /* (a lent flash bang's blinded guards) */
     shotgun_frame();
     hits_frame(); /* (TWINE_TRACE=hits, path: health put back, guards that hardly move) */
@@ -4834,6 +4865,19 @@ void endless_frame(void) {
                     }
                 }
             o = OBJ(look > 0 ? look : 0);
+        } else if (!strcmp(getenv("TWINE_ENDLESS_TEST_LOOK"), "near")) { /* ("near": the nearest person up) */
+            int k;
+            s32 bd = 0x7FFFFFFF;
+            o = g_Player;
+            for (k = D_800B0DA0; k <= D_800B07B0; k++) {
+                u8 *q = OBJ(k);
+                s32 d;
+                if (q == g_Player || !q[4] || q[5] != 6 || HEALTH(q) <= 0)
+                    continue;
+                d = dist2(g_Args->playerX, g_Args->playerZ, POS(q)[0], POS(q)[2]);
+                if (d < bd)
+                    bd = d, o = q;
+            }
         } else
             o = OBJ(atoi(getenv("TWINE_ENDLESS_TEST_LOOK")));
         if (o[4] && o != g_Player) {
@@ -4843,15 +4887,29 @@ void endless_frame(void) {
                 if (d > best)
                     best = d, ba = a;
             }
-            gPsi = ba;
+            if (!strcmp(getenv("TWINE_ENDLESS_TEST_LOOK"), "near")) /* (turned as the game turns him; LOOK_OFF: that far
+                                                                     * to his right of the man) */
+                steer((ba + (getenv("TWINE_ENDLESS_TEST_LOOK_OFF") ? atoi(getenv("TWINE_ENDLESS_TEST_LOOK_OFF")) : 0)) & 0xFFF);
+            else
+                gPsi = ba;
         }
     } /* (where Bond can walk to now) */
+    if (getenv("TWINE_TEST_AUTOAIM")) /* (headless tests: the pause menu's auto-aim option, 1 on, 0 off) */
+        g_Args->flags2 = atoi(getenv("TWINE_TEST_AUTOAIM")) ? g_Args->flags2 | 0x10 : g_Args->flags2 & ~0x10;
     /* the debug menu, the game's cheats (used, or on: g_Args +4 bits 3, 9-16) or the port's take the run off the
      * high scores */
     if (g_DevMenu[0])
         port_endless_unrank("debug menu");
-    if (*(u32 *)((u8 *)g_Args + 4) & 0x1FE08)
-        port_endless_unrank("cheats");
+    if (*(u32 *)((u8 *)g_Args + 4) & 0x1FE08) { /* (named as the CHEATS screen names them, for the stats screen) */
+        static const struct { u32 bit; const char *name; } cheat[] = {
+            {1 << 14, "infinite ammo"}, {1 << 15, "all weapons"}, {1 << 16, "invulnerable"}, {1 << 13, "power guns"},
+            {1 << 12, "power goons"}, {1 << 10, "stealthy bond"}, {1 << 3, "a cheat code"}, {0x1FE08, "cheats"}};
+        u32 f = *(u32 *)((u8 *)g_Args + 4);
+        int k = 0;
+        while (!(f & cheat[k].bit))
+            k++;
+        port_endless_unrank(cheat[k].name);
+    }
     if (getenv("TWINE_INFINITE_GRENADES") && atoi(getenv("TWINE_INFINITE_GRENADES")))
         port_endless_unrank("infinite grenades");
     wave = port_endless_wave();
@@ -6468,6 +6526,39 @@ void func_80044A60_orig(void);
 void func_80044A60(void) {
     if (!lent_sniper())
         func_80044A60_orig();
+}
+
+/* AUTO-AIM WITH A LENT WEAPON, AS AT HOME. The pause menu's auto-aim (g_Args->flags2 bit 4) is func_80036938's, every
+ * frame: the nearest person on screen inside a cone in front of Bond, nothing of the game's in the way (objects,
+ * walls), locked (g_Player+0x5C: the guns' fire aims at him, func_8003872C; the crosshair red on him, func_80049A88).
+ * It asks nothing of the weapon but its slot: each mission leaves out the slots of its own that never auto-aim, by
+ * number (levels 1: 2 and 3, 3: 2, 5: 2, 8: 3, 9: 5; the others none): the AR36 sniper rifle's and the grenade
+ * launcher's in every mission that has them. A lent weapon is in one of the tools' slots (clean_slots), none of them
+ * left out anywhere, so it locks on as any gun of the mission does (seen in TWINE_TRACE=aim); but the rifle and the
+ * launcher lent locked on where they never do at home. Now they don't. */
+static const u8 aim_left_out[12] = {0, 1 << 2 | 1 << 3, 0, 1 << 2, 0, 1 << 2, 0, 0, 1 << 3, 1 << 5, 0, 0};
+static int no_autoaim_name(const char *nm) {
+    return !strncmp(nm, "AR36", 4) || !strncmp(nm, "GRENADE LAUNCHER", 16);
+}
+void func_80036938_orig(void);
+void func_80036938(void) {
+    u32 had = g_Args->flags2 & 0x10;
+    int off = had && D_800B0DD4 >= 0 && D_800B0DD4 < 16 && (lent_mask >> D_800B0DD4 & 1) &&
+              no_autoaim_name((char *)g_Weapons[D_800B0DD4].pad0);
+    static s16 said = -1;
+    if (g_Args->level > 0 && g_Args->level < 12 && D_800B0DD4 >= 0 && D_800B0DD4 < 16 && said != D_800B0DD4 &&
+        !(lent_mask >> D_800B0DD4 & 1) && g_Weapons[D_800B0DD4].pad0[0] >= 'A' &&
+        ((aim_left_out[g_Args->level] >> D_800B0DD4 & 1) != 0) != (no_autoaim_name((char *)g_Weapons[D_800B0DD4].pad0) != 0)) {
+        said = D_800B0DD4; /* (the table and the names disagree: a mission's own weapon this note doesn't know) */
+        ELOG("aim: %s in slot %d: auto-aim %s at home, the lent rule says otherwise", (char *)g_Weapons[D_800B0DD4].pad0,
+             D_800B0DD4, aim_left_out[g_Args->level] >> D_800B0DD4 & 1 ? "left out" : "on");
+    }
+    if (off && getenv("TWINE_TEST_AIM_OLD")) /* (tests: the old way, the lent rifle or launcher locking on) */
+        off = 0;
+    if (off) /* (as its home mission's code: no target for it) */
+        g_Args->flags2 &= ~0x10u;
+    func_80036938_orig();
+    g_Args->flags2 |= had;
 }
 
 void func_8007A17C_orig(s32 state);
