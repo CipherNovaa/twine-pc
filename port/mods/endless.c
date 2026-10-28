@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 SsUtAllKeyOff func_80026C90 func_80053804 func_8005519C func_80034A48 func_80026D08 func_800272A4 func_80036938
+ * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 SsUtAllKeyOff func_80026C90 func_80053804 func_8005519C func_80034A48 func_80026D08 func_800272A4 func_80036938 func_80029868
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -224,7 +224,7 @@ static int weapon_slots(void) { /* g_Weapons' slots, the mission's own set: the 
 
 static void dump(void);
 /* the HUD's messages (in writable memory: the game's own are in its data) */
-static char msg_open[] = "EXIT OPEN", msg_locked[] = "EXIT LOCKED", msg_back[] = "NOT THAT WAY", msg_wave[16],
+static char msg_open[] = "EXIT OPEN", msg_locked[] = "KEEP FIGHTING!", msg_back[] = "NOT THAT WAY", msg_wave[16],
             msg_leave[] = "PRESS USE TO LEAVE";
 
 /* The guards to copy: one record of each kind of the mission's guards (people of whom it places more than one: not
@@ -314,9 +314,10 @@ static s32 was_alive[64]; /* each person's health last frame (a guard falling le
 static s32 was_at[3], said; /* where Bond was as the last frame began; when a message was last given */
 /* LOCKED DOORS: a door the mission keeps shut (its own message: "DOOR IS LOCKED", "ACCESS DENIED", a key or card
  * wanted, ...) is a way on like any other once the room's exit is open: Bond using it leaves (no automatic exits:
- * only by his use); before that, the mod's "EXIT LOCKED" in place of the mission's message */
+ * only by his use); before that, the mod's "KEEP FIGHTING!" in place of the mission's message */
 static s32 door_msg_at = -1, locked_exit_at = -1; /* (a door's refusal heard; Bond asking to leave by one) */
 static int far_exit(void);
+static int by_entry(void);
 static s32 fanfare_at = -1, fanfare_clip; /* (City of Walkways' helicopter room's end: func_8002E1B0) */
 static int fanfare_done(void);
 static char door_msg_text[32];
@@ -5624,8 +5625,8 @@ void endless_frame(void) {
     /* the way out by the entry (for a room whose doors lead nowhere: a story's, a lift's, or only for show): once the
      * exit is open, standing where he came in, Bond is told he may leave, and leaves with the use button */
     if (open && !(g_Args->flags & 0x40) && !loading && (!dt_on || dt_done) &&
-        (dist2(g_Args->playerX, g_Args->playerZ, entry[2], entry[4]) < 1500 || far_exit())) {
-        int far = dist2(g_Args->playerX, g_Args->playerZ, entry[2], entry[4]) >= 1500;
+        (by_entry() || far_exit())) {
+        int far = !by_entry();
         if (!at_entry++) {
             func_80048B4C(msg_leave, 0x80, 0);
             ELOG("%s: Bond told he may leave here", far ? "far end" : "entry");
@@ -5637,6 +5638,18 @@ void endless_frame(void) {
         }
     } else
         at_entry = 0;
+    /* ... and before the exit opens, the use button there (the entry, an extra exit) told to fight on: once a press */
+    {
+        static u32 use_was;
+        u32 use = g_PadPressed & *(u16 *)((u8 *)g_Args + 0x14E);
+        if (use & ~use_was && !open && !(g_Args->flags & 0x40) && !loading && !port_subframe &&
+            (by_entry() || far_exit())) {
+            func_80048B4C(msg_locked, 0x80, 0);
+            ELOG("%s: the use button before the exit opened: \"%s\"",
+                 by_entry() ? "entry" : "far end", msg_locked);
+        }
+        use_was = use;
+    }
     if (D_800D2F90 == 2 && !(g_Args->flags & 0x40) && !loading) {
         s16 *to = *(s16 **)(D_8009E9C4 + 8);
         int point = to ? (to - (D_8009E9C4 + 0xC)) / 8 : -1;
@@ -5668,21 +5681,57 @@ void endless_frame(void) {
             *(s32 *)(D_8009E9C4 + 8) = 0;
             pos[0] = was_at[0], pos[1] = was_at[1], pos[2] = was_at[2];
             if (room_frames - said > SEC * 3 || room_frames < said) {
-                func_80048B4C(back ? msg_back : msg_locked, 0x80, 0);
+                func_80048B4C(back && open ? msg_back : msg_locked, 0x80, 0); /* (the exit shut: fight on) */
                 said = room_frames;
-                ELOG("door: %s (to load point %d)", back ? "the way Bond came in" : "locked", point);
+                ELOG("door: %s (to load point %d): \"%s\"", back ? "the way Bond came in" : "locked", point,
+                     back && open ? msg_back : msg_locked);
             }
         }
     }
     was_at[0] = POS(g_Player)[0], was_at[1] = POS(g_Player)[1], was_at[2] = POS(g_Player)[2];
 }
 
+/* MESSAGES AT THE TOP (twine.ini messages = top, TWINE_MESSAGES; default bottom, the game's place): the game's blue
+ * message box ("AMMO FULL", "GOT ... ROUNDS", "WAVE N", the mod's "EXIT OPEN", ...) is made by its message queue's
+ * drawer (LEVEL01 func_800475BC) as a text pop-up (func_80029868, directly or by func_800299CC for a message with an
+ * icon) at y 0xAC, 15 high: over the port's weapon strip. With messages = top it is made at MSG_TOP_Y instead: above
+ * the health bar and 007 logo (x 30-124 from y 25), centred as the game centres its plain ones (an icon message, made
+ * at x 0x1E, centred too), and never left of MSG_TOP_LEFT (the port's "F1: controls" hint, x 0-86 to y 10). Campaign
+ * and endless alike; only the queue's pop-ups (y 0xAC, 15 high, mode 0) move: the mission's other pop-ups (MI6's
+ * briefing text at y 0x41) keep their places. */
+#define MSG_TOP_Y 5
+#define MSG_TOP_LEFT 90
+void func_80029868_orig(char *text, s16 x, s16 y, s16 w, s16 h, s32 mode);
+static int messages_top(void) { /* (read as each message is made: the front end's page may change it) */
+    const char *s = getenv("TWINE_MESSAGES");
+    return s && (s[0] == 't' || s[0] == 'T');
+}
+void func_80029868(char *text, s16 x, s16 y, s16 w, s16 h, s32 mode) {
+    if (y == 0xAC && h == 0xF && mode == 0 && messages_top()) {
+        y = MSG_TOP_Y;
+        if (x == 0x1E) /* (an icon message: the game's left edge) */
+            x = (512 - w) / 2;
+        if (x < MSG_TOP_LEFT) /* (kept clear of the hint, and on the screen) */
+            x = MSG_TOP_LEFT + w <= 512 - 4 ? MSG_TOP_LEFT : 512 - 4 - w > x ? 512 - 4 - w : x;
+    }
+    func_80029868_orig(text, x, y, w, h, mode);
+}
+
 /* EXTRA EXITS: a section's end the mission comes in by one way only (no door zone to leave by), a way out as the
- * entry is: once the exit is open, standing there, the use button leaves. Turncoat's first subway car (section 1):
- * its far end from the train (the mission's way down from the street), the end of the subway stretch. */
+ * entry is: once the exit is open, standing there, the use button leaves (before, "KEEP FIGHTING!"). Turncoat's first
+ * subway car (section 1): its far end from the train (the mission's way down from the street), the end of the subway
+ * stretch. King's Ransom's section 2 (the boat area): where 8:4 starts Bond (its section played backwards), an exit
+ * however Bond came into the section. Courier's bank (section 2:-1's, section 3): the bank's front doors behind
+ * Bond's start (-9399, -11513, facing in): the wall stops him at z -12863. */
 static const s32 far_exits[][4] = { /* level, section, x, z */
     {3, 1, -700, 13050},
+    {8, 2, 2926, 16449},
+    {2, 3, -9399, -12700},
 };
+/* (Bond where he came in: the entry's way out; TWINE_ENDLESS_TEST_FAR_ONLY=1, tests: never, only extra exits count) */
+static int by_entry(void) {
+    return dist2(g_Args->playerX, g_Args->playerZ, entry[2], entry[4]) < 1500 && !getenv("TWINE_ENDLESS_TEST_FAR_ONLY");
+}
 static int far_exit(void) {
     int i;
     for (i = 0; i < (int)(sizeof(far_exits) / sizeof(far_exits[0])); i++)

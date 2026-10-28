@@ -6,7 +6,8 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
              the 16-core machine when it is otherwise quiet; a run waits to start while the load is over the core count
   -k CHECKS  the checks to run, letters from abcdefghijklmnopqrstuvwxyz (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
-             d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
+             d room rules, e menus (and the game's messages at the top or bottom: PORT SETTINGS' MESSAGES, twine.ini
+             messages), f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
              j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching),
              k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried;
@@ -17,7 +18,8 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
              m a run started from the shell (main menu, mission select's ENDLESS, its briefing) with no weapons
                catalogue: the briefing seen, the survey then the first room; a survey stalled is given up after 10 s,
              n exits: every pool room's doors walked to and used once the exit is open (each opens, or, kept locked
-               by the mission, leads out all the same; none just refuses), and the entry's way out
+               by the mission, leads out all the same; none just refuses), and the entry's way out; the extra exits
+               (8:4's start, 2:-1's bank doors); "KEEP FIGHTING!" for a door or exit used before the exit opens
              o the early waves' ramp: Meltdown 4 (six guards of its own) as waves 1, 3 and 5 against no ramp: the
                damage Bond takes standing still, its bursts, the hunters at once
              p more than six people (8 MB of RAM, whatever -8 says: 12 slots): 12 alive at once, drawn, each fires
@@ -454,7 +456,57 @@ def menu_runs():
         runs["menu_cheats"] = Run("menu_cheats", 0, 45, {"TWINE_TEST_NO_FILMS": 1, "TWINE_SMOOTH": 0, "TWINE_HD": 0,
                                                          "TWINE_TEST_PAD": pad}, card=card,
                                   config="infinite_grenades = 1\n")
+        # (PORT SETTINGS: OPTIONS' fourth item, up three times to MESSAGES (wrapping past DEBUG MENU and CONTROLS),
+        # Cross: top)
+        runs["menu_msgs_page"] = Run("menu_msgs_page", 0, 30, {"TWINE_TEST_NO_FILMS": 1, "TWINE_SMOOTH": 0,
+                                                              "TWINE_HD": 0, "TWINE_TEST_PAD": pad[:pad.index("620:")] +
+                                                              "590:40,593:0,620:4000,623:0,700:10,703:0,730:10,733:0,"
+                                                              "760:10,763:0,800:4000,803:0", "TWINE_SHOT": 850}, card=card)
+    # (the game's blue messages at the top (messages = top) or the bottom (default), hw renderer, smooth motion: an
+    # endless room's "WAVE 1", the campaign's "PRESS SELECT FOR MESSAGE" (Courier's start))
+    for where in ("top", "bottom"):
+        env = {"TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1}
+        if where == "top":
+            env["TWINE_MESSAGES"] = "top"
+        runs["menu_msgs_end_" + where] = Run("menu_msgs_end_" + where, 8, 10, dict(
+            env, TWINE_ENDLESS=1, TWINE_ENDLESS_ROOM="8:4", TWINE_ENDLESS_SEED=4, TWINE_ENDLESS_TEST_GOD=1, TWINE_SHOT=75))
+        runs["menu_msgs_camp_" + where] = Run("menu_msgs_camp_" + where, 2, 12, dict(env, TWINE_SHOT=160))
     return runs
+
+
+def blue_box(img, y0, y1):
+    """the share of the game's message box blue (a deep blue, brighter than red and green) in a band across the middle"""
+    w, h, px = img
+    n = hit = 0
+    for y in range(int(y0 * h), int(y1 * h), 2):
+        for x in range(int(0.2 * w), int(0.8 * w), 2):
+            i = (y * w + x) * 3
+            if i + 2 < len(px):
+                n += 1
+                hit += px[i + 2] > 70 and px[i + 2] > px[i] + 35 and px[i + 2] > px[i + 1] + 35
+    return hit / n if n else 0.0
+
+
+def check_messages(runs):
+    if "menu_msgs_page" in runs:
+        r = runs["menu_msgs_page"]
+        ini = open(os.path.join(r.dir, "conf/twine/twine.ini")).read() if os.path.exists(
+            os.path.join(r.dir, "conf/twine/twine.ini")) else ""
+        result("e", "port settings: MESSAGES top/bottom (Cross on its line: top, kept in twine.ini)",
+               bool(r.lines(r"settings: messages = top")) and "messages = top" in ini and not r.crashed(),
+               "set %d, ini %s" % (len(r.lines(r"settings: messages = top")), "saved" if "messages = top" in ini else
+                                   "unchanged"))
+    for what, frame in (("end", 75), ("camp", 160)):
+        got = {}
+        for where in ("top", "bottom"):
+            img = read_ppm(os.path.join(runs["menu_msgs_%s_%s" % (what, where)].dir, "screen_%04d_0.ppm" % frame))
+            got[where] = (blue_box(img, 0.0, 0.11), blue_box(img, 0.70, 0.80)) if img else None
+        t, b = got["top"], got["bottom"]
+        result("e", "messages %s: the blue box at the top with messages = top, at the bottom (over the weapon strip) "
+               "by default (hw, smooth)" % ("in an endless room (WAVE 1)" if what == "end" else
+                                            "in the campaign (Courier's PRESS SELECT FOR MESSAGE)"),
+               bool(t and b) and t[0] > 0.01 and t[1] < 0.005 and b[1] > 0.01 and b[0] < 0.005,
+               "top: %s; bottom: %s" % tuple("blue %.3f above, %.3f below" % g if g else "no shot" for g in (t, b)))
 
 
 def check_menus(runs):
@@ -470,8 +522,9 @@ def check_menus(runs):
     else:
         b = bright(img, 0.6, 0.25, 0.95, 0.8)
         result("e", "main menu items", b > 0.04, "items area %.0f%% bright" % (b * 100))
+    check_messages(runs)
     for k, run in runs.items():
-        if k in ("menu_main", "menu_cheats"):
+        if k in ("menu_main", "menu_cheats") or k.startswith("menu_msgs"):
             continue
         img = run.shot("mission select")
         if img is None:
@@ -1714,6 +1767,19 @@ def door_runs(rooms):
           "TWINE_ENDLESS_TEST_OPEN": 30, "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1}
     runs["doors_613_leave"] = Run("doors_613_leave", 6, 45, ch)
     runs["doors_613_mission"] = Run("doors_613_mission", 6, 45, dict(ch, TWINE_ENDLESS_TEST_NO_LOCKED_EXIT=1))
+    # (the extra exits by the use button: King's Ransom's 8:4 start (the boat area) and Courier's bank doors behind
+    # 2:-1's start; the entry's own way out left out (TWINE_ENDLESS_TEST_FAR_ONLY), so only the extra exit can let him
+    # out: use pressed twice before the exit opens ("KEEP FIGHTING!" each press), then once after)
+    far = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_FAR_ONLY": 1,
+           "TWINE_ENDLESS_TEST_OPEN": 180, "TWINE_TEST_PAD": "130:2000,133:0,145:2000,148:0,240:2000,243:0"}
+    runs["doors_far_84"] = Run("doors_far_84", 8, 20, dict(far, TWINE_ENDLESS_ROOM="8:4"))
+    runs["doors_far_299"] = Run("doors_far_299", 2, 20, dict(far, TWINE_ENDLESS_ROOM="2:-1",
+                                                            TWINE_ENDLESS_TEST_PUT="-9399,-705,-12800,2048"))
+    # (a door walked into again and again before the exit opens (2 s of it), and the use button at the entry then:
+    # "KEEP FIGHTING!", the door's at most once in 3 s)
+    runs["doors_keep"] = Run("doors_keep", 8, 15, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:4", "TWINE_ENDLESS_SEED": 4,
+                                                   "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_LOCKED": 1,
+                                                   "TWINE_TEST_PAD": "200:2000,203:0"})
     return runs
 
 
@@ -1763,6 +1829,25 @@ def check_doors(runs):
            bool(v.lines(r'door: the mission.s "CHANNELS MUST BE OFFLINE" \(the exit open')) and bool(left) and
            "room in level" in after and not v.crashed(), "left %d, the next room %s" %
            (len(left), "started" if "room in level" in after else "not started"))
+    for k, what in (("doors_far_84", "8:4's start (the boat area)"), ("doors_far_299", "2:-1's bank doors behind Bond")):
+        v = runs[k]
+        first = v.log.split("room left (", 1)
+        keep = re.findall(r"far end: the use button before the exit opened: \"KEEP FIGHTING!\"", first[0])
+        shown = first[0].count('message shown: "KEEP FIGHTING!"')
+        left = len(first) > 1 and first[1].startswith("the use button at the far end)")
+        result("n", "extra exit at %s: KEEP FIGHTING! before the exit opens, leaves by the use button after" % what,
+               len(keep) == 2 and shown >= 1 and left and "room start:" in first[-1] and not v.crashed(),
+               "%d presses before told KEEP FIGHTING! (shown %d), %s, the next room %s" %
+               (len(keep), shown, "left by the far end" if left else "NOT LEFT there",
+                "started" if len(first) > 1 and "room start:" in first[1] else "not started"))
+    v = runs["doors_keep"]
+    door = v.lines(r'door: (locked|the way Bond came in) \(to load point -?\d+\): "KEEP FIGHTING!"')
+    other = v.lines(r'door: .*: "(NOT THAT WAY|EXIT LOCKED)"')
+    entry = v.lines(r'entry: the use button before the exit opened: "KEEP FIGHTING!"')
+    result("n", "a door before the exit opens: KEEP FIGHTING! (once in 3 s of walking into it); the use button at the "
+           "entry too", len(door) == 1 and not other and len(entry) == 1 and
+           bool(v.lines(r'message shown: "KEEP FIGHTING!"')) and not v.crashed(),
+           "door told %d times (other words %d), entry's use told %d times" % (len(door), len(other), len(entry)))
     v = runs["doors_77_leave"]
     left = v.lines(r"room left \(a door the mission keeps locked, the exit open\)")
     result("n", "7:7 left by a door the mission keeps locked", bool(left) and "room in level" in
