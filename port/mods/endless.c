@@ -5691,10 +5691,10 @@ void endless_frame(void) {
     was_at[0] = POS(g_Player)[0], was_at[1] = POS(g_Player)[1], was_at[2] = POS(g_Player)[2];
 }
 
-/* MESSAGES AT THE TOP (twine.ini messages = top, TWINE_MESSAGES; default bottom, the game's place): the game's blue
+/* MESSAGES AT THE TOP (twine.ini message_box = top, TWINE_MESSAGE_BOX; default bottom, the game's place): the game's blue
  * message box ("AMMO FULL", "GOT ... ROUNDS", "WAVE N", the mod's "EXIT OPEN", ...) is made by its message queue's
  * drawer (LEVEL01 func_800475BC) as a text pop-up (func_80029868, directly or by func_800299CC for a message with an
- * icon) at y 0xAC, 15 high: over the port's weapon strip. With messages = top it is made at MSG_TOP_Y instead: above
+ * icon) at y 0xAC, 15 high: over the port's weapon strip. With message_box = top it is made at MSG_TOP_Y instead: above
  * the health bar and 007 logo (x 30-124 from y 25), centred as the game centres its plain ones (an icon message, made
  * at x 0x1E, centred too), and never left of MSG_TOP_LEFT (the port's "F1: controls" hint, x 0-86 to y 10). Campaign
  * and endless alike; only the queue's pop-ups (y 0xAC, 15 high, mode 0) move: the mission's other pop-ups (MI6's
@@ -5703,7 +5703,7 @@ void endless_frame(void) {
 #define MSG_TOP_LEFT 90
 void func_80029868_orig(char *text, s16 x, s16 y, s16 w, s16 h, s32 mode);
 static int messages_top(void) { /* (read as each message is made: the front end's page may change it) */
-    const char *s = getenv("TWINE_MESSAGES");
+    const char *s = getenv("TWINE_MESSAGE_BOX");
     return s && (s[0] == 't' || s[0] == 'T');
 }
 void func_80029868(char *text, s16 x, s16 y, s16 w, s16 h, s32 mode) {

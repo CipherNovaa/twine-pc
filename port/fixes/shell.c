@@ -371,9 +371,9 @@ static void setting(int i, int d, char *label, char *value) {
         return;
     case 7: /* the game's blue messages ("AMMO FULL", "WAVE N", ...) at the screen's top, or at the bottom where the game
              * shows them, over the weapon strip (mods/endless.c) */
-        on = (getenv("TWINE_MESSAGES") && (getenv("TWINE_MESSAGES")[0] | 0x20) == 't') ^ (d != 0);
+        on = (getenv("TWINE_MESSAGE_BOX") && (getenv("TWINE_MESSAGE_BOX")[0] | 0x20) == 't') ^ (d != 0);
         if (d)
-            port_setting_save("messages", on ? "top" : "bottom");
+            port_setting_save("message_box", on ? "top" : "bottom");
         strcpy(label, "messages");
         strcpy(value, on ? "top" : "bottom");
         return;
