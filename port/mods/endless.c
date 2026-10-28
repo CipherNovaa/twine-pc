@@ -4739,7 +4739,7 @@ extern int port_endless_invincible;
 void Cheat_DoAction(s32 action);
 static void test_cheats(void) {
     const char *s = getenv("TWINE_TEST_CHEAT");
-    if (!s || port_endless_wave() != 1)
+    if (!s || (port_endless_wave() != 1 && !getenv("TWINE_TEST_CHEAT_EVERY"))) /* (_EVERY: every room, recordings) */
         return;
     while (*s) {
         int a = atoi(s), f = strchr(s, '@') ? atoi(strchr(s, '@') + 1) : -1;
