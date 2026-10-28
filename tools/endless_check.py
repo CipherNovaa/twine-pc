@@ -9,7 +9,9 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
              d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
              j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching),
-             k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried),
+             k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried;
+               the ammo rule: a pickup's ammo to the weapon in hand, else the checked emptiest, else any carried
+               emptiest, AMMO FULL only when all are; grenades' and armour's pickups as before),
              l room starts never run out of the menu texts' letters (20 starts; past them: cut, no crash),
              (i also: smooth motion's extra drawings never run the hit loop: per tick as without, campaign and a run)
              m a run started from the shell (main menu, mission select's ENDLESS, its briefing) with no weapons
@@ -764,6 +766,28 @@ def lent_runs():
     for k in ("k_satchel", "k_shotgun"):
         del runs[k].env["TWINE_ENDLESS_TEST_MEET"]
     del runs["k_ammo"].env["TWINE_ENDLESS_TEST_MEET"]
+    # (the ammo rule: a pickup's ammo to the weapon in hand, else the checked emptiest, else any carried emptiest; AMMO
+    # FULL only when all are full. King's Ransom's weapons carried into Courier (lent there; the AR36 waits in the
+    # pool), each case set up by TWINE_ENDLESS_TEST_PICKUPS: weapons' reserves set, a box or a gun made at Bond's feet.
+    # In King's Ransom first: a frag grenade's pickup and box, heavy armour (the game's own, as before). The same run
+    # the old way (TWINE_ENDLESS_TEST_AMMO_OLD: the box's own kind only) shows the first case's AMMO FULL caught)
+    rule = ";".join(["8:100 ammo FRAG GRENADE=0/1", "8:101 frag", "8:120 armour", "8:140 ammo FRAG GRENADE=0/1",
+                     "8:141 box FRAG GRENADE",
+                     "2:60 draw INGALLS",
+                     "2:100 ammo *=full", "2:100 ammo INGALLS=0/0", "2:100 box KOFFLER",  # (1: the hand, empty)
+                     "2:130 ammo *=full", "2:130 ticks INGALLS|AR36|FRINESI AUTO|WOLFRAM", "2:130 ammo AR36=10",
+                     "2:130 ammo FRINESI AUTO=50", "2:130 ammo KOFFLER=0", "2:131 box WOLFRAM",  # (2: the checked)
+                     "2:160 ammo *=full", "2:160 ammo KOFFLER=20", "2:161 box WOLFRAM",  # (3: the unchecked)
+                     "2:190 ammo *=full", "2:191 box WOLFRAM",  # (4: all full; the box left lying...)
+                     "2:220 ammo FRINESI AUTO=0",  # (... and taken once one isn't)
+                     "2:250 ammo *=full", "2:250 ammo INGALLS=10", "2:251 gun KOFFLER",  # (5: a gun of his, a drop)
+                     "2:280 ammo *=full", "2:281 gun FRINESI SHOTGUN"])  # (6: all full)
+    runs["k_ammo_rule"] = Run("k_ammo_rule", 8, 40, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="2:4",
+                                                         TWINE_ENDLESS_TEST_EXIT="200,3000",
+                                                         TWINE_ENDLESS_TEST_PICKUPS=rule))
+    runs["k_ammo_rule_old"] = Run("k_ammo_rule_old", 8, 40, dict(runs["k_ammo_rule"].env, TWINE_ENDLESS_TEST_AMMO_OLD=1))
+    for k in ("k_ammo_rule", "k_ammo_rule_old"):
+        del runs[k].env["TWINE_ENDLESS_TEST_MEET"]
     return runs
 
 
@@ -1164,6 +1188,66 @@ def check_lent(runs):
     missing = [g for g in guns if g[:16] not in fed]
     result("k", "drops feed every gun carried", bool(guns) and not missing,
            "guns %s; fed %s%s" % (", ".join(guns), len(fed), "; none for " + ", ".join(missing) if missing else ""))
+    check_ammo_rule(runs)
+
+
+def ammo_count_ok(n, clip, have, cap, linked=False):
+    """the game's count of a pickup's ammo for a weapon of that clip (func_8004CB2C), capped at its most"""
+    if clip < 2:
+        want = {1}
+    elif linked:
+        want = {clip}
+    else:
+        want = {c + (1 if clip % 2 == 0 and c % 2 else 0) for c in range(clip // 4 + 1, clip // 4 + clip // 2 + 1)}
+    return any(n == min(w, cap - have) for w in want)
+
+
+def check_ammo_rule(runs):
+    """k: the ammo rule (k_ammo_rule's cases, in their order), and the old way's AMMO FULL for the first"""
+    log = runs["k_ammo_rule"].log
+    home, room = room_part(log, 8), room_part(log, 2)
+    pat = (r"ammo pickup: (an ammo box|a gun of his lying about) \((.+?)'s ammo\)(?: -> (.+?) \((.+?)\): \+(\d+) "
+           r"\(its count (\d+), clip (\d+); reserve (\d+) -> (\d+) of (\d+)\)|: every weapon full)")
+    picks = re.findall(pat, room)
+    msgs = re.findall(r'message shown: "(GOT \d+ [^"]*|AMMO FULL)"', room)
+    def case(i):
+        return picks[i] if i < len(picks) else ("", "", "", "", "0", "0", "0", "0", "0", "0")
+    def said(p):
+        return p[1] + "'s ammo -> " + (("%s (%s) +%s" % (p[2], p[3], p[4])) if p[2] else "AMMO FULL")
+    cases = [("1 in hand nothing left, the box's own weapon (KS5) full: the hand", "KOFFLER KS5", "INGALLS TYPE 20", "in hand"),
+             ("2 in hand full, checked AR36 (lent, in the pool) 10/30 and Frinesi Auto 50/100, unchecked KS5 0/150: "
+              "the AR36", "WOLFRAM P2K", "AR36 SNIPER", "checked, the emptiest"),
+             ("3 the checked all full, unchecked KS5 20/150: the KS5", "WOLFRAM P2K", "KOFFLER KS5", "carried, the emptiest"),
+             ("4 every weapon full: AMMO FULL, the box left lying", "WOLFRAM P2K", "", ""),
+             ("4b the box left lying taken once the Frinesi Auto (checked) is empty", "WOLFRAM P2K", "FRINESI AUTO",
+              "checked, the emptiest"),
+             ("5 a gun of his lying about (a guard's drop, KS5 full): the hand", "KOFFLER KS5", "INGALLS TYPE 20", "in hand"),
+             ("6 a gun of his lying about, every weapon full: AMMO FULL", "FRINESI SHOTGUN", "", "")]
+    for i, (what, src, to, why) in enumerate(cases):
+        p = case(i)
+        ok = p[1] == src and p[2] == to and (not to or (p[3] == why and int(p[4]) > 0 and
+                                                       ammo_count_ok(int(p[4]), int(p[6]), int(p[7]), int(p[9]))))
+        result("k", "ammo rule %s" % what, ok, said(p) if p[1] else "no such pickup logged")
+    got = [m for m in msgs if m != "AMMO FULL"]
+    want = ["GOT %s %s" % (case(i)[4], n) for i, n in ((0, "TYPE 20 ROUNDS"), (1, "AR36 ROUNDS"), (2, "KS5 ROUNDS"),
+                                                     (4, "SHOTGUN SHELLS"), (5, "TYPE 20 ROUNDS"))]
+    result("k", "ammo rule: each message names the weapon that got it, and how many", got == want and "AMMO FULL" in msgs,
+           "shown %s" % ", ".join(msgs[:8]))
+    frag = re.search(r"pickup: FRAG GRENADE's ammo 1 -> 2", home)
+    box = re.search(r"ammo pickup: an ammo box \(FRAG GRENADE's ammo\): not bullets or shells, the game's own", home)
+    armour = re.search(r'message shown: "GOT HEAVY ARMOR"\n.*pickup taken: type \d+: .*armour 0 -> 131072', home)
+    old_home = room_part(runs["k_ammo_rule_old"].log, 8)
+    def outcome(part):  # (what the frag box gave: from its making to the next test line)
+        seg = part.split("the box holds FRAG GRENADE", 1)[-1].split("test:", 1)[0]
+        return re.findall(r'message shown: "([^"]*)"|pickup: (FRAG GRENADE)\'s ammo (\d+ -> \d+)', seg)[:2]
+    same = outcome(home) == outcome(old_home) and bool(outcome(home))
+    result("k", "ammo rule: grenades and armour as before (a frag grenade's pickup and box, heavy armour)",
+           bool(frag and box and armour) and same and "-> " not in "".join(re.findall(r"ammo pickup: .*", home)),
+           "frag pickup %s, frag box %s (as the old way: %s), armour %s" %
+           ("1 -> 2" if frag else "-", "the game's own" if box else "-", outcome(home), "taken" if armour else "-"))
+    old = re.findall(r'message shown: "(GOT \d+ [^"]*|AMMO FULL)"', room_part(runs["k_ammo_rule_old"].log, 2))
+    result("k", "ammo rule: the old way's AMMO FULL with the hand empty caught (TWINE_ENDLESS_TEST_AMMO_OLD)",
+           bool(old) and old[0] == "AMMO FULL", "the old way's first: %s" % (old[0] if old else "none"))
 
 
 # ---- h: the high scores on the card ----

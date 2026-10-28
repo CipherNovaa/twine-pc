@@ -2387,6 +2387,164 @@ static int pool_box(u8 *o) {
     return 1;
 }
 
+/* AMMO TO THE GUN THAT NEEDS IT. In a run an ammo pickup (a box, whatever kind it holds, or a gun of his own lying
+ * about, a guard's drop: the game takes that as its ammo) isn't wasted on a full weapon: the ammo goes to the first of
+ *   1. the weapon in his hand,
+ *   2. the weapons checked in the weapon list (in the weapon buttons' round), the emptiest first (reserve / its most),
+ *   3. any other weapon he carries (his own or lent, in a slot or waiting in the pool), the emptiest first,
+ * that isn't full and fires bullets or shells; "AMMO FULL" (the pickup left lying) only when none can take it. How
+ * much: the game's count for the weapon that takes it (func_8004CB2C: a clip's worth from a gun linked to a guard,
+ * otherwise a quarter clip plus 1 to half a clip, made even for an even clip; 1 for a clip of one), capped at its
+ * most, into its reserve (func_8004C50C, as a box gives); the message its own pickups' ("GOT %d ... ROUNDS").
+ * Explosives' pickups (grenades, satchels, rockets, launcher rounds, flash bangs), the stunner's and armour: the
+ * game's own, as before. */
+static int explosive(const char *nm);
+static int bullet_gun(const char *nm) {
+    return combat_item(nm) && !explosive(nm) && strncmp(nm, "UNARMED", 7) && strncmp(nm, "CELL PHONE", 10) &&
+           strncmp(nm, "SATCHEL", 7);
+}
+typedef struct {
+    int slot, pi, j, ticked, hand;
+    s32 have, cap, clip;
+    const char *name;
+} AmmoTaker;
+static int ammo_takers(AmmoTaker *t) {
+    EndlessCarry *c = &port_endless_carry;
+    int i, n = 0;
+    for (i = 0; i < SLOTS && n < 48; i++) {
+        Weapon *w = &g_Weapons[i];
+        const char *nm = (const char *)w->pad0;
+        if (nm[0] < 'A' || nm[0] > 'Z' || !(w->flags & 0x800) || !bullet_gun(nm) || *(s16 *)&w->maxAmmo <= 0 ||
+            (i == WATCH_SLOT && watch_on) || ((lent_mask >> i & 1) && slot_pool[i] >= 0 && slot_pool[i] == det_pi))
+            continue;
+        t[n].slot = i, t[n].pi = -1, t[n].j = -1, t[n].name = nm;
+        t[n].ticked = w->flags >> 12 & 1, t[n].hand = i == D_800B0DD4;
+        t[n].have = w->reserve, t[n].cap = *(s16 *)&w->maxAmmo, t[n].clip = w->clipSize;
+        n++;
+    }
+    for (i = 0; i < pool_n && n < 48; i++) {
+        const WeaponRec *r = pool[i].r;
+        int j;
+        if (pool_shown(i) || i == det_pi || (j = carry_entry(pool[i].name)) < 0 || !c->weapon[j].owned ||
+            !bullet_gun(pool[i].name) || *(s16 *)(r->def + 0x5C) <= 0)
+            continue;
+        t[n].slot = -1, t[n].pi = i, t[n].j = j, t[n].name = pool[i].name;
+        t[n].ticked = pool_round[i], t[n].hand = 0;
+        t[n].have = c->weapon[j].reserve, t[n].cap = *(s16 *)(r->def + 0x5C), t[n].clip = r->def[0x50];
+        n++;
+    }
+    return n;
+}
+/* (its rank: the hand first, then the checked, then the rest; within each the emptiest) */
+static int ammo_before(const AmmoTaker *a, const AmmoTaker *b) {
+    int ga = a->hand ? 0 : a->ticked ? 1 : 2, gb = b->hand ? 0 : b->ticked ? 1 : 2;
+    if (ga != gb)
+        return ga < gb;
+    return (long long)a->have * b->cap < (long long)b->have * a->cap;
+}
+/* the pickups' message for a weapon's ammo ("GOT %d KS5 ROUNDS"): its entry's in D_8009D130, or the pool's record's */
+static const char *ammo_msg(const AmmoTaker *t) {
+    int i;
+    if (t->slot >= 0) {
+        for (i = 0; i < 19; i++)
+            if (D_8009D130[i * 4] == t->slot && D_8009D130[i * 4 + 3])
+                return (const char *)(long)D_8009D130[i * 4 + 3];
+        if ((lent_mask >> t->slot & 1) && slot_pool[t->slot] >= 0 && pool[(int)slot_pool[t->slot]].r->ammo_got[0])
+            return pool[(int)slot_pool[t->slot]].r->ammo_got;
+    } else if (pool[t->pi].r->ammo_got[0])
+        return pool[t->pi].r->ammo_got;
+    return "GOT %d ROUNDS";
+}
+/* 1: taken (the ammo given, or it isn't an ammo pickup the rule has: 0, the game's own) */
+static int ammo_pickup(u8 *o) {
+    s16 *types = &D_8009D108; /* (the ammo box, a second box, the first entry's ammo: D_8009D108, 10A, 10C) */
+    AmmoTaker t[48];
+    const char *src = 0, *what;
+    int i, n, best = -1, kind = -1, gun = 0;
+    s32 amount, give, before;
+    char line[400];
+    int len = 0;
+    static char msg[48], full[] = "AMMO FULL";
+    static u8 *full_o;
+    static s32 full_at;
+    if ((types[0] > 0 && o[6] == (u8)types[0]) || (types[1] > 0 && o[6] == (u8)types[1]))
+        kind = *(s32 *)(o + 0x34);
+    else if (types[2] > 0 && o[6] == (u8)types[2])
+        kind = 0;
+    else
+        for (i = 0; i < 19; i++) /* (a gun lying about: one he owns is its ammo, as the game takes it) */
+            if (D_8009D130[i * 4 + 1] == o[6] && D_8009D130[i * 4] >= 0 && D_8009D130[i * 4] < SLOTS) {
+                if (!(g_Weapons[D_8009D130[i * 4]].flags & 0x800))
+                    return 0; /* (a gun new to him: the game gives it) */
+                kind = i, gun = 1;
+                break;
+            }
+    if (kind < 0 || kind >= 19)
+        return 0;
+    if (D_8009D130[kind * 4] >= 0 && D_8009D130[kind * 4] < SLOTS)
+        src = (const char *)g_Weapons[D_8009D130[kind * 4]].pad0;
+    else
+        for (i = 0; i < pool_n && !src; i++)
+            if (pool[i].r->kind == kind)
+                src = pool[i].name;
+    if (!src || !bullet_gun(src)) { /* (explosives', the stunner's: the game's own, or the pool's) */
+        if (src && (full_o != o || D_8009CDA8 - full_at > SEC * 2))
+            ELOG("ammo pickup: %s (%s's ammo): not bullets or shells, the game's own", gun ? "a gun of his lying about"
+                                                                                        : "an ammo box", src);
+        full_o = o, full_at = D_8009CDA8;
+        return 0;
+    }
+    what = gun ? "a gun of his lying about" : "an ammo box";
+    n = ammo_takers(t);
+    for (i = 0; i < n; i++)
+        if (t[i].have < t[i].cap && (best < 0 || ammo_before(&t[i], &t[best])))
+            best = i;
+    for (i = 0; i < n && len < (int)sizeof(line) - 60; i++)
+        len += snprintf(line + len, sizeof(line) - len, "%s%s%s %d/%d%s", i ? ", " : "", t[i].name,
+                        t[i].hand ? " (in hand)" : t[i].ticked ? " (checked)" : "", t[i].have, t[i].cap,
+                        t[i].have >= t[i].cap ? " full" : "");
+    if (best < 0) {
+        func_80048B4C(full, 0x80, 0);
+        if (full_o != o || D_8009CDA8 - full_at > SEC * 2) /* (once, not every frame he stands on it) */
+            ELOG("ammo pickup: %s (%s's ammo): every weapon full (%s): AMMO FULL", what, src, n ? line : "none");
+        full_o = o, full_at = D_8009CDA8;
+        return 2;
+    }
+    {
+        s32 clip = t[best].clip;
+        amount = clip < 2 ? 1 : *(s32 *)(o + 0x60) ? clip : (s32)(rnd() % (clip >> 1)) + 1 + (clip >> 2);
+        if (clip >= 2 && !(clip & 1) && (amount & 1))
+            amount++;
+    }
+    give = amount < t[best].cap - t[best].have ? amount : t[best].cap - t[best].have;
+    if (t[best].slot >= 0) {
+        Weapon *w = &g_Weapons[t[best].slot];
+        before = w->ammo;
+        w->reserve += give;
+        w->ammo = w->clip + w->reserve;
+        ELOG("pickup: %s's ammo %d -> %d%s", t[best].name, before, w->ammo,
+             lent_mask >> t[best].slot & 1 ? " (a lent weapon)" : "");
+    } else {
+        EndlessCarry *c = &port_endless_carry;
+        before = c->weapon[t[best].j].ammo;
+        c->weapon[t[best].j].reserve += give, c->weapon[t[best].j].ammo += give;
+        ELOG("pickup: %s's ammo %d -> %d (a lent weapon waiting in the pool)", t[best].name, before,
+             c->weapon[t[best].j].ammo);
+    }
+    ELOG("ammo pickup: %s (%s's ammo) -> %s (%s): +%d (its count %d, clip %d; reserve %d -> %d of %d); weapons: %s",
+         what, src, t[best].name, t[best].hand ? "in hand" : t[best].ticked ? "checked, the emptiest" : "carried, the emptiest",
+         give, amount, t[best].clip, t[best].have, t[best].have + give, t[best].cap, line);
+    snprintf(msg, sizeof(msg), ammo_msg(&t[best]), give);
+    func_80048B4C(msg, 0x80, 0);
+    func_80026F30(D_8009D124, 0);
+    if (*(s32 **)(o + 0x60)) {
+        **(s32 **)(o + 0x60) = 0;
+        *(s32 **)(o + 0x60) = 0;
+    }
+    func_800395E8(o);
+    return 1;
+}
+
 /* ... and as he comes into this one: what he had of this mission's weapons, and more of an ammo than it gives */
 static void carry_in(void) {
     EndlessCarry *c = &port_endless_carry;
@@ -4811,6 +4969,101 @@ static void test_cheats(void) {
     }
 }
 
+/* (headless tests: TWINE_ENDLESS_TEST_PICKUPS="<level>:<room frame> <what>;...", in that mission's rooms:
+ *   ammo <name>=<reserve|full>[/<clip>]  a weapon he carries (slot or pool; name a prefix, * every bullet gun) so
+ *   box <name>                            an ammo box holding that weapon's kind, at Bond's feet
+ *   gun <name>                            that weapon's own pickup there (a guard's drop of it)
+ *   armour | frag                         heavy armour, the mission's frag grenade pickup there
+ *   ticks <name>|<name>...                only these checked (as TWINE_ENDLESS_TEST_TICKS)
+ *   draw <name>                           Bond changes to it) */
+static int test_name(const char *nm, const char *want, int k) {
+    return (k == 1 && want[0] == '*') || !strncmp(nm, want, k);
+}
+static void test_pickups(const char *s) {
+    char cmd[16], arg[96];
+    while (*s) {
+        arg[0] = 0;
+        int lv = atoi(s), f = strchr(s, ':') ? atoi(strchr(s, ':') + 1) : -1;
+        const char *sp = strchr(s, ' ');
+        if (lv == g_Args->level && f == room_frames && sp && sscanf(sp + 1, "%15[^ ;] %95[^;]", cmd, arg) >= 1) {
+            int i, k = (int)strcspn(arg, "="), hit = 0;
+            u8 *o = 0;
+            if (!strcmp(cmd, "ammo")) {
+                const char *v = arg[k] ? arg + k + 1 : "0";
+                AmmoTaker t[48];
+                int n = ammo_takers(t);
+                for (i = 0; i < n; i++)
+                    if (test_name(t[i].name, arg, k)) {
+                        s32 r = !strncmp(v, "full", 4) ? t[i].cap : atoi(v), cl = strchr(v, '/') ? atoi(strchr(v, '/') + 1) : -1;
+                        if (t[i].slot >= 0) {
+                            Weapon *w = &g_Weapons[t[i].slot];
+                            w->reserve = r;
+                            if (cl >= 0)
+                                w->clip = cl;
+                            w->ammo = w->clip + w->reserve;
+                        } else {
+                            EndlessCarry *c = &port_endless_carry;
+                            c->weapon[t[i].j].reserve = r;
+                            if (cl >= 0)
+                                c->weapon[t[i].j].clip = cl;
+                            c->weapon[t[i].j].ammo = c->weapon[t[i].j].clip + r;
+                        }
+                        ELOG("test: %s's reserve %d%s", t[i].name, r, cl >= 0 ? ", clip set" : "");
+                        hit = 1;
+                    }
+                for (i = 0; !hit && k > 1 && i < SLOTS; i++) /* (another weapon of his in a slot: a grenade's, say) */
+                    if (!strncmp((char *)g_Weapons[i].pad0, arg, k) && (g_Weapons[i].flags & 0x800)) {
+                        Weapon *w = &g_Weapons[i];
+                        w->reserve = !strncmp(v, "full", 4) ? *(s16 *)&w->maxAmmo : atoi(v);
+                        if (strchr(v, '/'))
+                            w->clip = atoi(strchr(v, '/') + 1);
+                        w->ammo = w->clip + w->reserve;
+                        ELOG("test: %s's reserve %d, clip %d", (char *)w->pad0, w->reserve, w->clip);
+                    }
+            } else if (!strcmp(cmd, "box") || !strcmp(cmd, "gun")) {
+                int kind = -1;
+                for (i = 0; i < 19 && kind < 0; i++)
+                    if (D_8009D130[i * 4] >= 0 && D_8009D130[i * 4] < SLOTS &&
+                        !strncmp((char *)g_Weapons[D_8009D130[i * 4]].pad0, arg, strlen(arg)))
+                        kind = i;
+                for (i = 0; i < pool_n && kind < 0; i++)
+                    if (!strncmp(pool[i].name, arg, strlen(arg)))
+                        kind = pool[i].r->kind;
+                if (kind < 0 || kind >= 19)
+                    ELOG("test: no pickup of %s's here", arg);
+                else if (cmd[0] == 'b' && (o = pickup(D_8009D108, POS(g_Player)[0], POS(g_Player)[1], POS(g_Player)[2],
+                                                      "ammo box (test)")))
+                    *(s32 *)(o + 0x34) = kind, ELOG("test: the box holds %s's ammo (kind %d)", arg, kind);
+                else if (cmd[0] == 'g')
+                    o = pickup(D_8009D130[kind * 4 + 1], POS(g_Player)[0], POS(g_Player)[1], POS(g_Player)[2], "gun (test)");
+            } else if (!strcmp(cmd, "armour"))
+                o = pickup(D_8009D106, POS(g_Player)[0], POS(g_Player)[1], POS(g_Player)[2], "heavy armour (test)");
+            else if (!strcmp(cmd, "frag")) {
+                for (i = 0; i < 19; i++)
+                    if (D_8009D130[i * 4] >= 0 && D_8009D130[i * 4 + 1] > 0 &&
+                        !strncmp((char *)&g_Weapons[D_8009D130[i * 4]], "FRAG GRENADE", 12))
+                        break;
+                if (i < 19)
+                    o = pickup(D_8009D130[i * 4 + 1], POS(g_Player)[0], POS(g_Player)[1], POS(g_Player)[2], "frag grenade (test)");
+                else
+                    ELOG("test: no frag grenade pickup in this mission");
+            } else if (!strcmp(cmd, "ticks")) {
+                char t[120];
+                snprintf(t, sizeof(t), "%d:%s", g_Args->level, arg);
+                test_ticks(t);
+            } else if (!strcmp(cmd, "draw")) {
+                for (i = 0; i < SLOTS; i++)
+                    if (!strncmp((char *)g_Weapons[i].pad0, arg, strlen(arg)))
+                        draw_slot = i;
+            }
+            (void)o;
+        }
+        if (!strchr(s, ';'))
+            break;
+        s = strchr(s, ';') + 1;
+    }
+}
+
 void endless_frame(void) {
     int own, n, wave, i;
     s32 kills, back;
@@ -5114,6 +5367,8 @@ void endless_frame(void) {
     if (getenv("TWINE_ENDLESS_TEST_TICKS") && room_frames == 41) /* (headless tests: <level>:<name>|<name>...: in that
                                                                    * mission's rooms, only these checked in the inventory) */
         test_ticks(getenv("TWINE_ENDLESS_TEST_TICKS"));
+    if (getenv("TWINE_ENDLESS_TEST_PICKUPS"))
+        test_pickups(getenv("TWINE_ENDLESS_TEST_PICKUPS"));
     if (getenv("TWINE_ENDLESS_AI_DUMP") && room_frames == SEC * 3) /* (a guard's script: its handlers and code) */
         for (i = D_800B0DA0; i <= D_800B07B0; i++) {
             u8 *o = OBJ(i), *ctx = *(u8 **)(o + 0x118);
@@ -5812,6 +6067,9 @@ s32 func_8004CA5C(u8 *o, u8 *who) {
     s16 e[5];
     for (i = 0; i < n; i++)
         before[i] = g_Weapons[i].ammo;
+    if (port_endless_room(e) && *(s32 *)(who + 0x34) > 0 && !getenv("TWINE_ENDLESS_TEST_AMMO_OLD") &&
+        (r = ammo_pickup(o)) != 0) /* (TWINE_ENDLESS_TEST_AMMO_OLD=1: the old way, the box's kind only) */
+        return r == 1;
     if (port_endless_room(e) && *(s32 *)(who + 0x34) > 0 && pool_box(o))
         return 1;
     r = func_8004CA5C_orig(o, who);
