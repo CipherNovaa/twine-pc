@@ -4,7 +4,7 @@
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-p]
   -j JOBS    runs at once (default 4; at most 12, paced at most 5). A turbo run takes a whole core while it runs: 8 suit
              the 16-core machine when it is otherwise quiet; a run waits to start while the load is over the core count
-  -k CHECKS  the checks to run, letters from abcdefghijklmnopqr (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrs (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
@@ -21,7 +21,10 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
              p more than six people (8 MB of RAM, whatever -8 says: 12 slots): 12 alive at once, drawn, each fires
                and falls, real shots hit and kill people in the extra slots (hw renderer, smooth motion), a save
                state with 12 about, a long run of rooms
-             q King's Ransom's bar (8:5), 2 MB and 8 MB: guards sent in every minute, by Bond's door and the far side
+             q King's Ransom's bar (8:5), 2 MB and 8 MB: guards sent in every minute, by Bond's door and the far side;
+               Night Watch's small room (4:8): guards in by the door Bond came in by, again and again
+             s Bond can walk as each pool room starts (a second of the left stick each way: forward, back, left,
+               right): he moves (the 4:-1 playtest: put by the arrival's shift where he could not move at all)
              r the weapon list: own and lent weapons each an entry with a checkmark; the weapon buttons (wheel, Z/X,
                d-pad) step through the checked ones, Q/L1 the one held before, number keys by group; checkmarks kept
                for the run; every lent weapon reached; the campaign's stepping the game's own; the HUD strip
@@ -81,7 +84,13 @@ def pool_rooms():
     src = open(os.path.join(ROOT, "port", "src", "endless.c")).read()
     body = src[src.index("static Room rooms[] = {"):]
     body = body[:body.index("};")]
-    rooms = [(int(a), int(b)) for a, b in re.findall(r"\{(-?\d+),\s*(-?\d+)\}", body)]
+    nw = re.search(r"#define NIGHT_WATCH_ROOMS (\d+)", src)
+    if nw and nw.group(1) == "0":  # (Night Watch's rooms switched off: not in the pool)
+        body = re.sub(r"#if NIGHT_WATCH_ROOMS.*?#endif", "", body, flags=re.S)
+    hel = re.search(r"#define HELICOPTER_ROOM (\d+)", src)
+    if hel and hel.group(1) == "0":  # (the helicopter room switched off: not in the pool)
+        body = re.sub(r"#if HELICOPTER_ROOM.*?#endif", "", body, flags=re.S)
+    rooms = [(int(a), int(b)) for a, b in re.findall(r"\{(-?\d+),\s*(-?\d+)(?:,\s*\"[^\"]*\")?\}", body)]
     return [r for r in rooms if r[0] > 0]
 
 
@@ -1283,7 +1292,12 @@ def bar_runs():
     env = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:5", "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1,
            "TWINE_ENDLESS_TEST_SHOOT": 20, "TWINE_ENDLESS_TEST_MEET": 1}  # (everyone shot from 20 s on, every 2 s;
     # Bond put by each guard sent, so he's away from the door he came in by)
-    return {"q_bar": Run("q_bar", 8, 150, dict(env)), "q_bar8": Run("q_bar8", 8, 150, dict(env, TWINE_RAM_8MB=1))}
+    # (Night Watch's small section 6: its guards by Bond's own door too. Bond put once at the room's far side, as a
+    # player crossing it, not by each guard sent: one sent in at a doorway would leave him on its shut floor)
+    nw = {k: v for k, v in env.items() if k != "TWINE_ENDLESS_TEST_MEET"}
+    nw.update(TWINE_ENDLESS_ROOM="4:8", TWINE_ENDLESS_TEST_PUT="3381,-921,688,0")
+    return {"q_bar": Run("q_bar", 8, 150, dict(env)), "q_bar8": Run("q_bar8", 8, 150, dict(env, TWINE_RAM_8MB=1)),
+            "q_nw48": Run("q_nw48", 4, 150, nw)}
 
 
 def check_bar(runs):
@@ -1303,6 +1317,19 @@ def check_bar(runs):
                                                                           "no slot made a kind's")))
         result("q", "%s: in by both doorways (Bond's own too)" % label, bool(near) and bool(far),
                "%d in near the door Bond came in by, %d at the far side" % (len(near), len(far)))
+    r = runs["q_nw48"]
+    st = re.search(r"f(\d+) v\d+ room start: level 4 section 6 at (-?\d+) -?\d+ (-?\d+)", r.log)
+    ex, ez = (int(st.group(2)), int(st.group(3))) if st else (0, 0)
+    sp = [(int(m.group(1)), m.group(2), int(m.group(3)), int(m.group(4))) for m in
+          re.finditer(r" f(\d+) v\d+ spawn \([^)]*\): guard type \d+ (in at a doorway|on the floor) at (-?\d+) -?\d+ (-?\d+)",
+                      r.log)]
+    # (by Bond's entry: in at its doorway, or on the floor just inside it; its way in is too narrow for a doorway's
+    # own place, so most come on the floor some 2000 in)
+    near = [s for s in sp if math.hypot(s[2] - ex, s[3] - ez) < 2500]
+    result("q", "4:8 (Night Watch's small room): guards in by the door Bond came in by, again and again",
+           bool(st) and not r.crashed() and len(near) >= 3,
+           "%d spawns, %d by Bond's entry (%d of them in at a doorway)" %
+           (len(sp), len(near), sum(1 for s in near if s[1] == "in at a doorway")))
 
 
 
@@ -1454,6 +1481,22 @@ def door_runs(rooms):
     runs["doors_613_leave"] = Run("doors_613_leave", 6, 45, ch)
     runs["doors_613_mission"] = Run("doors_613_mission", 6, 45, dict(ch, TWINE_ENDLESS_TEST_NO_LOCKED_EXIT=1))
     return runs
+
+
+def walk_runs(rooms):
+    return {"walk_%d_%d" % (l, p if p >= 0 else 99): Run("walk_%d_%d" % (l, p if p >= 0 else 99), l, 15, {
+        "TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "%d:%d" % (l, p), "TWINE_ENDLESS_SEED": 4,
+        "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_WALK": 1}) for l, p in rooms}
+
+
+def check_walk(runs):
+    for k, r in sorted(runs.items()):
+        room = k[5:].replace("_99", "_-1").replace("_", ":")
+        m = re.search(r"test: walk: Bond moved (\d+) at most", r.log)
+        arrival = re.search(r"someone at Bond's arrival: he arrives at [-\d ]+ instead \(\d+ off\)", r.log)
+        result("s", room, bool(m) and int(m.group(1)) >= 300 and not r.crashed(),
+               ("moved %s at most in 4 s" % m.group(1) if m else "no walk logged") +
+               (" (arrival shifted)" if arrival else ""))
 
 
 def check_doors(runs):
@@ -1700,7 +1743,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqr", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrs", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -1779,6 +1822,8 @@ def main():
         groups["bar"] = bar_runs()
     if "r" in checks:
         groups["select"] = select_runs()
+    if "s" in checks:
+        groups["walk"] = walk_runs(rooms)
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.cost())  # (the long ones first)
     t0 = time.time()
@@ -1842,10 +1887,13 @@ def main():
         checked(groups["ramp"].values(), check_ramp, groups["ramp"])
     if "select" in groups:
         checked(groups["select"].values(), check_select, groups["select"])
+    if "walk" in groups:
+        checked(groups["walk"].values(), check_walk, groups["walk"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
              "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp",
-             "p": "12 people", "q": "the bar's guards", "r": "weapon list"}
+             "p": "12 people", "q": "the bar's guards", "r": "weapon list",
+             "s": "Bond walks"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))

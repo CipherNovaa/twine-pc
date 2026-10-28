@@ -102,6 +102,7 @@ s32 func_8002D4E4_orig(s32 text);
 void func_80041DBC(void);
 void func_80041DBC_orig(void);
 s32 func_8002E1B0_orig(void);
+s32 func_8002E1B0(void); /* (the mission completed: the run's say) */
 void RestartPrompt_Open_orig(void);
 s32 func_8004CA5C_orig(u8 *o, u8 *who);
 void func_8004B270_orig(s32 damage, s32 through_armour, s32 always);
@@ -122,6 +123,7 @@ void port_endless_unrank(const char *why);
 int port_endless_room_started(void);
 void port_endless_score(int points);
 void port_endless_ungate(int level);
+void port_endless_story_off(int level);
 void port_endless_restart(void);
 void quick_grenade_give(void);
 typedef struct {
@@ -271,6 +273,9 @@ static s32 was_at[3], said; /* where Bond was as the last frame began; when a me
  * wanted, ...) is a way on like any other once the room's exit is open: Bond using it leaves (no automatic exits:
  * only by his use); before that, the mod's "EXIT LOCKED" in place of the mission's message */
 static s32 door_msg_at = -1, locked_exit_at = -1; /* (a door's refusal heard; Bond asking to leave by one) */
+static int far_exit(void);
+static s32 fanfare_at = -1, fanfare_clip; /* (City of Walkways' helicopter room's end: func_8002E1B0) */
+static int fanfare_done(void);
 static char door_msg_text[32];
 extern u16 port_pad_buttons[2];
 extern u8 port_pad_sticks[2][4]; /* (RX RY LX LY) */
@@ -2502,10 +2507,15 @@ static int unkillable(u8 *o) { /* (a person now: scripts change these as they go
            (*(s32 *)(o + 0x4C) & 0x400);
 }
 
+/* M, where a mission has her about (Flashpoint's control room, Fallen Angel's): her AI script's index (the AIB
+ * tables, guard_scripts below); -1 none. Left out of a run: the story's, and her harm fails the mission */
+static const s8 m_script[12] = {-1, -1, -1, -1, -1, -1, 3, -1, -1, 4, -1, -1};
+#define M_SCRIPT(w4) (g_Args->level >= 1 && g_Args->level <= 11 && m_script[g_Args->level] >= 0 && \
+                      (int)((w4) >> 20 & 7) == m_script[g_Args->level])
+
 static int story_person(u32 t, s32 *rec) { /* (a placed person who would break the run: an unkillable one who
-                                            * fights; unkillable civilians, the bank's receptionist, stay) */
-    (void)rec;
-    return unkillable_type(t) && TYPE_DEF(t)[0x2C] != 0;
+                                            * fights, M; unkillable civilians, the bank's receptionist, stay) */
+    return (unkillable_type(t) && TYPE_DEF(t)[0x2C] != 0) || (rec && t && TYPE_DEF(t)[1] == 6 && M_SCRIPT((u32)rec[4]));
 }
 
 /* The mission's story people, out: those of a kind it places only once (counts: how many of each kind it places),
@@ -2525,6 +2535,9 @@ static void no_story_people(s32 *counts) {
         u8 *o = OBJ(i);
         if (o != g_Player && o[4] && o[5] == 6 && unkillable(o) && TYPE_DEF(o[6])[0x2C] && !is_copy(o)) {
             take_out(o, "a story person, as the room starts");
+        } else if (o != g_Player && o[4] && o[5] == 6 && m_script[g_Args->level] >= 0 && o[0xA7] == m_script[g_Args->level] &&
+                   !is_copy(o)) {
+            take_out(o, "M, as the room starts");
         }
     }
 }
@@ -2537,31 +2550,40 @@ static void clear_arrival(void) {
     int n = 0, i, j, k, b = -1;
     for (i = D_800B0DA0; i <= D_800B07B0 && n < 8; i++) { /* (the people there, and the section's placed ones) */
         u8 *o = OBJ(i);
-        if (o != g_Player && o[4] && dist2(POS(o)[0], POS(o)[2], entry[2], entry[4]) < 900)
+        if (o != g_Player && o[4] && !(*(s32 *)(o + 0x4C) & 0x02000000) && /* (one left out, inactive: no one) */
+            dist2(POS(o)[0], POS(o)[2], entry[2], entry[4]) < 900)
             who[n][0] = POS(o)[0], who[n][2] = POS(o)[2], n++;
     }
     for (i = 0; i < D_8009CF68; i++)
         for (j = 0; j < D_8009CF6C[i] && n < 8; j++) {
             s32 *p = D_8009CF70[i] + j * 6, x = p[0] + D_800D2FB0[0], z = p[2] + D_800D2FB0[2];
-            if ((p[3] & 0xFF) && !(p[3] & 0x400) && TYPE_DEF(p[3] & 0xFF)[1] == 6 && dist2(x, z, entry[2], entry[4]) < 900)
+            if ((p[3] & 0xFF) && !(p[3] & 0x500) && /* (not posed, nor made already or left out: those are above) */
+                TYPE_DEF(p[3] & 0xFF)[1] == 6 && dist2(x, z, entry[2], entry[4]) < 900)
                 who[n][0] = x, who[n][2] = z, n++;
         }
     if (!n)
         return;
-    {   /* (places round the arrival, nearest first: floor at its height, away from them all) */
-        s32 fy = floor_at(entry[2], entry[3] - 500, entry[4]), r, a;
+    {   /* (places round the arrival, nearest first: the middle of a polygon of the floor Bond can walk to from it, at
+         * its height, with floor all round it (no wall, ledge or furniture's edge by it), away from them all. A place
+         * merely over some floor (the 4:-1 playtest's) can be behind a wall or in a corner he can't leave) */
+        s32 fy = floor_at(entry[2], entry[3] - 500, entry[4]), d;
+        int f;
         fy = fy == -0x7FFF ? entry[3] : fy;
-        for (r = 1000; r <= 3000 && b < 0; r += 250)
-            for (a = 0; a < 4096 && b < 0; a += 256) {
-                s32 x = entry[2] + (isin(a) * r >> 12), z = entry[4] + (isin(a + 0x400) * r >> 12);
-                s32 h = floor_at(x, fy - 500, z);
-                if (h == -0x7FFF || h - fy > 300 || fy - h > 300)
-                    continue;
-                for (k = 0; k < n && dist2(x, z, who[k][0], who[k][2]) >= 1300; k++)
-                    ;
-                if (k == n)
-                    b = 0, best = r, mid_x = x, mid_y = h, mid_z = z;
-            }
+        flood();
+        for (f = 0; f < faces; f++) {
+            if (!reach[f] || shut[f] || mid[f][1] - fy > 150 || fy - mid[f][1] > 150)
+                continue;
+            d = dist2(mid[f][0], mid[f][2], entry[2], entry[4]);
+            if (d < 1000 || d > 3000 || d >= best)
+                continue;
+            for (k = 0; k < n && dist2(mid[f][0], mid[f][2], who[k][0], who[k][2]) >= 1300; k++)
+                ;
+            if (k < n || !clear(f))
+                continue;
+            b = f, best = d, mid_x = mid[f][0], mid_y = floor_at(mid[f][0], mid[f][1] - 500, mid[f][2]), mid_z = mid[f][2];
+            if (mid_y == -0x7FFF)
+                mid_y = mid[f][1];
+        }
     }
     if (b < 0) {
         ELOG("room: someone at Bond's arrival, and no clear place near it");
@@ -2671,6 +2693,7 @@ static void room_start(void) {
     }
     s32 i, j, counts[256];
     room_frames = carried = budget = open = kills_scored = said = burst = at_entry = 0;
+    fanfare_at = -1;
     last_sent = 0;
     flash_reset();
     draw_slot = -1;
@@ -2700,6 +2723,11 @@ static void room_start(void) {
         for (j = 0; j < D_8009CF6C[i]; j++) {
             s32 *p = D_8009CF70[i] + j * 6, k;
             u32 t = p[3] & 0xFF;
+            if (t && getenv("TWINE_ENDLESS_TEST_FINDCB") && /* (research: =hex: the placed things whose type's
+                                                             * handler, def+0x38, is that function) */
+                *(u32 *)(TYPE_DEF(t) + 0x38) == (u32)strtoul(getenv("TWINE_ENDLESS_TEST_FINDCB"), 0, 16))
+                ELOG("research: type %d (handler %08X) at %d %d %d", t, *(u32 *)(TYPE_DEF(t) + 0x38),
+                     p[0] + D_800D2FB0[0], p[1] + D_800D2FB0[1], p[2] + D_800D2FB0[2]);
             if (t && TYPE_DEF(t)[2] == 0x22 && door_count < DOORS) { /* a door's zone */
                 doors[door_count][0] = p[0] + D_800D2FB0[0];
                 doors[door_count][1] = p[1] + D_800D2FB0[1];
@@ -2817,9 +2845,15 @@ static int stuck_near(s32 x, s32 z) { /* (by where one sent got stuck) */
 }
 
 /* Rooms whose guards come in by every doorway, Bond's own among them (the playtest: King's Ransom's bar, two doors,
- * one Bond comes in by): elsewhere only by those further from where he came in than he is */
+ * one Bond comes in by; Night Watch's small section 6, 4:8, one way in): elsewhere only by those further from where
+ * he came in than he is. Level, section. */
+static const s8 every_door[][2] = {{8, 5}, {4, 6}};
 static int both_doors(void) {
-    return g_Args->level == 8 && D_800D2F8C == 5;
+    int i;
+    for (i = 0; i < (int)(sizeof(every_door) / sizeof(every_door[0])); i++)
+        if (g_Args->level == every_door[i][0] && D_800D2F8C == every_door[i][1])
+            return 1;
+    return 0;
 }
 
 static int lately(s32 x, s32 z) { /* (by where one of the last few came, or by where Bond came in; or someone there) */
@@ -4681,6 +4715,7 @@ void endless_frame(void) {
     }
     last_frame = D_8009CDA8;
     port_endless_ungate(g_Args->level);
+    port_endless_story_off(g_Args->level);
     /* a stretch of the mission (King's Ransom): the next section loaded the mission's way is the next room */
     if (loading)
         loading++;
@@ -5047,15 +5082,35 @@ void endless_frame(void) {
         }
     }
     if (getenv("TWINE_ENDLESS_TEST_PUT") && room_frames == SEC * 2) { /* (headless tests: x,y,z,yaw: Bond put there,
-                                                                     * facing that way) */
+                                                                     * facing that way; x,y,z,yaw;x,y,z,yaw...: the
+                                                                     * first room's, the second's, ...) */
         const char *pt = getenv("TWINE_ENDLESS_TEST_PUT");
+        static int put_room;
         s16 at[5];
         int n;
+        for (n = put_room++; n > 0 && pt; n--)
+            pt = strchr(pt, ';') ? strchr(pt, ';') + 1 : 0;
         at[0] = D_800D2F8C;
         for (n = 0; n < 4 && pt; n++, pt = strchr(pt, ',') ? strchr(pt, ',') + 1 : 0)
             at[n == 3 ? 1 : n + 2] = (s16)atoi(pt);
         func_80030FA8(at);
         ELOG("test: Bond put at %d %d %d, yaw %d", at[2], at[3], at[4], at[1]);
+    }
+    if (getenv("TWINE_ENDLESS_TEST_WALK") && room_frames >= SEC && room_frames <= SEC * 5) {
+        /* (headless tests: Bond walked by the left stick, a second each way: forward, back, left, right; how far he
+         * got from where he stood logged: one put where he can't move shows nothing) */
+        static s32 from[2], most;
+        int ph = (room_frames - SEC) / SEC;
+        s32 d;
+        if (room_frames == SEC)
+            from[0] = g_Args->playerX, from[1] = g_Args->playerZ, most = 0;
+        d = dist2(g_Args->playerX, g_Args->playerZ, from[0], from[1]);
+        most = d > most ? d : most;
+        port_pad_sticks[0][2] = room_frames == SEC * 5 ? 0x80 : ph == 2 ? 0x40 : ph == 3 ? 0xC0 : 0x80;
+        port_pad_sticks[0][3] = room_frames == SEC * 5 ? 0x80 : ph == 0 ? 0x40 : ph == 1 ? 0xC0 : 0x80;
+        if (room_frames == SEC * 5)
+            ELOG("test: walk: Bond moved %d at most from %d %d (now %d %d)", most, from[0], from[1], g_Args->playerX,
+                 g_Args->playerZ);
     }
     if (getenv("TWINE_ENDLESS_TEST_NEAR") && room_frames == SEC * 2) { /* (headless tests: Bond put before the first
                                                                     * person of that type, facing her) */
@@ -5085,6 +5140,14 @@ void endless_frame(void) {
         dt_on = getenv("TWINE_ENDLESS_TEST_DOORS") != 0;
     if (dt_on && !segment)
         door_test();
+    if (getenv("TWINE_ENDLESS_TEST_COMPLETE") && room_frames == atoi(getenv("TWINE_ENDLESS_TEST_COMPLETE")))
+        func_8002E1B0(); /* (headless tests: the mission completed then, as the last helicopter's fall does) */
+    if (fanfare_done() && !(g_Args->flags & 0x40) && !loading) {
+        D_8009CFFC = 1; /* (the fade out) */
+        segment = 0;
+        leave(wave, "the helicopter down, its fanfare played");
+        return;
+    }
     if (locked_exit_at >= 0 && open && !(g_Args->flags & 0x40) && !loading) {
         locked_exit_at = -1;
         if (dt_on && dt_list[0] >= 0 && !dt_done && !getenv("TWINE_ENDLESS_TEST_DOORS_LEAVE")) /* (the test: noted,
@@ -5103,14 +5166,15 @@ void endless_frame(void) {
     /* the way out by the entry (for a room whose doors lead nowhere: a story's, a lift's, or only for show): once the
      * exit is open, standing where he came in, Bond is told he may leave, and leaves with the use button */
     if (open && !(g_Args->flags & 0x40) && !loading && (!dt_on || dt_done) &&
-        dist2(g_Args->playerX, g_Args->playerZ, entry[2], entry[4]) < 1500) {
+        (dist2(g_Args->playerX, g_Args->playerZ, entry[2], entry[4]) < 1500 || far_exit())) {
+        int far = dist2(g_Args->playerX, g_Args->playerZ, entry[2], entry[4]) >= 1500;
         if (!at_entry++) {
             func_80048B4C(msg_leave, 0x80, 0);
-            ELOG("entry: Bond told he may leave here");
+            ELOG("%s: Bond told he may leave here", far ? "far end" : "entry");
         }
         if (g_PadPressed & *(u16 *)((u8 *)g_Args + 0x14E)) {
             D_8009CFFC = 1; /* (the fade out) */
-            leave(wave, "the use button at the entry");
+            leave(wave, far ? "the use button at the far end" : "the use button at the entry");
             return;
         }
     } else
@@ -5153,6 +5217,21 @@ void endless_frame(void) {
         }
     }
     was_at[0] = POS(g_Player)[0], was_at[1] = POS(g_Player)[1], was_at[2] = POS(g_Player)[2];
+}
+
+/* EXTRA EXITS: a section's end the mission comes in by one way only (no door zone to leave by), a way out as the
+ * entry is: once the exit is open, standing there, the use button leaves. Turncoat's first subway car (section 1):
+ * its far end from the train (the mission's way down from the street), the end of the subway stretch. */
+static const s32 far_exits[][4] = { /* level, section, x, z */
+    {3, 1, -700, 13050},
+};
+static int far_exit(void) {
+    int i;
+    for (i = 0; i < (int)(sizeof(far_exits) / sizeof(far_exits[0])); i++)
+        if (g_Args->level == far_exits[i][0] && D_800D2F8C == far_exits[i][1] &&
+            dist2(g_Args->playerX, g_Args->playerZ, far_exits[i][2], far_exits[i][3]) < 1500)
+            return 1;
+    return 0;
 }
 
 /* THE CARRIED WEAPON FROM THE MISSION'S FIRST FRAME: endless_frame runs at the top of each frame, from Pad_Update,
@@ -5217,14 +5296,37 @@ s32 func_8002D4E4(s32 text) {
     return func_8002D4E4_orig(text);
 }
 
-/* The mission completed: never in a run */
+/* The mission completed: never in a run. But City of Walkways' helicopter room (section 3, 5:1): its last helicopter
+ * down is the room's end: the mission's fanfare (its end-of-mission XA clip, func_8002B064(D_800E23E8), as the
+ * end-of-mission handler plays it, without the rest of that), then the next room once it has played
+ * (fanfare_done: the clip playing no longer it; or 12 s) */
+void func_8002B064(s32 clip);
+#define L05_END_CLIP (*(s32 *)0x800F070C) /* (LEVEL05's D_800E23E8: the mission's end-of-mission clip, 0x83) */
+#define L05_CLIP_NOW (*(s32 *)0x800B4FCC) /* (LEVEL05's D_800AFEBC: the clip playing, -1 none) */
 s32 func_8002E1B0(void) {
     s16 e[5];
     if (port_endless_room(e)) {
+        if (g_Args->level == 5 && D_800D2F8C == 3 && fanfare_at < 0) {
+            fanfare_clip = L05_END_CLIP;
+            fanfare_at = room_frames;
+            func_8002B064(fanfare_clip);
+            ELOG("story: the helicopter down: the mission's fanfare (clip %d, CD volume %d), then the next room",
+                 fanfare_clip, *(s16 *)((u8 *)g_Args + 0x142));
+            return 0;
+        }
         ELOG("story: the mission's completion skipped");
         return 0;
     }
     return func_8002E1B0_orig();
+}
+static int fanfare_done(void) { /* (the fanfare over: the room left) */
+    if (fanfare_at < 0 || room_frames < fanfare_at)
+        return 0;
+    if (room_frames - fanfare_at < SEC / 2 || (L05_CLIP_NOW == fanfare_clip && room_frames - fanfare_at < SEC * 12))
+        return 0;
+    ELOG("story: the fanfare over after %d s (clip playing now %d)", (room_frames - fanfare_at) / SEC, L05_CLIP_NOW);
+    fanfare_at = -1;
+    return 1;
 }
 
 /* RESTART? after Bond's death: in a run, NO at once (the prompt's own NO: func_80042020) */
@@ -5413,9 +5515,32 @@ static int door_refusal(const char *t) { /* (the missions' messages for a door t
            (!strncmp(t, "NEED ", 5) && (strstr(t, "CARD") || strstr(t, "KEY") ||
                                                                      strstr(t, "FINGERPRINT")));
 }
+/* City of Walkways' gas valve (its zone's handler, LEVEL05's func_8006DF58: a use button there is told "GAS VALVE
+ * JAMMED!" / "USE THE WRENCH"; only the wrench's blow works it): in a run the use button works it, as the blow does
+ * but for Bond's turn to it: the gas on (valve state D_800A3320 0 or 3 -> 2, the jet's ticks D_800A3498 200, the
+ * times it was turned D_800A3334 + 1; its note at the second turn left out); already on, nothing */
+static s32 valve_at = -1;
+static int valve_use(const char *text) {
+    s32 *state = (s32 *)0x800A3320;
+    if (g_Args->level != 5)
+        return 0;
+    if (!strcmp(text, "USE THE WRENCH"))
+        return valve_at == room_frames;
+    if (strcmp(text, "GAS VALVE JAMMED!"))
+        return 0;
+    if (valve_at != room_frames && (*state == 0 || *state == 3)) {
+        *state = 2, *(s32 *)0x800A3498 = 200, (*(s32 *)0x800A3334)++;
+        ELOG("story: the gas valve turned on by the use button (no wrench)");
+    }
+    valve_at = room_frames;
+    return 1;
+}
+
 s32 func_80048B4C(char *text, u8 prio, u8 flag) {
     s16 e[5];
     s32 r;
+    if (text && port_endless_room(e) && !port_subframe && valve_use(text))
+        return 0;
     if (text && port_endless_room(e) && text != msg_locked && text != msg_open && text != msg_back &&
         text != msg_leave && door_refusal(text) && !port_subframe) {
         /* a door the mission keeps shut: once the exit is open, a way on (endless_frame leaves); before, the room's
@@ -5806,7 +5931,12 @@ s32 func_80026F30(u32 id, s32 flags) {
          * not by a script's sound op (func_800572F4) nor as a sound at a place (func_80027248) */
         s16 e[5];
         if (id < 0x80 && port_endless_room(e) && muted_line(id)) {
-            ELOG("sound: story line %u muted (played directly, from %08X)", id, port_rc_ra);
+            static u32 last_id = ~0u;
+            static s32 last_at;
+            if (id != last_id || room_frames < last_at || room_frames - last_at > SEC * 10) /* (a loop asked for again
+                                                                                     * each frame: Night Watch's siren) */
+                ELOG("sound: story line %u muted (played directly, from %08X)", id, port_rc_ra), last_id = id,
+                    last_at = room_frames;
             if (trace_sound()) { /* (the PS1 stack's code addresses: its callers, roughly; the recompiled code's calls
                                   * keep no return address, so port_rc_ra is often 0) */
                 int k;
@@ -5994,7 +6124,8 @@ static int muted_line(u32 id) {
         {2, 9, 3}, {2, 9, 6},            /* Courier's ending: "open the door!", "open up" */
         {6, 9, 4}, {7, 9, 4},            /* Christmas's "I got it" */
         {7, 9, 0}, {7, 9, 1}, {10, 9, 7}, {10, 9, 8}, /* the public address: "warning", "blast doors open", ... */
-        {7, 9, 7}, {7, 9, 8}};           /* the friendly guard's "hello", "good day sir" (Masquerade's disguise) */
+        {7, 9, 7}, {7, 9, 8},            /* the friendly guard's "hello", "good day sir" (Masquerade's disguise) */
+        {4, 7, 9}};                      /* Night Watch's alarm siren (0x4B, its loop while D_8009FAA0: func_8006A388) */
     SfxDefE *d = *(SfxDefE **)((u8 *)g_Args + 0x130);
     unsigned k;
     if (!d || id > 0xFF)

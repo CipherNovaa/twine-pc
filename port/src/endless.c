@@ -28,33 +28,71 @@ static const u32 start_point[12] = {0,          0x8009E9C4, 0x800A3E74, 0x800A0E
 
 typedef struct {
     s8 level, point; /* point: the load point (-1 the start point) */
+    const char *need; /* a weapon Bond must carry (owned, with ammo) for the room to be chosen; 0 none */
 } Room;
+
+/* Switches for rooms that depend on other work (tools/endless_check.py's pool follows them): Night Watch's rooms,
+ * kept only with its action music in a run (the playtest's ruling; wt/music); City of Walkways' helicopter (5:1),
+ * whose end is the mission's fanfare then the next room (port/mods/endless.c's func_8002E1B0) */
+#ifndef NIGHT_WATCH_ROOMS
+#define NIGHT_WATCH_ROOMS 1
+#endif
+#ifndef HELICOPTER_ROOM
+#define HELICOPTER_ROOM 1
+#endif
 
 /* The rooms: sections of the missions that make a fight with a way out (a door to another section that opens
  * without the story: no keycard, objective, lift or wait), picked by playing them. A section may be entered from
- * either end (King's Ransom's 4, played backwards, is one of the best). Left out: Russian Roulette (the casino) and
- * Night Watch (its guards may not be killed: back with the borrowed guards of stage 2), the sections that start in a
- * cutscene or where Bond dies of the place alone, the ski slope, rooms whose doors the story keeps shut, the lifts.
- * King's Ransom flows: from one of its rooms the next of its sections follows, for a stretch (port_endless_segment). */
+ * either end (King's Ransom's 4, played backwards, is one of the best). Left out: Russian Roulette (the casino),
+ * Cold Reception (the ski slope and the rest, played: none kept), the sections that start in a cutscene or where
+ * Bond dies of the place alone, rooms whose doors the story keeps shut, the lifts. The rest of each mission's points
+ * were each played (2026-10-27's tour) and kept or left out by the player's verdict.
+ * King's Ransom flows: from one of its rooms the next of its sections follows, for a stretch (port_endless_segment);
+ * so does Turncoat's subway: the station (5) and the train's four cars (4 to 1, played back from the station), car
+ * to car by their end doors, the last car left by its far end (port/mods/endless.c's extra exits). */
 static Room rooms[] = {
     /* Courier: the bank's floor and the later part (its lift arrivals left out) */
     {2, -1}, {2, 4}, {2, 5}, {2, 6},
+    /* and section 1 by its far door (7) */
+    {2, 7},
     /* King's Ransom: all of it but its end (section 3: the balloon, scripted, no way on), the bar's two doors (5)
      * and the section played backwards (4) among the best */
     {8, -1}, {8, 0}, {8, 2}, {8, 3}, {8, 4}, {8, 5}, {8, 6},
+    /* Night Watch (its guards may not be killed in the story; in a run they may, and its failures are skipped):
+     * sections 2 (0) and 4 (4), and the small section 6 (8: its guards come in by Bond's own door too, the level
+     * mod's every_door). The rest played and left out (1, 2, 3, 5, 6) */
+#if NIGHT_WATCH_ROOMS
+    {4, 0}, {4, 4}, {4, 8},
+#endif
     /* Masquerade: the nuclear facility (6 was empty and 7's doors shut before the slots and the story gates were
      * mended: back on trial) */
     {7, 2}, {7, 6}, {7, 7},
-    /* Flashpoint: the night-vision pipeline (13) */
+    /* and its start (-1, section 1: entered from its far end (1) it has no door near) and section 2 from its middle (3).
+     * (0, 4 and 5 left out: section 2's far end spawned a guard on no floor; 4 is small and Renard's; 5 sent nobody) */
+    {7, -1}, {7, 3},
+    /* Flashpoint: the night-vision pipeline (13); section 1, its start, entered from each of its doors (-1, 1, 3, 5,
+     * 6: M left out, MI6's alert off), section 3 from either end and its side (2, 8, 11), section 4 (10), section 5
+     * (7), section 6 (12). (4, section 4's other end, had no fight reach Bond headless: not played) */
     {6, 0}, {6, 9}, {6, 13},
-    /* City of Walkways: the warehouse (4) */
-    {5, -1}, {5, 4},
-    /* Turncoat: the streets */
+    {6, -1}, {6, 1}, {6, 3}, {6, 5}, {6, 6}, {6, 2}, {6, 8}, {6, 11}, {6, 10}, {6, 7}, {6, 12},
+    /* City of Walkways: the warehouse (4), section 2 (0) */
+    {5, -1}, {5, 4}, {5, 0},
+#if HELICOPTER_ROOM
+    /* the helicopter (section 3): only with a rocket launcher; its gas valve worked by the use button, no wrench
+     * (port/mods/endless.c) */
+    {5, 1, "ROCKET LAUNCHER"},
+#endif
+    /* Turncoat: the streets, and the subway. The campaign's way: down from the street into the first car (12), car
+     * to car (0, 2, 4), out by the last car's middle door (7's) to the station (6), the bomb. Played back: the
+     * station's far end (9: the bomb's timer and MI6's messages off, port_endless_story_off; its grenade door on to
+     * the train), into the last car and on to the first (5, 3, 1). (The station's near end (6) is passed through
+     * from 9; 8 is the story's, 10 and 14 empty.) */
     {3, -1}, {3, 11}, {3, 13},
-    /* Fallen Angel: the MS keycard area and the castle's halls */
-    {9, 0}, {9, 2}, {9, 4},
-    /* Meltdown */
-    {10, -1}, {10, 1}, {10, 2}, {10, 4}, {10, 6},
+    {3, 12}, {3, 0}, {3, 2}, {3, 4}, {3, 7}, {3, 9}, {3, 5}, {3, 3}, {3, 1},
+    /* Fallen Angel: the MS keycard area and the castle's halls; section 1 by its other door (1) */
+    {9, 0}, {9, 2}, {9, 4}, {9, 1},
+    /* Meltdown; sections 2 and 1 by their other doors (0, 3) */
+    {10, -1}, {10, 1}, {10, 2}, {10, 4}, {10, 6}, {10, 0}, {10, 3},
     {0, 0}, /* (TWINE_ENDLESS_ROOM's, when not one of these) */
 };
 #define ROOMS ((int)(sizeof(rooms) / sizeof(rooms[0])) - 1)
@@ -80,7 +118,21 @@ static u32 next_rand(void) {
 
 void port_endless_logf(s32 frame, const char *fmt, ...);
 
-/* a room of another level than the one before: the level first (each as likely), then one of its rooms */
+/* a room Bond may be sent to now: what it needs, he carries (the carry, as he leaves the room before) */
+static int room_ok(int i) {
+    int k;
+    const EndlessCarry *c = &port_endless_carry;
+    if (!rooms[i].need)
+        return 1;
+    for (k = 0; c->valid && k < c->weapons && k < ENDLESS_WEAPONS; k++)
+        if (c->weapon[k].owned && !strncmp(c->weapon[k].name, rooms[i].need, sizeof(c->weapon[k].name)) &&
+            (c->weapon[k].ammo > 0 || c->weapon[k].clip > 0 || c->weapon[k].reserve > 0))
+            return 1;
+    return 0;
+}
+
+/* a room of another level than the one before: the level first (each as likely), then one of its rooms (of those
+ * whose needs Bond meets) */
 static int pick_room(int after) {
     int levels[12], n = 0, i, l, k = 0, r;
     static int forced; /* (TWINE_ENDLESS_NEXT=level:point,...: headless tests, the rooms after the first, in order) */
@@ -98,17 +150,17 @@ static int pick_room(int after) {
     }
     for (l = 1; l <= 11; l++)
         for (i = 0; i < ROOMS; i++)
-            if (rooms[i].level == l) {
+            if (rooms[i].level == l && room_ok(i)) {
                 if (after < 0 || rooms[after].level != l)
                     levels[n++] = l;
                 break;
             }
     l = levels[next_rand() % n];
     for (i = 0; i < ROOMS; i++)
-        k += rooms[i].level == l;
+        k += rooms[i].level == l && room_ok(i);
     r = next_rand() % k;
     for (i = 0; i < ROOMS; i++)
-        if (rooms[i].level == l && !r--)
+        if (rooms[i].level == l && room_ok(i) && !r--)
             return i;
     return 0;
 }
@@ -457,6 +509,33 @@ void port_endless_ungate(int level) {
     }
 }
 
+/* the level's mod, every frame of a run: a mission's story clocks and messages that have no place in a fight off.
+ * MI6's messages' alert, every mission's (the "MI6" sign: a new message waiting, set by the mission's message post,
+ * L2_func_800426E8, LEVEL03's func_8004205C; the messages themselves stay in the watch's list): its flag cleared.
+ * Turncoat's station (section 5): the bomb's two-minute timer (D_800D8AC4: > 0 running; the mission's own stop,
+ * func_80045ADC, sets its top bit: no clock drawn, its end (func_8006AEE4: the blast that kills Bond) never called). */
+static const u32 mi6_alert[12] = {0,          0,          0x800A1204, 0x8009EB98, 0x8009DA24, 0x800A15F0,
+                                  0x8009EFA4, 0x800A1F5C, 0x8009F414, 0x800A1C64, 0x800A1170, 0x8009C664};
+void port_endless_story_off(int level) {
+    static int said, said_gen = -1;
+    if (!port_endless || level < 1 || level > 11)
+        return;
+    if (said_gen != level_gen) /* (logged once a mission) */
+        said = 0, said_gen = level_gen;
+    if (level == 3 && *(s32 *)0x800D8AC4 > 0) {
+        *(u32 *)0x800D8AC4 |= 0x80000000u;
+        if (!(said & 1))
+            port_endless_logf(-1, "story: the mission's timer stopped");
+        said |= 1;
+    }
+    if (mi6_alert[level] && *(s32 *)mi6_alert[level] && !getenv("TWINE_ENDLESS_TEST_MI6_KEEP")) { /* (tests: kept) */
+        *(s32 *)mi6_alert[level] = 0;
+        if (!(said & 2))
+            port_endless_logf(-1, "story: MI6's message alert off");
+        said |= 2;
+    }
+}
+
 /* the level's mod: points scored (kills, rooms cleared) */
 void port_endless_score(int points) {
     port_endless_run.score += points;
@@ -483,10 +562,12 @@ int port_endless_room(s16 *entry) {
 int port_endless_segment(int point) {
     int l = rooms[room].level;
     s16 *lp;
-    if (point < 0 || l != 8 || segments >= 2)
+    if (point < 0 || (l != 8 && l != 3) || segments >= (l == 3 ? 4 : 2))
         return 0;
     lp = (s16 *)start_point[l] + 0xC + point * 8;
-    if (lp[0] == 3) /* (King's Ransom's end: the balloon) */
+    if (l == 8 && lp[0] == 3) /* (King's Ransom's end: the balloon) */
+        return 0;
+    if (l == 3 && (lp[0] < 1 || lp[0] > 5)) /* (Turncoat: only its subway, the cars (1-4) and the station (5)) */
         return 0;
     memcpy(cur_entry, lp, 10);
     segments++;
