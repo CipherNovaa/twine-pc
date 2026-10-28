@@ -629,8 +629,6 @@ s32 func_8005133C(char *text, s32 x, s32 y) {
         }
     }
     if (in_endless_stats && text) {
-        if (getenv("TWINE_ENDLESS_DUMP"))
-            port_endless_logf(-1, "stats text \"%s\" at %d %d (unranked %d)", text, x, y, port_endless_unranked);
         if (y == 56 && x > 89 && *text >= 'A' && *text <= 'Z') { /* the mission's name, centred over the lines */
             x += ((s32)strlen(text) - 7) * 15 / 4;
             strcpy(text = line, "ENDLESS"); /* (in a buffer: the text is written over, capitalized) */
@@ -648,6 +646,8 @@ s32 func_8005133C(char *text, s32 x, s32 y) {
             MISSION_SCORE = r->score;
             snprintf(text = line, sizeof(line), "endless score:%d", r->score);
         }
+        if (getenv("TWINE_ENDLESS_DUMP")) /* (the line as drawn) */
+            port_endless_logf(-1, "stats text \"%s\" at %d %d (unranked %d)", text, x, y, port_endless_unranked);
     }
     return func_8005133C_orig(text, x, y);
 }

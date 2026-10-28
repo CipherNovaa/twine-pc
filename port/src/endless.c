@@ -69,6 +69,8 @@ EndlessCarry port_endless_carry;
 EndlessRun port_endless_run;
 int port_endless_unranked PORT_NOSAVE; /* (a state loaded must not take it back) */
 char port_endless_unranked_why[32] PORT_NOSAVE; /* (why: for the stats screen) */
+int port_endless_invincible; /* (the debug menu's or the developers' code's invincibility, on as Bond left the last
+                              * room: a mission's own flag is new in each, port/mods/endless.c puts it back on) */
 int port_endless_stats; /* the front end shows the run's stats next */
 static int room = -1, next_room = -1, room_starts, segments;
 static s16 cur_entry[5]; /* where the room was entered: its section, yaw, x, y, z */
@@ -124,6 +126,7 @@ static void begin(void) {
     memset(&port_endless_run, 0, sizeof(port_endless_run));
     port_endless_unranked = 0;
     port_endless_unranked_why[0] = 0;
+    port_endless_invincible = 0;
     next_room = -1;
     room = pick_room(-1);
 }
@@ -393,6 +396,17 @@ void port_endless_level(const PortModule *m) {
     covering = surveying && port_endless && m->level;
     survey_mark = port_video_frames();
     survey_room = surveying;
+    if (m->level && getenv("TWINE_TEST_FLAGS2")) /* (headless tests: g_Args->flags2 bits on as each mission starts,
+                                                   * as the front end's CHEATS screen leaves them: 0x8000 all weapons,
+                                                   * 0x400 stealthy bond, 0x10000 invulnerable, 0x1000 power goons,
+                                                   * 0x2000 power guns, 0x4000 infinite ammo) */
+        *(u32 *)0x8001F168u |= (u32)strtoul(getenv("TWINE_TEST_FLAGS2"), NULL, 0);
+    if (!port_endless && m->level && m->level < 12 && getenv("TWINE_TEST_START_POINT")) { /* (headless tests: the
+                                                       * campaign's mission started at that load point, as a room's) */
+        start = (s16 *)start_point[m->level];
+        memcpy(start, start + 0xC + atoi(getenv("TWINE_TEST_START_POINT")) * 8, 10);
+        port_log("test: level %d started at its load point %s\n", m->level, getenv("TWINE_TEST_START_POINT"));
+    }
     if (!port_endless || !m->level || (room < 0 && next_room < 0))
         return;
     if (next_room >= 0) {

@@ -211,3 +211,5 @@ level09 func_80026D08 func_80026D08
 level09 func_800272A4 func_800272A4
 level10 func_80026D08 func_80026D08
 level10 func_800272A4 func_800272A4
+# auto-aim's target (port/mods/endless.c: a lent weapon's auto-aim as at home): its cone, its 10000 reach, its sight test
+level11 func_80036938 func_800363DC

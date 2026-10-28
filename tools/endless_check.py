@@ -4,7 +4,7 @@
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-p]
   -j JOBS    runs at once (default 4; at most 12, paced at most 5). A turbo run takes a whole core while it runs: 8 suit
              the 16-core machine when it is otherwise quiet; a run waits to start while the load is over the core count
-  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrt (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrtuv (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
@@ -28,6 +28,12 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
              t the music (TWINE_TRACE=music): Night Watch's and Meltdown's rooms play their mission's action song from
                the start; Night Watch's campaign its stealth song first, the action song once its story flag 2 is up
                (raised by the test as its scripts would), as ever
+             u auto-aim (the pause menu's option; TWINE_TRACE=aim): on, a weapon of the mission's own and a lent one
+               each lock on a guard, the crosshair red, their shots helped onto him; off, neither; the AR36 lent
+               never, as at home (no mission auto-aims its slot); as played (hw, smooth motion) the red crosshair
+             v cheats in a run: the CHEATS screen's six, a developers' code's invincibility, the port's infinite
+               grenades, the debug menu: each does what it says through three rooms (lent guns too, invincibility
+               through the room changes), makes the run unranked, and the run's stats say why
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -1865,10 +1871,183 @@ def check_campaign(runs):
                and "Exec level" in r.log, "endless lines %d, crash %s" % (len(r.lines("endless:")), r.crashed()))
 
 
+# ---- u: auto-aim (the pause menu's option) with every weapon, as at home ----
+
+def aim_runs():
+    """Turncoat's streets (3:-1), Bond turned to the nearest guard (TWINE_ENDLESS_TEST_LOOK=near), the option set
+    (TWINE_TEST_AUTOAIM), TWINE_TRACE=aim: a weapon of the mission's own (the KS5) and a lent one (King's Ransom's
+    Ingalls, carried in from 8:-1), on and off; then turned 100 off the guard and firing (are the shots helped onto
+    him?); the AR36 lent (Courier 2:4) and at home (King's Ransom), whose slot no mission auto-aims; as played (hw
+    renderer, smooth motion) a shot of the red crosshair on the guard with the lent gun"""
+    b = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
+         "TWINE_ENDLESS_TEST_LOOK": "near", "TWINE_ENDLESS_TEST_NO_RAMP": 1, "TWINE_TRACE": "aim"}
+    own = dict(b, TWINE_ENDLESS_ROOM="3:-1", TWINE_ENDLESS_TEST_DRAW="KOFFLER")
+    lent = dict(b, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="3:-1", TWINE_ENDLESS_TEST_EXIT="150,3000",
+                TWINE_ENDLESS_TEST_DRAW="INGALLS")
+    shots = ",".join("%d:4000,%d:0" % (t, t + 20) for t in range(200, 1400, 40))
+    off = {"TWINE_ENDLESS_TEST_LOOK_OFF": 100, "TWINE_TEST_PAD": shots, "TWINE_TRACE": "aim,hits"}
+    ar = dict(b, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_TEST_EXIT="150,3000", TWINE_ENDLESS_TEST_DRAW="AR36",
+              TWINE_ENDLESS_NEXT="2:4", TWINE_TEST_AUTOAIM=1)
+    runs = {}
+    for aa in (1, 0):
+        runs["u_own_%d" % aa] = Run("u_own_%d" % aa, 3, 20, dict(own, TWINE_TEST_AUTOAIM=aa))
+        runs["u_lent_%d" % aa] = Run("u_lent_%d" % aa, 8, 25, dict(lent, TWINE_TEST_AUTOAIM=aa))
+        runs["u_own_fire_%d" % aa] = Run("u_own_fire_%d" % aa, 3, 30, dict(own, TWINE_TEST_AUTOAIM=aa, **off))
+        runs["u_lent_fire_%d" % aa] = Run("u_lent_fire_%d" % aa, 8, 40, dict(lent, TWINE_TEST_AUTOAIM=aa, **off))
+    runs["u_ar36_lent"] = Run("u_ar36_lent", 8, 25, ar)
+    runs["u_ar36_old"] = Run("u_ar36_old", 8, 25, dict(ar, TWINE_TEST_AIM_OLD=1))
+    runs["u_ar36_home"] = Run("u_ar36_home", 8, 20, dict(b, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_TEST_DRAW="AR36",
+                                                           TWINE_TEST_AUTOAIM=1))
+    runs["u_shot"] = Run("u_shot", 8, 25, dict(lent, TWINE_TEST_AUTOAIM=1, TWINE_RENDERER="hw", TWINE_SMOOTH=1,
+                                               TWINE_SHOT="400,450,500"))
+    return runs
+
+
+def aim_lines(r, level, weapon):
+    """the aim trace's lines of that mission with that weapon in hand: (locked, red and shown)"""
+    out = []
+    for l in r.lines(r"trace: L%d f\d+ aim: option" % level):
+        if weapon in l:
+            out.append(("target -1 " not in l, "crosshair RED" in l and " shown" in l))
+    return out
+
+
+def red_crosshair(img):
+    """pixels of the crosshair's pure red in a shot"""
+    w, h, px = img
+    return sum(1 for i in range(0, len(px) - 2, 3) if px[i] > 220 and px[i + 1] < 40 and px[i + 2] < 40)
+
+
+def check_aim(runs):
+    for who, key, weapon in (("a weapon of the mission's own (Turncoat's KS5)", "own", "KOFFLER KS5 crosshair"),
+                             ("a lent weapon (King's Ransom's Ingalls in Turncoat)", "lent", "INGALLS TYPE 20 (lent)")):
+        on, off = aim_lines(runs["u_%s_1" % key], 3, weapon), aim_lines(runs["u_%s_0" % key], 3, weapon)
+        result("u", "auto-aim on, %s: locks on the guard, the crosshair red" % who,
+               len(on) > 10 and sum(a and b for a, b in on) > len(on) // 2,
+               "%d of %d traced frames locked and red" % (sum(a and b for a, b in on), len(on)))
+        result("u", "auto-aim off, %s: no lock, the crosshair green" % who,
+               len(off) > 10 and not any(a or b for a, b in off),
+               "%d of %d traced frames locked or red" % (sum(a or b for a, b in off), len(off)))
+        hon = len(runs["u_%s_fire_1" % key].lines(r"trace: L3 .*hits: .*hit by"))
+        hoff = len(runs["u_%s_fire_0" % key].lines(r"trace: L3 .*hits: .*hit by"))
+        result("u", "%s turned off the guard, firing: auto-aim's help puts more shots on him" % who, hon > hoff,
+               "hits with auto-aim %d, without %d" % (hon, hoff))
+    lent, old, home = (aim_lines(runs[k], lv, "AR36 SNIPER") for k, lv in
+                       (("u_ar36_lent", 2), ("u_ar36_old", 2), ("u_ar36_home", 8)))
+    result("u", "the AR36 lent (Courier): no auto-aim, as at home (King's Ransom; the old way locked)",
+           len(lent) > 10 and not any(a or b for a, b in lent) and sum(a for a, b in old) > 10 and
+           len(home) > 10 and not any(a for a, b in home),
+           "lent: %d of %d locked; the old way %d of %d; at home %d of %d" %
+           (sum(a for a, b in lent), len(lent), sum(a for a, b in old), len(old), sum(a for a, b in home), len(home)))
+    r = runs["u_shot"]
+    reds = []
+    for f in (400, 450, 500):
+        img = read_ppm(os.path.join(r.dir, "screen_%04d_0.ppm" % f)) or read_ppm(os.path.join(r.dir, "screen_%04d.ppm" % f))
+        reds.append(red_crosshair(img) if img else -1)
+    lines = aim_lines(r, 3, "INGALLS TYPE 20 (lent)")
+    result("u", "as played (hw, smooth motion): the red crosshair on the guard with the lent gun",
+           max(reds) >= 8 and sum(a and b for a, b in lines) > 10,
+           "red crosshair pixels in the shots %s; %d frames locked" % (reds, sum(a and b for a, b in lines)))
+
+
+# ---- v: cheats in a run: they work, and the run is unranked, the stats saying why ----
+
+CHEATS = [  # (run, the cheat, its environment, why the run is unranked)
+    ("v_none", "no cheat", {}, None),
+    ("v_ammo", "infinite ammo", {"TWINE_TEST_FLAGS2": "0x4000"}, "infinite ammo"),
+    ("v_invul", "invulnerable", {"TWINE_TEST_FLAGS2": "0x10000"}, "invulnerable"),
+    ("v_allw", "all weapons", {"TWINE_TEST_FLAGS2": "0x8000"}, "all weapons"),
+    ("v_pguns", "power guns", {"TWINE_TEST_FLAGS2": "0x2000"}, "power guns"),
+    ("v_pgoons", "power goons", {"TWINE_TEST_FLAGS2": "0x1000"}, "power goons"),
+    ("v_stealth", "stealthy bond", {"TWINE_TEST_FLAGS2": "0x400"}, "stealthy bond"),
+    ("v_devinv", "invincibility (a developers' code; the debug menu's row)", {"TWINE_TEST_CHEAT": "3@100"},
+     "a cheat code"),
+    ("v_gren", "infinite grenades (the port's)", {"TWINE_INFINITE_GRENADES": 1}, "infinite grenades"),
+    ("v_dbg", "the debug menu opened", {"TWINE_TEST_DEBUG_MENU": 150}, "debug menu")]
+
+
+def cheat_runs():
+    """three rooms (King's Ransom 8:-1, Turncoat 3:-1, Courier 2:4), the Ingalls drawn (lent after the first), Bond put
+    by the guards sent and firing; each cheat on as the game's CHEATS screen leaves it (TWINE_TEST_FLAGS2), or the
+    game's own cheat action (TWINE_TEST_CHEAT: Cheat_DoAction, as a developers' code), or the port's; and a run ended
+    (Bond killed in Courier 2:4, Start to the stats) with each, its stats lines logged"""
+    shots = ",".join("%d:4000,%d:0" % (t, t + 25) for t in range(200, 1500, 50))
+    b = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_NO_RAMP": 1, "TWINE_ENDLESS_ROOM": "8:-1",
+         "TWINE_ENDLESS_NEXT": "3:-1,2:4", "TWINE_ENDLESS_TEST_EXIT": "300", "TWINE_ENDLESS_TEST_MEET": 1,
+         "TWINE_ENDLESS_TEST_DRAW": "INGALLS", "TWINE_TEST_PAD": shots, "TWINE_TRACE": "weapon,hits"}
+    s = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "2:4", "TWINE_ENDLESS_TEST_DIE": 150, "TWINE_TEST_PAD": "490:8,493:0",
+         "TWINE_ENDLESS_DUMP": 1}
+    runs = {}
+    for name, _, env, _ in CHEATS:
+        runs[name] = Run(name, 8, 40, dict(b, **env))
+        if "INVUL" not in name.upper() and "devinv" not in name:  # (Bond can't be killed with those)
+            runs[name + "_stats"] = Run(name + "_stats", 2, 45, dict(s, **env))
+    return runs
+
+
+def check_cheats(runs):
+    def damage(r):
+        return [int(x) for x in re.findall(r"damage: (\d+): health", r.log)]
+
+    def clips(r, level):
+        return [int(x) for x in re.findall(r"trace: L%d f\d+ weapon: slot \d+ .*?INGALLS TYPE 20.*?clip (\d+)" % level,
+                                           r.log)]
+    none = runs["v_none"]
+    for name, what, _, why in CHEATS:
+        r = runs[name]
+        got = re.findall(r"the run is unranked from here \((.*?)\)", r.log)
+        rooms = len(r.lines(r"room start: level"))
+        result("v", "%s: three rooms; %s" % (what, "unranked (%s)" % why if why else "ranked"),
+               rooms >= 3 and not r.crashed() and (got[:1] == [why] if why else not got),
+               "rooms %d, unranked %s" % (rooms, got[:1] or "no"))
+        st = runs.get(name + "_stats")
+        if st:
+            lines = re.findall(r'stats text "(.*?)" at \d+ \d+ \(unranked (\d)\)', st.log)
+            shown = [t for t, _ in lines if t.startswith("unranked:")]
+            result("v", "%s: the run's stats say %s" % (what, "why it is unranked" if why else "nothing of it"),
+                   bool(lines) and (shown == ["unranked: " + why] * len(shown) and bool(shown) if why else not shown),
+                   "stats lines %d, %s" % (len(lines), shown[:1] or "no unranked line"))
+    a, n = clips(runs["v_ammo"], 3), clips(none, 3)
+    a8, n8 = clips(runs["v_ammo"], 8), clips(none, 8)
+    result("v", "infinite ammo: the Ingalls at home (King's Ransom) and lent (Turncoat) keep their rounds",
+           len(set(n)) > 2 and len(set(n8)) > 2 and set(a) <= {30} and set(a8) <= {30} and bool(a) and bool(a8),
+           "clips with it: home %s, lent %s; without: home %d values, lent %d" % (sorted(set(a8)), sorted(set(a)),
+                                                                                 len(set(n8)), len(set(n))))
+    d0 = damage(none)
+    for name, what in (("v_invul", "invulnerable"), ("v_devinv", "invincibility (a code)")):
+        r = runs[name]
+        kept = len(r.lines(r"invincibility kept on from the room before"))
+        result("v", "%s: no damage in any of the three rooms (through the room changes)" % what,
+               bool(d0) and not damage(r) and (kept >= 2 if name == "v_devinv" else True),
+               "damage taken %d times (without: %d); kept on into %d rooms" % (len(damage(r)), len(d0), kept))
+    r = runs["v_allw"]
+    first = (r.lines(r"weapons as the room starts") or [""])[0]
+    lent = r.lines(r"lent from level")
+    result("v", "all weapons: King's Ransom's every gun Bond's, the lent ones lent on as without it",
+           all("%s(-)" % w not in first for w in ("INGALLS TYPE 20", "FRINESI AUTO", "AR36 SNIPER")) and
+           len(lent) >= len(none.lines(r"lent from level")) and not r.crashed(),
+           "first room: %s; lent %d (without: %d)" % (first.split("starts: ")[-1][:90], len(lent),
+                                                     len(none.lines(r"lent from level"))))
+    hits = re.findall(r"trace: L3 f\d+ hits: .*?hit by INGALLS TYPE 20 in part \d+ \(all\): damage (\d+) \(the bullet's (\d+)\)",
+                      runs["v_pguns"].log)
+    result("v", "power guns: four times the damage, the lent gun's too",
+           bool(hits) and all(int(d) == 4 * int(b) for d, b in hits), "lent hits (damage, bullet): %s" % hits[:3])
+    dg = damage(runs["v_pgoons"])
+    result("v", "power goons: the guards' shots twice as hard", bool(dg) and bool(d0) and min(dg) == 2 * min(d0),
+           "a guard's shot: %s with it, %s without" % (sorted(set(dg))[:3], sorted(set(d0))[:3]))
+
+    def guard_shots(r):
+        m = re.findall(r"guards' shots (\d+)", r.log)
+        return sum(int(x) for x in m)
+    result("v", "stealthy bond: the guards see him less, fire less", guard_shots(runs["v_stealth"]) < guard_shots(none),
+           "guards' shots (the AI's counts summed): %d with it, %d without" % (guard_shots(runs["v_stealth"]),
+                                                                              guard_shots(none)))
+
+
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrt", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrtuv", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -1958,6 +2137,10 @@ def main():
         groups["select"] = select_runs()
     if "t" in checks:
         groups["music"] = music_runs()
+    if "u" in checks:
+        groups["aim"] = aim_runs()
+    if "v" in checks:
+        groups["cheats"] = cheat_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.cost())  # (the long ones first)
     t0 = time.time()
@@ -2023,11 +2206,15 @@ def main():
         checked(groups["select"].values(), check_select, groups["select"])
     if "music" in groups:
         checked(groups["music"].values(), check_music, groups["music"])
+    if "aim" in groups:
+        checked(groups["aim"].values(), check_aim, groups["aim"])
+    if "cheats" in groups:
+        checked(groups["cheats"].values(), check_cheats, groups["cheats"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
              "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp",
              "p": "12 people", "q": "the bar's guards", "r": "weapon list",
-             "t": "music"}
+             "t": "music", "u": "auto-aim", "v": "cheats"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))
