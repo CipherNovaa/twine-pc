@@ -306,7 +306,8 @@ static int mouse_steps(void) { /* mouse speed in quarters, 1-12 */
     return n < 1 ? 1 : n > 12 ? 12 : n;
 }
 
-#define SETTINGS 8
+#define SETTINGS 9
+#define ROW 0xE /* (the lines' spacing: 0x10 as the CHEATS screen's for up to 8 lines; nine fit the panel at 0xE) */
 
 /* the page's line i, as its label and value, and stepped by d (1 on, -1 back) when d */
 static void setting(int i, int d, char *label, char *value) {
@@ -368,6 +369,14 @@ static void setting(int i, int d, char *label, char *value) {
         strcpy(label, "enemy ai");
         strcpy(value, on ? "improved" : "original");
         return;
+    case 7: /* the game's blue messages ("AMMO FULL", "WAVE N", ...) at the screen's top, or at the bottom where the game
+             * shows them, over the weapon strip (mods/endless.c) */
+        on = (getenv("TWINE_MESSAGES") && (getenv("TWINE_MESSAGES")[0] | 0x20) == 't') ^ (d != 0);
+        if (d)
+            port_setting_save("messages", on ? "top" : "bottom");
+        strcpy(label, "messages");
+        strcpy(value, on ? "top" : "bottom");
+        return;
     default: /* F9 opens the developers' debug menu in a mission (mods/savestate.c) */
         on = env_on("TWINE_DEBUG_MENU", 0) ^ (d != 0);
         if (d)
@@ -390,7 +399,7 @@ static void colour_items(int n, int at) {
 
 /* The page as the CHEATS screen lays its lines out (func_80046DC4): the text left in lower case (the flag
  * D_80073F05, which func_8005133C otherwise capitalizes with), which draws as the small capitals; each line a
- * label at x 0x94 and its value 0x140 further on, 0x10 apart from y 0x45; the cursor on the labels (items 2i).
+ * label at x 0x94 and its value 0x140 further on, ROW apart from y 0x45; the cursor on the labels (items 2i).
  * page = 0: the OPTIONS screen's own items again and PORT SETTINGS. `at` is the cursor's item. */
 /* AUTOLOAD on the OPTIONS screen, a fifth item under PORT SETTINGS: Cross, left or right steps it */
 static char *autoload_name(void) {
@@ -409,8 +418,8 @@ static void make_items(int page, int at) {
         *(u8 *)0x80073F05u = 1;
         for (i = 0; i < n; i++) {
             setting(i, 0, item_text[2 * i], item_text[2 * i + 1]);
-            func_8005133C(item_text[2 * i], 0x94, 0x45 + i * 0x10);
-            func_8005133C(item_text[2 * i + 1], 0x94 + 0x140, 0x45 + i * 0x10);
+            func_8005133C(item_text[2 * i], 0x94, 0x45 + i * ROW);
+            func_8005133C(item_text[2 * i + 1], 0x94 + 0x140, 0x45 + i * ROW);
         }
         *(u8 *)0x80073F05u = 0;
         n *= 2;
