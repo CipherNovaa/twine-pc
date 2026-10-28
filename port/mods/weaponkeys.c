@@ -601,8 +601,13 @@ void weaponkeys_hud(void) {
     if (!port_subframe && port_trace("strip")) { /* (each tick it's drawn: its name, and the gun on screen) */
         extern u8 *D_8009CD98;
         int s = D_800B0DD4;
-        port_log("trace: L%d f%d strip: \"%s\" drawn (level %d); in hand %d (%s), to %d, state %d, gun %s\n",
-                 g_Args->level, D_8009CDA8, strip_name, hud_lvl, s,
+        int boxed = D_800D7838 && D_800D4688 && D_800D77E8;
+        port_log("trace: L%d f%d strip: \"%s\" drawn (level %d) as %s; in hand %d (%s), to %d, state %d, gun %s\n",
+                 g_Args->level, D_8009CDA8, strip_name, hud_lvl,
+                 var == 'C' ? (boxed ? "C, the list in the ammo box's pieces" : "A, the fallback (no ammo box pieces)")
+                 : var == 'B' || var == '2' ? (boxed ? (var == 'B' ? "B, the ammo box's pieces with dots" : "A2, the ammo box's pieces")
+                                                     : "A, the fallback (no ammo box pieces)")
+                 : "A, the band", s,
                  s >= 0 && s < SLOTS ? (const char *)g_Weapons[s].pad0 : "-", D_800B0DDC, D_800F11F0,
                  !D_8009CD98 ? "none" : *(u32 *)(D_8009CD98 + 0x7C) & 0x80000000 ? "hidden" : "shown");
     }
