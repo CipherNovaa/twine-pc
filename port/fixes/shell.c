@@ -445,12 +445,13 @@ void port_exe_leave(void);
 void port_endless_logf(s32 frame, const char *fmt, ...);
 extern int port_blackjack;
 static char blackjack_text[] = "BLACKJACK";
+static int main_fresh; /* (tests: the main menu just made, for its shot) */
 
 s32 func_8003A7A8(void) {
     s32 r;
     port_endless_logf(-1, "shell: main menu");
     port_blackjack = 0;
-    in_main = 1;
+    in_main = main_fresh = 1;
     main_made = 0;
     r = func_8003A7A8_orig();
     in_main = 0;
@@ -614,6 +615,7 @@ void port_endless_best(char names[3][4], u32 scores[3]);
 void port_endless_keep(const char *name);
 void func_80028644_orig(void);
 #define MISSION_SCORE (*(s32 *)0x80160FE8u)
+static int blackjack_back; /* (back from the main menu's BLACKJACK: mission select skipped, to the main menu) */
 static int in_endless_stats, after_stats; /* (after_stats: frames of the front end to log after a run's stats) */
 
 s32 func_8005133C(char *text, s32 x, s32 y) {
@@ -701,6 +703,15 @@ void func_80028644(void) {
     char names[3][4], name[4] = "";
     u32 scores[3];
     int i, m;
+    /* The main menu's BLACKJACK left (EXIT at the table, fixes/level11.c, or the mission ended any other way): no
+     * "mission failed" or stats, nothing of the campaign changed, straight back to the main menu (the front end
+     * goes on to mission select after a mission: left at once, as its BACK does: func_8003C14C) */
+    if (port_blackjack) {
+        port_blackjack = 0;
+        blackjack_back = 1;
+        port_endless_logf(-1, "shell: back from blackjack: to the main menu");
+        return;
+    }
     if (!port_endless_stats || !a) {
         func_80028644_orig();
         return;
@@ -921,6 +932,12 @@ void func_8003C14C_orig(void);
 void func_8003C14C(void) {
     u8 *a = G_ARGS;
     s32 b, m, frame = 0;
+    if (blackjack_back) { /* (never shown: BACK at once) */
+        blackjack_back = 0;
+        STATE = 3;
+        port_endless_logf(-1, "shell: mission select skipped (back from blackjack): BACK to the main menu");
+        return;
+    }
     if (getenv("TWINE_TEST_ORIG_MS")) {
         func_8003C14C_orig();
         return;
@@ -1237,6 +1254,8 @@ static void shell_keys(void) {
     if (getenv("TWINE_TEST_SHELL_SHOTS")) { /* (tests: a shot of each menu once it has shown for 40 frames) */
         static int on_main, on_ms;
         extern int port_shot_now;
+        if (main_fresh) /* (the main menu made again: e.g. back from BLACKJACK, which left from it) */
+            on_main = main_fresh = 0;
         on_main = in_main ? on_main + 1 : 0;
         on_ms = in_mission_select ? on_ms + 1 : 0;
         if (on_main == 40 || on_ms == 40) {

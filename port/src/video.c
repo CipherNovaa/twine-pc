@@ -19,7 +19,8 @@
  * drawn by SDL's GPU renderer into a texture the way it draws the window);
  * TWINE_TEST_LOOK=<yaw>,<pitch> stands in for the mouse there (angle units each game frame), and
  * TWINE_TEST_PAD=<frame>:<hex>[,...] for the pad (from each frame on, the pad bits below are held) and
- * TWINE_TEST_STICK=<rx>,<ry>,<lx>,<ly> (hex) for its sticks. */
+ * TWINE_TEST_STICK=<rx>,<ry>,<lx>,<ly> (hex) for its sticks; TWINE_TEST_KEYS=<frame>:<key>[,...] for the blackjack
+ * table's keys (test_pad). */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -101,26 +102,74 @@ int port_text_take(void) {
     return c;
 }
 
-/* the blackjack table's extra keys (F1 lists them there) */
+/* The casino mission's blackjack table (fixes/level11.c says when Bond is at it, every frame of the mission:
+ * port_blackjack_table; the front end's BLACKJACK, port_blackjack, is that mission at its table). There the keys
+ * are the table's alone, the pad's buttons its prompts show (func_800730A4 the bet, func_80072288 the hand,
+ * func_80073380 insurance): Cross bets (DONE) and hits, Square stays, Circle doubles down, Triangle leaves (EXIT);
+ * R1 / L1 raise and lower the bet by the table's minimum (1000 at the high table) and are SPLIT / PASS in a hand
+ * and INSURANCE? Y / N; R2 / L2 change the bet by a tenth of it. Z / X answer insurance only while it asks. Esc and
+ * Enter are the table's too (below, in poll_input), Alt+Enter still the full screen. */
 extern int port_blackjack;
 static const struct {
     SDL_Scancode key;
     u16 bit;
 } bj_keys[] = {
-    {SDL_SCANCODE_W, P_R1}, {SDL_SCANCODE_S, P_L1}, {SDL_SCANCODE_D, P_R2}, {SDL_SCANCODE_A, P_L2},
-    {SDL_SCANCODE_C, P_CIRC}, {SDL_SCANCODE_R, P_SQUARE},
+    {SDL_SCANCODE_W, P_R1},     {SDL_SCANCODE_UP, P_R1},      {SDL_SCANCODE_S, P_L1},      {SDL_SCANCODE_DOWN, P_L1},
+    {SDL_SCANCODE_D, P_R2},     {SDL_SCANCODE_RIGHT, P_R2},   {SDL_SCANCODE_A, P_L2},      {SDL_SCANCODE_LEFT, P_L2},
+    {SDL_SCANCODE_SPACE, P_CROSS}, {SDL_SCANCODE_E, P_SQUARE}, {SDL_SCANCODE_Q, P_CIRC},
+    {SDL_SCANCODE_BACKSPACE, P_TRI},
 };
 static const char *const bj_help[] = {
     "BLACKJACK",
     "",
-    "Space, Enter ..... X (bet, hit)",
-    "C ................ Circle",
-    "R ................ Square",
-    "Esc, Backspace ... Triangle (exit)",
-    "@W / @S .......... R1 / L1 (bet +/- 1000)",
-    "@D / @A .......... R2 / L2 (bet +/- 100)",
+    "Space, Enter ..... bet / hit",
+    "@E ................ stay",
+    "@Q ................ double down",
+    "@Z / @X ............ insurance: yes / no",
+    "@W / @S, Up/Down .... bet +/- 1000; split / pass",
+    "@D / @A, Right/Left .. bet +/- 100",
+    "Esc, Backspace ... leave the table",
     "F5, F6 ........... save state, load state",
+    "",
+    "GAMEPAD",
+    "",
+    "Cross ............ bet / hit",
+    "Square ........... stay",
+    "Circle ........... double down",
+    "R1 / L1 .......... bet +/- 1000; split / pass;",
+    "                   insurance: yes / no",
+    "R2 / L2 .......... bet +/- 100",
+    "Triangle ......... leave the table",
 };
+
+static int table_state;
+static u32 table_at;
+
+/* fixes/level11.c, each frame of the casino mission: 1 while Bond is at the blackjack table (sitting down, seated
+ * or getting up), 2 while its INSURANCE? waits for an answer, else 0 */
+void port_blackjack_table(int state) {
+    table_state = state;
+    table_at = port_vblank_count();
+}
+
+/* the pad bits the table's keys press (keys: the keyboard's state, by scancode) */
+static u16 table_bits(const bool *keys, int state) {
+    u16 down = 0;
+    size_t i;
+    SDL_Scancode esc = SDL_GetScancodeFromKey(SDLK_ESCAPE, NULL);
+    for (i = 0; i < sizeof(bj_keys) / sizeof(bj_keys[0]); i++)
+        if (keys[bj_keys[i].key])
+            down |= bj_keys[i].bit;
+    if (keys[esc != SDL_SCANCODE_UNKNOWN ? esc : SDL_SCANCODE_ESCAPE])
+        down |= P_TRI;
+    if (keys[SDL_SCANCODE_RETURN] && !(SDL_GetModState() & SDL_KMOD_ALT))
+        down |= P_CROSS;
+    if (state == 2 && keys[SDL_SCANCODE_Z])
+        down |= P_R1; /* INSURANCE? Y */
+    if (state == 2 && keys[SDL_SCANCODE_X])
+        down |= P_L1; /* N */
+    return down;
+}
 
 /* the game's actions (g_Args->buttonMap); reload is also the button that uses things (doors, people) */
 enum { A_FIRE, A_PREV_WEAPON, A_NEXT_WEAPON, A_RELOAD, A_CROUCH, A_AIM, A_STRAFE_LEFT, A_STRAFE_RIGHT };
@@ -208,6 +257,10 @@ static int in_gameplay(void) {
 /* a menu inside a mission (the phone's pause menu, ...) */
 static int in_mission_menu(void) {
     return port_module && port_module->level && controls_now() == 0;
+}
+
+static int at_table(void) {
+    return port_vblank_count() - table_at < 10 && !in_mission_menu() && !in_gameplay() ? table_state : 0;
 }
 
 /* the display TWINE_DISPLAY names (its number from 1, or part of its name), else 0 */
@@ -690,7 +743,7 @@ static void poll_input(int tick) {
     u16 down = 0;
     u8 lx = 0x80, ly = 0x80, rx = 0x80, ry = 0x80;
     SDL_MouseButtonFlags mouse;
-    int capture;
+    int capture, table = at_table();
     size_t i;
     /* the mouse looks around in the levels, while the window has the focus (TWINE_MOUSE=0: never, for playing
      * with a gamepad only) */
@@ -710,11 +763,10 @@ static void poll_input(int tick) {
             !(keymap[i].key == SDL_SCANCODE_SPACE && in_gameplay()) &&
             !(keymap[i].key == SDL_SCANCODE_BACKSPACE && port_text_entry && (SDL_GetModState() & SDL_KMOD_SHIFT)))
             down |= keymap[i].bit;
-    /* at the blackjack table (the front end's BLACKJACK): the pad's buttons its prompts show */
-    if (port_blackjack && !in_gameplay())
-        for (i = 0; i < sizeof(bj_keys) / sizeof(bj_keys[0]); i++)
-            if (keys[bj_keys[i].key])
-                down |= bj_keys[i].bit;
+    /* at the blackjack table: its keys alone, the pad's buttons its prompts show (no arrows' d-pad, no use, weapon,
+     * crouch or strafe buttons, no mouse buttons, no keys' sticks) */
+    if (table)
+        down = table_bits(keys, table);
     /* Space chooses in the menus and punches (below) while Bond has the controls; with TWINE_JUMP=1 (and the jump
      * mod built in, PORT_MODS=... JUMP) it jumps instead, kept until the game's next tick takes it */
     if (jump_on < 0)
@@ -730,20 +782,19 @@ static void poll_input(int tick) {
      * the key the keyboard layout calls Escape (e.g. Caps Lock's with caps:swapescape, where the key marked Esc
      * is Caps Lock), where the other keys are where they are on the keyboard. */
     {
-        /* at the blackjack table (the front end's BLACKJACK) Esc is its EXIT and Enter its X, not the pause */
-        int table = port_blackjack && !in_gameplay() && !in_mission_menu();
+        /* (at the blackjack table Esc is its EXIT and Enter its X, not the pause) */
         if (keys[SDL_GetScancodeFromKey(SDLK_ESCAPE, NULL)])
             down |= (port_module && !strcmp(port_module->name, "shell")) || in_mission_menu() || table ? P_TRI : P_START;
         if (keys[SDL_SCANCODE_RETURN] && !(SDL_GetModState() & SDL_KMOD_ALT))
             down |= in_mission_menu() || table ? P_CROSS : P_START;
     }
     for (i = 0; i < sizeof(actionkeys) / sizeof(actionkeys[0]); i++)
-        if (keys[actionkeys[i].key])
+        if (keys[actionkeys[i].key] && !table)
             down |= action_bits(actionkeys[i].action);
     if (keys[SDL_SCANCODE_R] || (gamepad && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_WEST) &&
                                   !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"))))
         reload_tap = 1;
-    if (mouse_captured) {
+    if (mouse_captured && !table) {
         mouse = SDL_GetMouseState(NULL, NULL);
         if (mouse & SDL_BUTTON_LMASK)
             down |= action_bits(A_FIRE);
@@ -790,6 +841,8 @@ static void poll_input(int tick) {
         rx = 0x00;
     if (keys[SDL_SCANCODE_L])
         rx = 0xFF;
+    if (table) /* (the table's keys move nothing) */
+        lx = ly = rx = ry = 0x80;
     if (gamepad) {
         int modern;
         int l2 = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16000;
@@ -963,6 +1016,48 @@ static void test_pad(void) {
         else if (frames == at && name[0] >= '1' && name[0] <= '9' && !name[1])
             weapon_key = name[0] - '0';
         s = *end ? end + 1 : end;
+    }
+    /* <frame>:<key>[+<key>...][,...]: keys held for 3 frames, as the blackjack table reads them (table_bits; f1
+     * toggles the help instead): w s a d up down left right space enter e q z x esc backspace */
+    s = getenv("TWINE_TEST_KEYS");
+    if (s) {
+        static const struct {
+            const char *name;
+            SDL_Scancode key;
+        } names[] = {
+            {"w", SDL_SCANCODE_W},       {"s", SDL_SCANCODE_S},         {"a", SDL_SCANCODE_A},
+            {"d", SDL_SCANCODE_D},       {"up", SDL_SCANCODE_UP},       {"down", SDL_SCANCODE_DOWN},
+            {"left", SDL_SCANCODE_LEFT}, {"right", SDL_SCANCODE_RIGHT}, {"space", SDL_SCANCODE_SPACE},
+            {"enter", SDL_SCANCODE_RETURN}, {"e", SDL_SCANCODE_E},      {"q", SDL_SCANCODE_Q},
+            {"z", SDL_SCANCODE_Z},       {"x", SDL_SCANCODE_X},         {"esc", SDL_SCANCODE_ESCAPE},
+            {"backspace", SDL_SCANCODE_BACKSPACE},
+        };
+        static bool fake[SDL_SCANCODE_COUNT];
+        int any = 0;
+        memset(fake, 0, sizeof(fake));
+        while (*s) {
+            char *end;
+            u32 at = (u32)strtoul(s, &end, 10);
+            while (*end == ':' || *end == '+') {
+                char name[16];
+                int k = 0, j;
+                for (end++; *end && *end != ',' && *end != '+' && k < 15; end++)
+                    name[k++] = *end;
+                name[k] = 0;
+                if (frames == at && !strcmp(name, "f1"))
+                    help_shown = !help_shown;
+                for (j = 0; j < (int)(sizeof(names) / sizeof(names[0])); j++)
+                    if (frames >= at && frames < at + 3 && !strcmp(name, names[j].name)) {
+                        fake[names[j].key] = 1;
+                        any = 1;
+                        if (frames == at)
+                            port_log("test: key %s at frame %u (table %d)\n", name, frames, at_table());
+                    }
+            }
+            s = *end ? end + 1 : end;
+        }
+        if (any && at_table())
+            bits |= table_bits(fake, at_table());
     }
     port_pad_buttons[0] = (u16)~bits;
     s = getenv("TWINE_TEST_MELEE"); /* <frame>[,...]: the quick punch pressed at these frames */
@@ -1161,7 +1256,7 @@ static const char *const help_lines[] = {
 /* A help line as this keyboard's layout names its keys: "@W" is the key in W's place (keys are read by their
  * place), and the dots between the keys and what they do are fitted to the names. */
 static const char *const *help_list(int *n) {
-    if (port_blackjack) {
+    if (port_blackjack == 1 || at_table()) {
         *n = sizeof(bj_help) / sizeof(bj_help[0]);
         return bj_help;
     }
@@ -1593,7 +1688,7 @@ void port_frame_end(void) {
     } else if (screen && !port_smooth_shown)
         present();
     if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK") || getenv("TWINE_TEST_MELEE") || getenv("TWINE_TEST_GRENADE") ||
-        getenv("TWINE_TEST_WEAPON") || getenv("TWINE_TEST_JUMP") || getenv("TWINE_TEST_INPUT"))
+        getenv("TWINE_TEST_WEAPON") || getenv("TWINE_TEST_JUMP") || getenv("TWINE_TEST_INPUT") || getenv("TWINE_TEST_KEYS"))
         test_pad();
     port_smooth_shown = 0;
     RT_LEAVE();

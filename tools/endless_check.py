@@ -4,7 +4,7 @@
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-p]
   -j JOBS    runs at once (default 4; at most 12, paced at most 5). A turbo run takes a whole core while it runs: 8 suit
              the 16-core machine when it is otherwise quiet; a run waits to start while the load is over the core count
-  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrstuvwx (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrstuvwxz (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
@@ -43,6 +43,11 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
              x slots for lent weapons: the playtest's eight weapons carried into Night Watch (4:4) each drawn there (the
                weapon buttons stepping through the pool), its own model; Night Watch's tools all taken away; every
                mission's lent weapons in real slots, the rest in the pool, none left out (the table printed)
+             z the blackjack table (y left free): each key does its action (W/S, Up/Down bet +/-1000; D/A, Right/Left
+               +/-100; Space/Enter bet and hit; E stay; Q double down; Z/X insurance yes/no, nothing without the
+               prompt; Esc/Backspace leave), at the front end's BLACKJACK and the mission's own table; leaving the
+               main menu's BLACKJACK lands on the main menu (no mission failed, no mission select); at the mission's
+               own table Esc stands Bond up; F1 there shows the table's help
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -2258,10 +2263,168 @@ def check_nwslots(runs):
            "; ".join(rows) or "no rooms")
 
 
+# ---- z: the blackjack table: its keys, its F1 help, leaving it ----
+
+BJ_KEYS = "300:w,330:up,360:d,390:right,420:s,450:down,480:a,510:left,540:w,580:space,700:q,900:enter,1000:space," \
+          "1100:e,1200:z,1230:x,1300:space,1340:%s,1400:e"  # (the hand dealt at 1300 has the dealer's ace up)
+BJ_MENU_PAD = "600:40,604:0,640:40,644:0,680:40,684:0,760:4000,764:0"  # (BLACKJACK: three downs, no save; Cross)
+
+
+def blackjack_runs():
+    loop = "".join(",%d:space,%d:%s,%d:e" % (t, t + 40, "zx"[i % 2], t + 100) for i, t in enumerate(range(1600, 4600, 300)))
+    return {
+        # the main menu's BLACKJACK: two keys at the table, Esc, and where it lands
+        "bj_menu": Run("bj_menu", 0, 150, {"TWINE_TEST_NO_FILMS": 1, "TWINE_TEST_SHELL_SHOTS": 1, "TWINE_SMOOTH": 0,
+                                           "TWINE_TEST_PAD": BJ_MENU_PAD, "TWINE_TEST_KEYS": "1400:w,1440:d,1500:esc",
+                                           "TWINE_SHOT": "1450,1700"}),
+        # every key (insurance taken with Z), more hands for another ace, Backspace to leave
+        "bj_keys": Run("bj_keys", 11, 260, {"TWINE_BLACKJACK": 1, "TWINE_SMOOTH": 0,
+                                            "TWINE_TEST_KEYS": BJ_KEYS % "z" + loop + ",4900:backspace"}),
+        "bj_ins_no": Run("bj_ins_no", 11, 80, {"TWINE_BLACKJACK": 1, "TWINE_SMOOTH": 0, "TWINE_TEST_KEYS": BJ_KEYS % "x"}),
+        # the mission's own table (the front end's BLACKJACK forgotten once seated): a key, F1's help (hw: the
+        # window's picture), Esc stands Bond up in the casino, the mission going on
+        "bj_mission": Run("bj_mission", 11, 60, {"TWINE_BLACKJACK": 1, "TWINE_TEST_BJ_MISSION": 1, "TWINE_SMOOTH": 0,
+                                                 "TWINE_RENDERER": "hw", "TWINE_NO_HINT": 1,
+                                                 "TWINE_TEST_KEYS": "300:w,330:f1,400:f1,450:esc",
+                                                 "TWINE_SHOT": "360,1000"}),
+    }
+
+
+BJ_STATE = re.compile(r"blackjack: f(\d+) seated (\d+) dealt (\d+) insurance\? (\d+) bet (\d+) stake (\d+) insured (\d+) "
+                      r"purse (-?\d+) hand (\d+) cards (\d+) dealer (\d+) phase (\d+)")
+BJ_FIELDS = ("seated", "dealt", "asking", "bet", "stake", "insured", "purse", "hand", "cards", "dealer", "phase")
+
+
+def bj_presses(run):
+    """each test key: (key, frame, table state, the buttons the table read next, the state before, the first state after
+    it) in the order of the log (the table's frames are the mission's, the keys' the video's)"""
+    out, state, cur = [], None, None
+    for l in run.log.splitlines():
+        k = re.search(r"test: key (\w+) at frame (\d+) \(table (\d)\)", l)
+        m = BJ_STATE.search(l)
+        p = re.search(r"blackjack: f\d+ pressed (.*)", l)
+        if k:
+            cur = {"key": k.group(1), "frame": int(k.group(2)), "table": int(k.group(3)), "pressed": "",
+                   "before": state, "after": None}
+            out.append(cur)
+        elif p and cur and not cur["pressed"] and cur["after"] is None:
+            cur["pressed"] = p.group(1).strip()
+        elif m:
+            state = dict(zip(BJ_FIELDS, (int(v) for v in m.groups()[1:])))
+            if cur and cur["after"] is None and cur["pressed"]:
+                cur["after"] = state
+    for c in out:
+        if c["after"] is None:
+            c["after"] = c["before"]
+    return out
+
+
+BJ_EXPECT = {  # key: (the button, in the betting / in a hand / at INSURANCE?, what it does to the state)
+    "w": ("R1", lambda b, a: a["bet"] == b["bet"] + 1000, "bet +1000"),
+    "up": ("R1", lambda b, a: a["bet"] == b["bet"] + 1000, "bet +1000"),
+    "s": ("L1", lambda b, a: a["bet"] == b["bet"] - 1000, "bet -1000"),
+    "down": ("L1", lambda b, a: a["bet"] == b["bet"] - 1000, "bet -1000"),
+    "d": ("R2", lambda b, a: a["bet"] == b["bet"] + 100, "bet +100"),
+    "right": ("R2", lambda b, a: a["bet"] == b["bet"] + 100, "bet +100"),
+    "a": ("L2", lambda b, a: a["bet"] == b["bet"] - 100, "bet -100"),
+    "left": ("L2", lambda b, a: a["bet"] == b["bet"] - 100, "bet -100"),
+    "q": ("Circle", lambda b, a: a["stake"] == 2 * b["stake"] and a["cards"] == b["cards"] + 1, "double down"),
+    "e": ("Square", lambda b, a: a["phase"] >= 1 and b["phase"] == 0, "stay"),
+    "esc": ("Triangle", lambda b, a: a["seated"] == 0, "leave the table"),
+    "backspace": ("Triangle", lambda b, a: a["seated"] == 0, "leave the table"),
+}
+
+
+def bj_expect(p):
+    """what the key should have done where it was pressed: (button, ok, what)"""
+    b, a, k = p["before"], p["after"], p["key"]
+    if not b or not a:
+        return None, False, "no state"
+    if k in ("space", "enter"):
+        if not b["dealt"]:
+            return "Cross", a["stake"] == b["bet"] > 0, "bet (DONE)"
+        return "Cross", a["cards"] == b["cards"] + 1, "hit"
+    if k in ("z", "x"):
+        if p["table"] != 2:
+            return "", True, "nothing (no INSURANCE? up)"
+        if k == "z":
+            return "R1", a["insured"] == b["stake"] // 2 > 0 and not a["asking"], "insurance: yes"
+        return "L1", a["insured"] == 0 and not a["asking"], "insurance: no"
+    button, ok, what = BJ_EXPECT[k]
+    return button, ok(b, a), what
+
+
+def bj_check_keys(run, upto, label):
+    bad, done = [], []
+    for p in bj_presses(run):
+        if p["frame"] > upto or p["key"] == "f1":
+            continue
+        button, ok, what = bj_expect(p)
+        if p["pressed"] != button or not ok:
+            bad.append("%s@%d: %s, read %r, %s -> %s" % (p["key"], p["frame"], what, p["pressed"], p["before"], p["after"]))
+        else:
+            done.append("%s %s" % (p["key"], what))
+    result("z", "%s: each key does its action" % label, bool(done) and not bad,
+           "; ".join(bad) if bad else "%d keys: %s" % (len(done), ", ".join(done)))
+
+
+def check_blackjack(runs):
+    # the keys, as the front end's BLACKJACK plays (TWINE_LEVEL=11 TWINE_BLACKJACK=1)
+    k, n = runs["bj_keys"], runs["bj_ins_no"]
+    bj_check_keys(k, 1400, "table keys")
+    answers = {"z": 0, "x": 0}
+    for r in (k, n):
+        for p in bj_presses(r):
+            if p["key"] in "zx" and p["table"] == 2 and bj_expect(p)[1] and p["pressed"]:
+                answers[p["key"]] += 1
+    asked = sum(1 for r in (k, n) for p in bj_presses(r) if p["table"] == 2)
+    result("z", "insurance: Z yes (R1, half the stake taken), X no (L1)", None if not asked else
+           answers["z"] > 0 and answers["x"] > 0,
+           "no ace dealt up in these hands (the deal changed): unknown" if not asked else
+           "answered yes %d, no %d of %d prompts" % (answers["z"], answers["x"], asked))
+    left = [p for p in bj_presses(k) if p["key"] == "backspace"]
+    result("z", "Backspace leaves the table (front end's BLACKJACK: back to the front end)",
+           bool(left) and left[0]["pressed"] == "Triangle" and bool(k.lines(r"blackjack: left the table")),
+           "pressed %r, left %d" % (left[0]["pressed"] if left else None, len(k.lines(r"blackjack: left the table"))))
+    # leaving the main menu's BLACKJACK: straight to the main menu, no mission failed, no mission select
+    m = runs["bj_menu"]
+    bj_check_keys(m, 1500, "from the main menu")
+    after = m.log[m.log.find("blackjack: left the table"):] if "blackjack: left the table" in m.log else ""
+    landed = bool(re.search(r"shell: back from blackjack.*\n.*mission select skipped", after)) and \
+        "mission select opens" not in after and "shell: main menu" in after
+    shot = None
+    if "test: a shot of the main menu" in after:
+        g = re.search(r"wrote (shot_\d+\.ppm)", after[after.find("test: a shot of the main menu"):])
+        shot = read_ppm(os.path.join(m.dir, g.group(1))) if g else None
+    b = bright(shot, 0.6, 0.25, 0.95, 0.8) if shot else 0
+    result("z", "Esc from the main menu's BLACKJACK: the main menu, no mission failed or mission select",
+           landed and b > 0.04 and not m.crashed(),
+           "landed %s, main menu shot %s (items %.0f%% bright)" % (landed, "taken" if shot else "missing", b * 100))
+    # the mission's own table: the keys there too; Esc stands Bond up, the mission goes on
+    s = runs["bj_mission"]
+    forgot = s.log.find("BLACKJACK forgotten")
+    bj_check_keys(s, 1000, "the mission's own table")
+    ps = [p for p in bj_presses(s) if p["key"] == "esc"]
+    up = s.lines(r"blackjack: f\d+ seated 0")
+    result("z", "Esc at the mission's own table: Bond stands up in the casino, the mission goes on",
+           forgot >= 0 and bool(ps) and ps[0]["pressed"] == "Triangle" and bool(up) and
+           "left the table" not in s.log and "Exec shell" not in s.log and not s.crashed(),
+           "forgotten %s, pressed %r, stood %d, left %s, shell %s" % (forgot >= 0, ps[0]["pressed"] if ps else None,
+                                                                      len(up), "left the table" in s.log,
+                                                                      "Exec shell" in s.log))
+    path = os.path.join(s.dir, "screen_0360.ppm")
+    img = read_ppm(path) if os.path.exists(path) else None
+    # (the help's box: dark, with its lines of text in the middle of the picture)
+    dark = 1 - bright(img, 0.25, 0.3, 0.75, 0.7, 60) if img else 0
+    text = bright(img, 0.2, 0.25, 0.8, 0.75, 200) if img else 0
+    result("z", "F1 at the table: the table's help (hw)", img is not None and dark > 0.5 and text > 0.02,
+           "%s: dark %.0f%%, text %.0f%%" % (path if img else "no shot", dark * 100, text * 100))
+
+
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrstuvwx", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrstuvwxz", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -2361,6 +2524,8 @@ def main():
         groups["scope"] = scope_runs()
     if "x" in checks:
         groups["nwslots"] = nwslots_runs()
+    if "z" in checks:
+        groups["blackjack"] = blackjack_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.cost())  # (the long ones first)
     t0 = time.time()
@@ -2436,12 +2601,14 @@ def main():
         checked(groups["scope"].values(), check_scope, groups["scope"])
     if "nwslots" in groups:
         checked(groups["nwslots"].values(), check_nwslots, groups["nwslots"])
+    if "blackjack" in groups:
+        checked(groups["blackjack"].values(), check_blackjack, groups["blackjack"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
              "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp",
              "p": "12 people", "q": "the bar's guards", "r": "weapon list",
              "s": "Bond walks", "t": "music", "u": "auto-aim", "v": "cheats", "w": "scope reticle",
-             "x": "slots for lent"}
+             "x": "slots for lent", "z": "blackjack"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))
