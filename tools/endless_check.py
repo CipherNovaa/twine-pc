@@ -4,7 +4,7 @@
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-p]
   -j JOBS    runs at once (default 4; at most 12, paced at most 5). A turbo run takes a whole core while it runs: 8 suit
              the 16-core machine when it is otherwise quiet; a run waits to start while the load is over the core count
-  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrstuvw (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrstuvwx (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
@@ -40,6 +40,9 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
              w the AR36's scope after a grenade (a guard's in King's Ransom 8:-1, sw and hw with smooth motion; Bond's own
                quick grenade in 1:-1): the scope's crosshair over the scene, not a black box with red marks (the mod's
                grenade texture was put where the AR36 keeps the crosshair's)
+             x slots for lent weapons: the playtest's eight weapons carried into Night Watch (4:4) each drawn there (the
+               weapon buttons stepping through the pool), its own model; Night Watch's tools all taken away; every
+               mission's lent weapons in real slots, the rest in the pool, none left out (the table printed)
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -2161,10 +2164,100 @@ def check_cheats(runs):
                                                                               guard_shots(none)))
 
 
+# ---- x: Night Watch's slots: the weapons Bond carries in each drawn there; every mission's real slots for lent ones ----
+
+NW_CARRY = ("FRINESI AUTO", "BELGIQUE PS100", "SATCHEL CHARGE", "AR36 SNIPER", "IAC DEFENDER", "MEYER TMP",
+            "FRINESI SHOTGUN", "FLASH BANG")  # (the playtest's: carried into Night Watch 4:4, none could be drawn)
+# (the rooms that arm him with every mission's weapons, then one room of every mission in the pool, each again)
+X_ARM = ("8:-1", "10:4", "2:4", "6:0")
+X_SURVEY = ("4:4", "3:-1", "5:-1", "7:2", "9:0", "8:0", "10:-1", "2:-1", "6:9")
+
+
+def nwslots_runs():
+    base = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
+            "TWINE_ENDLESS_TEST_NO_RAMP": 1, "TWINE_ENDLESS_AMMO_LOG": 1, "TWINE_TRACE": "weapon,change"}
+    # (the next-weapon button, every 30 frames, all the way: in Night Watch it steps through all he carries)
+    nxt = ",".join("%d:8000,%d:0" % (t, t + 3) for t in range(800, 3000, 30))
+    return {"x_nw": Run("x_nw", 8, 100, dict(base, TWINE_ENDLESS_ROOM=X_ARM[0], TWINE_ENDLESS_NEXT=",".join(X_ARM[1:]) + ",4:4",
+                                             TWINE_ENDLESS_TEST_EXIT="150,150,150,150,5000", TWINE_TEST_PAD=nxt)),
+            "x_survey": Run("x_survey", 8, 130, dict(base, TWINE_ENDLESS_ROOM=X_ARM[0],
+                                                    TWINE_ENDLESS_NEXT=",".join(X_ARM[1:] + X_SURVEY),
+                                                    TWINE_ENDLESS_TEST_EXIT=150))}
+
+
+def lend_table(log):
+    """per room start: (level, lent into real slots, waiting in the pool, can't be lent)"""
+    out, chunk = [], ""
+    for line in log.splitlines():
+        if "room start: level " in line:
+            lv = int(re.search(r"room start: level (\d+)", line).group(1))
+            out.append((lv, re.findall(r"weapons: (.+?) lent from level \d+ into slot (\d+)", chunk),
+                        re.findall(r"weapons: (.+?) waits in the pool", chunk), re.findall(r"weapons: (.+?) can't be lent here", chunk)))
+            chunk = ""
+        else:
+            chunk += line + "\n"
+    return out
+
+
+def check_nwslots(runs):
+    import weapon_trace
+    r = runs["x_nw"]
+    t = [x for x in lend_table(r.log) if x[0] == 4]
+    slots = sorted(int(s) for _, s in t[0][1]) if t else []
+    result("x", "Night Watch: its tools' slots 4 and 8 take lent weapons (the rest wait in the pool, none left out)",
+           bool(t) and slots == [4, 8] and not t[0][3],
+           "lent into slots %s; %d in the pool; can't be lent: %s" % (slots, len(t[0][2]) if t else 0,
+                                                                     ", ".join(t[0][3]) if t else "-"))
+    p = room_part(r.log, 4)
+    taken = re.findall(r"inventory: (.+?) taken away", r.log.split("room start: level 4 ", 1)[-1].split("room start:", 1)[0])
+    gadgets = ("TRANQUILIZER GUN", "TELEPHONE BUG", "CREDIT CARD LOCK", "MICRO CAMERA", "PALMTOP")
+    shown = re.search(r"weapons as the room starts: (.*)", p)
+    owned_tools = [g for g in gadgets if shown and re.search(r"\d+:%s[^;(]* \d+;" % g[:16], shown.group(1))]
+    result("x", "Night Watch: its tools all taken away in a run (slots 0-8, not 0-5)", not owned_tools and
+           all(any(t.startswith(g) for t in taken) for g in ("CREDIT CARD LOCK", "MICRO CAMERA")),
+           "taken away: %s; still his: %s" % (", ".join(sorted(set(taken))) or "none", ", ".join(owned_tools) or "none"))
+    # (each weapon carried in, in hand in Night Watch: idle there, its own model, the one its lending named)
+    path = os.path.join(r.dir, "port.log")
+    model = {}
+    for m in re.finditer(r"trace: L4 f-?\d+ weapon: (.+?) into lent slot \d+, its model (\S+)", r.log):
+        model.setdefault(m.group(1), set()).add(m.group(2))
+    idle = {}
+    for x in weapon_trace.frames(path, "", 4):
+        if x["state"] == 1 and x["loaded"] == x["model"]:
+            idle.setdefault(x["name"], set()).add(x["file"])
+    bad, got = [], []
+    for w in NW_CARRY:
+        files = idle.get(w[:16], set()) | idle.get(w, set())
+        want = model.get(w, set())
+        if not files:
+            bad.append("%s never in hand" % w)
+        elif len(files) != 1 or files != want:
+            bad.append("%s shows %s (its own: %s)" % (w, "/".join(sorted(files)), "/".join(sorted(want)) or "-"))
+        else:
+            got.append("%s %s" % (w, next(iter(files))))
+    stepped = re.findall(r"weapons: the pool's (.+?) into slot (\d+)", p)
+    result("x", "Night Watch: every weapon carried in drawn (the weapon buttons through the pool), its own model",
+           not bad and not r.crashed(), "; ".join(bad) or "%d in hand, each its own model (%d pool swaps into slots %s): %s" %
+           (len(got), len(stepped), "/".join(sorted({s for _, s in stepped})), ", ".join(got)))
+    s = runs["x_survey"]
+    tab = lend_table(s.log)[len(X_ARM):]
+    seen = {}
+    for lv, lent, wait, cant in tab:
+        seen.setdefault(lv, (len(lent), len(wait), len(cant), sorted(int(x) for _, x in lent)))
+    lv_want = sorted({int(x.split(":")[0]) for x in X_SURVEY})
+    rows = ["L%d %d lent (slots %s), %d in the pool%s" % (lv, a, ",".join(map(str, sl)) or "-", b,
+                                                           ", %d can't" % c if c else "") for lv, (a, b, c, sl) in sorted(seen.items())]
+    for row in rows:
+        print("x survey: " + row)
+    result("x", "every mission: lent weapons get real slots, the rest the pool (none left out)",
+           sorted(seen) == lv_want and all(a >= 1 and c == 0 for a, b, c, _ in seen.values()) and not s.crashed(),
+           "; ".join(rows) or "no rooms")
+
+
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrstuvw", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrstuvwx", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -2262,6 +2355,8 @@ def main():
         groups["cheats"] = cheat_runs()
     if "w" in checks:
         groups["scope"] = scope_runs()
+    if "x" in checks:
+        groups["nwslots"] = nwslots_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.cost())  # (the long ones first)
     t0 = time.time()
@@ -2335,11 +2430,14 @@ def main():
         checked(groups["cheats"].values(), check_cheats, groups["cheats"])
     if "scope" in groups:
         checked(groups["scope"].values(), check_scope, groups["scope"])
+    if "nwslots" in groups:
+        checked(groups["nwslots"].values(), check_nwslots, groups["nwslots"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
              "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp",
              "p": "12 people", "q": "the bar's guards", "r": "weapon list",
-             "s": "Bond walks", "t": "music", "u": "auto-aim", "v": "cheats", "w": "scope reticle"}
+             "s": "Bond walks", "t": "music", "u": "auto-aim", "v": "cheats", "w": "scope reticle",
+             "x": "slots for lent"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))

@@ -88,8 +88,8 @@ const char *endless_carried_before(void) __attribute__((weak));
 void endless_carried_set_before(const char *name) __attribute__((weak));
 int endless_room_drawing(void) __attribute__((weak));
 
-/* each mission's weapon slots (g_Weapons' count: its reset function's) */
-static const u8 slot_count[12] = {6, 6, 12, 9, 6, 11, 12, 13, 11, 12, 10, 6};
+/* each mission's weapon slots (g_Weapons' count: the one its own weapon buttons wrap at, endless.c's weapon_slots) */
+static const u8 slot_count[12] = {6, 6, 12, 9, 9, 11, 12, 13, 11, 12, 10, 4};
 #define SLOTS (g_Args->level < 12 ? slot_count[g_Args->level] : 6)
 
 /* THE GROUPS: every weapon and thing Bond can hold in the eleven missions (their slots' names, as the weapons

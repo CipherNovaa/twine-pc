@@ -213,8 +213,11 @@ static s32 hp_seen[64]; /* (headless tests: each person's health as the frame be
 static const u8 sound_count[12] = {0x69, 0x69, 0x7C, 0x77, 0x69, 0x62, 0x76, 0x79, 0x73, 0x71, 0x7D, 0x69};
 #define LENT_SOUND (sound_count[g_Args->level < 12 ? g_Args->level : 0]) /* (the first lent weapon's sound id) */
 
-static int weapon_slots(void) { /* g_Weapons' slots, the mission's own set (the reset function's count) */
-    static const s8 n[12] = {0, 6, 12, 9, 6, 11, 12, 13, 11, 12, 10, 6};
+static int weapon_slots(void) { /* g_Weapons' slots, the mission's own set: the count its weapon buttons wrap at (each
+                                 * level's psyq_libs.s, the stepping loop's `slti v0,v1,N`: Night Watch's 9, its
+                                 * tools in 6-8 included; it was 6 here, so a run never saw them: no lent weapon got
+                                 * a slot there, the credit card lock and the camera stayed his) */
+    static const s8 n[12] = {0, 6, 12, 9, 9, 11, 12, 13, 11, 12, 10, 4};
     return g_Args && g_Args->level >= 1 && g_Args->level <= 11 ? n[g_Args->level] : 6;
 }
 #define SLOTS weapon_slots()
@@ -632,7 +635,10 @@ static void weapons_capture(void) {
  * fires once, or never, or as a grapple), found by firing an automatic lent into each, then a single-shot gun (the
  * IAC Defender): City of Walkways' 7, its flare gun's, plays the flare's reload sounds 7 and 10 frames into every
  * shot (playtest 8: "the IAC plays its reload sound after every shot"), so not 7 there */
-static const u16 clean_slots[12] = {0, 0, 1 << 6 | 1 << 11, 1 << 8, 0, 1 << 9, 1 << 6 | 1 << 10 | 1 << 11,
+/* Night Watch (4): its tools' slots 4-8 tried the same way (a Frinesi auto and the IAC Defender lent into each,
+ * 2026-10-28): 4 (the tranquilizer's) and 8 (the palmtop's, its watch slot) fire as at home, sounds and all; 5, 6 and
+ * 7 (the bug's, the card lock's, the camera's) never fire at all */
+static const u16 clean_slots[12] = {0, 0, 1 << 6 | 1 << 11, 1 << 8, 1 << 4 | 1 << 8, 1 << 9, 1 << 6 | 1 << 10 | 1 << 11,
                                     1 << 11 | 1 << 12, 1 << 10, 1 << 10 | 1 << 11, 1 << 9, 0};
 static struct {
     u8 level, loop;
@@ -1795,6 +1801,9 @@ static void lend_into(int i, int pi, int k) {
         ((Weapon *)w)->ammo = ((Weapon *)w)->clip = 1, ((Weapon *)w)->reserve = 0;
     }
     slot_pool[i] = (s8)pi, slot_idx[i] = (s8)k;
+    if (port_trace("weapon")) /* (its own model: tools/endless_check.py's x checks each one drawn shows it) */
+        port_log("trace: L%d f%d weapon: %s into lent slot %d, its model %s\n", g_Args->level, D_8009CDA8,
+                 pool[pi].name, i, r->path);
 }
 
 /* a lent slot's weapon as Bond's carry has it (owned, its ammo) */
@@ -1829,6 +1838,7 @@ static int pool_shown(int pi) {
     return 0;
 }
 
+static int pool_slot_for(int pi);
 static void lend_weapons(void) {
     EndlessCarry *c = &port_endless_carry;
     int j, i, k = 0;
@@ -1920,7 +1930,10 @@ static void lend_weapons(void) {
                 !(lent_mask & 1 << i) && ((u8 *)&g_Weapons[i])[0x5B]) /* (and a model type of its own) */
                 break;
         if (i == SLOTS || i == 16) {
-            ELOG("weapons: %s waits in the pool (no slot left: the weapon buttons step to it)", pool[j].name);
+            if (pool_slot_for(j) < 0) /* (no shared slot at all: nothing could ever bring it out; not offered) */
+                ELOG("weapons: %s can't be lent here (no slot of this mission's works for a lent weapon)", pool[j].name);
+            else
+                ELOG("weapons: %s waits in the pool (no slot left: the weapon buttons step to it)", pool[j].name);
             continue;
         }
         lend_into(i, j, k++);
@@ -2030,7 +2043,8 @@ static int car_n;
 static int car_owned_pool(int pi) { /* (a pool weapon of his, waiting out of a slot) */
     EndlessCarry *c = &port_endless_carry;
     int j;
-    if (pool_shown(pi))
+    if (pool_shown(pi) || pool_slot_for(pi) < 0) /* (and only while a shared slot can take it: an entry the weapon
+                                                   * buttons stop on and can't bring out would leave him stuck) */
         return 0;
     if (pi == det_pi)
         return charges_out > 0;
@@ -5204,11 +5218,15 @@ void endless_frame(void) {
         open = 1, room_frames = SEC * 60, D_800D2F90 = 2, D_8009CFFC = 1;
         *(s16 **)(D_8009E9C4 + 8) = D_8009E9C4 + 0xC + atoi(getenv("TWINE_ENDLESS_TEST_DOOR")) * 8;
     }
-    if (getenv("TWINE_ENDLESS_TEST_EXIT") && /* (N, or N,M: the first room at N, the rest at M) */
-        room_frames == (port_endless_wave() > 1 && strchr(getenv("TWINE_ENDLESS_TEST_EXIT"), ',')
-                            ? atoi(strchr(getenv("TWINE_ENDLESS_TEST_EXIT"), ',') + 1)
-                            : atoi(getenv("TWINE_ENDLESS_TEST_EXIT"))))
-        open = 1, D_800D2F90 = 2, room_frames = SEC * 60; /* (headless tests: as if Bond went through a door) */
+    if (getenv("TWINE_ENDLESS_TEST_EXIT")) { /* (N, or N,M,...: the first room at N, the second at M, ..., the
+                                              * rooms after the list's end at its last) */
+        const char *t = getenv("TWINE_ENDLESS_TEST_EXIT");
+        int w = port_endless_wave();
+        while (--w > 0 && strchr(t, ','))
+            t = strchr(t, ',') + 1;
+        if (room_frames == atoi(t))
+            open = 1, D_800D2F90 = 2, room_frames = SEC * 60; /* (headless tests: as if Bond went through a door) */
+    }
     if (getenv("TWINE_ENDLESS_TEST_SLOTS") && (room_frames == SEC * 2 || room_frames % (SEC * 10) == 0)) {
         /* (research: the people's six slots: each one's INI record (its texture chunk, its object type), taken or
          * not, its owner) */
