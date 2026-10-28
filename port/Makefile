@@ -24,8 +24,9 @@ CFLAGS := -m32 -std=gnu89 -fpermissive -O0 -g -fno-omit-frame-pointer -fwrapv -f
           -fno-stack-protector -fcommon -w -DNATIVE_PORT -D_LANGUAGE_C \
           -I$(ROOT)/include -I$(ROOT)/src
 RT_CFLAGS := -m32 -std=gnu11 -O2 -g -fno-pie -fno-stack-protector -Wall -Wno-unused-function -DNATIVE_PORT \
-             -I$(ROOT)/include -I$(ROOT)/port/src
-LDFLAGS := -m32 -no-pie
+             -I$(ROOT)/include -I$(ROOT)/port/src -include $(ROOT)/port/src/glibc_compat.h
+# -static-libgcc: one library fewer for the systems it is copied to (make dist-linux)
+LDFLAGS := -m32 -no-pie -static-libgcc
 
 RT_SRC := $(wildcard $(ROOT)/port/src/*.c)
 RT_OBJ := $(patsubst $(ROOT)/port/src/%.c,$(RT_OUT)/%.o,$(RT_SRC))
@@ -39,7 +40,7 @@ all: $(PB)/twine
 # cards, the hardware renderer, the films, the recompiled code's stack, the smooth motion's timing and the
 # runtime's place (main.c), the console's boot animation, save states themselves.
 NOSAVE := video audio memcard gpu_hw hdmovie recomp_rt interp main libpad mdec intro intro_card bios_boot \
-          bios_cdrom savestate
+          bios_cdrom savestate setup
 
 $(RT_OUT)/%.o: $(ROOT)/port/src/%.c $(wildcard $(ROOT)/port/src/*.h) $(wildcard $(ROOT)/include/*.h) Makefile
 	@mkdir -p $(dir $@)
@@ -171,8 +172,13 @@ dist: $(PB)/twine
 	-cp -l $(HD_MOVIES)/*.mpg $(DIST)/hdmovies/ 2>/dev/null || cp $(HD_MOVIES)/*.mpg $(DIST)/hdmovies/
 	@echo "$(DIST): $$(ls $(DIST)/hdmovies | wc -l) HD clips, $$(du -sh $(DIST) | cut -f1)"
 
+# The Linux download (build/dist/twine-linux and twine-linux-x86.tar.gz): this build, its SDL3 and a 32-bit runtime for
+# systems without one, built in containers, with a launcher; no game data. See tools/dist/dist_linux.sh.
+dist-linux: $(PB)/twine
+	tools/dist/dist_linux.sh $(abspath $(PB)/twine) $(abspath $(ROOT)/build/dist)
+
 clean:
 	rm -rf $(PB)
 
-.PHONY: all dist clean mdectest hwtest FORCE
+.PHONY: all dist dist-linux clean mdectest hwtest FORCE
 .PRECIOUS: $(PB)/%.c

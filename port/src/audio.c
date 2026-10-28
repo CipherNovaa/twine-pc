@@ -58,6 +58,8 @@ static void SDLCALL feed(void *userdata, SDL_AudioStream *s, int additional, int
     }
 }
 
+void port_notice(const char *key, const char *fmt, ...); /* setup.c */
+
 void port_audio_init(void) {
     SDL_AudioSpec spec;
     if (getenv("TWINE_HEADLESS")) {
@@ -76,6 +78,8 @@ void port_audio_init(void) {
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO) || !spu_set_clock(SPU_CLOCK_DEVICE) ||
         !(stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, feed, NULL))) {
         port_log("audio: no output (%s); the SPU runs on host time\n", SDL_GetError());
+        port_notice("sound", "No sound device could be opened (%s), so the game plays without sound.",
+                    SDL_GetError());
         spu_set_clock(SPU_CLOCK_HOST);
     } else if (!SDL_ResumeAudioStreamDevice(stream)) {
         port_log("audio: cannot start the device (%s); the SPU runs on host time\n", SDL_GetError());
