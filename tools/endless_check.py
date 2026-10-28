@@ -573,6 +573,9 @@ def lend_runs():
     return {"lend": Run("lend", 8, 50, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:-1", "TWINE_ENDLESS_SEED": 5,
                                         "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
                                         "TWINE_ENDLESS_TEST_DRAW": "INGALLS", "TWINE_ENDLESS_TEST_EXIT": 500,
+                                        # (the next room named: Courier's 2:6, the one seed 5 drew from the pool
+                                        # before it grew to 61 rooms; drawn now it would be Meltdown's)
+                                        "TWINE_ENDLESS_NEXT": "2:6",
                                         "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_TEST_PAD": pad}),
             "survey": Run("survey", 2, 60, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "2:4", "TWINE_ENDLESS_SURVEY": 1})}
 

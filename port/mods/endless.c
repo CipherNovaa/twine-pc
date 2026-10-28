@@ -2568,14 +2568,28 @@ static int unkillable(u8 *o) { /* (a person now: scripts change these as they go
            (*(s32 *)(o + 0x4C) & 0x400);
 }
 
-/* M, where a mission has her about (Flashpoint's control room, Fallen Angel's): her AI script's index (the AIB
- * tables, guard_scripts below); -1 none. Left out of a run: the story's, and her harm fails the mission */
-static const s8 m_script[12] = {-1, -1, -1, -1, -1, -1, 3, -1, -1, 4, -1, -1};
-#define M_SCRIPT(w4) (g_Args->level >= 1 && g_Args->level <= 11 && m_script[g_Args->level] >= 0 && \
-                      (int)((w4) >> 20 & 7) == m_script[g_Args->level])
+/* The AI scripts whose people a run leaves out (bits by the script's index: the AIB tables, guard_scripts below):
+ * M (Flashpoint's control room, Fallen Angel's: the story's, and her harm fails the mission) and BONDNIS, Bond's
+ * stand-in for the missions' cutscenes (unhittable, hit mask 7FFF, health 1: Fallen Angel's 9:1 has one by its
+ * entry; none of the cutscenes play in a run) */
+static const u8 out_scripts[12] = {0,
+                                   1 << 4,            /* L01 BONDNIS */
+                                   1 << 7,            /* L02 BONDNIS */
+                                   0,
+                                   1 << 6,            /* L04 BONDNIS */
+                                   0,
+                                   1 << 3 | 1 << 4,   /* L06 M, BONDNIS */
+                                   1 << 4,            /* L07 BONDNIS */
+                                   1 << 7,            /* L08 BONDNIS */
+                                   1 << 4 | 1 << 5,   /* L09 M, BONDNIS */
+                                   1 << 4,            /* L10 BONDNIS */
+                                   0};
+#define OUT_SCRIPT(s) (g_Args->level >= 1 && g_Args->level <= 11 && (out_scripts[g_Args->level] >> ((s) & 7) & 1))
+#define M_SCRIPT(w4) OUT_SCRIPT((w4) >> 20)
 
 static int story_person(u32 t, s32 *rec) { /* (a placed person who would break the run: an unkillable one who
-                                            * fights, M; unkillable civilians, the bank's receptionist, stay) */
+                                            * fights, M, Bond's stand-in; unkillable civilians, the bank's
+                                            * receptionist, stay) */
     return (unkillable_type(t) && TYPE_DEF(t)[0x2C] != 0) || (rec && t && TYPE_DEF(t)[1] == 6 && M_SCRIPT((u32)rec[4]));
 }
 
@@ -2596,9 +2610,8 @@ static void no_story_people(s32 *counts) {
         u8 *o = OBJ(i);
         if (o != g_Player && o[4] && o[5] == 6 && unkillable(o) && TYPE_DEF(o[6])[0x2C] && !is_copy(o)) {
             take_out(o, "a story person, as the room starts");
-        } else if (o != g_Player && o[4] && o[5] == 6 && m_script[g_Args->level] >= 0 && o[0xA7] == m_script[g_Args->level] &&
-                   !is_copy(o)) {
-            take_out(o, "M, as the room starts");
+        } else if (o != g_Player && o[4] && o[5] == 6 && OUT_SCRIPT(o[0xA7]) && !is_copy(o)) {
+            take_out(o, "M or Bond's cutscene stand-in, as the room starts");
         }
     }
 }
@@ -2933,7 +2946,14 @@ static int lately(s32 x, s32 z) { /* (by where one of the last few came, or by w
     return 0;
 }
 
-#define LEVEL_DY 1000 /* (a place on Bond's own floor: another floor's guards would stay up there and shoot down) */
+/* (a place on Bond's own floor: another floor's guards would stay up there and shoot down. Turncoat's train cars
+ * (sections 1-4): the car's own floor only, not the strip of platform outside its middle door, 470 up, where the
+ * game's own AI (-o) walked a guard sent there off the floor mesh, along the platform) */
+static int level_dy(void) {
+    return g_Args->level == 3 && D_800D2F8C >= 1 && D_800D2F8C <= 4 ? 300 : 1000;
+}
+#define LEVEL_DY 1000
+#define PLACE_DY level_dy() /* (where a guard is sent; his ways about, the hunters' paths, keep LEVEL_DY) */
 
 static int place(int *door) {
     s32 bx = g_Args->playerX, by = g_Args->playerY, bz = g_Args->playerZ, at = dist2(bx, bz, entry[2], entry[4]);
@@ -2949,7 +2969,7 @@ static int place(int *door) {
             s32 e;
             if (!reach[i] || shut[i] || (e = dist2(doors[k][0], doors[k][2], mid[i][0], mid[i][2])) > 2200 ||
                 e < 800 || mid[i][1] - doors[k][1] > 1200 || doors[k][1] - mid[i][1] > 1200 ||
-                mid[i][1] - by > LEVEL_DY || by - mid[i][1] > LEVEL_DY)
+                mid[i][1] - by > PLACE_DY || by - mid[i][1] > PLACE_DY)
                 continue; /* (a little inside the room, clear of the doorway) */
             if (e < best && clear(i))
                 best = e, b = i;
@@ -2962,7 +2982,7 @@ static int place(int *door) {
     *door = 0;
     for (i = 0; i < faces; i++) {
         s32 dx, dz, far, on, seen, h;
-        if (!reach[i] || shut[i] || mid[i][1] - by > LEVEL_DY || by - mid[i][1] > LEVEL_DY)
+        if (!reach[i] || shut[i] || mid[i][1] - by > PLACE_DY || by - mid[i][1] > PLACE_DY)
             continue;
         dx = mid[i][0] - bx, dz = mid[i][2] - bz, far = dist2(bx, bz, mid[i][0], mid[i][2]);
         on = dist2(entry[2], entry[4], mid[i][0], mid[i][2]);
@@ -2987,8 +3007,8 @@ static int place(int *door) {
             continue; /* (behind him or to the side only) */
         for (i = 0; i < faces; i++)
             if (reach[i] && !shut[i] && dist2(doors[k][0], doors[k][2], mid[i][0], mid[i][2]) < 2200 &&
-                dist2(doors[k][0], doors[k][2], mid[i][0], mid[i][2]) > 800 && mid[i][1] - by < LEVEL_DY &&
-                by - mid[i][1] < LEVEL_DY && !lately(mid[i][0], mid[i][2]) && clear(i)) {
+                dist2(doors[k][0], doors[k][2], mid[i][0], mid[i][2]) > 800 && mid[i][1] - by < PLACE_DY &&
+                by - mid[i][1] < PLACE_DY && !lately(mid[i][0], mid[i][2]) && clear(i)) {
                 pick[n++] = i;
                 break;
             }
@@ -3002,7 +3022,7 @@ static int place(int *door) {
         *door = 0;
         for (i = 0; i < faces; i++) {
             s32 dx = mid[i][0] - bx, dz = mid[i][2] - bz, d = dist2(bx, bz, mid[i][0], mid[i][2]);
-            if (!reach[i] || shut[i] || d <= best || d > 11000 || mid[i][1] - by > LEVEL_DY || by - mid[i][1] > LEVEL_DY ||
+            if (!reach[i] || shut[i] || d <= best || d > 11000 || mid[i][1] - by > PLACE_DY || by - mid[i][1] > PLACE_DY ||
                 (dx / 16 * fx + dz / 16 * fz) / (d / 16 + 1) > 4096 / 4 || lately(mid[i][0], mid[i][2]) || !clear(i))
                 continue;
             best = d, b = i;
@@ -3011,8 +3031,8 @@ static int place(int *door) {
             for (i = 0; i < faces; i++) {
                 s32 d = dist2(bx, bz, mid[i][0], mid[i][2]);
                 if (reach[i] && !shut[i] && d > 2000 && d < 11000 && d > best - 2500 && !stuck_near(mid[i][0], mid[i][2]) &&
-                    mid[i][1] - by <= LEVEL_DY &&
-                    by - mid[i][1] <= LEVEL_DY)
+                    mid[i][1] - by <= PLACE_DY &&
+                    by - mid[i][1] <= PLACE_DY)
                     best = d + 2500, b = i;
             }
         }
@@ -3021,7 +3041,7 @@ static int place(int *door) {
             for (i = 0; i < faces; i++)
                 if (reach[i] && !shut[i]) {
                     r++;
-                    if (mid[i][1] - by <= LEVEL_DY && by - mid[i][1] <= LEVEL_DY) {
+                    if (mid[i][1] - by <= PLACE_DY && by - mid[i][1] <= PLACE_DY) {
                         lv++;
                         cl += clear(i);
                         la += !lately(mid[i][0], mid[i][2]);
@@ -3178,18 +3198,41 @@ static void recall(void) {
         if (getenv("TWINE_ENDLESS_TEST_MEET") && room_frames - hunters[h].born == SEC * 3) {
             s16 at[5]; /* (headless tests: Bond put 1500 from the guard sent, facing him: does he fire?) */
             s32 a, ba = 0, best = -0x7FFFFFFF, toward = *(u16 *)(*(u8 **)(o + 0x90) + 0x62) & 0xFFF; /* (in front of him) */
+            s32 was[3];
+            was[0] = g_Args->playerX, was[1] = g_Args->playerY, was[2] = g_Args->playerZ;
+            g_Args->playerX = POS(o)[0], g_Args->playerY = POS(o)[1], g_Args->playerZ = POS(o)[2];
+            flood(); /* (the floor the guard can walk to: reach[], from him for this; from Bond again below) */
+            g_Args->playerX = was[0], g_Args->playerY = was[1], g_Args->playerZ = was[2];
             for (a = 0; a < 4096; a += 64) { /* (nearest that way with floor at his height) */
                 s32 x = POS(o)[0] + (isin(a) * 1500 >> 12), z = POS(o)[2] + (isin(a + 0x400) * 1500 >> 12);
                 s32 fh = floor_at(x, POS(o)[1] - 500, z), off = (a - toward) & 0xFFF;
                 off = off > 0x800 ? 0x1000 - off : off;
-                if (fh != -0x7FFF && fh - POS(o)[1] < 200 && POS(o)[1] - fh < 200 && -off > best)
+                int k, shut_between = 1, f = -1;
+                s32 fd = 600;
+                for (k = 0; k < faces; k++) /* (the floor there: one he can walk to without a doorway, not across a
+                                             * door that may be shut between them: the train cars' middle doors) */
+                    if (dist2(x, z, mid[k][0], mid[k][2]) < fd && mid[k][1] - POS(o)[1] < 300 && POS(o)[1] - mid[k][1] < 300)
+                        fd = dist2(x, z, mid[k][0], mid[k][2]), f = k;
+                /* (floor beyond a doorway from him; in Turncoat's train cars no door zone near the way between them at
+                 * all: their middle doors shut between Bond and the guard (-o 3:5); a guard by one: no meeting) */
+                shut_between = f >= 0 && !reach[f] && !shut[f];
+                for (k = 0; level_dy() < 1000 && k < door_count && !shut_between; k++) { /* (the cars: no door near
+                                                                                          * the way between them) */
+                    s32 dx = x - POS(o)[0], dz = z - POS(o)[2], px = doors[k][0] - POS(o)[0], pz = doors[k][2] - POS(o)[2];
+                    s32 t = (px * dx + pz * dz) / 1500; /* (along the way, 0..1500) */
+                    t = t < 0 ? 0 : t > 1500 ? 1500 : t;
+                    shut_between = dist2(px, pz, dx * t / 1500, dz * t / 1500) < 1600;
+                }
+                if (fh != -0x7FFF && fh - POS(o)[1] < 200 && POS(o)[1] - fh < 200 && -off > best && !shut_between)
                     best = -off, ba = a;
             }
             if (best > -0x7FFFFFFF) {
                 at[0] = D_800D2F8C, at[1] = (s16)((ba + 0x800) & 0xFFF), at[2] = POS(o)[0] + (isin(ba) * 1500 >> 12);
                 at[3] = POS(o)[1], at[4] = POS(o)[2] + (isin(ba + 0x400) * 1500 >> 12);
                 bond_put(at);
-                ELOG("test: Bond put by the sent guard type %d", o[6]);
+                g_Args->playerX = at[2], g_Args->playerY = at[3], g_Args->playerZ = at[4];
+                ELOG("test: Bond put by the sent guard type %d, at %d %d %d (he at %d %d %d)", o[6], at[2], at[3], at[4],
+                     POS(o)[0], POS(o)[1], POS(o)[2]);
                 if (getenv("TWINE_ENDLESS_TEST_NOISE"))
                     func_80053DE4(0, 0, at[2], at[3], at[4]);
                 if (getenv("TWINE_ENDLESS_TEST_MEET_GRENADE")) { /* (and a grenade of Bond's lobbed at him) */
@@ -3200,6 +3243,7 @@ static void recall(void) {
                     ELOG("test: a grenade of Bond's lobbed at the guard");
                 }
             }
+            flood(); /* (Bond's floor again) */
         }
         if (room_frames - hunters[h].born == SEC * 5)
             ELOG("sent guard type %d five seconds on: ai %d, state %08X, health %d, at %d %d %d", o[6], o[0xA7],
@@ -5879,7 +5923,8 @@ s32 func_80048B4C(char *text, u8 prio, u8 flag) {
     }
     if (text && port_endless_room(e)) {
         int story = prio != 0x80 || scripted || strstr(text, "MISSION") || strstr(text, "FAILED") || strstr(text, "ESCAPED") ||
-                    strstr(text, "OBJECTIVE") || strstr(text, "ALARM");
+                    strstr(text, "OBJECTIVE") || strstr(text, "ALARM") ||
+                    strstr(text, "FOR MESSAGE"); /* (Courier's "PRESS SELECT FOR MESSAGE": MI6's message, its alert off) */
         if (story) {
             static char last[48];
             if (!port_subframe && strncmp(last, text, 47)) { /* (logged once, not every frame it is asked for) */
