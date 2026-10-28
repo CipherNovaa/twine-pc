@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 SsUtAllKeyOff func_80026C90 func_80053804 func_8005519C
+ * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 SsUtAllKeyOff func_80026C90 func_80053804 func_8005519C func_80026D08 func_800272A4
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -4651,11 +4651,13 @@ static int trace_voices(void) {
     return on;
 }
 
+static void test_story_flag(void);
 void endless_frame(void) {
     int own, n, wave, i;
     s32 kills, back;
     if (port_subframe) /* (an extra drawing's: not the mission's frame) */
         return;
+    test_story_flag();
     if (port_endless_room(entry) && g_Player)
         watch_frame();
     if (trace_voices() && D_8009CAA4 && port_endless_room(entry)) { /* (the watch's menu up: what sounds meanwhile) */
@@ -5878,8 +5880,122 @@ static int trace_sound(void) {
     return on;
 }
 
+/* The mission's music. It isn't the CD's (the XA streams hold the speech) nor a libsnd sequence: it is one long
+ * looping tone of the level's sound bank, an entry of the same table as the sounds (g_Args+0x130), started by
+ * func_80026D08 at the music volume (g_Args+0x144) and kept at it each frame by func_800272A4. Each mission's music
+ * function (its own, each frame: e.g. Night Watch's func_8006A388) asks for entry 0, and two missions have a second
+ * song, entry 1, which their logic switches to (stopping the first, func_80026C14, then starting the other):
+ *   Night Watch (level 4): entry 1 while Bond's story flag 2 is up (his +0x124 bit 5, set by the mission's scripts),
+ *     no cutscene runs and the mission's D_8009FB30 is set (an object of the kind D_8009DD54 seen to:
+ *     func_80069F58); entry 0 otherwise;
+ *   Meltdown (level 10): entry 1 from the time its stage D_800EA8DC reaches 4 (and on: it is never set back).
+ * The other missions only ever play entry 0.
+ * In a run, a room plays the mission's action song from the start: entry 0 asked for is entry 1 in those two missions
+ * (the volume kept by entry 1's, as it plays), so whatever the mission's logic asks for, the action song plays.
+ * TWINE_TRACE=music logs each song started (entry, the table's program/tone/note/volume, the bank tone's sample
+ * size and loop, the voice, the caller) and each stop of it: "trace: L<level> f<frame> music: ...". */
+static int trace_music(void) {
+    static int on = -1;
+    if (on < 0)
+        on = port_trace("music");
+    return on;
+}
+static s32 music_voice = -1, music_entry = -1; /* the song playing (the voice its key on took), its entry */
+
+/* the entry a run plays for the one asked for */
+/* the caller, for the trace: port_rc_ra, or (the recompiled code's calls keep no return address) the first code
+ * address on the PS1 stack, roughly the caller's caller */
+static u32 music_caller(void) {
+    int k;
+    if (port_rc_ra)
+        return port_rc_ra;
+    for (k = 0; k < 32 && port_rc_psp >= 0x80000000u && port_rc_psp < 0x801FFF00u; k++) {
+        u32 v = *(u32 *)(long)(port_rc_psp + k * 4);
+        if (v >= 0x80026800u && v < 0x800A0000u && !(v & 3))
+            return v;
+    }
+    return 0;
+}
+
+static u32 music_for(u32 id) {
+    s16 e[5];
+    if (id == 0 && (g_Args->level == 4 || g_Args->level == 10) && port_endless_room(e))
+        return 1;
+    return id;
+}
+
+s32 func_80026D08_orig(u32 id, s32 flags);
+s32 func_80026D08(u32 id, s32 flags) {
+    u32 to = music_for(id);
+    s32 h = func_80026D08_orig(to, flags);
+    if (h >= 0)
+        music_voice = h, music_entry = (s32)to;
+    if (trace_music()) {
+        const u8 *t = *(u8 **)((u8 *)g_Args + 0x130), *vh, *vb;
+        const u8 *d = t && to < 0x69 ? t + to * 8 : NULL;
+        char bank[96] = "";
+        s16 e[5];
+        if (d && port_sound_bank(g_Args->level, &vh, &vb)) { /* (the tone's sample: its size in the bank, in bytes) */
+            const u8 *ta = vh + 0x20 + 0x800 + (d[0] * 16 + d[1]) * 32;
+            u32 vag = ta[22] | ta[23] << 8, ps = vh[0x12] | vh[0x13] << 8;
+            const u8 *sz = vh + 0x20 + 0x800 + ps * 16 * 32;
+            if (vag < 256) { /* (its length played at the entry's note: 28 samples a 16-byte block, at 44100 Hz
+                              * moved by the note's distance from the tone's centre, a semitone each) */
+                u32 bytes = (sz[vag * 2] | sz[vag * 2 + 1] << 8) * 8u;
+                int st = d[2] - ta[4];
+                double rate = 44100.0;
+                for (; st < 0; st++)
+                    rate /= 1.0594630943592953;
+                for (; st > 0; st--)
+                    rate *= 1.0594630943592953;
+                snprintf(bank, sizeof(bank), ", bank sample %u (%u bytes: a %.1f s loop)", vag, bytes,
+                         bytes / 16.0 * 28 / rate);
+            }
+        }
+        port_log("trace: L%d f%d music: start entry %u%s (program %d tone %d note %d volume %d)%s: voice %d, from %08X%s\n",
+                 g_Args->level, D_8009CDA8, to, to != id ? " (the action song: entry 0 asked for, in a run)" : "",
+                 d ? d[0] : -1, d ? d[1] : -1, d ? d[2] : -1, d ? d[4] : -1, bank, h, music_caller(),
+                 port_endless_room(e) ? ", in a run" : "");
+    }
+    return h;
+}
+
+void func_800272A4_orig(s16 voice, s32 id, s32 flags);
+void func_800272A4(s16 voice, s32 id, s32 flags) {
+    func_800272A4_orig(voice, voice == music_voice && id >= 0 ? (s32)music_for((u32)id) : id, flags);
+}
+
+/* TWINE_TEST_STORY_FLAG=frame:n (tests, campaign or a run): Bond's story flag n (1-16: his +0x124 bit n + 3, the
+ * flags the mission's scripts set and its logic reads, func_80053B40) raised from that mission frame on, as the
+ * mission's scripts would: Night Watch's 2 is its action song's (tools/endless_check.py's t) */
+extern u32 D_800D91E4; /* (Bond's object, D_800D90C0, +0x124) */
+static void test_story_flag(void) {
+    static int frame = -2, n;
+    const char *v;
+    if (frame == -2) {
+        frame = -1;
+        if ((v = getenv("TWINE_TEST_STORY_FLAG")) && strchr(v, ':'))
+            frame = atoi(v), n = atoi(strchr(v, ':') + 1);
+    }
+    if (frame >= 0 && n >= 1 && n <= 16 && D_8009CDA8 >= frame && !(D_800D91E4 >> (n + 3) & 1)) {
+        D_800D91E4 |= 1u << (n + 3);
+        port_log("test: f%d Bond's story flag %d raised (TWINE_TEST_STORY_FLAG)\n", D_8009CDA8, n);
+    }
+}
+
+static void music_stopped(const char *how) {
+    if (music_voice < 0)
+        return;
+    if (trace_music())
+        port_log("trace: L%d f%d music: stop entry %d (voice %d): %s, from %08X\n", g_Args->level, D_8009CDA8,
+                 music_entry, music_voice, how, music_caller());
+    music_voice = music_entry = -1;
+}
+
 void func_80081458_orig(s32 voice);
 void func_80081458(s32 voice) {
+    if (voice == music_voice)
+        music_stopped("its voice keyed off");
     if (voice & 0x4000) {
         port_sfx_stop(voice & 0x3FFF); /* (the handle's low bits: spu.c's handles are counted from 1) */
         if (getenv("TWINE_ENDLESS_AMMO_LOG"))
@@ -5907,12 +6023,15 @@ static void runtime_off(const char *why, int keep) {
 void SsUtAllKeyOff_orig(s32 mode);
 void SsUtAllKeyOff(s32 mode) {
     runtime_off("all keyed off", 0);
+    music_stopped("all voices keyed off");
     SsUtAllKeyOff_orig(mode);
 }
 
 void func_80026C90_orig(s32 keep);
 void func_80026C90(s32 keep) {
     runtime_off("all voices stopped", keep >= 0 && (keep & 0x4000) ? keep & 0x3FFF : 0);
+    if (keep != music_voice)
+        music_stopped("all voices stopped (the menu over the mission)");
     func_80026C90_orig(keep);
 }
 
