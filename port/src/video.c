@@ -14,7 +14,7 @@
  * 24-bit movie frames, which come from VRAM as before); a picture larger than the window is averaged down to it
  * (supersampling) before the filter scales it the rest of the way. The default is TWINE_RENDERER=sw. With it,
  * TWINE_PRESENT=vsync|mailbox|immediate picks how frames reach the display (port_video_present_mode).
- * TWINE_HEADLESS=1 runs without a window; TWINE_SHOT=<frame>[,<frame>...] dumps frames as PPM (with the hardware
+ * TWINE_HEADLESS=1 runs without a window; TWINE_SHOT=<frame>[,<frame>...] (or <first>-<last>) dumps frames as PPM (with the hardware
  * renderer its picture, at its full resolution, and also screen_NNNN.ppm: what a 1280x960 window would show,
  * drawn by SDL's GPU renderer into a texture the way it draws the window);
  * TWINE_TEST_LOOK=<yaw>,<pitch> stands in for the mouse there (angle units each game frame), and
@@ -435,9 +435,11 @@ static int shot_wanted(void) {
     snprintf(want, sizeof(want), "%u", frames);
     strncpy(list, shots, sizeof(list) - 1);
     list[sizeof(list) - 1] = 0;
-    for (s = strtok(list, ","); s; s = strtok(NULL, ","))
-        if (!strcmp(s, want))
+    for (s = strtok(list, ","); s; s = strtok(NULL, ",")) {
+        unsigned a, b;
+        if (sscanf(s, "%u-%u", &a, &b) == 2 ? frames >= a && frames <= b : !strcmp(s, want))
             return 1;
+    }
     return 0;
 }
 
@@ -1302,7 +1304,7 @@ static void draw_help(void) {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     if (!help_shown) {
         const char *text = ui_ms() < message_until ? message : "F1: controls";
-        if (ui_ms() >= hint_until && text != message)
+        if ((ui_ms() >= hint_until || getenv("TWINE_NO_HINT")) && text != message) /* (TWINE_NO_HINT: captures) */
             return;
         scale = (float)(wh / 360 > 1 ? wh / 360 : 1);
         SDL_SetRenderScale(renderer, scale, scale);

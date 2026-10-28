@@ -134,10 +134,24 @@ void port_smooth_tick(u32 vblanks) {
 int port_smooth_begin(s32 *t, s32 *yaw, s32 *pitch, int room) {
     u64 now, end;
     int i;
+    static int fixed = -1;
     if (port_subframe || !smooth_enabled() || !tick_start)
         return 0;
+    if (fixed < 0) /* TWINE_SMOOTH_FIXED=N (captures): N frames a tick, evenly spaced, whatever the time */
+        fixed = getenv("TWINE_SMOOTH_FIXED") ? atoi(getenv("TWINE_SMOOTH_FIXED")) : 0;
     now = now_ns();
     end = tick_start + tick_vblanks * VBLANK_NS;
+    if (fixed > 0) { /* (the mouse's turned copy comes just after the tick's start: at its start) */
+        static u64 fixed_tick;
+        static int fixed_n;
+        if (fixed_tick != tick_start)
+            fixed_tick = tick_start, fixed_n = 0;
+        if (room >= 0 && fixed_n >= fixed - 1)
+            return 0;
+        now = room >= 0 ? tick_start + (end - tick_start) * ++fixed_n / fixed : tick_start;
+        room = -1;
+        spacing = 0;
+    }
     /* TWINE_FPS_MAX: not before its time, so that it is shown `spacing` after the one before (if that leaves
      * room for the rest) */
     if (room >= 0 && spacing && shown_at && now + (cost < spacing ? cost : spacing) < shown_at + spacing) {

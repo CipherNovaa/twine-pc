@@ -4789,7 +4789,7 @@ void endless_frame(void) {
         draw_direct = !segment;
         log_weapons("as the room starts");
         /* the first room: a heavy armour ahead of Bond */
-        if (port_endless_wave() == 1 && !segment) {
+        if (port_endless_wave() == 1 && !segment && !getenv("TWINE_ENDLESS_TEST_NO_ARMOUR")) { /* (media captures) */
             s32 x = g_Args->playerX + (isin(gPsi) * 1300 >> 12), z = g_Args->playerZ + (isin(gPsi + 0x400) * 1300 >> 12);
             s32 y = floor_at(x, g_Args->playerY - 500, z);
             pickup(D_8009D106, x, y == -0x7FFF ? g_Args->playerY : y, z, "heavy armour (the first room's)");
