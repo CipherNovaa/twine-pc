@@ -264,7 +264,10 @@ void port_irq_start(void) {
         pthread_attr_t at;
         void *base;
         size_t size;
-        if (!pthread_getattr_np(pthread_self(), &at)) {
+        extern u32 port_game_stack_top; /* (main.c: the game's stack, at a fixed place) */
+        if (port_game_stack_top)
+            look_stack_top = port_game_stack_top;
+        else if (!pthread_getattr_np(pthread_self(), &at)) {
             if (!pthread_attr_getstack(&at, &base, &size))
                 look_stack_top = (u32)base + (u32)size;
             pthread_attr_destroy(&at);

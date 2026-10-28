@@ -26,6 +26,9 @@ CFLAGS := -m32 -std=gnu89 -fpermissive -O0 -g -fno-omit-frame-pointer -fwrapv -f
 RT_CFLAGS := -m32 -std=gnu11 -O2 -g -fno-pie -fno-stack-protector -Wall -Wno-unused-function -DNATIVE_PORT \
              -I$(ROOT)/include -I$(ROOT)/port/src
 LDFLAGS := -m32 -no-pie
+# (tests: extra flags for every C file, e.g. XCFLAGS=-ftrivial-auto-var-init=pattern, with PB= a build of its own)
+CFLAGS += $(XCFLAGS)
+RT_CFLAGS += $(XCFLAGS)
 
 RT_SRC := $(wildcard $(ROOT)/port/src/*.c)
 RT_OBJ := $(patsubst $(ROOT)/port/src/%.c,$(RT_OUT)/%.o,$(RT_SRC))

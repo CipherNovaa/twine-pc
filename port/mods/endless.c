@@ -153,6 +153,45 @@ int port_live_grenades(s32 (*at)[3], int max);
 s32 func_80027248(s32 sound, s32 at, s32 arg2); /* a sound of the level's bank at a place */
 s32 func_80051728(u8 *obj, u8 *target) __attribute__((weak)); /* what a person makes of another: 0x40 he sees him */
 s32 func_800746D0(s32 mesh, s32 *from, s32 *to, s16 *normal, s16 *hit, s32 *flags); /* the walls between: nonzero */
+
+/* PS1 code called from the mod's own with pointers (the walls between two points, the floor's height, Bond put at a
+ * point): the game's code keeps its pointer arguments in the scratchpad (func_800746D0 at +0x40..), where the game's
+ * own code later reads bytes of them it never sets itself (an unaligned store over one, rc_8006FB5C). Pointers to the
+ * mod's locals were the host's stack addresses, which the host's address randomization moves run to run: two runs of
+ * the same build and input parted (a Fallen Angel blast's debris in k_gl_lent at f1088 in one of three places). Now
+ * the arguments are copied to the mod's own (fixed) memory and, for the queries, which change nothing of the game's,
+ * the scratchpad is put back as it was after (TWINE_TEST_RAMHASH shows it the same run to run). */
+static u8 scratch_kept[0x400];
+static s32 walls_between(s32 mesh, const s32 *from, const s32 *to, s16 *normal, s16 *hit, s32 *flags) {
+    static s32 f[4], t[4], fl;
+    static s16 nn[4], hh[4];
+    s32 r;
+    memcpy(f, from, 12), memcpy(t, to, 12), f[3] = t[3] = 0, fl = flags ? *flags : 0;
+    memcpy(scratch_kept, (void *)0x1F800000u, 0x400);
+    r = func_800746D0(mesh, f, t, nn, hh, flags ? &fl : 0);
+    memcpy((void *)0x1F800000u, scratch_kept, 0x400);
+    if (normal)
+        memcpy(normal, nn, 8);
+    if (hit)
+        memcpy(hit, hh, 8);
+    if (flags)
+        *flags = fl;
+    return r;
+}
+static s32 floor_query(s32 floor, const s16 *pos, s32 a2, s32 a3) {
+    static s16 p[4];
+    s32 r;
+    memcpy(p, pos, 8);
+    memcpy(scratch_kept, (void *)0x1F800000u, 0x400);
+    r = func_800705A8(floor, p, a2, a3);
+    memcpy((void *)0x1F800000u, scratch_kept, 0x400);
+    return r;
+}
+static void bond_put(const s16 *at) {
+    static s16 a[6];
+    memcpy(a, at, 10);
+    func_80030FA8(a);
+}
 extern s32 D_800E2F2C;  /* (the section's walls, for it) */
 u32 port_ext_free_bytes(void); /* (malloc3.c) */
 void func_80053DE4(s16 type, s16 sub, s32 x, s32 y, s32 z); /* an event on the AI's board (0: a gunshot) */
@@ -2114,7 +2153,7 @@ static s32 floor_at(s32 x, s32 y, s32 z) {
     if (x < -0x7FFF || x > 0x7FFF || z < -0x7FFF || z > 0x7FFF)
         return -0x7FFF;
     at[0] = x, at[1] = y, at[2] = z, at[3] = 0;
-    return func_800705A8(D_800E2F54, at, 0, 0);
+    return floor_query(D_800E2F54, at, 0, 0);
 }
 
 /* The floor's polygons (+0x24, 8 bytes each: three corners and the normal; +0x10 how many) over its corners (+0x1C),
@@ -2291,7 +2330,7 @@ static void clear_arrival(void) {
     {
         s16 at[5];
         at[0] = D_800D2F8C, at[1] = entry[1], at[2] = mid_x, at[3] = mid_y, at[4] = mid_z;
-        func_80030FA8(at);
+        bond_put(at);
         ELOG("room: someone at Bond's arrival: he arrives at %d %d %d instead (%d off)", mid_x, mid_y, mid_z, best);
         entry[2] = mid_x, entry[3] = mid_y, entry[4] = mid_z;
     }
@@ -2730,7 +2769,7 @@ static void recall(void) {
             if (best > -0x7FFFFFFF) {
                 at[0] = D_800D2F8C, at[1] = (s16)((ba + 0x800) & 0xFFF), at[2] = POS(o)[0] + (isin(ba) * 1500 >> 12);
                 at[3] = POS(o)[1], at[4] = POS(o)[2] + (isin(ba + 0x400) * 1500 >> 12);
-                func_80030FA8(at);
+                bond_put(at);
                 ELOG("test: Bond put by the sent guard type %d", o[6]);
                 if (getenv("TWINE_ENDLESS_TEST_NOISE"))
                     func_80053DE4(0, 0, at[2], at[3], at[4]);
@@ -3174,7 +3213,7 @@ static int steer_to(u8 *o, s32 x, s32 z, int run_it) { /* (a guard turned toward
             fy = floor_at(nx, POS(o)[1] - 500, nz);
             from[0] = POS(o)[0], from[1] = POS(o)[1] - 600, from[2] = POS(o)[2], from[3] = 0;
             to[0] = nx + dx * 100 / len, to[1] = POS(o)[1] - 600, to[2] = nz + dz * 100 / len, to[3] = 0;
-            if (fy != -0x7FFF && fy - POS(o)[1] < 200 && POS(o)[1] - fy < 200 && !func_800746D0(D_800E2F2C, from, to, n, h, 0))
+            if (fy != -0x7FFF && fy - POS(o)[1] < 200 && POS(o)[1] - fy < 200 && !walls_between(D_800E2F2C, from, to, n, h, 0))
                 POS(o)[0] = nx, POS(o)[2] = nz, POS(o)[1] = fy;
         }
     }
@@ -3497,7 +3536,7 @@ static int sight_from(s32 x, s32 y, s32 z) {
         return 0;
     from[0] = x, from[1] = y - 1200, from[2] = z, from[3] = 0;
     to[0] = g_Args->playerX, to[1] = g_Args->playerY - 1200, to[2] = g_Args->playerZ, to[3] = 0;
-    return !func_800746D0(D_800E2F2C, from, to, n, h, 0);
+    return !walls_between(D_800E2F2C, from, to, n, h, 0);
 }
 
 static int sight(u8 *o) {
@@ -4027,7 +4066,7 @@ static void ai_frame(void) {
                             from[0] = POS(o)[0], from[1] = POS(o)[1] - 600, from[2] = POS(o)[2], from[3] = 0;
                             to[0] = nx, to[1] = POS(o)[1] - 600, to[2] = nz, to[3] = 0;
                             if (fy != -0x7FFF && fy - POS(o)[1] < 200 && POS(o)[1] - fy < 200 &&
-                                !func_800746D0(D_800E2F2C, from, to, nn, hh, 0)) {
+                                !walls_between(D_800E2F2C, from, to, nn, hh, 0)) {
                                 POS(o)[0] = nx, POS(o)[1] = fy, POS(o)[2] = nz;
                                 spread_tries[i] = 0;
                                 hold_ground[i] = room_frames + SEC * 20; /* (standing there a while: not walked back) */
@@ -4171,7 +4210,7 @@ static void door_test(void) {
         u16 use = *(u16 *)((u8 *)g_Args + 0x14E);
         if (!dt_done++) {
             ELOG("doortest: done; to the entry");
-            func_80030FA8(entry);
+            bond_put(entry);
         }
         port_pad_buttons[0] = (u16) ~(e % 20 == 10 ? (u16)(use << 8 | use >> 8) : 0);
         port_pad_sticks[0][3] = 0x80;
@@ -4185,7 +4224,7 @@ static void door_test(void) {
         s32 f = dt_floor[i];
         at[0] = D_800D2F8C, at[1] = face(mid[f][0], mid[f][2], doors[k][0], doors[k][2]);
         at[2] = mid[f][0], at[3] = mid[f][1], at[4] = mid[f][2];
-        func_80030FA8(at);
+        bond_put(at);
         dt_result = 0, door_msg_at = -1;
         return;
     }
@@ -4509,13 +4548,13 @@ void endless_frame(void) {
     if (getenv("TWINE_ENDLESS_TEST_GRAB_BOX") && room_frames % atoi(getenv("TWINE_ENDLESS_TEST_GRAB_BOX")) == 0 && last_box[0]) {
         s16 at[5]; /* (headless tests: Bond onto the last ammo box) */
         at[0] = D_800D2F8C, at[1] = gPsi, at[2] = last_box[0], at[3] = last_box[1], at[4] = last_box[2];
-        func_80030FA8(at);
+        bond_put(at);
         last_box[0] = 0;
     }
     if (getenv("TWINE_ENDLESS_TEST_GRAB") && room_frames == atoi(getenv("TWINE_ENDLESS_TEST_GRAB")) && last_drop[0]) {
         s16 at[5]; /* (headless tests: Bond onto the last drop) */
         at[0] = D_800D2F8C, at[1] = gPsi, at[2] = last_drop[0], at[3] = last_drop[1], at[4] = last_drop[2];
-        func_80030FA8(at);
+        bond_put(at);
     }
     if (getenv("TWINE_ENDLESS_TEST_VRAM") && room_frames == 100) { /* (research: VRAM places no mission uses) */
         extern u16 gpu_vram[512 * 1024];
@@ -4674,7 +4713,7 @@ void endless_frame(void) {
         at[0] = D_800D2F8C;
         for (n = 0; n < 4 && pt; n++, pt = strchr(pt, ',') ? strchr(pt, ',') + 1 : 0)
             at[n == 3 ? 1 : n + 2] = (s16)atoi(pt);
-        func_80030FA8(at);
+        bond_put(at);
         ELOG("test: Bond put at %d %d %d, yaw %d", at[2], at[3], at[4], at[1]);
     }
     if (getenv("TWINE_ENDLESS_TEST_NEAR") && room_frames == SEC * 2) { /* (headless tests: Bond put before the first
@@ -4695,7 +4734,7 @@ void endless_frame(void) {
                 s16 at[5];
                 at[0] = D_800D2F8C, at[1] = face(mid[b][0], mid[b][2], POS(o)[0], POS(o)[2]);
                 at[2] = mid[b][0], at[3] = mid[b][1], at[4] = mid[b][2];
-                func_80030FA8(at);
+                bond_put(at);
                 ELOG("test: Bond put %d from person %d (type %d), facing her", dist2(mid[b][0], mid[b][2], POS(o)[0], POS(o)[2]), i, o[6]);
             }
             break;

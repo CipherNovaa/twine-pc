@@ -688,7 +688,46 @@ static void watchdog_start(void) {
         pthread_create(&t, NULL, watchdog, NULL);
 }
 
+/* The game runs on a stack at a fixed address (below the executable, above PS1 RAM's mirror), not the host's own:
+ * the decompiled C runs natively, so its locals are on the host stack, and it hands their addresses to the game's
+ * recompiled code (as the console's code hands addresses on its stack), which keeps some in the scratchpad and in
+ * RAM (psyq's drawing code, func_800746D0's walls test: their pointer arguments at the scratchpad's +0x40..) where
+ * other game code later reads bytes of them it never set. The host's stack moves with its address randomization
+ * (and with the environment's size), so two runs of the same build and input could part (k_gl_lent: a Fallen
+ * Angel blast's debris at f1088 in one of three places; a MAX_TEXT_SPRITES exit). Here those addresses are the same
+ * every run. TWINE_TEST_HOST_STACK=1: the host's own stack, as before (to show the difference). */
+#define GAME_STACK_LO 0x04000000u
+#define GAME_STACK_SIZE 0x04000000u
+static int port_main(int argc, char **argv);
+static int game_argc, game_ret;
+static char **game_argv;
+static ucontext_t uc_host, uc_game;
+u32 port_game_stack_top; /* (irq.c's turbo look: where the game's stack ends; 0 the host's own) */
+static void game_entry(void) {
+    game_ret = port_main(game_argc, game_argv);
+}
 int main(int argc, char **argv) {
+    void *st = MAP_FAILED;
+    if (!getenv("TWINE_TEST_HOST_STACK"))
+        st = mmap((void *)GAME_STACK_LO, GAME_STACK_SIZE, PROT_READ | PROT_WRITE,
+                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE | MAP_NORESERVE, -1, 0);
+    if (st != (void *)GAME_STACK_LO) {
+        if (st != MAP_FAILED)
+            munmap(st, GAME_STACK_SIZE);
+        return port_main(argc, argv);
+    }
+    game_argc = argc, game_argv = argv;
+    port_game_stack_top = GAME_STACK_LO + GAME_STACK_SIZE;
+    getcontext(&uc_game);
+    uc_game.uc_stack.ss_sp = st;
+    uc_game.uc_stack.ss_size = GAME_STACK_SIZE;
+    uc_game.uc_link = &uc_host;
+    makecontext(&uc_game, game_entry, 0);
+    swapcontext(&uc_host, &uc_game);
+    return game_ret;
+}
+
+static int port_main(int argc, char **argv) {
     const char *level_env;
     s32 level, r;
     load_settings();

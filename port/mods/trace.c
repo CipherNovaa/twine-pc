@@ -341,6 +341,57 @@ static void trace_flash(void) {
     }
 }
 
+
+/* TWINE_TEST_RAMHASH=1: each frame (at its top), a hash of each 64 KB of PS1 RAM (the console's 2 MB) and of the
+ * scratchpad: two runs that should be the same (the same build, input, seed: turbo) show the first frame and place
+ * where they part, though nothing logged shows it yet. TWINE_TEST_RAMDUMP=<level>:<frame>[,...]: that frame's RAM and
+ * scratchpad written to ram_L<level>_f<frame>.bin in the run's folder (to find the words that differ). For finding
+ * what reads memory it never set (the host's address randomization showing through: endless.c's walls test). */
+void *fopen(const char *p, const char *m);
+unsigned fwrite(const void *b, unsigned s, unsigned n, void *f);
+int fclose(void *f);
+static void ram_hash(void) {
+    static int on = -1;
+    static const char *dump;
+    u32 b, i, h[33], all = 0;
+    char line[33 * 9 + 8];
+    int m = 0;
+    if (on < 0)
+        on = getenv("TWINE_TEST_RAMHASH") != 0, dump = getenv("TWINE_TEST_RAMDUMP");
+    if (dump) {
+        const char *s = dump;
+        while (*s) {
+            int lv = atoi(s), fr;
+            while (*s && *s != ':') s++;
+            if (!*s) break;
+            fr = atoi(++s);
+            if (lv == g_Args->level && fr == D_8009CDA8) {
+                char name[64];
+                void *f;
+                snprintf(name, sizeof(name), "ram_L%d_f%d.bin", lv, fr);
+                if ((f = fopen(name, "wb"))) {
+                    fwrite((void *)0x80000000u, 1, 0x200000, f);
+                    fwrite((void *)0x1F800000u, 1, 0x400, f);
+                    fclose(f);
+                }
+            }
+            while (*s && *s != ',') s++;
+            if (*s) s++;
+        }
+    }
+    if (!on)
+        return;
+    for (b = 0; b < 33; b++) {
+        const u32 *p = (const u32 *)(b < 32 ? 0x80000000u + b * 0x10000 : 0x1F800000u);
+        u32 n = b < 32 ? 0x4000 : 0x100, x = 2166136261u;
+        for (i = 0; i < n; i++)
+            x = (x ^ p[i]) * 16777619u;
+        h[b] = x, all ^= x * (b + 1);
+        m += snprintf(line + m, sizeof(line) - m, "%08X ", x);
+    }
+    port_log("trace: L%d f%d ramhash %08X: %s\n", g_Args->level, D_8009CDA8, all, line);
+}
+
 /* each frame, at the top of the mission's frame loop (mods/savestate.c) */
 void trace_frame(void) {
     static s32 last_frame = -99999;
@@ -349,6 +400,7 @@ void trace_frame(void) {
                                                                          * each time) */
         return;
     last_frame = D_8009CDA8;
+    ram_hash();
     tone_ab();
     if (on_weapon < 0) {
         on_weapon = port_trace("weapon");
