@@ -24,10 +24,17 @@
 #include "module.h"
 #include "spu.h"
 #include "intro.h"
+#include <SDL3/SDL.h>
 
 const PortModule *port_module, *port_boot;
 
 static FILE *log_file;
+static char log_path[1100]; /* where it is, whole (for the player: errors and crashes name it) */
+
+/* setup.c */
+void port_setup(int argc, char **argv);
+void port_setup_notices(void);
+void port_crash_notice(const char *log, const char *code);
 
 void port_log(const char *fmt, ...) {
     va_list ap;
@@ -62,6 +69,12 @@ void port_fatal(const char *fmt, ...) {
         hook();
     if (log_file)
         fflush(log_file);
+    if (!getenv("TWINE_HEADLESS")) { /* (a player started from a desktop sees no terminal) */
+        char text[1800];
+        void *port_video_window(void);
+        snprintf(text, sizeof(text), "%s%s%s", msg, *log_path ? "\nThe log is at " : "", log_path);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "TWINE", text, port_video_window());
+    }
     if (getenv("TWINE_CORE") && atoi(getenv("TWINE_CORE")))
         abort();
     exit(1);
@@ -160,8 +173,18 @@ static int x86reg_to_greg(int r) {
 
 static void crash_report(u32 fault, u32 eip) {
     char cmd[256];
+    void *at[64];
+    int n;
     fprintf(stderr, "crash: access to %08X from %08X\n", fault, eip);
-    port_log("crash: access to %08X from %08X\n", fault, eip);
+    port_log("crash: access to %08X from %08X (in %s)\n", fault, eip, port_module ? port_module->name : "startup");
+    if (log_file) { /* (the stack, as addresses in this executable: addr2line -f -e twine) */
+        n = backtrace(at, 64);
+        fprintf(log_file, "crash: the stack:\n");
+        fflush(log_file);
+        backtrace_symbols_fd(at, n, fileno(log_file));
+    }
+    if (*log_path)
+        fprintf(stderr, "TWINE crashed. The log is at %s\n", log_path);
     snprintf(cmd, sizeof(cmd), "addr2line -f -e /proc/%d/exe %08X >&2", (int)getpid(), eip);
     if (system(cmd)) {
     }
@@ -223,6 +246,23 @@ static void on_segv(int sig, siginfo_t *si, void *ctx) {
         logged[n] = g[REG_EIP];
         port_log("low-memory access %08X from %08X (redirected to the KSEG0 mirror)\n", fault, (u32)g[REG_EIP]);
     }
+}
+
+/* SIGBUS, SIGFPE, SIGILL: said in the log, where and with the stack (when glibc finds libgcc_s to walk it), then
+ * the default action (the handler is reset) */
+static void on_fatal_signal(int sig, siginfo_t *si, void *ctx) {
+    void *at[64];
+    int n = backtrace(at, 64);
+    if (log_file) {
+        fprintf(log_file, "crash: signal %d at %08X, address %08X (in %s); the stack:\n", sig,
+                (u32)((ucontext_t *)ctx)->uc_mcontext.gregs[REG_EIP], (u32)si->si_addr,
+                port_module ? port_module->name : "startup");
+        fflush(log_file);
+        backtrace_symbols_fd(at, n, fileno(log_file));
+    }
+    if (*log_path)
+        fprintf(stderr, "TWINE crashed (signal %d). The log is at %s\n", sig, log_path);
+    raise(sig);
 }
 
 static int unimpl_seen[4096];
@@ -591,16 +631,15 @@ void port_setting_save(const char *key, const char *value) {
 static void game_folder_files(void) {
     char dir[1024], path[1300], best[1300] = "";
     long best_size = 0;
-    ssize_t n = readlink("/proc/self/exe", dir, sizeof(dir) - 1);
-    char *slash;
+    const char *home = getenv("TWINE_HOME"), *base; /* (the launcher's: the folder it is in) */
+    size_t n;
     DIR *d;
     struct dirent *e;
-    if (n <= 0)
+    if (!home && !(base = SDL_GetBasePath()))
         return;
-    dir[n] = 0;
-    if (!(slash = strrchr(dir, '/')))
-        return;
-    *slash = 0;
+    snprintf(dir, sizeof(dir), "%s", home ? home : base);
+    for (n = strlen(dir); n > 1 && dir[n - 1] == '/'; n--)
+        dir[n - 1] = 0;
     snprintf(path, sizeof(path), "%s/bios", dir);
     if (!getenv("TWINE_BIOS") && access(path, F_OK) == 0)
         setenv("TWINE_BIOS", path, 0);
@@ -610,12 +649,17 @@ static void game_folder_files(void) {
     while ((e = readdir(d))) {
         size_t len = strlen(e->d_name);
         FILE *f;
-        if (len < 4 || strcasecmp(e->d_name + len - 4, ".bin"))
+        if (len < 4 || (strcasecmp(e->d_name + len - 4, ".bin") && strcasecmp(e->d_name + len - 4, ".cue")))
             continue;
         snprintf(path, sizeof(path), "%s/disc/%s", dir, e->d_name);
         if ((f = fopen(path, "rb"))) {
             fseek(f, 0, SEEK_END);
-            if (ftell(f) > best_size) {
+            if (!strcasecmp(e->d_name + len - 4, ".cue")) { /* (a sheet: the disc it names, before any .bin) */
+                if (best_size < 0x7FFFFFFF) {
+                    best_size = 0x7FFFFFFF;
+                    strcpy(best, path);
+                }
+            } else if (ftell(f) > best_size) {
                 best_size = ftell(f);
                 strcpy(best, path);
             }
@@ -691,13 +735,30 @@ static void watchdog_start(void) {
 int main(int argc, char **argv) {
     const char *level_env;
     s32 level, r;
+    if (argc == 4 && !strcmp(argv[1], "--crash-notice")) { /* (the launcher's, after a crash: twine.sh) */
+        port_crash_notice(argv[2], argv[3]);
+        return 0;
+    }
     load_settings();
     game_folder_files();
     port_dev_cheats = getenv("TWINE_DEVCHEATS") && atoi(getenv("TWINE_DEVCHEATS"));
     port_blackjack = getenv("TWINE_BLACKJACK") && atoi(getenv("TWINE_BLACKJACK")); /* (with level = 11, for tests) */
     level_env = getenv("TWINE_LEVEL");
     level = level_env ? atoi(level_env) : 0;
-    log_file = fopen("port.log", "w");
+    /* the log: TWINE_LOG (the launcher's: in the user's state folder), else port.log here */
+    {
+        const char *want = getenv("TWINE_LOG") && *getenv("TWINE_LOG") ? getenv("TWINE_LOG") : "port.log";
+        char *cwd;
+        log_file = fopen(want, "w");
+        if (!log_file)
+            fprintf(stderr, "cannot write the log %s; logging here instead\n", want);
+        else if (want[0] == '/' || !(cwd = SDL_GetCurrentDirectory()))
+            snprintf(log_path, sizeof(log_path), "%s", want);
+        else {
+            snprintf(log_path, sizeof(log_path), "%s%s", cwd, want);
+            SDL_free(cwd);
+        }
+    }
     if ((r = port_endless_start())) /* (TWINE_ENDLESS: straight into a run) */
         level = r;
     if (getenv("TWINE_PROFILE"))
@@ -708,9 +769,16 @@ int main(int argc, char **argv) {
         sa.sa_sigaction = on_segv;
         sa.sa_flags = SA_SIGINFO | SA_NODEFER;
         sigaction(SIGSEGV, &sa, NULL);
+        sa.sa_sigaction = on_fatal_signal;
+        sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+        sigaction(SIGBUS, &sa, NULL);
+        sigaction(SIGFPE, &sa, NULL);
+        sigaction(SIGILL, &sa, NULL);
     }
     port_video_init();
+    port_setup(argc, argv); /* the disc (and BIOS): checked, and chosen on the setup screen when it isn't right */
     port_audio_init();
+    port_setup_notices(); /* what didn't start as asked (renderer, sound, folders), before the game */
     watchdog_start();
     if (level < 1 || level > 11)
         port_intro(); /* the console's boot animation and the port's title card; they leave the machine as it was */

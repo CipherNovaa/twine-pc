@@ -209,6 +209,27 @@ static u8 *find_bios(void) {
     return best_rom;
 }
 
+/* The setup screen's look at a BIOS (setup.c): with a path, that file; without, the one the boot animation would
+ * use. Its rank (bios_rank's: 0 none or not a PS1 BIOS, 2 not American, 3 American) and its path and version in
+ * desc. */
+int port_intro_bios(const char *path, char *desc, size_t len) {
+    int rank;
+    best_rom = NULL;
+    best_rank = 0;
+    best_path[0] = 0;
+    if (path)
+        consider(path);
+    else
+        find_bios();
+    rank = best_rank;
+    if (desc && len)
+        snprintf(desc, len, "%s", best_path);
+    free(best_rom);
+    best_rom = NULL;
+    best_rank = 0;
+    return rank;
+}
+
 /* Everything the BIOS run touched, back to how the process started. */
 static void restore_machine(void) {
     memset((void *)PS1_RAM_BASE, 0, PS1_RAM_SIZE);

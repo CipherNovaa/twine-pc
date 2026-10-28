@@ -33,6 +33,7 @@
 #include "module.h"
 
 extern u16 port_pad_buttons[2];
+void port_notice(const char *key, const char *fmt, ...); /* setup.c */
 extern int port_smooth_shown;
 extern u8 port_pad_sticks[2][4];
 void port_pad_motors(u8 *small, u8 *large);
@@ -267,8 +268,12 @@ static void headless_hw(void) {
     if (!getenv("SDL_VIDEODRIVER"))
         SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
-    if (!SDL_Init(SDL_INIT_VIDEO) || !gpu_hw_init())
+    if (!SDL_Init(SDL_INIT_VIDEO) || !gpu_hw_init()) {
         port_log("video: no hardware renderer (%s); drawing in software\n", SDL_GetError());
+        port_notice("renderer", "The hardware renderer (renderer = hw) couldn't start: no usable Vulkan driver "
+                                "for this 32-bit program. The game draws with the software renderer instead. (%s)",
+                    SDL_GetError());
+    }
     else if (!(renderer = SDL_CreateGPURenderer(gpu_hw_device(), NULL)) ||
              !(screen = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_TARGET, 1280, 960)) ||
              !(texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, 640, 512)))
@@ -304,7 +309,7 @@ void port_video_init(void) {
             SDL_SetHint(SDL_HINT_GAMECONTROLLERCONFIG_FILE, db);
     }
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
-        port_fatal("SDL_Init: %s\n", SDL_GetError());
+        port_fatal("No display to open a window on (%s). Start TWINE from a desktop session.\n", SDL_GetError());
     display = chosen_display();
     full = getenv("TWINE_FULLSCREEN") && atoi(getenv("TWINE_FULLSCREEN"));
     props = SDL_CreateProperties();
@@ -320,14 +325,23 @@ void port_video_init(void) {
     window = SDL_CreateWindowWithProperties(props);
     SDL_DestroyProperties(props);
     if (!window)
-        port_fatal("SDL window: %s\n", SDL_GetError());
+        port_fatal("Couldn't open the game's window: %s\n", SDL_GetError());
     /* the hardware renderer's device shows the window too (SDL's GPU renderer on it) */
     if (gpu_hw_wanted() && gpu_hw_init() && !(renderer = SDL_CreateGPURenderer(gpu_hw_device(), window))) {
         port_log("video: no GPU renderer for the hardware renderer (%s); drawing in software\n", SDL_GetError());
         gpu_hw_on = 0;
     }
-    if (!renderer && !(renderer = SDL_CreateRenderer(window, NULL)))
-        port_fatal("SDL renderer: %s\n", SDL_GetError());
+    if (gpu_hw_wanted() && !gpu_hw_on) /* (the setup screen shows it before the game: setup.c) */
+        port_notice("renderer", "The hardware renderer (renderer = hw) couldn't start: no usable Vulkan driver "
+                                "for this 32-bit program. The game draws with the software renderer instead. (%s)",
+                    SDL_GetError());
+    if (!renderer && !(renderer = SDL_CreateRenderer(window, NULL)) &&
+        !(renderer = SDL_CreateRenderer(window, SDL_SOFTWARE_RENDERER)))
+        port_fatal("Couldn't draw in the game's window: %s\n", SDL_GetError());
+    if (!SDL_strcmp(SDL_GetRendererName(renderer), SDL_SOFTWARE_RENDERER))
+        port_notice("software", "No graphics acceleration (OpenGL or Vulkan) was found for this 32-bit program, so "
+                                "the picture is scaled on the CPU: it may run slowly in a large window. Installing "
+                                "your graphics driver's 32-bit libraries (as Steam needs) fixes it.");
     if (full)
         SDL_HideCursor();
     {
@@ -1455,6 +1469,10 @@ float port_video_refresh(void) {
 
 int port_video_headless(void) {
     return headless;
+}
+
+void *port_video_window(void) {
+    return window;
 }
 
 void *port_video_renderer(void) {

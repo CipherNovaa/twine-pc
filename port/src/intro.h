@@ -6,6 +6,7 @@
 #include "port.h"
 
 void port_intro(void); /* main.c, after port_video_init/port_audio_init and before anything is loaded */
+int port_intro_bios(const char *path, char *desc, size_t len); /* setup.c: a BIOS file's rank (0: not one), or the found one's */
 
 /* intro.c */
 int intro_shot_wanted(u32 frame); /* TWINE_INTRO_SHOT lists this intro frame */
