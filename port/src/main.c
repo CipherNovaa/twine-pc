@@ -24,6 +24,7 @@
 #include "module.h"
 #include "spu.h"
 #include "intro.h"
+#include "controls.h"
 #include <SDL3/SDL.h>
 
 const PortModule *port_module, *port_boot;
@@ -559,22 +560,41 @@ static void prof_start(void) {
 
 /* Settings: twine.ini in $XDG_CONFIG_HOME/twine (~/.config/twine), `key = value` lines (# comments) that stand
  * for the TWINE_<KEY> environment variables (fullscreen = 1, display = NEC, aspect = fill, ...); the
- * environment wins. */
-static void load_settings(void) {
+ * environment wins. A [section] line only says where the lines after it belong: [controls] holds the keys and
+ * buttons (controls.c), which it checks against what it knows; the rest are taken as they are. Each line's
+ * key, number and section are kept for controls.c's messages (port_settings_each). */
+#define MAX_SEEN 256
+static struct {
+    char key[32];
+    int line, controls;
+} seen[MAX_SEEN];
+static int seen_n;
+
+static void settings_path(char *path, size_t n) {
     const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
-    char path[1024], line[512];
-    FILE *f;
     if (xdg && *xdg)
-        snprintf(path, sizeof(path), "%s/twine/twine.ini", xdg);
+        snprintf(path, n, "%s/twine/twine.ini", xdg);
     else
-        snprintf(path, sizeof(path), "%s/.config/twine/twine.ini", home ? home : ".");
+        snprintf(path, n, "%s/.config/twine/twine.ini", home ? home : ".");
+}
+
+static void load_settings(void) {
+    char path[1024], line[512];
+    int number = 0, controls = 0;
+    FILE *f;
+    settings_path(path, sizeof(path));
     f = fopen(path, "r");
     if (!f)
         return;
     while (fgets(line, sizeof(line), f)) {
         char name[128] = "TWINE_", *eq = strchr(line, '='), *k = line, *v, *e;
         size_t n = 6;
-        if (!eq || *line == '#' || *line == ';')
+        number++;
+        for (v = line; *v == ' ' || *v == '\t'; v++)
+            ;
+        if (*v == '[') /* a section */
+            controls = !strncasecmp(v, "[controls]", 10);
+        if (!eq || *v == '#' || *v == ';')
             continue;
         *eq = 0;
         for (v = eq + 1; *v == ' ' || *v == '\t'; v++)
@@ -586,56 +606,187 @@ static void load_settings(void) {
             if (*k != ' ' && *k != '\t')
                 name[n++] = (char)toupper((unsigned char)*k);
         name[n] = 0;
-        if (n > 6)
+        if (n > 6) {
             setenv(name, v, 0);
+            if (seen_n < MAX_SEEN) {
+                size_t i;
+                for (i = 0; i + 6 < n && i < sizeof(seen[0].key) - 1; i++)
+                    seen[seen_n].key[i] = (char)tolower((unsigned char)name[6 + i]);
+                seen[seen_n].key[i] = 0;
+                seen[seen_n].line = number;
+                seen[seen_n++].controls = controls;
+            }
+        }
     }
     fclose(f);
 }
 
-/* A setting changed in the game (the front end's OPTIONS): its line in twine.ini rewritten, or added, and the
- * environment variable it stands for set to it. */
+/* each setting twine.ini had at the start: its key (lower case), line number, and whether it is in [controls] */
+void port_settings_each(void (*fn)(const char *key, int line, int controls)) {
+    int i;
+    for (i = 0; i < seen_n; i++)
+        fn(seen[i].key, seen[i].line, seen[i].controls);
+}
+
+/* the line number of a key in twine.ini at the start (0: not there) */
+int port_setting_line(const char *key) {
+    int i;
+    for (i = seen_n - 1; i >= 0; i--)
+        if (!strcasecmp(seen[i].key, key))
+            return seen[i].line;
+    return 0;
+}
+
+/* twine.ini's lines, for rewriting it (port_setting_save, ...); 0 when it can't be had */
+#define MAX_LINES 1024
+static int read_lines(char *path, size_t n, char (*lines)[512], int *count) {
+    FILE *in;
+    char dir[1024];
+    settings_path(path, n);
+    snprintf(dir, sizeof(dir), "%s", path);
+    if (strrchr(dir, '/'))
+        *strrchr(dir, '/') = 0;
+    mkdir(dir, 0755);
+    *count = 0;
+    if ((in = fopen(path, "r"))) {
+        while (*count < MAX_LINES && fgets(lines[*count], 512, in))
+            (*count)++;
+        fclose(in);
+    }
+    return 1;
+}
+
+static void write_lines(const char *path, char (*lines)[512], int count) {
+    char tmp[1100];
+    FILE *out;
+    int i;
+    snprintf(tmp, sizeof(tmp), "%s.new", path);
+    if (!(out = fopen(tmp, "w")))
+        return;
+    for (i = 0; i < count; i++) {
+        fputs(lines[i], out);
+        if (!strchr(lines[i], '\n'))
+            fputc('\n', out);
+    }
+    if (fclose(out) == 0)
+        rename(tmp, path);
+}
+
+/* whether a line is `key = ...` (commented: `# key = ...`) */
+static int line_is(const char *line, const char *key, int commented) {
+    const char *k = line;
+    size_t n = strlen(key);
+    while (*k == ' ' || *k == '\t')
+        k++;
+    if (commented) {
+        if (*k != '#')
+            return 0;
+        for (k++; *k == ' ' || *k == '\t'; k++)
+            ;
+    }
+    if (strncasecmp(k, key, n))
+        return 0;
+    for (k += n; *k == ' ' || *k == '\t'; k++)
+        ;
+    return *k == '=';
+}
+
+static int section_line(char (*lines)[512], int count, const char *section) {
+    int i;
+    for (i = 0; i < count; i++) {
+        const char *k = lines[i];
+        while (*k == ' ' || *k == '\t')
+            k++;
+        if (!strncasecmp(k, section, strlen(section)))
+            return i;
+    }
+    return -1;
+}
+
+static char (*ini_lines)[512] PORT_NOSAVE;
+int port_control_known(const char *key); /* controls.c */
+
+/* A setting changed in the game (the front end's OPTIONS): its line in twine.ini rewritten, else the commented
+ * line of it (as the [controls] block has its defaults), else one added (before [controls], which holds only the
+ * keys and buttons), and the environment variable it stands for set to it. */
 void port_setting_save(const char *key, const char *value) {
-    const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
-    char path[1024], tmp[1100], line[512], name[128] = "TWINE_";
-    FILE *in, *out;
-    int done = 0;
-    size_t i, n = 6;
+    char path[1024], name[128] = "TWINE_";
+    int count, i, at = -1;
+    size_t n = 6;
     RT_ENTER();
     for (i = 0; key[i] && n < sizeof(name) - 1; i++)
         name[n++] = (char)toupper((unsigned char)key[i]);
     name[n] = 0;
     setenv(name, value, 1);
-    if (xdg && *xdg)
-        snprintf(path, sizeof(path), "%s/twine", xdg);
-    else
-        snprintf(path, sizeof(path), "%s/.config/twine", home ? home : ".");
-    mkdir(path, 0755);
-    strcat(path, "/twine.ini");
-    snprintf(tmp, sizeof(tmp), "%s.new", path);
-    in = fopen(path, "r");
-    if (!(out = fopen(tmp, "w"))) {
-        if (in)
-            fclose(in);
-        RT_LEAVE();
-        return;
+    if (!ini_lines)
+        ini_lines = malloc(sizeof(*ini_lines) * (MAX_LINES + 1));
+    read_lines(path, sizeof(path), ini_lines, &count);
+    for (i = 0; i < count && at < 0; i++)
+        if (line_is(ini_lines[i], key, 0))
+            at = i;
+    for (i = 0; i < count && at < 0; i++)
+        if (line_is(ini_lines[i], key, 1))
+            at = i;
+    if (at < 0) {
+        int sec = section_line(ini_lines, count, "[controls]"), before = count;
+        if (!port_control_known(key) && sec >= 0) /* (before [controls] and the blank line that sets it off) */
+            before = sec > 0 && !strcmp(ini_lines[sec - 1], "\n") ? sec - 1 : sec;
+        if (count >= MAX_LINES) {
+            RT_LEAVE();
+            return;
+        }
+        memmove(ini_lines[before + 1], ini_lines[before], sizeof(*ini_lines) * (count - before));
+        count++;
+        at = before;
     }
-    while (in && fgets(line, sizeof(line), in)) {
-        const char *k = line;
-        while (*k == ' ' || *k == '\t')
-            k++;
-        if (!done && !strncasecmp(k, key, strlen(key)) && strchr(" \t=", k[strlen(key)])) {
-            fprintf(out, "%s = %s\n", key, value);
-            done = 1;
-        } else
-            fputs(line, out);
-    }
-    if (!done)
-        fprintf(out, "%s = %s\n", key, value);
-    if (in)
-        fclose(in);
-    if (fclose(out) == 0)
-        rename(tmp, path);
+    snprintf(ini_lines[at], sizeof(*ini_lines), "%s = %s\n", key, value);
+    write_lines(path, ini_lines, count);
     port_log("settings: %s = %s\n", key, value);
+    RT_LEAVE();
+}
+
+/* A setting back to its default: its line in twine.ini commented out (as `# key = shown`), its variable unset */
+void port_setting_unset(const char *key, const char *shown) {
+    char path[1024], name[128] = "TWINE_";
+    int count, i;
+    size_t n = 6;
+    RT_ENTER();
+    for (i = 0; key[i] && n < sizeof(name) - 1; i++)
+        name[n++] = (char)toupper((unsigned char)key[i]);
+    name[n] = 0;
+    unsetenv(name);
+    if (!ini_lines)
+        ini_lines = malloc(sizeof(*ini_lines) * (MAX_LINES + 1));
+    read_lines(path, sizeof(path), ini_lines, &count);
+    for (i = 0; i < count; i++)
+        if (line_is(ini_lines[i], key, 0)) {
+            snprintf(ini_lines[i], sizeof(*ini_lines), "# %s = %s\n", key, shown);
+            write_lines(path, ini_lines, count);
+            break;
+        }
+    port_log("settings: %s back to its default (%s)\n", key, shown);
+    RT_LEAVE();
+}
+
+/* A block of lines added to the end of twine.ini (made if need be) unless it has its first line already (the
+ * [controls] block: controls.c, so the player sees the keys and buttons to change) */
+void port_settings_add_block(const char *block) {
+    char path[1024], first[64];
+    int count;
+    const char *nl = strchr(block, '\n');
+    FILE *out;
+    RT_ENTER();
+    snprintf(first, sizeof(first), "%.*s", nl ? (int)(nl - block) : (int)strlen(block), block);
+    if (!ini_lines)
+        ini_lines = malloc(sizeof(*ini_lines) * (MAX_LINES + 1));
+    read_lines(path, sizeof(path), ini_lines, &count);
+    if (section_line(ini_lines, count, first) < 0 && (out = fopen(path, "a"))) {
+        if (count && strcmp(ini_lines[count - 1], "\n"))
+            fputs(strchr(ini_lines[count - 1], '\n') ? "\n" : "\n\n", out);
+        fputs(block, out);
+        fclose(out);
+        port_log("settings: %s added to %s\n", first, path);
+    }
     RT_LEAVE();
 }
 
@@ -850,6 +1001,7 @@ static int port_main(int argc, char **argv) {
         sigaction(SIGILL, &sa, NULL);
     }
     port_video_init();
+    port_controls_init(); /* the keys and buttons (controls.c: twine.ini's [controls], the layout's key names) */
     port_setup(argc, argv); /* the disc (and BIOS): checked, and chosen on the setup screen when it isn't right */
     port_audio_init();
     port_setup_notices(); /* what didn't start as asked (renderer, sound, folders), before the game */

@@ -306,7 +306,7 @@ static int mouse_steps(void) { /* mouse speed in quarters, 1-12 */
     return n < 1 ? 1 : n > 12 ? 12 : n;
 }
 
-#define SETTINGS 8
+#define SETTINGS 9 /* (the last: controls, which opens the CONTROLS page) */
 
 /* the page's line i, as its label and value, and stepped by d (1 on, -1 back) when d */
 static void setting(int i, int d, char *label, char *value) {
@@ -368,6 +368,10 @@ static void setting(int i, int d, char *label, char *value) {
         strcpy(label, "enemy ai");
         strcpy(value, on ? "improved" : "original");
         return;
+    case 8: /* the CONTROLS page (Cross opens it: the step) */
+        strcpy(label, "controls");
+        strcpy(value, "change");
+        return;
     default: /* F9 opens the developers' debug menu in a mission (mods/savestate.c) */
         on = env_on("TWINE_DEBUG_MENU", 0) ^ (d != 0);
         if (d)
@@ -399,13 +403,101 @@ static char *autoload_name(void) {
     return names[v < 0 ? 2 : v];
 }
 
+/* The CONTROLS page (on_page 2), from PORT SETTINGS' controls line: a line for each of the keyboard's and the
+ * gamepad's actions (port/src/controls.c), its keys or buttons as the value, and RESET ALL (to defaults) last, laid out as
+ * the page is; CTL_ROWS of them at a time, scrolled as the cursor goes past them. Cross on a line waits for the next
+ * key (a gamepad's line: button) pressed and makes it the line's only one, right waits for one more, left puts the
+ * line's default back (port_controls_listen, video.c: Esc gives up); Triangle goes back to PORT SETTINGS. Each change
+ * is kept in twine.ini's [controls] at once. The menu's letters come from a pool of 180 (func_80051DBC), so values
+ * are cut to fit. */
+void port_controls_listen(int c, int add);
+int port_controls_heard(void);
+void port_control_text(int c, int style, char *out, size_t n);
+const char *port_control_label(int c);
+void port_control_default(int c);
+void port_controls_reset(void);
+int port_control_count(void);
+int port_control_first_pad(void);
+extern int port_controls_page;
+#define CTL_ROWS 8
+static int ctl_top, ctl_wait = -1, ctl_shown;
+
+static int ctl_lines(void) {
+    return port_control_count() + 1;
+}
+
+/* in the page's small capitals (lower case), with only what the menu font has (letters, digits, . - + / ? :);
+ * others as '?' */
+static void menu_text(char *s) {
+    for (; *s; s++)
+        if (*s >= 'A' && *s <= 'Z')
+            *s += 'a' - 'A';
+        else if (!((*s >= 'a' && *s <= 'z') || (*s >= '0' && *s <= '9') || strchr(" .-+/?:", *s)))
+            *s = '?';
+}
+
+static int glyphs(const char *s) {
+    int n = 0;
+    for (; *s; s++)
+        n += *s != ' ' && *s != '_';
+    return n;
+}
+
+static void ctl_row(int line, char *label, char *value) {
+    if (line == port_control_count()) {
+        strcpy(label, "reset all");
+        strcpy(value, "to defaults");
+        return;
+    }
+    strcpy(label, port_control_label(line));
+    if (line == ctl_wait)
+        strcpy(value, line >= port_control_first_pad() ? "press a button" : "press a key");
+    else {
+        char t[96];
+        port_control_text(line, 2, t, sizeof(t));
+        if (strlen(t) > 13) { /* (cut after a whole name, "+" for the rest) */
+            char *c;
+            t[13] = 0;
+            if ((c = strrchr(t, '/')) && c > t + 1)
+                strcpy(c - 1, " +");
+            else
+                strcpy(t + 11, "..");
+        }
+        snprintf(value, 32, "%s", t);
+        menu_text(value);
+    }
+}
+
 static void make_items(int page, int at) {
     static char *const own[] = {(char *)0x8008E0FCu, (char *)0x8008E108u, (char *)0x8008E114u};
     int i, n = page ? SETTINGS : 5;
     ITEMS = 0;
     NEXT_GLYPH = FIRST_GLYPH;
     on_page = page;
-    if (page) {
+    port_controls_page = page == 2;
+    if (page == 2) {
+        int total = 0, budget = 0xB4 - FIRST_GLYPH - 2;
+        n = CTL_ROWS;
+        for (i = 0; i < n; i++) {
+            ctl_row(ctl_top + i, item_text[2 * i], item_text[2 * i + 1]);
+            total += glyphs(item_text[2 * i]) + glyphs(item_text[2 * i + 1]);
+        }
+        while (total > budget) { /* (the longest value a letter shorter, till they fit) */
+            int longest = 1;
+            for (i = 1; i < 2 * n; i += 2)
+                if (strlen(item_text[i]) > strlen(item_text[longest]))
+                    longest = i;
+            total -= glyphs(item_text[longest] + strlen(item_text[longest]) - 1);
+            item_text[longest][strlen(item_text[longest]) - 1] = 0;
+        }
+        *(u8 *)0x80073F05u = 1;
+        for (i = 0; i < n; i++) {
+            func_8005133C(item_text[2 * i], 0x94, 0x45 + i * 0x10);
+            func_8005133C(item_text[2 * i + 1], 0x94 + 0xD0, 0x45 + i * 0x10);
+        }
+        *(u8 *)0x80073F05u = 0;
+        n *= 2;
+    } else if (page) {
         *(u8 *)0x80073F05u = 1;
         for (i = 0; i < n; i++) {
             setting(i, 0, item_text[2 * i], item_text[2 * i + 1]);
@@ -539,7 +631,56 @@ s32 func_800293C0(void) {
     on_page = 0;
     r = func_800293C0_orig();
     in_options = on_page = 0;
+    port_controls_page = 0;
     return r;
+}
+
+/* the CONTROLS page's step (the menus' step's, below: `at` the cursor's item before it) */
+static s32 controls_step(s32 at, s32 r, u32 now, u32 was) {
+    int line = ctl_top + at / 2, lines = ctl_lines(), c = CURSOR;
+    if (ctl_wait >= 0) { /* (waiting for the key: video.c gives the menu nothing meanwhile) */
+        int h = port_controls_heard();
+        if (h) {
+            port_endless_logf(-1, "shell: controls page: %s %s", port_control_label(ctl_wait), h > 0 ? "bound" : "left");
+            ctl_wait = -1;
+            ctl_shown = 0; /* (tests: another shot, of the page as it is now) */
+            make_items(2, at);
+        }
+        CURSOR = CURSOR_WAS = at;
+        return 1;
+    }
+    if (r == 3) {
+        port_controls_page = 0;
+        make_items(1, 16);
+        return 1;
+    }
+    if (c != at) { /* moved: the next line or the one before (wrapping), scrolled into sight */
+        int up = (c == at - 1) || (at == 0 && c == CURSOR_END - 1);
+        line = (line + (up ? lines - 1 : 1)) % lines;
+        if (line < ctl_top)
+            ctl_top = line;
+        else if (line >= ctl_top + CTL_ROWS)
+            ctl_top = line - CTL_ROWS + 1;
+        make_items(2, (line - ctl_top) * 2);
+        return r == 2 ? 1 : r;
+    }
+    if (line == lines - 1) { /* RESET ALL TO DEFAULTS */
+        if (r == 2) {
+            port_controls_reset();
+            port_endless_logf(-1, "shell: controls page: all reset");
+            make_items(2, at);
+        }
+        return r == 2 ? 1 : r;
+    }
+    if (r == 2 || ((now & 0x2000) && !(was & 0x2000))) {
+        ctl_wait = line;
+        port_controls_listen(line, r != 2);
+        make_items(2, at);
+    } else if ((now & 0x8000) && !(was & 0x8000)) {
+        port_control_default(line);
+        make_items(2, at);
+    }
+    return r == 2 ? 1 : r;
 }
 
 /* The menus' step, on the OPTIONS screen: Cross on PORT SETTINGS opens the page; on the page the cursor goes a
@@ -569,8 +710,18 @@ s32 func_8003277C(void) {
         }
         return r;
     }
+    if (on_page == 2)
+        return controls_step(at, r, now, was);
     if (r == 3) {
         make_items(0, 3);
+        return 1;
+    }
+    if (at / 2 == 8 && (r == 2 || ((now & 0x2000) && !(was & 0x2000)))) { /* controls: the CONTROLS page */
+        ctl_top = 0;
+        ctl_wait = -1;
+        ctl_shown = 0;
+        make_items(2, 0);
+        port_endless_logf(-1, "shell: the controls page");
         return 1;
     }
     c = CURSOR;
@@ -1232,13 +1383,17 @@ static void shell_keys(void) {
     u32 now = *(u32 *)0x80151A1Cu;
     /* (and no attract mode from these screens: the front end's idle count, which after a while leaves a screen for
      * the intro film, left the run's stats and mission select broken behind it) */
-    if (in_mission_select || in_endless_stats || endless_briefing)
+    if (in_mission_select || in_endless_stats || endless_briefing || on_page == 2) /* (and the CONTROLS page) */
         *(s32 *)0x800747ACu = 0;
     if (getenv("TWINE_TEST_SHELL_SHOTS")) { /* (tests: a shot of each menu once it has shown for 40 frames) */
         static int on_main, on_ms;
         extern int port_shot_now;
         on_main = in_main ? on_main + 1 : 0;
         on_ms = in_mission_select ? on_ms + 1 : 0;
+        if (in_options && on_page == 2 && ctl_wait < 0 && ++ctl_shown == 40) {
+            port_shot_now = 1;
+            port_endless_logf(-1, "test: a shot of the controls page");
+        }
         if (on_main == 40 || on_ms == 40) {
             port_shot_now = 1;
             port_endless_logf(-1, "test: a shot of %s", on_main == 40 ? "the main menu" : "mission select");

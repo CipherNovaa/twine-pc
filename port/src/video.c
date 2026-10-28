@@ -19,7 +19,10 @@
  * drawn by SDL's GPU renderer into a texture the way it draws the window);
  * TWINE_TEST_LOOK=<yaw>,<pitch> stands in for the mouse there (angle units each game frame), and
  * TWINE_TEST_PAD=<frame>:<hex>[,...] for the pad (from each frame on, the pad bits below are held) and
- * TWINE_TEST_STICK=<rx>,<ry>,<lx>,<ly> (hex) for its sticks. */
+ * TWINE_TEST_STICK=<rx>,<ry>,<lx>,<ly> (hex) for its sticks; TWINE_TEST_KEYS=<frame>:<name>[:<frames>][,...] presses
+ * keys, mouse buttons, wheel steps and gamepad buttons by their twine.ini names (held 3 frames, or as many as
+ * given), read through the controls' bindings (controls.c) as a player's are.
+ * Which keys and buttons do what: controls.c (twine.ini's [controls] block, the front end's CONTROLS page). */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +34,7 @@
 #include "gpu_hw.h"
 #include "intro.h"
 #include "module.h"
+#include "controls.h"
 
 extern u16 port_pad_buttons[2];
 void port_notice(const char *key, const char *fmt, ...); /* setup.c */
@@ -74,7 +78,7 @@ static const struct {
 } keymap[] = {
     {SDL_SCANCODE_UP, P_UP}, {SDL_SCANCODE_DOWN, P_DOWN}, {SDL_SCANCODE_LEFT, P_LEFT},
     {SDL_SCANCODE_RIGHT, P_RIGHT},
-    {SDL_SCANCODE_TAB, P_SELECT}, {SDL_SCANCODE_SPACE, P_CROSS}, {SDL_SCANCODE_BACKSPACE, P_TRI},
+    {SDL_SCANCODE_SPACE, P_CROSS}, {SDL_SCANCODE_BACKSPACE, P_TRI}, /* (Tab, messages: controls.c's) */
 };
 
 /* Typing on the front end's initials entry (fixes/shell.c sets port_text_entry while it shows): Shift and a letter
@@ -125,13 +129,17 @@ static const char *const bj_help[] = {
 /* the game's actions (g_Args->buttonMap); reload is also the button that uses things (doors, people) */
 enum { A_FIRE, A_PREV_WEAPON, A_NEXT_WEAPON, A_RELOAD, A_CROUCH, A_AIM, A_STRAFE_LEFT, A_STRAFE_RIGHT };
 
+/* the controls (controls.c) that press one of the game's actions: the keyboard's and mouse's, and the gamepad's in
+ * the modern layout (use presses the game's reload button, which uses things; reload itself: port_reload) */
 static const struct {
-    SDL_Scancode key;
-    int action;
-} actionkeys[] = {
-    {SDL_SCANCODE_E, A_RELOAD}, {SDL_SCANCODE_F, A_RELOAD}, /* use (R reloads: port_reload) */
-    {SDL_SCANCODE_Z, A_PREV_WEAPON}, {SDL_SCANCODE_X, A_NEXT_WEAPON}, {SDL_SCANCODE_C, A_CROUCH}, {SDL_SCANCODE_LCTRL, A_CROUCH},
-    {SDL_SCANCODE_A, A_STRAFE_LEFT}, {SDL_SCANCODE_D, A_STRAFE_RIGHT},
+    int ctl, action;
+} ctl_actions[] = {
+    {CTL_FIRE, A_FIRE}, {CTL_AIM, A_AIM}, {CTL_USE, A_RELOAD}, {CTL_PREV_WEAPON, A_PREV_WEAPON},
+    {CTL_NEXT_WEAPON, A_NEXT_WEAPON}, {CTL_CROUCH, A_CROUCH}, {CTL_STRAFE_LEFT, A_STRAFE_LEFT},
+    {CTL_STRAFE_RIGHT, A_STRAFE_RIGHT},
+}, pad_actions[] = {
+    {CTL_PAD_FIRE, A_FIRE}, {CTL_PAD_CROUCH, A_CROUCH}, {CTL_PAD_USE, A_RELOAD},
+    {CTL_PAD_NEXT_WEAPON, A_NEXT_WEAPON}, {CTL_PAD_PREV_WEAPON, A_PREV_WEAPON},
 };
 
 static int mouse_captured, wheel, wheel_pulse;
@@ -141,7 +149,7 @@ static Uint64 message_until;
 void port_state_request(int load);
 static Uint64 mouse_moved; /* when the mouse last moved (SDL ticks) */
 static Uint64 mouse_taken; /* when the game last took its movement (port_mouse_look) */
-static u16 wheel_bits; /* the weapon button a wheel step holds until the game's next tick */
+static int wheel_held; /* the wheel step the game's next tick has: 1 up, 2 down (what it is bound to held) */
 static int jump_on = -1; /* TWINE_JUMP: Space jumps (else it punches) */
 static int melee_held, melee_pressed; /* Space, the mouse's back button or R3 (the quick punch mod, port_quick_melee) */
 static int grenade_held, grenade_pressed; /* G or R1 (the quick grenade mod, port_quick_grenade) */
@@ -149,6 +157,7 @@ static int reload_tap; /* R or Square seen since the game last asked (port_reloa
 static int sprint_held, sprint_on; /* L3 switches sprinting on until Bond stops (port_sprint) */
 static int jump_held, jump_pressed; /* Space (the jump mod, port_jump) */
 static int weapon_key; /* 1-9: the number key last pressed, -1 Q (the weapon keys mod, port_weapon_key) */
+static int last_held; /* the last weapon's key or button (Q, L1) */
 static float look_yaw, look_pitch; /* angle units not yet taken */
 static float taken_yaw, taken_pitch; /* (TWINE_TEST_LOOK) taken so far */
 
@@ -166,18 +175,10 @@ static const struct {
 };
 
 /* The gamepad while Bond has the controls, in the modern layout (TWINE_CONTROLS, the default; "original"
- * keeps the PS1 pad's buttons and the game's own settings for them): the buttons are actions, whichever PS1
- * buttons the game's settings give them. The triggers fire and aim, the d-pad's left and right change weapons
- * and L1 goes back to the last one (as Q). Cross and the d-pad's up and down stay the pad's, for the prompts a
- * mission puts up, and Start, Select and the touchpad too. */
-static const struct {
-    SDL_GamepadButton b;
-    int action;
-} modern_actions[] = {
-    {SDL_GAMEPAD_BUTTON_EAST, A_CROUCH}, /* (Square reloads: port_reload) */
-    {SDL_GAMEPAD_BUTTON_NORTH, A_RELOAD},
-    {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, A_NEXT_WEAPON}, {SDL_GAMEPAD_BUTTON_DPAD_LEFT, A_PREV_WEAPON},
-};
+ * keeps the PS1 pad's buttons and the game's own settings for them): the buttons are actions (controls.c's
+ * pad_ ones), whichever PS1 buttons the game's settings give them. By default the triggers fire and aim, the
+ * d-pad's left and right change weapons and L1 goes back to the last one (as Q). Cross and the d-pad's up and
+ * down stay the pad's, for the prompts a mission puts up, and Start, Select and the touchpad too. */
 static const struct {
     SDL_GamepadButton b;
     u16 bit;
@@ -208,6 +209,189 @@ static int in_gameplay(void) {
 /* a menu inside a mission (the phone's pause menu, ...) */
 static int in_mission_menu(void) {
     return port_module && port_module->level && controls_now() == 0;
+}
+
+static int modern_layout(void) {
+    return !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
+}
+
+/* The input as it is now: SDL's, or headless TWINE_TEST_KEYS's (test_keys) */
+static int testing_keys = -1;
+static bool fake_keys[SDL_SCANCODE_COUNT];
+static u32 fake_mouse;
+static u8 fake_pad[SDL_GAMEPAD_BUTTON_COUNT], fake_trigger[2];
+
+static int test_keys_on(void) {
+    if (testing_keys < 0)
+        testing_keys = headless && getenv("TWINE_TEST_KEYS") != NULL;
+    return testing_keys;
+}
+
+static const bool *key_state(void) {
+    return test_keys_on() ? fake_keys : SDL_GetKeyboardState(NULL);
+}
+
+static int pad_button(SDL_GamepadButton b) {
+    return test_keys_on() ? fake_pad[b] : gamepad && SDL_GetGamepadButton(gamepad, b);
+}
+
+static int pad_trigger(int right) {
+    return test_keys_on() ? fake_trigger[right]
+                          : gamepad && SDL_GetGamepadAxis(gamepad, right ? SDL_GAMEPAD_AXIS_RIGHT_TRIGGER
+                                                                         : SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16000;
+}
+
+/* one of the controls held (controls.c's bindings): `what` 1 its keys, 2 its mouse buttons and wheel steps (in a
+ * mission, the mouse captured), 4 its gamepad buttons */
+static int held_in(int c, int what) {
+    const bool *keys = key_state();
+    u32 mouse = what & 2 && mouse_captured ? (test_keys_on() ? fake_mouse : SDL_GetMouseState(NULL, NULL)) : 0;
+    int i;
+    for (i = 0; i < MAX_BINDS; i++) {
+        Bind b = port_binds[c][i];
+        switch (b.kind) {
+        case BIND_KEY:
+            if (what & 1 && keys && b.code < SDL_SCANCODE_COUNT && keys[b.code])
+                return 1;
+            break;
+        case BIND_MOUSE:
+            if (mouse & SDL_BUTTON_MASK(b.code))
+                return 1;
+            break;
+        case BIND_WHEEL:
+            if (what & 2 && mouse_captured && wheel_held == b.code + 1)
+                return 1;
+            break;
+        case BIND_PAD:
+            if (what & 4 && b.code < SDL_GAMEPAD_BUTTON_COUNT && pad_button((SDL_GamepadButton)b.code))
+                return 1;
+            break;
+        case BIND_TRIGGER:
+            if (what & 4 && pad_trigger(b.code))
+                return 1;
+            break;
+        }
+    }
+    return 0;
+}
+#define held(c) held_in(c, 3) /* (a keyboard and mouse control) */
+
+/* The CONTROLS page (fixes/shell.c) waiting for a key or button to bind (port_control_set) to control
+ * listen_ctl; meanwhile, and until everything is let go after, the game gets nothing pressed. Esc gives up
+ * (and Start, for a gamepad's), as does 10 s of nothing. */
+static int listen_ctl = -1, listen_add, listen_result, input_quiet;
+static u32 listen_since;
+int port_controls_page; /* (the page shows: F1 lists its keys) */
+
+void port_controls_listen(int c, int add) {
+    listen_ctl = c;
+    listen_add = add;
+    listen_result = 0;
+    listen_since = port_vblank_count();
+    port_log("controls: waiting for a %s for %s\n", c >= CTL_FIRST_PAD ? "gamepad button" : "key",
+             port_control_key(c));
+}
+
+/* 0 still waiting, 1 bound, -1 given up */
+int port_controls_heard(void) {
+    if (listen_ctl >= 0 && port_vblank_count() - listen_since > 600) {
+        port_log("controls: nothing pressed for %s\n", port_control_key(listen_ctl));
+        listen_ctl = -1;
+        listen_result = -1;
+        input_quiet = 1;
+    }
+    return listen_ctl >= 0 ? 0 : listen_result;
+}
+
+static void heard(Bind b) {
+    int pad = listen_ctl >= CTL_FIRST_PAD;
+    if (listen_ctl < 0)
+        return;
+    if ((b.kind == BIND_KEY && b.code == SDL_GetScancodeFromKey(SDLK_ESCAPE, NULL)) ||
+        (b.kind == BIND_KEY && b.code == SDL_SCANCODE_ESCAPE) ||
+        (pad && b.kind == BIND_PAD && b.code == SDL_GAMEPAD_BUTTON_START)) {
+        port_log("controls: %s left as it was\n", port_control_key(listen_ctl));
+        listen_ctl = -1;
+        listen_result = -1;
+        input_quiet = 1;
+        return;
+    }
+    if (pad != (b.kind == BIND_PAD || b.kind == BIND_TRIGGER) || port_bind_reserved(b))
+        return; /* (not one for this control: still waiting) */
+    port_control_set(listen_ctl, b, listen_add);
+    listen_ctl = -1;
+    listen_result = 1;
+    input_quiet = 1;
+}
+
+/* anything held (the CONTROLS page waits for all of it let go after a key is bound) */
+static int anything_held(void) {
+    const bool *keys = key_state();
+    int i;
+    for (i = 0; keys && i < SDL_SCANCODE_COUNT; i++)
+        if (keys[i])
+            return 1;
+    if (test_keys_on() ? fake_mouse : SDL_GetMouseState(NULL, NULL))
+        return 1;
+    for (i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; i++)
+        if (pad_button((SDL_GamepadButton)i))
+            return 1;
+    return pad_trigger(0) || pad_trigger(1);
+}
+
+/* headless: TWINE_TEST_KEYS's keys and buttons held at this frame (pressed: as their events would, the wheel's
+ * steps and the CONTROLS page's waiting) */
+static void test_keys(void) {
+    const char *s = getenv("TWINE_TEST_KEYS");
+    memset(fake_keys, 0, sizeof(fake_keys));
+    memset(fake_pad, 0, sizeof(fake_pad));
+    memset(fake_trigger, 0, sizeof(fake_trigger));
+    fake_mouse = 0;
+    while (s && *s) {
+        char *end, name[48];
+        u32 at = (u32)strtoul(s, &end, 10), len = 3;
+        int k = 0, n;
+        Bind b[2];
+        if (*end == ':')
+            for (end++; *end && *end != ',' && *end != ':' && k < 47; end++)
+                name[k++] = *end;
+        name[k] = 0;
+        if (*end == ':')
+            len = (u32)strtoul(end + 1, &end, 10);
+        while (*end && *end != ',')
+            end++;
+        s = *end ? end + 1 : end;
+        if (!(n = port_bind_parse(name, 0, b, 2)) && !(n = port_bind_parse(name, 1, b, 1))) {
+            if (frames == at)
+                port_log("test keys: no key or button called \"%s\"\n", name);
+            continue;
+        }
+        if (frames < at || frames >= at + len)
+            continue;
+        if (frames == at) {
+            port_log("test keys: %s pressed at frame %u\n", port_bind_name(b[0], 0), frames);
+            heard(b[0]);
+        }
+        for (k = 0; k < n; k++)
+            switch (b[k].kind) {
+            case BIND_KEY:
+                fake_keys[b[k].code] = 1;
+                break;
+            case BIND_MOUSE:
+                fake_mouse |= SDL_BUTTON_MASK(b[k].code);
+                break;
+            case BIND_WHEEL:
+                if (frames == at && mouse_captured)
+                    wheel += b[k].code ? 1 : -1;
+                break;
+            case BIND_PAD:
+                fake_pad[b[k].code] = 1;
+                break;
+            case BIND_TRIGGER:
+                fake_trigger[b[k].code] = 1;
+                break;
+            }
+    }
 }
 
 /* the display TWINE_DISPLAY names (its number from 1, or part of its name), else 0 */
@@ -643,8 +827,6 @@ static void window_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode >= SDL_SCANCODE_1 &&
         e->key.scancode <= SDL_SCANCODE_9 && in_gameplay())
         weapon_key = e->key.scancode - SDL_SCANCODE_1 + 1;
-    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat && e->key.scancode == SDL_SCANCODE_Q && in_gameplay())
-        weapon_key = -1;
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
         (e->key.scancode == SDL_SCANCODE_F11 || (e->key.scancode == SDL_SCANCODE_RETURN && (e->key.mod & SDL_KMOD_ALT))))
         set_fullscreen(!(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));
@@ -655,12 +837,25 @@ static void window_event(const SDL_Event *e) {
         pad_removed(e->gdevice.which);
     if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
         pad_used(e->gbutton.which);
-    /* L1 in the modern layout: back to the weapon held before, as Q */
-    if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && e->gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER &&
-        in_gameplay() && !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original")))
-        weapon_key = -1;
     if (e->type == SDL_EVENT_GAMEPAD_AXIS_MOTION && (e->gaxis.value > 16000 || e->gaxis.value < -16000))
         pad_used(e->gaxis.which);
+    /* the CONTROLS page waiting for a key or button */
+    if (listen_ctl >= 0) {
+        Bind b = {BIND_NONE, 0};
+        if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat)
+            b = (Bind){BIND_KEY, (unsigned short)(e->key.key == SDLK_ESCAPE ? SDL_SCANCODE_ESCAPE : e->key.scancode)};
+        else if (e->type == SDL_EVENT_MOUSE_BUTTON_DOWN && e->button.button >= 1 && e->button.button <= 5)
+            b = (Bind){BIND_MOUSE, e->button.button};
+        else if (e->type == SDL_EVENT_MOUSE_WHEEL && e->wheel.y != 0)
+            b = (Bind){BIND_WHEEL, (unsigned short)(e->wheel.y > 0 ? 0 : 1)};
+        else if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
+            b = (Bind){BIND_PAD, e->gbutton.button};
+        else if (e->type == SDL_EVENT_GAMEPAD_AXIS_MOTION && e->gaxis.value > 16000 &&
+                 (e->gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || e->gaxis.axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER))
+            b = (Bind){BIND_TRIGGER, (unsigned short)(e->gaxis.axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)};
+        if (b.kind != BIND_NONE)
+            heard(b);
+    }
 }
 
 /* The game's motor values on the gamepad: the small motor (on or off) as its high-frequency rumble, the large
@@ -689,38 +884,60 @@ static void poll_input(int tick) {
     const bool *keys;
     u16 down = 0;
     u8 lx = 0x80, ly = 0x80, rx = 0x80, ry = 0x80;
-    SDL_MouseButtonFlags mouse;
-    int capture;
+    int capture, modern = modern_layout();
     size_t i;
     /* the mouse looks around in the levels, while the window has the focus (TWINE_MOUSE=0: never, for playing
-     * with a gamepad only) */
-    capture = port_module && port_module->level && (SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) &&
-              !(getenv("TWINE_MOUSE") && !atoi(getenv("TWINE_MOUSE")));
+     * with a gamepad only); headless, TWINE_TEST_KEYS's mouse is in a level */
+    if (test_keys_on())
+        capture = port_module && port_module->level;
+    else
+        capture = port_module && port_module->level && (SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) &&
+                  !(getenv("TWINE_MOUSE") && !atoi(getenv("TWINE_MOUSE")));
     if (capture != mouse_captured) {
-        SDL_SetWindowRelativeMouseMode(window, capture);
+        if (!test_keys_on())
+            SDL_SetWindowRelativeMouseMode(window, capture);
         mouse_captured = capture;
         look_yaw = look_pitch = 0;
         wheel = 0;
     }
-    while (SDL_PollEvent(&e))
-        window_event(&e);
-    keys = SDL_GetKeyboardState(NULL);
+    if (test_keys_on())
+        test_keys();
+    else
+        while (SDL_PollEvent(&e))
+            window_event(&e);
+    keys = key_state();
+    /* each wheel step holds what it is bound to (the weapon buttons) for one game frame, then lets go for one */
+    if (!mouse_captured)
+        wheel_held = 0;
+    else if (tick) {
+        wheel_held = 0;
+        if (wheel_pulse)
+            wheel_pulse = 0;
+        else if (wheel) {
+            wheel_held = wheel < 0 ? 1 : 2;
+            wheel += wheel < 0 ? 1 : -1;
+            wheel_pulse = 1;
+        }
+    }
     for (i = 0; i < sizeof(keymap) / sizeof(keymap[0]); i++)
         if (keys[keymap[i].key] && !(keymap[i].key == SDL_SCANCODE_RETURN && (SDL_GetModState() & SDL_KMOD_ALT)) &&
             !(keymap[i].key == SDL_SCANCODE_SPACE && in_gameplay()) &&
             !(keymap[i].key == SDL_SCANCODE_BACKSPACE && port_text_entry && (SDL_GetModState() & SDL_KMOD_SHIFT)))
             down |= keymap[i].bit;
+    if (held(CTL_MESSAGES))
+        down |= P_SELECT;
     /* at the blackjack table (the front end's BLACKJACK): the pad's buttons its prompts show */
     if (port_blackjack && !in_gameplay())
         for (i = 0; i < sizeof(bj_keys) / sizeof(bj_keys[0]); i++)
             if (keys[bj_keys[i].key])
                 down |= bj_keys[i].bit;
-    /* Space chooses in the menus and punches (below) while Bond has the controls; with TWINE_JUMP=1 (and the jump
-     * mod built in, PORT_MODS=... JUMP) it jumps instead, kept until the game's next tick takes it */
+    /* The punch's keys (Space) choose in the menus (Space: keymap) and punch (below) while Bond has the controls;
+     * with TWINE_JUMP=1 (and the jump mod built in, PORT_MODS=... JUMP) they jump instead, kept until the game's
+     * next tick takes it */
     if (jump_on < 0)
         jump_on = getenv("TWINE_JUMP") && atoi(getenv("TWINE_JUMP"));
     {
-        int space = keys[SDL_SCANCODE_SPACE] && in_gameplay();
+        int space = held_in(CTL_PUNCH, 1) && in_gameplay();
         if (jump_on && space && !jump_held)
             jump_pressed = 1;
         jump_held = jump_on && space;
@@ -732,36 +949,16 @@ static void poll_input(int tick) {
     {
         /* at the blackjack table (the front end's BLACKJACK) Esc is its EXIT and Enter its X, not the pause */
         int table = port_blackjack && !in_gameplay() && !in_mission_menu();
-        if (keys[SDL_GetScancodeFromKey(SDLK_ESCAPE, NULL)])
+        if (keys[test_keys_on() ? SDL_SCANCODE_ESCAPE : SDL_GetScancodeFromKey(SDLK_ESCAPE, NULL)])
             down |= (port_module && !strcmp(port_module->name, "shell")) || in_mission_menu() || table ? P_TRI : P_START;
         if (keys[SDL_SCANCODE_RETURN] && !(SDL_GetModState() & SDL_KMOD_ALT))
             down |= in_mission_menu() || table ? P_CROSS : P_START;
     }
-    for (i = 0; i < sizeof(actionkeys) / sizeof(actionkeys[0]); i++)
-        if (keys[actionkeys[i].key])
-            down |= action_bits(actionkeys[i].action);
-    if (keys[SDL_SCANCODE_R] || (gamepad && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_WEST) &&
-                                  !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"))))
+    for (i = 0; i < sizeof(ctl_actions) / sizeof(ctl_actions[0]); i++)
+        if (held(ctl_actions[i].ctl))
+            down |= action_bits(ctl_actions[i].action);
+    if (held(CTL_RELOAD) || (modern && held_in(CTL_PAD_RELOAD, 4)))
         reload_tap = 1;
-    if (mouse_captured) {
-        mouse = SDL_GetMouseState(NULL, NULL);
-        if (mouse & SDL_BUTTON_LMASK)
-            down |= action_bits(A_FIRE);
-        if (mouse & SDL_BUTTON_RMASK)
-            down |= action_bits(A_AIM);
-        /* each wheel step presses the weapon button for one game frame */
-        if (tick) {
-            wheel_bits = 0;
-            if (wheel_pulse)
-                wheel_pulse = 0;
-            else if (wheel) {
-                wheel_bits = action_bits(wheel < 0 ? A_PREV_WEAPON : A_NEXT_WEAPON);
-                wheel += wheel < 0 ? 1 : -1;
-                wheel_pulse = 1;
-            }
-        }
-        down |= wheel_bits;
-    }
     /* In the missions the pad is in analog mode, where the game walks and turns by the sticks alone: the arrows
      * walk (the left stick) and turn (the right one) there. */
     if (port_module && port_module->level) {
@@ -774,40 +971,36 @@ static void poll_input(int tick) {
         if (keys[SDL_SCANCODE_RIGHT])
             rx = 0xFF;
     }
-    if (keys[SDL_SCANCODE_W])
+    if (held(CTL_FORWARD))
         ly = 0x00;
-    if (keys[SDL_SCANCODE_S])
+    if (held(CTL_BACK))
         ly = 0xFF;
-    if (keys[SDL_SCANCODE_A])
+    if (held(CTL_STRAFE_LEFT))
         lx = 0x00;
-    if (keys[SDL_SCANCODE_D])
+    if (held(CTL_STRAFE_RIGHT))
         lx = 0xFF;
-    if (keys[SDL_SCANCODE_I])
+    if (held(CTL_LOOK_UP))
         ry = 0x00;
-    if (keys[SDL_SCANCODE_K])
+    if (held(CTL_LOOK_DOWN))
         ry = 0xFF;
-    if (keys[SDL_SCANCODE_J])
+    if (held(CTL_TURN_LEFT))
         rx = 0x00;
-    if (keys[SDL_SCANCODE_L])
+    if (held(CTL_TURN_RIGHT))
         rx = 0xFF;
-    if (gamepad) {
-        int modern;
-        int l2 = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16000;
-        int r2 = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16000;
-        modern = !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
-        stick(SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, &lx, &ly);
-        stick(SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, &rx, &ry);
+    if (gamepad || test_keys_on()) {
+        if (gamepad) {
+            stick(SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, &lx, &ly);
+            stick(SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, &rx, &ry);
+        }
         if (modern && in_gameplay()) {
-            for (i = 0; i < sizeof(modern_actions) / sizeof(modern_actions[0]); i++)
-                if (SDL_GetGamepadButton(gamepad, modern_actions[i].b))
-                    down |= action_bits(modern_actions[i].action);
+            for (i = 0; i < sizeof(pad_actions) / sizeof(pad_actions[0]); i++)
+                if (held_in(pad_actions[i].ctl, 4))
+                    down |= action_bits(pad_actions[i].action);
             for (i = 0; i < sizeof(modern_pad) / sizeof(modern_pad[0]); i++)
-                if (SDL_GetGamepadButton(gamepad, modern_pad[i].b))
+                if (pad_button(modern_pad[i].b))
                     down |= modern_pad[i].bit;
-            if (r2)
-                down |= action_bits(A_FIRE);
             /* aiming, the game leans with the strafe buttons (as A/D do with the mouse's aim): the stick does */
-            if (l2) {
+            if (held_in(CTL_PAD_AIM, 4)) {
                 down |= action_bits(A_AIM);
                 if (lx < 0x50)
                     down |= action_bits(A_STRAFE_LEFT);
@@ -816,44 +1009,53 @@ static void poll_input(int tick) {
             }
         } else {
             for (i = 0; i < sizeof(padmap) / sizeof(padmap[0]); i++)
-                if (SDL_GetGamepadButton(gamepad, padmap[i].b))
+                if (pad_button(padmap[i].b))
                     down |= padmap[i].bit;
-            if (l2)
+            if (pad_trigger(0))
                 down |= P_L2;
-            if (r2)
+            if (pad_trigger(1))
                 down |= P_R2;
         }
     }
-    /* Space (but for the jump) or the mouse's back button, or R3 in the modern layout: a quick punch, kept until the
-     * game's next tick takes it */
+    /* the punch (Space but for the jump, the mouse's back button; R3 in the modern layout): a quick punch, kept until
+     * the game's next tick takes it */
     {
-        int melee = in_gameplay() && ((keys[SDL_SCANCODE_SPACE] && !jump_on) ||
-                    (mouse_captured && (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_X1MASK)) || (gamepad && SDL_GetGamepadButton(gamepad,
-                    SDL_GAMEPAD_BUTTON_RIGHT_STICK) && !(getenv("TWINE_CONTROLS") &&
-                    !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"))));
+        int melee = in_gameplay() && ((held_in(CTL_PUNCH, 1) && !jump_on) || held_in(CTL_PUNCH, 2) ||
+                                      (modern && held_in(CTL_PAD_PUNCH, 4)));
         if (melee && !melee_held)
             melee_pressed = 1;
         melee_held = melee;
     }
-    /* G, or R1 in the modern layout: a quick grenade, once for each press */
+    /* the grenade (G, or R1 in the modern layout): a quick grenade, once for each press */
     {
-        int grenade = in_gameplay() && (keys[SDL_SCANCODE_G] || (gamepad && SDL_GetGamepadButton(gamepad,
-                      SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) && !(getenv("TWINE_CONTROLS") &&
-                      !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"))));
+        int grenade = in_gameplay() && (held(CTL_GRENADE) || (modern && held_in(CTL_PAD_GRENADE, 4)));
         if (grenade && !grenade_held)
             grenade_pressed = 1;
         grenade_held = grenade;
     }
-    /* L3 in the modern layout switches sprinting on; it goes off when the left stick lets go (or Bond hasn't the
-     * controls) */
+    /* the last weapon (Q, or L1 in the modern layout): back to the weapon held before, once for each press */
     {
-        int l3 = in_gameplay() && gamepad && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_STICK) &&
-                 !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
+        int last = in_gameplay() && (held(CTL_LAST_WEAPON) || (modern && held_in(CTL_PAD_LAST_WEAPON, 4)));
+        if (last && !last_held)
+            weapon_key = -1;
+        last_held = last;
+    }
+    /* the pad's sprint (L3 in the modern layout) switches sprinting on; it goes off when the left stick lets go (or
+     * Bond hasn't the controls) */
+    {
+        int l3 = in_gameplay() && modern && held_in(CTL_PAD_SPRINT, 4);
         if (l3 && !sprint_held)
             sprint_on = !sprint_on;
         sprint_held = l3;
         if (!in_gameplay() || (abs(lx - 0x80) < 0x30 && abs(ly - 0x80) < 0x30))
             sprint_on = 0;
+    }
+    /* the CONTROLS page waiting for a key, and until all is let go after: nothing for the game */
+    if (listen_ctl >= 0 || input_quiet) {
+        if (listen_ctl < 0 && !anything_held())
+            input_quiet = 0;
+        else
+            down = 0;
     }
     port_pad_buttons[0] = (u16)~down;
     if (gamepad && tick)
@@ -877,32 +1079,27 @@ int port_quick_melee(void) {
  * E, F and Triangle press it and the mod clears those flags. Bit 0: a reload key is down (or was tapped since
  * the last call, once a tick); bit 1: a use key is. TWINE_TEST_RELOAD=frame (a tap) for headless tests. */
 int port_reload(void) {
-    const bool *keys;
-    int r = 0, modern = !(getenv("TWINE_CONTROLS") && !SDL_strcasecmp(getenv("TWINE_CONTROLS"), "original"));
-    if (headless)
+    int r = 0, modern = modern_layout();
+    if (headless && !test_keys_on())
         return getenv("TWINE_TEST_RELOAD") && frames >= (u32)atoi(getenv("TWINE_TEST_RELOAD")) &&
                frames < (u32)atoi(getenv("TWINE_TEST_RELOAD")) + 2;
-    keys = SDL_GetKeyboardState(NULL);
-    if (keys && keys[SDL_SCANCODE_R])
+    if (listen_ctl >= 0 || input_quiet)
+        return 0;
+    if (held(CTL_RELOAD) || (modern && held_in(CTL_PAD_RELOAD, 4)))
         r |= 1;
-    if (gamepad && modern && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_WEST))
-        r |= 1;
-    if (keys && (keys[SDL_SCANCODE_E] || keys[SDL_SCANCODE_F]))
-        r |= 2;
-    if (gamepad && modern && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH))
+    if (held(CTL_USE) || (modern && held_in(CTL_PAD_USE, 4)))
         r |= 2;
     r |= reload_tap;
     reload_tap = 0;
     return r;
 }
 
-/* 1 while Bond should sprint: Shift held, or L3's sprint on (src/mods/twinstick.c asks every tick) */
+/* 1 while Bond should sprint: the sprint keys held (Shift), or the pad's sprint on (src/mods/twinstick.c asks every
+ * tick) */
 int port_sprint(void) {
-    const bool *keys;
-    if (headless) /* tests: TWINE_TEST_SPRINT=1 holds it */
+    if (headless && !test_keys_on()) /* tests: TWINE_TEST_SPRINT=1 holds it */
         return getenv("TWINE_TEST_SPRINT") != NULL;
-    keys = SDL_GetKeyboardState(NULL);
-    return keys && in_gameplay() && (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT] || sprint_on);
+    return in_gameplay() && (held(CTL_SPRINT) || sprint_on);
 }
 
 /* 1 once for each press of the quick grenade (port/mods/quickgrenade.c asks every tick) */
@@ -964,7 +1161,10 @@ static void test_pad(void) {
             weapon_key = name[0] - '0';
         s = *end ? end + 1 : end;
     }
-    port_pad_buttons[0] = (u16)~bits;
+    if (test_keys_on()) /* (with TWINE_TEST_KEYS's, poll_input's) */
+        port_pad_buttons[0] &= (u16)~bits;
+    else
+        port_pad_buttons[0] = (u16)~bits;
     s = getenv("TWINE_TEST_MELEE"); /* <frame>[,...]: the quick punch pressed at these frames */
     while (s && *s) {
         char *end;
@@ -1115,47 +1315,108 @@ static void draw_picture(SDL_Texture *texture, const SDL_FRect *src, const SDL_F
 
 /* F1: the controls, over the picture; "F1: controls" in a corner for a while the first time the front end and a
  * mission show */
-static const char *const help_lines[] = {
-    "CONTROLS",
+/* The F1 list, from the bindings (controls.c) as they are, the keys by the names this keyboard's layout gives them
+ * (made again every half second: the CONTROLS page changes them) */
+static char help_text[56][96];
+static const char *help_lines[56];
+static int help_n;
+
+static void help_add(const char *keys, const char *does) {
+    if (help_n < 56) {
+        if (does)
+            snprintf(help_text[help_n], sizeof(help_text[0]), "%s .. %s", keys, does);
+        else
+            snprintf(help_text[help_n], sizeof(help_text[0]), "%s", keys);
+        help_lines[help_n] = help_text[help_n];
+        help_n++;
+    }
+}
+
+static void help_ctl(int c, const char *does) {
+    char t[80];
+    port_control_text(c, 1, t, sizeof(t));
+    help_add(t, does);
+}
+
+/* the first key of each of four controls, as "W A S D" */
+static void help_four(int a, int b, int c, int d, const char *does) {
+    int list[4] = {a, b, c, d}, i;
+    char t[80] = "";
+    for (i = 0; i < 4; i++) {
+        size_t n = strlen(t);
+        Bind first = port_binds[list[i]][0];
+        snprintf(t + n, sizeof(t) - n, "%s%s", i ? " " : "", first.kind ? port_bind_name(first, 1) : "-");
+    }
+    help_add(t, does);
+}
+
+static void make_help(void) {
+    char t[160], u[80];
+    help_n = 0;
+    help_add("CONTROLS", NULL);
+    help_add("", NULL);
+    help_add("Mouse", "look");
+    help_four(CTL_FORWARD, CTL_STRAFE_LEFT, CTL_BACK, CTL_STRAFE_RIGHT, "move");
+    help_four(CTL_TURN_LEFT, CTL_TURN_RIGHT, CTL_LOOK_UP, CTL_LOOK_DOWN, "turn, look");
+    help_add("Arrows", "move and turn; menus: move");
+    help_ctl(CTL_FIRE, "fire");
+    help_ctl(CTL_AIM, "aim");
+    port_control_text(CTL_PREV_WEAPON, 1, t, 80);
+    port_control_text(CTL_NEXT_WEAPON, 1, u, sizeof(u));
+    snprintf(t + strlen(t), sizeof(t) - strlen(t), " / %s", u);
+    help_add(t, "change weapon");
+    help_add("1 - 9", "pick a weapon");
+    help_ctl(CTL_LAST_WEAPON, "last weapon");
+    help_ctl(CTL_USE, "use");
+    help_ctl(CTL_RELOAD, "reload");
+    help_ctl(CTL_PUNCH, "punch");
+    help_ctl(CTL_GRENADE, "grenade");
+    help_ctl(CTL_SPRINT, "sprint");
+    help_ctl(CTL_CROUCH, "crouch");
+    help_add("Enter", "pause; menus: choose");
+    help_add("Esc", "pause; menus: back");
+    help_add("Space", "menus: choose");
+    help_add("Backspace", "menus: back");
+    help_ctl(CTL_MESSAGES, "messages");
+    help_add("F5, F6", "save state, load state");
+    help_add("F11, Alt+Enter", "full screen");
+    help_add("", NULL);
+    help_add("GAMEPAD", NULL);
+    help_add("", NULL);
+    help_add("Left stick", "move");
+    help_add("Right stick", "look");
+    if (!modern_layout())
+        help_add("(classic layout: the PS1 pad's buttons)", NULL);
+    else {
+        int c;
+        for (c = CTL_PAD_FIRE; c < CTL_COUNT; c++)
+            if (c == CTL_PAD_PREV_WEAPON) {
+                port_control_text(CTL_PAD_PREV_WEAPON, 1, t, 80);
+                port_control_text(CTL_PAD_NEXT_WEAPON, 1, u, sizeof(u));
+                snprintf(t + strlen(t), sizeof(t) - strlen(t), " / %s", u);
+                help_add(t, "change weapon");
+            } else if (c != CTL_PAD_NEXT_WEAPON)
+                help_ctl(c, c == CTL_PAD_FIRE ? "fire" : c == CTL_PAD_AIM ? "aim" : c == CTL_PAD_USE ? "use" :
+                            c == CTL_PAD_RELOAD ? "reload" : c == CTL_PAD_PUNCH ? "punch" :
+                            c == CTL_PAD_GRENADE ? "grenade" : c == CTL_PAD_CROUCH ? "crouch" :
+                            c == CTL_PAD_SPRINT ? "sprint (on / off)" : "last weapon");
+    }
+    help_add("Start", "pause");
+    help_add("Back, touchpad", "messages");
+}
+
+/* on the front end's CONTROLS page: its keys */
+static const char *const page_help[] = {
+    "CONTROLS PAGE",
     "",
-    "Mouse ............ look",
-    "@W @A @S @D .......... move",
-    "Arrows ........... move and turn; menus: move",
-    "Left button ...... fire",
-    "Right button ..... aim",
-    "Wheel, @Z, @X ...... change weapon",
-    "1 - 9 ............ pick a weapon",
-    "@Q ................ last weapon",
-    "@E, @F ............ use",
-    "@R ................ reload",
-    "Space, Mouse 4 ... punch",
-    "@G ................ grenade",
-    "Shift ............ sprint",
-    "@C, Ctrl .......... crouch",
-    "Enter ............ pause; menus: choose",
-    "Esc .............. pause; menus: back",
-    "Space ............ menus: choose",
-    "Backspace ........ menus: back",
-    "Tab .............. messages",
-    "F5, F6 ........... save state, load state",
-    "F11, Alt+Enter ... full screen",
+    "Up, Down ......... choose",
+    "Enter, Space, X .. change (then press it)",
+    "Right ............ add one more",
+    "Left ............. back to the default",
+    "Esc, Triangle .... back",
     "",
-    "GAMEPAD",
-    "",
-    "Left stick ....... move",
-    "Right stick ...... look",
-    "R2 / RT .......... fire",
-    "L2 / LT .......... aim",
-    "Square / X ....... reload",
-    "Triangle / Y ..... use",
-    "Circle / B ....... crouch",
-    "R3 ............... punch",
-    "L3 ............... sprint (on / off)",
-    "R1 / RB .......... grenade",
-    "D-pad left/right . change weapon",
-    "L1 / LB .......... last weapon",
-    "Start ............ pause",
-    "Back, touchpad ... messages",
+    "Esc while waiting: leave it as it was",
+    "Keys: twine.ini's [controls] too",
 };
 
 /* A help line as this keyboard's layout names its keys: "@W" is the key in W's place (keys are read by their
@@ -1165,7 +1426,18 @@ static const char *const *help_list(int *n) {
         *n = sizeof(bj_help) / sizeof(bj_help[0]);
         return bj_help;
     }
-    *n = sizeof(help_lines) / sizeof(help_lines[0]);
+    if (port_controls_page) {
+        *n = sizeof(page_help) / sizeof(page_help[0]);
+        return page_help;
+    }
+    {
+        static Uint64 made_at;
+        if (!help_n || ui_ms() - made_at > 500 || ui_ms() < made_at) {
+            make_help();
+            made_at = ui_ms();
+        }
+    }
+    *n = help_n;
     return help_lines;
 }
 
@@ -1285,11 +1557,25 @@ static void draw_debug_text(void) {
     }
 }
 
+/* tests: TWINE_TEST_HELP=1 logs the F1 list once a level shows, and shows it (the hw renderer's screen shots) */
+static void test_help(void) {
+    static int done;
+    int n, i;
+    if (done || !port_module || !port_module->level || !getenv("TWINE_TEST_HELP"))
+        return;
+    done = help_shown = 1;
+    help_list(&n);
+    for (i = 0; i < n; i++)
+        port_log("help: %s\n", help_line(i));
+}
+
 static void draw_help(void) {
     static const PortModule *hinted_shell, *hinted_level;
     static Uint64 hint_until;
     int ww = 0, wh = 0, cols = 0, n, i;
-    const char *const *list = help_list(&n);
+    const char *const *list;
+    test_help();
+    list = help_list(&n);
     float scale, x, y, w, h;
     SDL_FRect r;
     if (port_module && !strcmp(port_module->name, "shell") && !hinted_shell) {
@@ -1590,8 +1876,12 @@ void port_frame_end(void) {
         poll_input(1);
         if (!port_smooth_shown) /* else interp.c has shown it */
             present();
-    } else if (screen && !port_smooth_shown)
-        present();
+    } else {
+        if (test_keys_on())
+            poll_input(1);
+        if (screen && !port_smooth_shown)
+            present();
+    }
     if (getenv("TWINE_TEST_PAD") || getenv("TWINE_TEST_STICK") || getenv("TWINE_TEST_MELEE") || getenv("TWINE_TEST_GRENADE") ||
         getenv("TWINE_TEST_WEAPON") || getenv("TWINE_TEST_JUMP") || getenv("TWINE_TEST_INPUT"))
         test_pad();
