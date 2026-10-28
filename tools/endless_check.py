@@ -1732,6 +1732,14 @@ def select_runs():
     # (the playtest's: the AR36 carried through a door into Meltdown, where the game's slot is the P2K's till the AR36
     # comes out at frame 61: the strip names the AR36 from the room's first frame; the pause menu opened and left over
     # that room's strip; RESTART MISSION, the fresh run's first room)
+    # (the strip's box, the ammo counter's own pieces with the dots, in every mission: a room of each in a run (its
+    # start's band) and each campaign mission, a weapon change at 200 in both; TWINE_TRACE=strip names the style drawn)
+    for l in range(2, 12):
+        runs["p_box_%d" % l] = Run("p_box_%d" % l, l, 15, {"TWINE_TRACE": "strip", "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1,
+                                                          "TWINE_TEST_INPUT": "200:wheeldown"})
+        runs["p_box_end_%d" % l] = Run("p_box_end_%d" % l, l, 15, dict(runs["p_box_%d" % l].env, TWINE_ENDLESS=1,
+                                                                     TWINE_ENDLESS_SEED=5, TWINE_ENDLESS_TEST_GOD=1,
+                                                                     TWINE_ENDLESS_ROOM="%d:-1" % l))
     runs["p_carry"] = Run("p_carry", 8, 50, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="10:4",
                                                  TWINE_ENDLESS_TEST_EXIT="200,5000", TWINE_ENDLESS_TEST_DRAW="AR36",
                                                  TWINE_ENDLESS_TEST_RESTART=400, TWINE_TRACE="select,change,strip",
@@ -1814,6 +1822,24 @@ def check_select(runs):
     result("r", "... and in the fresh run's first room after RESTART MISSION", bool(rest) and bool(rest[0][2]) and
            all(n == rest[0][1] for n in rest[0][2]), "%s drawn, strip %s" % (rest[0][1], ", ".join(sorted(set(rest[0][2]))))
            if rest else "no restart")
+    # the strip's style in every mission, a run's rooms and the campaign's: the box of the ammo counter's pieces with
+    # the dots (B), never the fallback band (a mission whose box pieces' names the build couldn't place)
+    def styles(log):
+        st = {}
+        for lv, how in re.findall(r"trace: L(\d+) f\d+ strip: \".*?\" drawn \(level \d+\) as ([^,;]+)", log):
+            st.setdefault(int(lv), set()).add(how)
+        return st
+    se, sc = {}, {}
+    for l in range(2, 12):
+        sc.update(styles(runs["p_box_%d" % l].log))
+        se.update(styles(runs["p_box_end_%d" % l].log))
+    for how, st in (("a run's rooms", se), ("the campaign", sc)):
+        miss = [l for l in range(2, 12) if l not in st]
+        bad = ["L%d %s" % (l, "/".join(sorted(st[l]))) for l in sorted(st) if st[l] != {"B"}]
+        result("r", "HUD strip drawn as the box with the dots (B) in every mission: %s (hw, smooth)" % how,
+               not miss and not bad, "; ".join(bad + (["no strip in L" + ",".join(map(str, miss))] if miss else [])) or
+               "levels 2-11 all B")
+
     # the checkmarks kept: the list in Meltdown and Courier as King's Ransom left it
     lists = re.findall(r"trace: L(\d+) f\d+ select: the next-weapon button: .*?; list (.+)", runs["p_ticks"].log)
     def marks(lst):
