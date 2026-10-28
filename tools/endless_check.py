@@ -4,7 +4,7 @@
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-p]
   -j JOBS    runs at once (default 4; at most 12, paced at most 5). A turbo run takes a whole core while it runs: 8 suit
              the 16-core machine when it is otherwise quiet; a run waits to start while the load is over the core count
-  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrstuv (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrstuvw (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
@@ -37,6 +37,9 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
              v cheats in a run: the CHEATS screen's six, a developers' code's invincibility, the port's infinite
                grenades, the debug menu: each does what it says through three rooms (lent guns too, invincibility
                through the room changes), makes the run unranked, and the run's stats say why
+             w the AR36's scope after a grenade (a guard's in King's Ransom 8:-1, sw and hw with smooth motion; Bond's own
+               quick grenade in 1:-1): the scope's crosshair over the scene, not a black box with red marks (the mod's
+               grenade texture was put where the AR36 keeps the crosshair's)
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -2035,6 +2038,51 @@ CHEATS = [  # (run, the cheat, its environment, why the run is unranked)
     ("v_dbg", "the debug menu opened", {"TWINE_TEST_DEBUG_MENU": 150}, "debug menu")]
 
 
+# ---- w: the AR36's scope after a grenade ----
+
+def scope_runs():
+    """the AR36 drawn and scoped (from frame 166/200) on the guards of the room, after a grenade of the port's own
+    (quickgrenade.c: a guard's in King's Ransom at frame 199, Bond's quick grenade in 1:-1 at 180), shot at 240/250"""
+    arm = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_ARM": 1, "TWINE_ENDLESS_TEST_DRAW": "AR36",
+           "TWINE_ENDLESS_TEST_GOD": 1}
+    guard = dict(arm, TWINE_ENDLESS_ROOM="8:-1", TWINE_TEST_PAD="166:0800", TWINE_SHOT=240)
+    return {"w_guard_sw": Run("w_guard_sw", 8, 14, dict(guard, TWINE_RENDERER="sw")),
+            "w_guard_hw": Run("w_guard_hw", 8, 14, dict(guard, TWINE_RENDERER="hw", TWINE_SMOOTH=1)),
+            "w_bond_sw": Run("w_bond_sw", 1, 14, dict(arm, TWINE_ENDLESS_ROOM="1:-1", TWINE_TEST_GRENADE=180,
+                                                      TWINE_TEST_PAD="200:0800", TWINE_SHOT=250, TWINE_RENDERER="sw"))}
+
+
+def reticle_black(img):
+    """the share of black pixels in the box the scope's crosshair image covers (a 512x240 frame's x 216-296, y 96-140):
+    the scene through it, the crosshair's ring and lines about 0.16; the box drawn opaque (its texels another
+    image's) about 0.7"""
+    w, h, px = img
+    sx, sy = w / 512.0, h / 240.0
+    n = k = 0
+    for y in range(96, 140):
+        for x in range(216, 296):
+            i = (int(y * sy) * w + int(x * sx)) * 3
+            if i + 2 < len(px):
+                n += 1
+                k += max(px[i], px[i + 1], px[i + 2]) < 12
+    return k / n if n else 1.0
+
+
+def check_scope(runs):
+    for name, shot, what in (("w_guard_sw", 240, "a guard's grenade, sw"), ("w_guard_hw", 240, "a guard's grenade, hw, smooth motion"),
+                             ("w_bond_sw", 250, "Bond's quick grenade (1:-1), sw")):
+        r = runs[name]
+        img = read_ppm(os.path.join(r.dir, "shot_%04d.ppm" % shot))
+        thrown = re.search(r" f(\d+) v\d+ ai: type \d+ throws a grenade", r.log)
+        before = name.startswith("w_bond") or (thrown and int(thrown.group(1)) < shot - 10)
+        up = scope_picture(img) if img else 0
+        black = reticle_black(img) if img else 1.0
+        result("w", "AR36 scoped after %s: the crosshair over the scene, no black box" % what,
+               bool(img) and bool(before) and up >= 0.85 and black < 0.35 and not r.crashed(),
+               "scope's marks %d%%, black in the crosshair's box %d%% (a box: about 70%%)%s%s" %
+               (up * 100, black * 100, "" if img else ", no shot", "" if before else ", no grenade thrown before the shot"))
+
+
 def cheat_runs():
     """three rooms (King's Ransom 8:-1, Turncoat 3:-1, Courier 2:4), the Ingalls drawn (lent after the first), Bond put
     by the guards sent and firing; each cheat on as the game's CHEATS screen leaves it (TWINE_TEST_FLAGS2), or the
@@ -2116,7 +2164,7 @@ def check_cheats(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrstuv", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrstuvw", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -2212,6 +2260,8 @@ def main():
         groups["aim"] = aim_runs()
     if "v" in checks:
         groups["cheats"] = cheat_runs()
+    if "w" in checks:
+        groups["scope"] = scope_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.cost())  # (the long ones first)
     t0 = time.time()
@@ -2283,11 +2333,13 @@ def main():
         checked(groups["aim"].values(), check_aim, groups["aim"])
     if "cheats" in groups:
         checked(groups["cheats"].values(), check_cheats, groups["cheats"])
+    if "scope" in groups:
+        checked(groups["scope"].values(), check_scope, groups["scope"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
              "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp",
              "p": "12 people", "q": "the bar's guards", "r": "weapon list",
-             "s": "Bond walks", "t": "music", "u": "auto-aim", "v": "cheats"}
+             "s": "Bond walks", "t": "music", "u": "auto-aim", "v": "cheats", "w": "scope reticle"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))

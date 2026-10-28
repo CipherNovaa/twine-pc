@@ -248,8 +248,12 @@ s32 func_80076A8C(u8 *grenade) {
 
 /* Grenades of the mod's own, for the missions without frag grenades: King's Ransom's model (L08/DATA08.BIN in
  * L08/LVL08CD.BIN, the type its frag throws, a TMD of 74 textured triangles) and texture (TIM 32 of
- * L08/LVL08TIM.BIN), read from the disc (port_disc_file) once, the texture put where no mission has anything (x
- * 928, y 320; its colours at 0, 508) and the model's texture page, colours and places in it moved there. They fly
+ * L08/LVL08TIM.BIN), read from the disc (port_disc_file) once, the texture put where no mission has anything: the
+ * 32 rows under the two 240-line frames (x 448, y 480, cut in three bands of 32 rows: see load(); its colours at 0,
+ * 508), and the model's texture page, colours and places in it moved there. (It was at x 928, y 320, 16x64, where
+ * the AR36 sniper rifle puts its scope's crosshair as it's drawn, in its missions 1, 3, 5 and 8: a grenade
+ * thrown after that, Bond's or a guard's, turned the crosshair's clear background into a black box. VRAM traced in
+ * all eleven missions, every weapon drawn: no 16x64 place is free in all of them; those 32 rows are.) They fly
  * and bounce, losing most of their speed, here (through the level's shot mesh, func_800746D0, as projectiles are moved), guards who see one
  * shout and run, and three seconds after the throw it goes off as the frag does (func_80065614 and the blast
  * sound, func_80027248, from an object of this mod's own, the blast Bond's). The model is drawn with the
@@ -267,8 +271,9 @@ s32 func_80076A8C(u8 *grenade) {
 #define THROW_PROGRAM 7
 #define THROW_TONE 0
 #define THROW_RATE 15198 /* its note (10) 18 below the tone's centre (28, less 57/128): 44100 Hz * 2^(-18.45/12) */
-#define TEX_X 928
-#define TEX_Y 320
+#define TEX_X 448 /* (the image's three bands: 48x32 VRAM pixels) */
+#define TEX_Y 480
+#define BANDS 3
 #define CLUT_X 0
 #define CLUT_Y 508
 
@@ -277,7 +282,8 @@ typedef struct Coord { u32 flg; Mat coord, workm; void *param; struct Coord *sup
 typedef struct { u32 attribute; Coord *coord2; u32 *tmd; u32 id; } DObj;
 
 static u32 model[0xAD0 / 4];
-static u16 clut[16], image[16 * 64];
+static u16 clut[16], image[16 * 64], strip[16 * BANDS * 32];
+static const u32 band_row[BANDS] = {0, 32, 16}; /* (the image's rows each band begins at) */
 static int assets;      /* 1 loaded, -1 not to be had */
 static DObj dobj;
 static Coord coord;
@@ -391,6 +397,7 @@ void port_voice_play(int level, int program, int tone, s32 vol) {
 /* the frag's model and texture, from King's Ransom's archive (entries of 0x1C bytes: name, first sector) */
 static void load(void) {
     u8 *arc, *data = NULL, *tim = NULL, *vh = NULL, *vb = NULL, *e, *q, *at;
+    u32 u0, v0;
     u32 n = port_disc_file("L08/LVL08CD.BIN", &arc), i, k;
     assets = -1;
     if (!n)
@@ -415,16 +422,32 @@ static void load(void) {
         memcpy(clut, q + 12, sizeof(clut));
         q += W(q, 0, u32);
         memcpy(image, q + 12, sizeof(image));
-        /* each textured primitive's colours, texture page and places in it moved (u by 64, v by -64) */
+        /* (where the image's texels begin in its own texture page: the model's places count from there) */
+        u0 = W(q, 4, u16) % 64 * 4, v0 = W(q, 6, u16) % 256;
+        /* the image in three bands of 32 rows (band_row), side by side (64 texels apart), each textured primitive
+         * moved into the first band that holds all its rows, its colours and texture page moved there */
+        for (k = 0; k < BANDS; k++)
+            for (i = 0; i < 32; i++)
+                memcpy(strip + i * 16 * BANDS + k * 16, image + (band_row[k] + i) * 16, 32);
         q = (u8 *)model + 12 + model[3 + 4];
         for (i = 0; i < model[3 + 5]; i++, q += 4 + q[1] * 4)
             if (q[3] & 4) {
+                u32 nv = q[3] & 8 ? 4u : 3u, lo = 255, hi = 0, b;
+                for (k = 0; k < nv; k++) {
+                    at = q + 4 + k * 4;
+                    lo = at[1] - v0 < lo ? at[1] - v0 : lo, hi = at[1] - v0 > hi ? at[1] - v0 : hi;
+                }
+                for (b = 0; b < BANDS - 1 && !(lo >= band_row[b] && hi < band_row[b] + 32); b++)
+                    ; /* (none holding them all: the last band's, and the rows outside it clamped) */
                 W(q, 6, u16) = CLUT_Y << 6 | CLUT_X >> 4;
                 W(q, 10, u16) = (W(q, 10, u16) & ~0x1F) | (TEX_X / 64) | (TEX_Y / 256) << 4;
-                for (k = 0; k < (q[3] & 8 ? 4u : 3u); k++) {
-                    at = q + 4 + (k < 2 ? k * 4 : k == 2 ? 8 : 12);
-                    at[0] += 64;
-                    at[1] -= 64;
+                for (k = 0; k < nv; k++) {
+                    s32 row;
+                    at = q + 4 + k * 4;
+                    row = (s32)at[1] - (s32)v0 - (s32)band_row[b];
+                    row = row < 0 ? 0 : row > 31 ? 31 : row;
+                    at[0] = at[0] - u0 + b * 64 + TEX_X % 64 * 4;
+                    at[1] = row + TEX_Y % 256;
                 }
             }
         GsMapModelingData(model + 1);
@@ -561,7 +584,7 @@ static void throw_own(void) {
         func_80026F30(swing_sound[g_Args->level - 1], 0);
     toss = TOSS;
     /* (again: what the level loads may cover it) */
-    gpu_load_image(TEX_X, TEX_Y, 16, 64, image);
+    gpu_load_image(TEX_X, TEX_Y, 16 * BANDS, 32, strip);
     gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
 }
 
@@ -596,7 +619,7 @@ int quick_projectile(int kind) {
     live[g].kind = kind;
     if (kind <= QP_FLASH || kind == QP_SATCHEL)
         toss = TOSS;
-    gpu_load_image(TEX_X, TEX_Y, 16, 64, image);
+    gpu_load_image(TEX_X, TEX_Y, 16 * BANDS, 32, strip);
     gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
     return 1;
 }
@@ -656,7 +679,7 @@ int quick_grenade_enemy(const s32 *from, const s32 *to, u8 *owner) {
     live[g].kind = QP_FRAG;
     memcpy(live[g].aim, to, 12);
     toss = TOSS;
-    gpu_load_image(TEX_X, TEX_Y, 16, 64, image);
+    gpu_load_image(TEX_X, TEX_Y, 16 * BANDS, 32, strip);
     gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
     return 1;
 }
