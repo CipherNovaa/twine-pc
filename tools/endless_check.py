@@ -35,6 +35,8 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
   -p         paced: every run in real time, as played (default: TWINE_TURBO, game time as fast as the machine
              runs it; the same frames, vblanks, controls and sound, irq.c). Either way each run lasts its seconds
              of game time (TWINE_TEST_VBLANKS); build/endless_check/times.txt has each run's time on the wall clock
+  -w         the Windows build (make -C port windows: build/port-win/twine.exe) under Wine, in a Wine prefix of the
+             suite's own (build/endless_check/wineprefix), with no display (headless runs need none)
 
 Environment:
   TWINE_DISC         the disc image (default: the first .bin in workbench/disc/)
@@ -43,6 +45,8 @@ Environment:
   TWINE_CHECK_DIR    where the runs go (default build/endless_check/)
   TWINE_CHECK_ENV    NAME=VALUE;... added to every run (tests of the harness: TWINE_TURBO_LOOK_NS=0 makes LEVEL07's
                      busy wait stick)
+  TWINE_CHECK_EXE    the program to run (default build/port/twine; with -w build/port-win/twine.exe); a .exe runs
+                     under Wine
 
 Each run has its own folders (config, data, state, cards) and runs as "twinechk" (a link to build/port/twine), so
 it never touches the user's settings or cards and isn't mistaken for the game. Runs are headless with SDL's dummy
@@ -67,7 +71,8 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BIN = os.path.join(ROOT, "build", "port", "twine")
+BIN = os.environ.get("TWINE_CHECK_EXE", os.path.join(ROOT, "build", "port", "twine"))
+WINE_PREFIX = None  # (a .exe: Wine's prefix for the runs)
 
 
 def disc():
@@ -121,8 +126,18 @@ class Run:
         if self.config:
             open(os.path.join(self.dir, "conf/twine/twine.ini"), "w").write(self.config)
         exe = os.path.join(self.dir, "twinechk")
+        windows = BIN.lower().endswith(".exe")
+        if windows:  # (its DLLs from the folder it runs from: SDL3.dll beside it)
+            exe += ".exe"
+            for dll in glob.glob(os.path.join(os.path.dirname(BIN), "*.dll")) or \
+                    glob.glob(os.path.join(ROOT, "build", "win-deps", "SDL3-*", "i686-w64-mingw32", "bin", "*.dll")):
+                os.symlink(dll, os.path.join(self.dir, os.path.basename(dll)))
         os.symlink(BIN, exe)
         env = dict(os.environ)
+        if windows:
+            for k in ("DISPLAY", "WAYLAND_DISPLAY"):  # (no window can reach the screen)
+                env.pop(k, None)
+            env.update({"WINEPREFIX": WINE_PREFIX, "WINEDEBUG": "-all"})
         for k in list(env):
             if k.startswith("TWINE_") and k != "TWINE_DISC":
                 del env[k]
@@ -139,6 +154,9 @@ class Run:
         env.update({k: str(v) for k, v in self.env.items()})
         for kv in filter(None, os.environ.get("TWINE_CHECK_ENV", "").split(";")):  # (tests of the harness itself)
             env[kv.split("=", 1)[0]] = kv.split("=", 1)[1]
+        if windows:  # (Wine hides XDG_* from Windows programs: the game takes them as TWINE_XDG_*, platform_win.c)
+            env.update({"TWINE_" + k: env[k] for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")})
+            env["WINEDLLOVERRIDES"] = "winemenubuilder.exe=d"  # (no menu entries written into the run's folders)
         env["TWINE_TEST_VBLANKS"] = str(int(round(self.secs * 59.94)))
         if TURBO:  # (game time: as fast as the machine runs it, the same frames, vblanks, controls and sound)
             env["TWINE_TURBO"] = "1"
@@ -151,7 +169,7 @@ class Run:
             # (setarch -R: the same addresses every run. Some of the game's code reads memory it never set (a blast's
             # debris in Fallen Angel at f1088 of k_gl_lent comes out in one of three places), finding there what the
             # host's address randomization left: with it, two runs of the same build can differ)
-            child = subprocess.Popen(["nice"] + SETARCH + [exe], cwd=self.dir, env=env, stdout=out,
+            child = subprocess.Popen(["nice"] + SETARCH + (["wine"] if windows else []) + [exe], cwd=self.dir, env=env, stdout=out,
                                      stderr=subprocess.STDOUT)
             # (no bound on the wall clock that a loaded machine can reach: a run is stopped when its game is stuck, the
             # watchdog's "no frame shown" (in turbo: 6 s of the game thread's own CPU time) standing for 30 s, or
@@ -1831,6 +1849,9 @@ def main():
         elif a == "-o":
             global AI_ORIGINAL
             AI_ORIGINAL = True
+        elif a == "-w":
+            global BIN
+            BIN = os.environ.get("TWINE_CHECK_EXE", os.path.join(ROOT, "build", "port-win", "twine.exe"))
         elif a == "-p":
             global TURBO
             TURBO = False
@@ -1842,6 +1863,12 @@ def main():
     WORK = os.environ.get("TWINE_CHECK_DIR", os.path.join(ROOT, "build", "endless_check"))
     DISC = disc()
     os.makedirs(WORK, exist_ok=True)
+    if BIN.lower().endswith(".exe"):  # (the Wine prefix made once, before the runs share it)
+        global WINE_PREFIX
+        WINE_PREFIX = os.path.join(WORK, "wineprefix")
+        env = {k: v for k, v in os.environ.items() if k not in ("DISPLAY", "WAYLAND_DISPLAY")}
+        env.update({"WINEPREFIX": WINE_PREFIX, "WINEDEBUG": "-all"})
+        subprocess.run(["wineboot", "-i"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     rooms = rooms or pool_rooms()
     groups = {}
     if set(checks) & set("abc"):

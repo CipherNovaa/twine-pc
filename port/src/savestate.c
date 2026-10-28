@@ -27,6 +27,9 @@
 #include "module.h"
 #include "gpu.h"
 #include "gpu_hw.h"
+#ifdef _WIN32
+#include "win/platform.h"
+#endif
 
 #define MAGIC "TWINESTA"
 #define VERSION 1
@@ -92,11 +95,22 @@ static void init(void) {
     int i;
     if (ranges)
         return;
+#ifdef _WIN32 /* (the port's own objects' data and BSS: platform_win.c) */
+    {
+        char *at[3];
+        unsigned size[3];
+        int k, n = plat_state_ranges(at, size, 3);
+        for (k = 0; k < n; k++)
+            range[k].at = at[k], range[k].size = size[k];
+        ranges = n;
+    }
+#else
     range[0].at = __data_start;
     range[0].size = (u32)(_end - __data_start);
     ranges = 1;
     cut(__start_nosave_data, __stop_nosave_data);
     cut(__start_nosave_bss, __stop_nosave_bss);
+#endif
     for (i = 0; i < ranges; i++)
         native_size += range[i].size;
     build = 2166136261u;
