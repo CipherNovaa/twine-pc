@@ -771,7 +771,11 @@ static void watchdog_start(void) {
  * (and with the environment's size), so two runs of the same build and input could part (k_gl_lent: a Fallen
  * Angel blast's debris at f1088 in one of three places; a MAX_TEXT_SPRITES exit). Here those addresses are the same
  * every run. TWINE_TEST_HOST_STACK=1: the host's own stack, as before (to show the difference). */
+#ifdef _WIN32 /* (Windows: the program's own image lies at 0x04000000; port/tools/win_link.py) */
+#define GAME_STACK_LO 0x30000000u
+#else
 #define GAME_STACK_LO 0x04000000u
+#endif
 #define GAME_STACK_SIZE 0x04000000u
 static int port_main(int argc, char **argv);
 static int game_argc, game_ret;
