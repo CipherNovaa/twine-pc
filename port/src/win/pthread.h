@@ -5,6 +5,7 @@
  * its signal mask. */
 #include <stddef.h>
 #include <signal.h>
+#include <time.h>
 
 typedef struct plat_thread *pthread_t;
 typedef struct {
@@ -18,5 +19,8 @@ int pthread_kill(pthread_t t, int sig);
 int pthread_getattr_np(pthread_t t, pthread_attr_t *attr);
 int pthread_attr_getstack(const pthread_attr_t *attr, void **addr, size_t *size);
 int pthread_attr_destroy(pthread_attr_t *attr);
+/* a thread's CPU time as a clock for clock_gettime (GetThreadTimes: user and kernel time, in 100 ns, updated at the
+ * scheduler's tick) */
+int pthread_getcpuclockid(pthread_t t, clockid_t *clock);
 
 #endif

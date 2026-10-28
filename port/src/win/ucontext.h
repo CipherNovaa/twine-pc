@@ -21,6 +21,17 @@ typedef struct ucontext_t {
     stack_t uc_stack;
     mcontext_t uc_mcontext;
     sigset_t uc_sigmask;
+    /* (getcontext/makecontext/swapcontext, platform_win.c: the stack pointer it was left at, its function) */
+    unsigned int plat_sp;
+    void (*plat_fn)(void);
 } ucontext_t;
+
+/* Contexts as main.c uses them: getcontext, makecontext with a stack and no arguments, swapcontext to it, its uc_link
+ * when the function returns. A switch of stack (the thread's stack bounds in its TEB with it), registers kept as a
+ * call keeps them. */
+int getcontext(ucontext_t *uc);
+void makecontext(ucontext_t *uc, void (*fn)(), int argc, ...);
+int swapcontext(ucontext_t *from, const ucontext_t *to);
+int setcontext(const ucontext_t *uc);
 
 #endif

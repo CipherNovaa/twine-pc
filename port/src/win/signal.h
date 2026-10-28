@@ -14,6 +14,9 @@
 #ifndef SIGALRM
 #define SIGALRM 14
 #endif
+#ifndef SIGBUS
+#define SIGBUS 10 /* (a misaligned or failed memory access: EXCEPTION_DATATYPE_MISALIGNMENT, EXCEPTION_IN_PAGE_ERROR) */
+#endif
 #define SIGPROF 27
 #define SIGUSR1 30
 #define SIGUSR2 31

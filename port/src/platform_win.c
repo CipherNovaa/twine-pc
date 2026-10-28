@@ -61,9 +61,14 @@ static u64 now_ns(void) {
            (u64)(c.QuadPart % qpc_freq.QuadPart) * 1000000000ull / (u64)qpc_freq.QuadPart;
 }
 
+#define CPU_CLOCK_BASE 0x1000 /* (pthread_getcpuclockid's: a thread's index) */
+static u64 thread_cpu_ns(int i);
+
 int plat_clock_gettime(clockid_t clock, struct timespec *ts) {
     u64 ns;
-    if (clock == CLOCK_REALTIME) {
+    if (clock >= CPU_CLOCK_BASE && clock < CPU_CLOCK_BASE + 32)
+        ns = thread_cpu_ns(clock - CPU_CLOCK_BASE);
+    else if (clock == CLOCK_REALTIME) {
         FILETIME ft;
         ULARGE_INTEGER u;
         GetSystemTimePreciseAsFileTime(&ft);
@@ -206,6 +211,117 @@ int pthread_getattr_np(pthread_t t, pthread_attr_t *attr) {
     if (!attr->stackaddr)
         attr->stackaddr = tib->StackLimit;
     attr->stacksize = (u8 *)tib->StackBase - (u8 *)attr->stackaddr;
+    return 0;
+}
+
+int pthread_getcpuclockid(pthread_t t, clockid_t *clock) {
+    *clock = CPU_CLOCK_BASE + (clockid_t)(t - threads);
+    return 0;
+}
+
+static u64 thread_cpu_ns(int i) {
+    FILETIME c, e, k, u;
+    if (i < 0 || i >= thread_count || !GetThreadTimes(threads[i].h, &c, &e, &k, &u))
+        return 0;
+    return ((((u64)k.dwHighDateTime << 32) | k.dwLowDateTime) + (((u64)u.dwHighDateTime << 32) | u.dwLowDateTime)) * 100;
+}
+
+/* ---- contexts (main.c runs the game on a stack of its own at a fixed address) ---- */
+
+/* callee-saved registers pushed on the stack left, its pointer kept, the other's popped */
+void plat_switch(u32 *save, u32 to);
+__asm__(".text\n"
+        ".globl plat_switch\n"
+        "plat_switch:\n"
+        "    pushl %ebp\n"
+        "    pushl %ebx\n"
+        "    pushl %esi\n"
+        "    pushl %edi\n"
+        "    movl 20(%esp), %eax\n"
+        "    movl 24(%esp), %ecx\n"
+        "    movl %esp, (%eax)\n"
+        "    movl %ecx, %esp\n"
+        "    popl %edi\n"
+        "    popl %esi\n"
+        "    popl %ebx\n"
+        "    popl %ebp\n"
+        "    ret\n"
+        ".globl plat_ctx_start\n"
+        "plat_ctx_start:\n"
+        "    andl $-16, %esp\n"
+        "    call plat_ctx_entry\n"
+        "    ud2\n");
+extern char plat_ctx_start[];
+
+/* (the thread's stack bounds in its TEB while the game's stack is in use: both stacks, so that Windows' exception
+ * dispatch takes the game's stack as the thread's and still finds the handlers on the first one) */
+static struct {
+    void *base, *limit, *dealloc;
+    int saved;
+} host_bounds;
+
+static void bounds_enter(const ucontext_t *to) {
+    NT_TIB *tib = (NT_TIB *)NtCurrentTeb();
+    u8 *lo = to->uc_stack.ss_sp, *hi = lo + to->uc_stack.ss_size;
+    if (!host_bounds.saved) {
+        host_bounds.base = tib->StackBase, host_bounds.limit = tib->StackLimit;
+        host_bounds.dealloc = *(void **)((u8 *)tib + 0xE0C);
+        host_bounds.saved = 1;
+    }
+    tib->StackBase = hi > (u8 *)host_bounds.base ? hi : host_bounds.base;
+    tib->StackLimit = lo < (u8 *)host_bounds.limit ? lo : host_bounds.limit;
+    *(void **)((u8 *)tib + 0xE0C) = lo < (u8 *)host_bounds.dealloc ? lo : host_bounds.dealloc;
+}
+
+static void bounds_leave(void) {
+    NT_TIB *tib = (NT_TIB *)NtCurrentTeb();
+    if (!host_bounds.saved)
+        return;
+    tib->StackBase = host_bounds.base, tib->StackLimit = host_bounds.limit;
+    *(void **)((u8 *)tib + 0xE0C) = host_bounds.dealloc;
+}
+
+static ucontext_t *ctx_starting;
+
+void plat_ctx_entry(void);
+void plat_ctx_entry(void) {
+    ucontext_t *uc = ctx_starting;
+    u32 dead;
+    uc->plat_fn();
+    if (uc->uc_link) { /* (its function returned: on to uc_link) */
+        bounds_leave();
+        plat_switch(&dead, uc->uc_link->plat_sp);
+    }
+    ExitThread(0);
+}
+
+int getcontext(ucontext_t *uc) {
+    (void)uc;
+    return 0;
+}
+
+void makecontext(ucontext_t *uc, void (*fn)(), int argc, ...) {
+    u32 *sp = (u32 *)(((u32)uc->uc_stack.ss_sp + uc->uc_stack.ss_size - 64) & ~15u);
+    (void)argc;
+    uc->plat_fn = (void (*)(void))fn;
+    sp -= 5;
+    sp[0] = sp[1] = sp[2] = sp[3] = 0; /* (edi, esi, ebx, ebp) */
+    sp[4] = (u32)plat_ctx_start;
+    uc->plat_sp = (u32)sp;
+}
+
+int swapcontext(ucontext_t *from, const ucontext_t *to) {
+    if (to->plat_fn) {
+        ctx_starting = (ucontext_t *)to;
+        bounds_enter(to);
+    }
+    plat_switch(&from->plat_sp, to->plat_sp);
+    return 0;
+}
+
+int setcontext(const ucontext_t *uc) {
+    u32 dead;
+    plat_switch(&dead, uc->plat_sp);
     return 0;
 }
 
@@ -675,28 +791,42 @@ void (*plat_signal(int sig, void (*fn)(int)))(int) {
  * are the ones the thread goes on with); left to its default (a crash) when it puts that back */
 static LONG CALLBACK on_exception(EXCEPTION_POINTERS *ep) {
     CONTEXT *c = ep->ContextRecord;
-    struct plat_sigaction a = actions[SIGSEGV].act;
+    struct plat_sigaction a;
     siginfo_t info;
     ucontext_t uc;
     plat_thread *t;
+    int sig;
     u32 fault = ep->ExceptionRecord->NumberParameters > 1 ? (u32)ep->ExceptionRecord->ExceptionInformation[1] : ~0u;
-    /* (the program's own code, or any code's access to PS1 KUSEG, which nothing else uses: a C runtime's memcpy given
-     * such a pointer by the game) */
-    if (ep->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION ||
-        !(interruptible(c->Eip) || fault < KUSEG_END) || a.sa_handler == SIG_DFL || a.sa_handler == SIG_IGN)
+    switch (ep->ExceptionRecord->ExceptionCode) {
+    case EXCEPTION_ACCESS_VIOLATION: sig = SIGSEGV; break;
+    case EXCEPTION_ILLEGAL_INSTRUCTION: case EXCEPTION_PRIV_INSTRUCTION: sig = SIGILL; break;
+    case EXCEPTION_INT_DIVIDE_BY_ZERO: case EXCEPTION_INT_OVERFLOW: case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+    case EXCEPTION_FLT_INVALID_OPERATION: case EXCEPTION_FLT_OVERFLOW: case EXCEPTION_FLT_UNDERFLOW:
+    case EXCEPTION_FLT_INEXACT_RESULT: case EXCEPTION_FLT_DENORMAL_OPERAND: case EXCEPTION_FLT_STACK_CHECK:
+        sig = SIGFPE; break;
+    case EXCEPTION_DATATYPE_MISALIGNMENT: case EXCEPTION_IN_PAGE_ERROR: sig = SIGBUS; break;
+    default: return EXCEPTION_CONTINUE_SEARCH;
+    }
+    a = actions[sig].act;
+    /* (the program's own code; for SIGSEGV also any code's access to PS1 KUSEG, which nothing else uses: a C runtime's
+     * memcpy given such a pointer by the game) */
+    if (!(interruptible(c->Eip) || (sig == SIGSEGV && fault < KUSEG_END)) || a.sa_handler == SIG_DFL ||
+        a.sa_handler == SIG_IGN)
         return EXCEPTION_CONTINUE_SEARCH;
+    if (a.sa_flags & SA_RESETHAND)
+        actions[sig].act.sa_handler = SIG_DFL;
     memset(&info, 0, sizeof(info));
-    info.si_signo = SIGSEGV;
-    info.si_addr = (void *)fault;
+    info.si_signo = sig;
+    info.si_addr = sig == SIGSEGV || sig == SIGBUS ? (void *)fault : (void *)c->Eip;
     context_to_uc(c, &uc);
     t = self();
     InterlockedIncrement(&t->in_exception);
     if (a.sa_flags & SA_SIGINFO)
-        a.sa_sigaction(SIGSEGV, &info, &uc);
+        a.sa_sigaction(sig, &info, &uc);
     else
-        a.sa_handler(SIGSEGV);
+        a.sa_handler(sig);
     InterlockedDecrement(&t->in_exception);
-    if (actions[SIGSEGV].act.sa_handler == SIG_DFL)
+    if (actions[sig].act.sa_handler == SIG_DFL)
         return EXCEPTION_CONTINUE_SEARCH;
     uc_to_context(&uc, c);
     return EXCEPTION_CONTINUE_EXECUTION;
@@ -730,6 +860,16 @@ static LONG CALLBACK on_crash(EXCEPTION_POINTERS *ep) {
         }
         if (f != INVALID_HANDLE_VALUE)
             CloseHandle(f);
+    }
+    if (!getenv("TWINE_HEADLESS")) { /* (the launcher's crash box on Linux: twine.sh; here the program's own) */
+        char log[MAX_PATH * 2], text[MAX_PATH * 2 + 300];
+        const char *want = getenv("TWINE_LOG") && *getenv("TWINE_LOG") ? getenv("TWINE_LOG") : "port.log";
+        if (!GetFullPathNameA(want, sizeof(log), log, NULL))
+            snprintf(log, sizeof(log), "%s", want);
+        snprintf(text, sizeof(text), "TWINE stopped unexpectedly (exception %08lX). Sorry about that.\n\nWhat happened is in "
+                 "the log:\n%s\n\nIf you report the problem, please attach that file.",
+                 ep->ExceptionRecord->ExceptionCode, log);
+        MessageBoxA(NULL, text, "TWINE", MB_OK | MB_ICONERROR | MB_TOPMOST);
     }
     TerminateProcess(GetCurrentProcess(), 3);
     return EXCEPTION_EXECUTE_HANDLER;

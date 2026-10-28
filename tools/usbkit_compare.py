@@ -47,7 +47,7 @@ def normal(log):
     out = []
     for l in log.splitlines():
         # (what is the host's by nature: the program's own memory a save state holds and its build hash, the GPU)
-        if re.match(r"savestate: \d+ bytes of the program's memory|gpu_hw: |video: display", l):
+        if re.match(r"savestate: \d+ bytes of the program's memory|gpu_hw: |video: display|setup: disc ", l):
             continue
         l = re.sub(r"^endless: \d\d:\d\d:\d\d\.\d+ ", "endless: ", l)
         l = re.sub(r"\b(from|at) [0-9A-F]{8}\b", r"\1 X", l)
