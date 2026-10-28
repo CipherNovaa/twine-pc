@@ -121,6 +121,9 @@ static u32 raw_size[GAME_SLOTS], raw_most;
 static s8 bound[EXT];           /* (each extra slot: the game's slot it is a copy of) */
 static u8 guard_type[16];       /* (people_guard_types: the kinds the extra slots go to) */
 static int guard_types;
+static u8 model_type[16];       /* (and the types whose slots' models a kind with no slot of its own may wear) */
+static int model_types;
+static u8 bound_kind[EXT];      /* (the type each extra slot takes: its source's own, or a kind wearing its model) */
 static int slots = GAME_SLOTS; /* the slots in use (the pools: as many more past their own) */
 static int kept;
 static int dry, would_spawn; /* (TWINE_PEOPLE_VERIFY: func_80033090 run to see whether it would send a guard) */
@@ -214,32 +217,72 @@ static u32 inst_size(int i) {
 
 /* extra slot i made a copy of the game's slot s: its instance as loaded, relocated where it is, its record (type,
  * texture chunk); only while free */
-static void bind(int i, int s) {
+static void bind(int i, int s, int kind) {
     int j = i - GAME_SLOTS;
-    if (BUSY(i) || !clone_buf[j] || !raw_buf[s] || bound[j] == s)
+    if (BUSY(i) || !clone_buf[j] || !raw_buf[s])
         return;
-    memcpy(clone_buf[j], raw_buf[s], raw_size[s]);
-    memcpy(ext.rec[j], REC(s), 0x20);
-    func_8007CE30((u32)clone_buf[j], REC(s)[1]);
-    ext.inst[j] = clone_buf[j];
-    bound[j] = s;
+    if (bound[j] != s) {
+        memcpy(clone_buf[j], raw_buf[s], raw_size[s]);
+        memcpy(ext.rec[j], REC(s), 0x20);
+        func_8007CE30((u32)clone_buf[j], REC(s)[1]);
+        ext.inst[j] = clone_buf[j];
+        bound[j] = s;
+    }
+    bound_kind[j] = kind;
+    H(ext.rec[j], 0x1C) = kind;
+}
+
+/* a slot the guards' kinds have none of: the slot of the first model type a mod gave (a guard's model) */
+static int model_slot(int kind) {
+    int s, k;
+    for (s = 0; s < GAME_SLOTS; s++)
+        if (HU(REC(s), 0x1C) == kind)
+            return s;
+    for (k = 0; k < model_types; k++)
+        for (s = 0; s < GAME_SLOTS; s++)
+            if (HU(REC(s), 0x1C) == model_type[k])
+                return s;
+    return -1;
+}
+
+/* The game's free slot s made one of kind `kind` wearing slot src's model (a room whose kinds of guards have no slot
+ * of their own in the section: King's Ransom's bar, its slot 0 bound to the story person left out): src's instance
+ * copied over s's own (it must fit: the next instance in the GUY file follows it), its pointers moved with it, its
+ * record (texture chunk) src's, its type the kind. Until the section's slots are set up again. */
+int people_game_slot_as(int s, int src, int kind) {
+    u8 *d, *f;
+    u32 sz, delta, k;
+    static const u8 ptrs[6] = {0xC, 0x10, 0x14, 0x18, 0x1C, 0x54};
+    if (s < 0 || s >= GAME_SLOTS || src < 0 || src >= GAME_SLOTS || s == src || BUSY(s))
+        return 0;
+    d = INST(s), f = INST(src), sz = inst_size(src);
+    if (!d || !f || sz > inst_size(s)) {
+        if (TRACE)
+            port_log("people: slot %d can't wear slot %d's model (%X bytes, room for %X)\n", s, src, sz, inst_size(s));
+        return 0;
+    }
+    memmove(d, f, sz);
+    delta = (u32)d - (u32)f;
+    for (k = 0; k < 6; k++) {
+        u32 *p = (u32 *)(d + ptrs[k]);
+        *p = ptrs[k] == 0x10 || ptrs[k] == 0x14 ? (*p + delta) & 0xFFFFFF : *p + delta; /* (as func_8007CE30 has them) */
+    }
+    memcpy(REC(s), REC(src), 0x20);
+    H(REC(s), 0x1C) = kind;
+    if (TRACE)
+        port_log("people: slot %d now type %d, wearing slot %d's model (type %d)\n", s, kind, src, HU(REC(src), 0x1C));
+    return 1;
 }
 
 /* the free extra slots shared out between the game's slots of the kinds of guards a mod asked for (endless.c: the
  * room's), as they are bound now; a game slot's type follows into its copies */
 static void rebind(void) {
-    int src[GAME_SLOTS], n = 0, s, k, i;
-    for (s = 0; s < GAME_SLOTS; s++)
-        for (k = 0; k < guard_types; k++)
-            if (HU(REC(s), 0x1C) == guard_type[k]) {
-                src[n++] = s;
-                break;
-            }
-    for (i = GAME_SLOTS; i < slots; i++) {
-        int j = i - GAME_SLOTS;
-        if (n)
-            bind(i, src[j % n]);
-        if (bound[j] >= 0 && !BUSY(i))
+    int i;
+    for (i = GAME_SLOTS; i < slots; i++) { /* (the kinds in turn; each from its own slot's model, or a guard's) */
+        int j = i - GAME_SLOTS, kind = guard_types ? guard_type[j % guard_types] : -1, s = kind >= 0 ? model_slot(kind) : -1;
+        if (s >= 0)
+            bind(i, s, kind);
+        else if (bound[j] >= 0 && !BUSY(i)) /* (no kinds: as the game's slot it copies) */
             H(ext.rec[j], 0x1C) = H(REC(bound[j]), 0x1C);
     }
     if (TRACE) {
@@ -252,12 +295,16 @@ static void rebind(void) {
     }
 }
 
-/* for other mods: the kinds of guards the extra slots should go to (the room's) */
-void people_guard_types(const u8 *types, int n) {
+/* for other mods: the kinds of guards the extra slots should go to (the room's), and the types whose models a kind
+ * with no slot of its own in the section may wear (the section's guards') */
+void people_guard_types(const u8 *types, int n, const u8 *models, int m) {
     int k;
     guard_types = n < 16 ? n : 16;
     for (k = 0; k < guard_types; k++)
         guard_type[k] = types[k];
+    model_types = m < 16 ? m : 16;
+    for (k = 0; k < model_types; k++)
+        model_type[k] = models[k];
     if (slots > GAME_SLOTS)
         rebind();
 }
@@ -308,7 +355,7 @@ static void n_8005B508(void) {
             ext.inst[j] = NULL;
             bound[j] = -1;
             BUSY(i) = 0;
-            bind(i, i % GAME_SLOTS); /* (the default: the game's slots twice over) */
+            bind(i, i % GAME_SLOTS, HU(REC(i % GAME_SLOTS), 0x1C)); /* (the default: the game's slots twice over) */
         }
     }
     for (i = 0; i < GAME_SLOTS; i++) {
