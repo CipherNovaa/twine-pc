@@ -26,7 +26,11 @@ typedef void (*RcFunc)(R3000 *c);
 u32 port_io_read(u32 addr, int size);
 void port_io_write(u32 addr, u32 value, int size);
 #define IS_IO(a) ((((a) & 0x1FFFFFFFu) - 0x1F801000u) < 0x2000u)
+#ifdef _WIN32 /* (Windows can't map KUSEG's low 8 MB either: port/tools/win_link.py) */
+static inline u32 RA(u32 a) { return a < 0x00800000u ? a | 0x80000000u : a; }
+#else
 static inline u32 RA(u32 a) { return a < 0x10000u ? a | 0x80000000u : a; }
+#endif
 static inline u32 LD32(u32 a) { return IS_IO(a) ? port_io_read(a, 4) : M32(RA(a)); }
 static inline u32 LD16(u32 a) { return IS_IO(a) ? port_io_read(a, 2) : MU16(RA(a)); }
 static inline u32 LD8(u32 a) { return IS_IO(a) ? port_io_read(a, 1) : MU8(RA(a)); }

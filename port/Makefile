@@ -26,13 +26,48 @@ CFLAGS := -m32 -std=gnu89 -fpermissive -O0 -g -fno-omit-frame-pointer -fwrapv -f
 RT_CFLAGS := -m32 -std=gnu11 -O2 -g -fno-pie -fno-stack-protector -Wall -Wno-unused-function -DNATIVE_PORT \
              -I$(ROOT)/include -I$(ROOT)/port/src
 LDFLAGS := -m32 -no-pie
+# what the Windows build changes (below): the partial link, objcopy, the runtime's headers for generated code, the
+# module's names made local
+LD_R := ld -m elf_i386 -r
+OBJCOPY := objcopy
+PORT_INC := -Isrc
+EXE := $(PB)/twine
+MODULE_LOCALIZE := $(OBJCOPY)
+
+# The Windows build (make windows -> build/dist-win/twine): the same sources and objects, cross-compiled with MinGW-w64
+# (i686-w64-mingw32) into build/port-win. Compiled without C symbols' leading underscore, so every object's names
+# are the Linux build's (port/gen_native.py, recomp.py and mods.py read them with nm as they are); the final link
+# bridges them to the Windows libraries' (port/tools/win_link.py). What Linux has and Windows lacks is in the
+# platform layer: port/src/platform_win.c, with the POSIX headers it gives in port/src/win/ (before MinGW's on the
+# include path). workbench/research/NOTES_windows.md has the design.
+ifeq ($(PORT_OS),windows)
+WIN_CC := i686-w64-mingw32-gcc
+SDL3_VERSION := 3.4.18
+SDL3_DIR := $(ROOT)/build/win-deps/SDL3-$(SDL3_VERSION)/i686-w64-mingw32
+PB := $(ROOT)/build/port-win
+RT_OUT := $(PB)/rt
+CC := $(WIN_CC)
+# (as on Linux: bit fields laid out as there (the game's structures over PS1 memory), structures returned through memory
+# (recompiled code and calls by PS1 address pass the result's address), time_t of 32 bits)
+WIN_FLAGS := -fno-leading-underscore -mno-ms-bitfields -fpcc-struct-return -D_USE_32BIT_TIME_T -isystem $(ROOT)/port/src/win
+CFLAGS += $(WIN_FLAGS)
+# (-iquote: port/src/io.h is not the C runtime's <io.h>)
+RT_CFLAGS := $(subst -I$(ROOT)/port/src,-iquote $(ROOT)/port/src,$(RT_CFLAGS)) $(WIN_FLAGS) -I$(SDL3_DIR)/include
+LD_R := i686-w64-mingw32-ld -r -d --oformat pe-i386 -T tools/win_partial.ld
+OBJCOPY := i686-w64-mingw32-objcopy
+PORT_INC := -iquote src $(WIN_FLAGS)
+EXE := $(PB)/twine.exe
+MODULE_LOCALIZE := sh tools/win_localize.sh $(OBJCOPY)
+LDFLAGS := -m32 -static-libgcc -mwindows -Wl,--large-address-aware,--disable-dynamicbase,--no-insert-timestamp \
+           -Wl,--image-base=0x10000
+endif
 
 RT_SRC := $(wildcard $(ROOT)/port/src/*.c)
 RT_OBJ := $(patsubst $(ROOT)/port/src/%.c,$(RT_OUT)/%.o,$(RT_SRC))
 GEN := gen_native.py psyq_names.txt native_names.txt
 MOD_SRC := $(wildcard $(ROOT)/src/mods/*.c $(ROOT)/port/mods/*.c $(ROOT)/port/fixes/*.c)
 
-all: $(PB)/twine
+all: $(EXE)
 
 # What a save state leaves as it is (port/src/savestate.c): these objects' data and BSS go in the nosave
 # sections, with PORT_NOSAVE variables: the window, input and on-screen text, the audio device, the memory
@@ -44,7 +79,7 @@ NOSAVE := video audio memcard gpu_hw hdmovie recomp_rt interp main libpad mdec i
 $(RT_OUT)/%.o: $(ROOT)/port/src/%.c $(wildcard $(ROOT)/port/src/*.h) $(wildcard $(ROOT)/include/*.h) Makefile
 	@mkdir -p $(dir $@)
 	$(CC) $(RT_CFLAGS) -c $< -o $@
-	$(if $(filter $*,$(NOSAVE)),objcopy --rename-section .data=nosave_data --rename-section .bss=nosave_bss $@)
+	$(if $(filter $*,$(NOSAVE)),$(OBJCOPY) --rename-section .data=nosave_data --rename-section .bss=nosave_bss $@)
 
 # The title card draws per pixel in floating point: SSE2 (vectorized) instead of the x87 unit 32-bit code
 # defaults to.
@@ -101,7 +136,7 @@ $(PB)/$(1)/recomp.c: $$($(1)_OBJ) $(RT_OUT)/defined.txt $$($(1)_DEPS) recomp.py 
 	python3 recomp.py $(1) $$@ --replaced $(PB)/$(1)/mods/recompiled.txt $$($(1)_OBJ) $(RT_OBJ)
 
 $(PB)/$(1)/recomp.o: $(PB)/$(1)/recomp.c src/recomp.h
-	$(CC) -m32 -std=gnu11 -fno-builtin -fpermissive -fno-pie -fno-stack-protector -O1 -g -w -DNATIVE_PORT -I$(ROOT)/include -Isrc \
+	$(CC) -m32 -std=gnu11 -fno-builtin -fpermissive -fno-pie -fno-stack-protector -O1 -g -w -DNATIVE_PORT -I$(ROOT)/include $(PORT_INC) \
 	    -c $$< -o $$@
 
 $(PB)/$(1)/gen.stamp: $(PB)/$(1)/mods/objs.txt $(RT_OUT)/defined.txt $(PB)/$(1)/recomp.o $$($(1)_DEPS)
@@ -109,14 +144,14 @@ $(PB)/$(1)/gen.stamp: $(PB)/$(1)/mods/objs.txt $(RT_OUT)/defined.txt $(PB)/$(1)/
 	@touch $$@
 
 $(PB)/$(1)/stubs.o $(PB)/$(1)/funcs.o: $(PB)/$(1)/%.o: $(PB)/$(1)/gen.stamp src/module.h
-	$(CC) -m32 -std=gnu11 -fno-pie -O1 -w -DNATIVE_PORT -I$(ROOT)/include -Isrc -c $(PB)/$(1)/$$*.c -o $$@
+	$(CC) -m32 -std=gnu11 -fno-pie -O1 -w -DNATIVE_PORT -I$(ROOT)/include $(PORT_INC) -c $(PB)/$(1)/$$*.c -o $$@
 
 # The module is linked on its own (data symbols at their PS1 addresses, names bound to its functions) and all
 # but its descriptor is made local.
 $(PB)/$(1)/module.o: $(PB)/$(1)/mods/objs.txt $(PB)/$(1)/recomp.o $(PB)/$(1)/stubs.o $(PB)/$(1)/funcs.o
-	ld -m elf_i386 -r -T $(PB)/$(1)/syms.ld -T $(PB)/$(1)/mods/mods.ld $$$$(cat $(PB)/$(1)/mods/objs.txt) \
+	$(LD_R) -T $(PB)/$(1)/syms.ld -T $(PB)/$(1)/mods/mods.ld $$$$(cat $(PB)/$(1)/mods/objs.txt) \
 	    $(PB)/$(1)/recomp.o $(PB)/$(1)/stubs.o $(PB)/$(1)/funcs.o -o $(PB)/$(1)/module.r.o
-	objcopy --keep-global-symbol=port_module_$(1) $(PB)/$(1)/module.r.o $$@
+	$(MODULE_LOCALIZE) --keep-global-symbol=port_module_$(1) $(PB)/$(1)/module.r.o $$@
 endef
 $(foreach m,$(MODULES),$(eval $(call MODULE,$(m))))
 
@@ -141,6 +176,65 @@ $(PB)/modules.o: $(PB)/modules.c src/module.h
 
 $(PB)/twine: $(RT_OBJ) $(PB)/modules.o $(foreach m,$(MODULES),$(PB)/$(m)/module.o)
 	$(CC) $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/lib' -o $@ $^ -lSDL3 -lm
+
+ifeq ($(PORT_OS),windows)
+# Windows: SDL3's MinGW build (zlib licence), fetched once into build/win-deps (port/tools/fetch_sdl3_mingw.sh)
+$(SDL3_DIR)/lib/libSDL3.dll.a:
+	sh tools/fetch_sdl3_mingw.sh $(SDL3_VERSION) $(ROOT)/build/win-deps
+
+# (Windows' own structures as Windows lays them out)
+$(RT_OUT)/platform_win.o: RT_CFLAGS += -mms-bitfields -freg-struct-return
+
+$(RT_OBJ) $(PB)/modules.o: $(SDL3_DIR)/lib/libSDL3.dll.a $(wildcard $(ROOT)/port/src/win/*.h $(ROOT)/port/src/win/sys/*.h)
+
+# what lies before and after the port's own objects (their data and BSS: a save state's memory, platform_win.c)
+$(RT_OUT)/win_%.o: $(ROOT)/port/src/win/%.c Makefile
+	@mkdir -p $(dir $@)
+	$(CC) $(RT_CFLAGS) -c $< -o $@
+
+WIN_OBJ := $(RT_OUT)/win_first.o $(RT_OBJ) $(PB)/modules.o $(foreach m,$(MODULES),$(PB)/$(m)/module.o) $(RT_OUT)/win_last.o
+
+# the linker script: MinGW's, with PS1 memory's low addresses kept for the image (KUSEG, platform_win.c) and the
+# objects' names bridged to the libraries' (port/tools/win_link.py)
+$(PB)/twine.ld: $(WIN_OBJ) tools/win_link.py
+	python3 tools/win_link.py "$(CC)" $@ $(WIN_OBJ)
+
+$(PB)/twine.exe: $(WIN_OBJ) $(PB)/twine.ld
+	$(CC) $(LDFLAGS) -Wl,-T,$(PB)/twine.ld -o $@ $(WIN_OBJ) -L$(SDL3_DIR)/lib -lSDL3 -lwinmm -lm
+
+# A folder to copy to a Windows PC as it is (build/dist-win/twine): the game and SDL3.dll. The player's own disc
+# image, BIOS and film clips go next to twine.exe (disc/, bios/, hdmovies/), as in the Linux build's folder.
+WIN_DIST := $(ROOT)/build/dist-win/twine
+windist: $(PB)/twine.exe
+	rm -rf $(WIN_DIST) && mkdir -p $(WIN_DIST)
+	i686-w64-mingw32-strip -o $(WIN_DIST)/twine.exe $(PB)/twine.exe
+	cp $(SDL3_DIR)/bin/SDL3.dll $(WIN_DIST)/
+	cp $(SDL3_DIR)/share/licenses/SDL3/LICENSE.txt $(WIN_DIST)/LICENSE-SDL3.txt
+	@echo "$(WIN_DIST): $$(du -sh $(WIN_DIST) | cut -f1)"
+
+# The system report of the USB test kit (port/usbkit)
+$(PB)/winsysinfo.exe: tools/winsysinfo.c $(SDL3_DIR)/lib/libSDL3.dll.a
+	$(CC) -O2 -Wall -I$(SDL3_DIR)/include tools/winsysinfo.c -o $@ -L$(SDL3_DIR)/lib -lSDL3 -lopengl32 -lgdi32
+
+# The USB test kit (port/usbkit/README.txt) in DEST: the game's folder as windist makes it, "portable" (settings,
+# saves, cards, logs all kept there), TEST.bat and kit/. Never a disc image: the player copies their own into disc/.
+usbkit-win: windist $(PB)/winsysinfo.exe
+	@test -n "$(DEST)" || { echo "make -C port usbkit DEST=<folder on the stick>"; exit 1; }
+	mkdir -p "$(DEST)/kit" "$(DEST)/disc" "$(DEST)/bios" "$(DEST)/hdmovies" "$(DEST)/results"
+	cp $(WIN_DIST)/* "$(DEST)/"
+	cp usbkit/TEST.bat usbkit/README.txt "$(DEST)/"
+	cp usbkit/test.ps1 usbkit/runs.txt $(PB)/winsysinfo.exe $(SDL3_DIR)/bin/SDL3.dll "$(DEST)/kit/"
+	printf 'This file keeps the game portable: its settings, saves, cards and logs stay in the twine folder here.\r\n' > "$(DEST)/portable"
+	@echo "$(DEST): the test kit; put your own disc image into $(DEST)/disc"
+endif
+
+# The Windows build and its folder (from Linux: MinGW-w64's i686-w64-mingw32 tools)
+windows:
+	$(MAKE) PORT_OS=windows windist
+
+# The USB test kit for a Windows PC (port/usbkit): make -C port usbkit DEST=/run/media/.../STICK/twine
+usbkit:
+	$(MAKE) PORT_OS=windows usbkit-win DEST="$(abspath $(DEST))"
 
 # Host tool: the MDEC model on its own, decoding movie frames from the disc image (port/tools/mdectest.c)
 mdectest: $(PB)/mdectest
@@ -174,5 +268,5 @@ dist: $(PB)/twine
 clean:
 	rm -rf $(PB)
 
-.PHONY: all dist clean mdectest hwtest FORCE
+.PHONY: all dist clean mdectest hwtest windows windist usbkit usbkit-win FORCE
 .PRECIOUS: $(PB)/%.c

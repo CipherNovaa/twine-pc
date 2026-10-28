@@ -41,6 +41,26 @@ def source(mod):
     sys.exit(f"no mod {mod} (port/mods/, src/mods/)")
 
 
+def rename_definitions(module, obj, copy, syms, cc):
+    """(Windows) obj made again from its C as copy, the definitions of syms renamed <sym>_orig, every use left"""
+    asm, c = copy.with_suffix(".s"), copy.with_suffix(".c")
+    # (its C as port/Makefile compiles it: src/<module>/<name>.c less the MIPS GTE macros)
+    src = (ROOT / "src" / module / obj.name).with_suffix(".c")
+    c.write_text("".join(l for l in src.read_text().splitlines(True)
+                         if not re.match(r"#define gte_[A-Za-z0-9_]*\(.*__asm__", l)))
+    run([*shlex.split(cc), "-S", str(c), "-o", str(asm)])
+    c.unlink()
+    text = asm.read_text()
+    for sym in syms:
+        s = re.escape(sym)
+        text = re.sub(rf"^{s}:", f"{sym}_orig:", text, flags=re.M)
+        text = re.sub(rf"^(\t\.globl\t){s}$", rf"\g<1>{sym}_orig", text, flags=re.M)
+        text = re.sub(rf"^(\t\.def\t){s};", rf"\g<1>{sym}_orig;", text, flags=re.M)
+    asm.write_text(text)
+    run([*shlex.split(cc), "-c", str(asm), "-o", str(copy)])
+    asm.unlink()
+
+
 def main():
     module, outdir, mods, cc, objs = sys.argv[1], Path(sys.argv[2]), sys.argv[3].split(), sys.argv[4], sys.argv[5:]
     out = outdir / "mods"
@@ -64,8 +84,21 @@ def main():
     defined_as.update({f: f for f in fixes})
 
     links, recompiled, replaced_c = list(objs), [], []
+    # The Windows build (port/Makefile PORT_OS=windows): a PE object calls a function of its own without naming it
+    # (the assembler resolves the call), so weakening the definition would leave those calls to it; the object is
+    # made again from its C instead, with the definition alone renamed <name>_orig (what weakening gives on Linux).
+    windows = "mingw32" in cc
+    renames = {}
     for f, sym in defined_as.items():
         for i, o in enumerate(links):
+            if windows:
+                m = re.search(rf"^([0-9a-f]+) T {re.escape(sym)}$", run(["nm", objs[i]]), re.M)
+                if m:
+                    renames.setdefault(i, []).append(sym)
+                    links[i] = str(out / f"game_{Path(objs[i]).name}")
+                    replaced_c.append(sym)
+                    break
+                continue
             m = re.search(rf"^([0-9a-f]+) T {re.escape(sym)}$", run(["nm", o]), re.M)
             if not m:
                 continue
@@ -79,6 +112,8 @@ def main():
             break
         else:
             recompiled.append(sym)
+    for i, syms in renames.items():
+        rename_definitions(module, Path(objs[i]), Path(links[i]), syms, cc)
     for src in sources:
         o = out / f"{src.stem}.o"
         run([*shlex.split(cc), *defines, "-c", str(src), "-o", str(o)])

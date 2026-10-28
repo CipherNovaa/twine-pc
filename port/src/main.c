@@ -68,6 +68,10 @@ void port_fatal(const char *fmt, ...) {
 }
 
 static void map_fixed(int fd, u32 offset, u32 addr, u32 size, int prot) {
+#ifdef _WIN32
+    if (addr < 0x00800000u) /* KUSEG: Windows has it taken; the image's first section keeps it (port/tools/win_link.py) */
+        return;
+#endif
     void *p = mmap((void *)addr, size, prot, (fd < 0 ? MAP_PRIVATE | MAP_ANONYMOUS : MAP_SHARED) | MAP_FIXED_NOREPLACE,
                    fd, offset);
     if (p != (void *)addr)
@@ -153,6 +157,12 @@ static void kernel_tables(void) {
  * touch it through NULL-based pointers (e.g. `*p->e &= ~0x100` with e still NULL at level load). Linux
  * can't map that page range, so an access there faults: decode the instruction's address registers and
  * move the small one onto the KSEG0 mirror at 0x80000000 (the same RAM on the PS1), then retry. */
+#ifdef _WIN32
+#define LOW_END 0x00800000u /* (the KUSEG Windows can't map either: port/tools/win_link.py) */
+#else
+#define LOW_END 0x10000
+#endif
+
 static int x86reg_to_greg(int r) {
     static const int map[8] = {REG_EAX, REG_ECX, REG_EDX, REG_EBX, REG_ESP, REG_EBP, REG_ESI, REG_EDI};
     return map[r & 7];
@@ -162,9 +172,13 @@ static void crash_report(u32 fault, u32 eip) {
     char cmd[256];
     fprintf(stderr, "crash: access to %08X from %08X\n", fault, eip);
     port_log("crash: access to %08X from %08X\n", fault, eip);
+#ifndef _WIN32 /* (Windows: addr2line -f -e twine.exe <address> on the build's twine.exe) */
     snprintf(cmd, sizeof(cmd), "addr2line -f -e /proc/%d/exe %08X >&2", (int)getpid(), eip);
     if (system(cmd)) {
     }
+#else
+    (void)cmd;
+#endif
 }
 
 static void on_segv(int sig, siginfo_t *si, void *ctx) {
@@ -175,7 +189,7 @@ static void on_segv(int sig, siginfo_t *si, void *ctx) {
     static u32 logged[64];
     int n, base = -1, index = -1, scale = 0;
     u8 op;
-    if (fault >= 0x10000) {
+    if (fault >= LOW_END) {
         crash_report(fault, (u32)g[REG_EIP]);
         signal(SIGSEGV, SIG_DFL);
         return; /* a real crash: let it happen again with the default action */
@@ -187,7 +201,7 @@ static void on_segv(int sig, siginfo_t *si, void *ctx) {
     if (op == 0xA4 || op == 0xA5 || op == 0xA6 || op == 0xA7 || op == 0xAA || op == 0xAB || op == 0xAC ||
         op == 0xAD) {
         /* string instructions: ESI source, EDI destination */
-        if ((u32)g[REG_ESI] < 0x10000)
+        if ((u32)g[REG_ESI] < LOW_END)
             base = 6;
         else
             base = 7;
@@ -208,9 +222,9 @@ static void on_segv(int sig, siginfo_t *si, void *ctx) {
                 base = rm;
         }
     }
-    if (base >= 0 && (u32)g[x86reg_to_greg(base)] < 0x10000)
+    if (base >= 0 && (u32)g[x86reg_to_greg(base)] < LOW_END)
         g[x86reg_to_greg(base)] += 0x80000000;
-    else if (index >= 0 && ((u32)g[x86reg_to_greg(index)] << scale) < 0x10000)
+    else if (index >= 0 && ((u32)g[x86reg_to_greg(index)] << scale) < LOW_END)
         g[x86reg_to_greg(index)] += 0x80000000u >> scale;
     else {
         crash_report(fault, (u32)g[REG_EIP]);

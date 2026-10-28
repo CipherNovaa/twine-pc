@@ -8,6 +8,9 @@
 #include "recomp.h"
 
 #include "module.h"
+#ifdef _WIN32
+#include "win/platform.h"
+#endif
 
 s32 EnterCriticalSection(void);
 void ExitCriticalSection(void);
@@ -331,8 +334,12 @@ void port_rc_call(R3000 *c, u32 addr) {
     }
     /* a native function: by its PS1 address, or a host code pointer the game stored */
     n = (NativeFn)native_lookup(addr);
+#ifdef _WIN32 /* (the program's code: port/tools/win_link.py) */
+    if (!n && addr >= (u32)__executable_start && addr < (u32)etext)
+#else
     if (!n && (addr < PS1_RAM_BASE || addr >= PS1_RAM_BASE + PS1_RAM_SIZE) && addr >= 0x08048000u &&
         addr < 0x10000000u)
+#endif
         n = (NativeFn)addr;
     if (!n)
         port_fatal("recompiled code called %08X: no function there\n", addr);
