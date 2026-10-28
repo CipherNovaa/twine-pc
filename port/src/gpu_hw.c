@@ -776,8 +776,10 @@ void gpu_hw_fill(s32 x, s32 y, s32 w, s32 h, s32 r, s32 g, s32 b) {
     RT_LEAVE();
 }
 
+void gpu_trace_vramw(const char *what, s32 x, s32 y, s32 w, s32 h, s32 sx, s32 sy, const void *caller);
 void gpu_hw_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src) {
     Blocks wb;
+    gpu_trace_vramw("card image", x, y, w, h, -1, -1, __builtin_return_address(0));
     Vertex a;
     u32 size = (u32)(w * h * 2);
     int direct = x + w <= 1024 && y + h <= 512 && size <= IMAGES_SIZE;
@@ -1294,6 +1296,20 @@ static void compare(u32 frame, s32 x, s32 y, s32 w, s32 h, const char *shot) {
         write_ppm(path, side, w * 3, h);
         free(side);
     }
+}
+
+/* (tests: TWINE_SHOT_CARD=x,y,w,h, video.c) that rectangle of the card's VRAM, as drawn there, into a picture */
+void gpu_hw_shot_rect(s32 x, s32 y, s32 w, s32 h, const char *path) {
+    u32 *rgb;
+    if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > 1024 || y + h > 512)
+        return;
+    RT_ENTER();
+    flush();
+    rgb = malloc((size_t)w * h * scale * scale * sizeof(u32));
+    if (rgb && read_target(x, y, w, h, rgb, NULL))
+        write_ppm(path, rgb, w * scale, h * scale);
+    free(rgb);
+    RT_LEAVE();
 }
 
 void gpu_hw_frame(u32 frame, s32 x, s32 y, s32 w, s32 h, const char *shot) {

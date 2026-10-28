@@ -43,7 +43,9 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
                through the room changes), makes the run unranked, and the run's stats say why
              w the AR36's scope after a grenade (a guard's in King's Ransom 8:-1, sw and hw with smooth motion; Bond's own
                quick grenade in 1:-1): the scope's crosshair over the scene, not a black box with red marks (the mod's
-               grenade texture was put where the AR36 keeps the crosshair's)
+               grenade texture was put where the AR36 keeps the crosshair's); and the port's own textures (the
+               grenade's, a lent launcher's round) never left in VRAM: in every pool room, the subway car as played
+               (hw) and Flashpoint with a lent launcher, a pattern planted where they go is still there after one
              x slots for lent weapons: the playtest's eight weapons carried into Night Watch (4:4) each drawn there (the
                weapon buttons stepping through the pool), its own model; Night Watch's tools all taken away; every
                mission's lent weapons in real slots, the rest in the pool, none left out (the table printed)
@@ -2232,10 +2234,110 @@ def scope_runs():
     arm = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_ARM": 1, "TWINE_ENDLESS_TEST_DRAW": "AR36",
            "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENEMY_AI": "improved"}  # (the port's AI whatever -o says: its guard throws)
     guard = dict(arm, TWINE_ENDLESS_ROOM="8:-1", TWINE_TEST_PAD="166:0800", TWINE_SHOT=240)
-    return {"w_guard_sw": Run("w_guard_sw", 8, 14, dict(guard, TWINE_RENDERER="sw")),
+    runs = {"w_guard_sw": Run("w_guard_sw", 8, 14, dict(guard, TWINE_RENDERER="sw")),
             "w_guard_hw": Run("w_guard_hw", 8, 14, dict(guard, TWINE_RENDERER="hw", TWINE_SMOOTH=1)),
             "w_bond_sw": Run("w_bond_sw", 1, 14, dict(arm, TWINE_ENDLESS_ROOM="1:-1", TWINE_TEST_GRENADE=180,
                                                       TWINE_TEST_PAD="200:0800", TWINE_SHOT=250, TWINE_RENDERER="sw"))}
+    runs.update(overlay_runs())
+    return runs
+
+
+# (w also: the port's own textures (the grenade's, the lent launcher round's) are in VRAM only while they are drawn,
+# libgpu.c's overlays. In every pool room a pattern is planted where they go (TWINE_TEST_VRAM_PLANT: the game's own
+# LoadImage, as a room keeping its textures there would), then a grenade lobbed in front of Bond as a guard's is
+# (TWINE_TEST_LOB: quick_grenade_enemy, the playtest's case; drawn: the overlay put in, TWINE_TRACE=overlay); VRAM a moment later must still hold the pattern there. The subway car 3:4
+# as played too (hw renderer, smooth motion: the card's VRAM read back, TWINE_SHOT_CARD), and a lent grenade
+# launcher's rounds fired in Flashpoint (6:0, k_gl_lent's way). TWINE_TEST_OVERLAY_OFF=1 (as before: the pixels
+# left in VRAM) fails them all.)
+OVERLAY_RECTS = {"grenade": [(448, 480, 48, 32), (0, 508, 16, 1)], "launcher": [(944, 320, 16, 64), (16, 508, 16, 1)]}
+
+
+def overlay_runs():
+    g = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1,
+         "TWINE_TEST_VRAM_PLANT": 150, "TWINE_TEST_LOB": 170, "TWINE_TRACE": "overlay", "TWINE_SHOT": 200,
+         "TWINE_SHOT_VRAM": 1, "TWINE_RENDERER": "sw"}
+    runs = {}
+    for room in pool_rooms():
+        n = "w_vram_%d_%d" % (room[0], room[1])
+        runs[n] = Run(n, room[0], 12, dict(g, TWINE_ENDLESS_ROOM="%d:%d" % room))
+    runs["w_vram_hw"] = Run("w_vram_hw", 3, 14, dict(g, TWINE_ENDLESS_ROOM="3:4", TWINE_SHOT="165,200",
+                                                     TWINE_SHOT_CARD="448,480,48,32", TWINE_RENDERER="hw",
+                                                     TWINE_SMOOTH=1))
+    del runs["w_vram_hw"].env["TWINE_SHOT_VRAM"]
+    runs["w_vram_gl"] = Run("w_vram_gl", 9, 60, {
+        "TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 4, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
+        "TWINE_ENDLESS_ROOM": "9:2", "TWINE_ENDLESS_NEXT": "6:0", "TWINE_ENDLESS_TEST_EXIT": "200,5000",
+        "TWINE_ENDLESS_TEST_DRAW": "GRENADE LAUNCHER", "TWINE_TEST_PAD": "600:4000,900:0", "TWINE_TRACE": "overlay,proj",
+        "TWINE_TEST_VRAM_PLANT": 550, "TWINE_SHOT": 1000, "TWINE_SHOT_VRAM": 1, "TWINE_RENDERER": "sw"})
+    return runs
+
+
+def read_raw_ppm(path):
+    try:
+        data = open(path, "rb").read()
+    except OSError:
+        return None
+    head = data.split(b"\n", 3)
+    if len(head) < 4:
+        return None
+    w, h = map(int, head[1].split())
+    return w, h, head[3]
+
+
+def planted(x, y):
+    """the pattern TWINE_TEST_VRAM_PLANT writes (libgpu.c), as a VRAM shot shows a pixel: its 5-bit channels << 3"""
+    c = (((x * 37 + y * 101) & 0x7FFF) | 0x0421)
+    return bytes(((c & 31) << 3, ((c >> 5) & 31) << 3, ((c >> 10) & 31) << 3))
+
+
+def pattern_kept(img, rects):
+    """the pixels of those VRAM rectangles that don't hold the planted pattern, and how many there are"""
+    w, h, px = img
+    bad = n = 0
+    for x0, y0, rw, rh in rects:
+        for y in range(y0, y0 + rh):
+            for x in range(x0, x0 + rw):
+                i = (y * w + x) * 3
+                n += 1
+                bad += px[i:i + 3] != planted(x, y)
+    return bad, n
+
+
+def check_overlays(runs):
+    bad_rooms, notes = [], []
+    for name in sorted(runs):
+        if not name.startswith("w_vram_") or name in ("w_vram_hw", "w_vram_gl"):
+            continue
+        r = runs[name]
+        img = read_raw_ppm(os.path.join(r.dir, "shot_0200.ppm"))
+        put = re.search(r"overlay: 0 first put in at v(\d+)", r.log)
+        plant = "VRAM planted" in r.log
+        drawn = bool(put) and int(put.group(1)) <= 200
+        bad, n = pattern_kept(img, OVERLAY_RECTS["grenade"]) if img else (-1, 0)
+        if not (img and plant and drawn and bad == 0 and not r.crashed()):
+            bad_rooms.append("%s (%s)" % (name[7:].replace("_", ":", 1), "no shot" if not img else "not planted"
+                                          if not plant else "%d of %d pixels lost" % (bad, n) if bad else
+                                          "grenade not drawn by v200" if not drawn else "crash"))
+    total = sum(1 for n in runs if n.startswith("w_vram_") and n not in ("w_vram_hw", "w_vram_gl"))
+    result("w", "every pool room (%d): what it keeps where the grenade's texture goes is still there after a grenade"
+           % total, not bad_rooms, "bad: %s" % (", ".join(bad_rooms) if bad_rooms else "none"))
+    r = runs["w_vram_hw"]
+    a, b = (read_raw_ppm(os.path.join(r.dir, "card_%04d.ppm" % f)) for f in (165, 200))
+    put = re.search(r"overlay: 0 first put in at v(\d+)", r.log)
+    same = bool(a and b) and a[2] == b[2]
+    lit = bool(a) and sum(1 for i in range(0, len(a[2]), 3) if a[2][i:i + 3] != b"\0\0\0") > len(a[2]) // 6
+    result("w", "the subway car 3:4 as played (hw, smooth motion): the card's VRAM there the same before and after a "
+           "grenade", same and lit and bool(put) and int(put.group(1)) <= 200 and not r.crashed(),
+           "card shots %s, the same %s, the pattern there %s, the grenade drawn %s" %
+           ("read" if a and b else "missing", same, lit, put.group(1) if put else "no"))
+    r = runs["w_vram_gl"]
+    img = read_raw_ppm(os.path.join(r.dir, "shot_1000.ppm"))
+    reg = re.search(r"overlay: (\d+) \(colours 7F01\)", r.log)
+    bad, n = pattern_kept(img, OVERLAY_RECTS["launcher"] + OVERLAY_RECTS["grenade"]) if img else (-1, 0)
+    result("w", "a lent grenade launcher's rounds (6:0): what the room keeps where their texture goes still there",
+           bool(img) and bool(reg) and bad == 0 and not r.crashed(),
+           "shot %s, the round's overlay %s, %d of %d pixels lost" % ("read" if img else "missing",
+                                                                  "registered" if reg else "NOT registered", bad, n))
 
 
 def reticle_black(img):
@@ -2255,6 +2357,7 @@ def reticle_black(img):
 
 
 def check_scope(runs):
+    check_overlays(runs)
     for name, shot, what in (("w_guard_sw", 240, "a guard's grenade, sw"), ("w_guard_hw", 240, "a guard's grenade, hw, smooth motion"),
                              ("w_bond_sw", 250, "Bond's quick grenade (1:-1), sw")):
         r = runs[name]

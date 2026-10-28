@@ -977,13 +977,13 @@ static void find_tmd(void) {
  * mission's own func_80039A9C with Fallen Angel's type entry and model put in its bullets' type for the call (the
  * object's +0 then the entry, kept here); its blast done here as Fallen Angel's, before the mission's hit loop
  * (func_80033F38 below) sees it. The model (DATA09.BIN, a TMD of 74 textured triangles) and its texture (a TIM of
- * LVL09TIM.BIN) are read from the disc, the texture put where no mission of a run has anything (944,320; colours
- * 16,508: every room's VRAM checked, TWINE_ENDLESS_TEST_VRAM) and the model's texture places moved there. Its two
+ * LVL09TIM.BIN) are read from the disc, the texture put at 944,320 (colours 16,508) only while the round is drawn
+ * (libgpu.c's overlays: what a room keeps there is put back) and the model's texture places moved there. Its two
  * sounds play from Fallen Angel's bank (their entries in its sounds' table below). TWINE_TRACE=weapon logs it. */
 /* (the projectiles' types lent: a mission's object type's entry and model, put in the mission's bullets' type while
  * its code makes the object (then the object's +0 the entry, kept here). The model, a TMD, is read from the donor's
- * DATA<nn>.BIN; a textured one's texture from its LVL<nn>TIM.BIN, put where no mission of a run has anything and the
- * model's texture places moved there. The entry: its bytes that aren't 0, as the donor's table has them (that
+ * DATA<nn>.BIN; a textured one's texture from its LVL<nn>TIM.BIN, in VRAM only while the model is drawn (an overlay,
+ * libgpu.c: its primitives' CLUT word marked) and the model's texture places moved there. The entry: its bytes that aren't 0, as the donor's table has them (that
  * table is made as the mission starts, not read from a file: TWINE_ENDLESS_TEST_FINDTMD dumps one)) */
 typedef struct {
     const char *what;
@@ -1023,7 +1023,11 @@ static const u8 gl_blast_sfx[8] = {6, 7, 0x3C, 1, 0x7F, 0, 0, 0}; /* (its 0x4B) 
 static u8 *gl_round[GL_LIVE];
 static s32 gl_round_born[GL_LIVE];
 void GsMapModelingData(u32 *p);
-void gpu_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src);
+/* (libgpu.c) a texture of the port's own, in VRAM only while its primitives (their CLUT word | PORT_OVERLAY_MARK)
+ * are drawn */
+#define PORT_OVERLAY_MARK 0x8000
+void port_vram_overlay(u16 clut, s32 tx, s32 ty, s32 tw, s32 th, const u16 *tex, s32 cx, s32 cy, s32 cw,
+                       const u16 *col);
 void PushMatrix(void);
 void PopMatrix(void);
 void func_8003B53C(u8 *obj, s32 yaw, s32 pitch, s32 speed); /* a projectile sent off that way at that speed */
@@ -1065,12 +1069,15 @@ static void donor_load(Donor *d) {
                 q = (u8 *)(d->model + 3) + d->model[3 + 4];
                 for (i = 0; i < d->model[3 + 5]; i++, q += 4 + q[1] * 4)
                     if (q[3] & 4) {
-                        *(u16 *)(q + 6) = d->clut_y << 6 | d->clut_x >> 4;
+                        *(u16 *)(q + 6) = PORT_OVERLAY_MARK | d->clut_y << 6 | d->clut_x >> 4;
                         *(u16 *)(q + 10) = (*(u16 *)(q + 10) & ~0x1F) | (d->tex_x / 64) | (d->tex_y / 256) << 4;
                         for (k = 0; k < (q[3] & 8 ? 4u : 3u); k++)
                             q[4 + k * 4] += du, q[5 + k * 4] += dv;
                     }
             }
+            if (d->tim_file) /* (in VRAM only while it is drawn: libgpu.c's overlays) */
+                port_vram_overlay(d->clut_y << 6 | d->clut_x >> 4, d->tex_x, d->tex_y, 16, 64, d->image, d->clut_x,
+                                  d->clut_y, 16, d->clut);
             GsMapModelingData(d->model + 1);
             memset(d->entry, 0, sizeof(d->entry));
             for (i = 0; i < (u32)d->nset; i++)
@@ -1096,10 +1103,6 @@ static int donor_in(Donor *d, u8 tt) {
     memcpy(TYPE_DEF(tt), d->entry, 0x70);
     d->save_model = D_800D2D30[tt];
     D_800D2D30[tt] = (s32)(long)(d->model + 3);
-    if (d->tim_file) { /* (again each time: what the mission loads may cover it) */
-        gpu_load_image(d->tex_x, d->tex_y, 16, 64, d->image);
-        gpu_load_image(d->clut_x, d->clut_y, 16, 1, d->clut);
-    }
     return 1;
 }
 

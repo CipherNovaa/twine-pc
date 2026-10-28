@@ -6,6 +6,7 @@
  * hardware renderer on (gpu_hw.c), each primitive and VRAM transfer goes to it too, before it changes VRAM
  * here; this VRAM stays the one the game sees. Then a vblank waits until both have done a packet or transfer:
  * its handler may draw too, and both must see the same order. */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "port.h"
@@ -565,12 +566,14 @@ static void move_now(s32 sx, s32 sy, s32 w, s32 h, s32 dx, s32 dy) {
 }
 
 static int defer_on(void);
+void gpu_trace_vramw(const char *what, s32 x, s32 y, s32 w, s32 h, s32 sx, s32 sy, const void *caller);
 static void keep_write(int type, s32 x, s32 y, s32 w, s32 h, s32 sx, s32 sy, u16 c, const u16 *src);
 
 static void fill(const u32 *w) {
     u16 c = ((w[0] >> 3) & 31) | (((w[0] >> 11) & 31) << 5) | (((w[0] >> 19) & 31) << 10);
     s32 x = w[1] & 0x3F0, y = (w[1] >> 16) & 0x1FF;
     s32 wd = ((w[2] & 0x3FF) + 15) & ~15, ht = (w[2] >> 16) & 0x1FF;
+    gpu_trace_vramw("fill (GP0)", x, y, wd, ht, -1, -1, __builtin_return_address(0));
     if (gpu_hw_on)
         gpu_hw_fill(x, y, wd, ht, w[0] & 255, (w[0] >> 8) & 255, (w[0] >> 16) & 255);
     if (defer_on())
@@ -579,7 +582,27 @@ static void fill(const u32 *w) {
         fill_now(x, y, wd, ht, c);
 }
 
+/* TWINE_TRACE_VRAMW=x,y,w,h (research): every VRAM write (image, copy, fill) that meets that rectangle, with the
+ * video frame and the caller's address (gdb: info symbol); gpu_hw.c's card-only images (the lent weapon's swaps)
+ * too, marked so */
+u32 port_video_frames(void);
+void gpu_trace_vramw(const char *what, s32 x, s32 y, s32 w, s32 h, s32 sx, s32 sy, const void *caller) {
+    static int on = -1;
+    static s32 box[4];
+    if (on < 0) {
+        const char *e = getenv("TWINE_TRACE_VRAMW");
+        on = e && sscanf(e, "%d,%d,%d,%d", &box[0], &box[1], &box[2], &box[3]) == 4;
+    }
+    if (!on || x >= box[0] + box[2] || box[0] >= x + w || y >= box[1] + box[3] || box[1] >= y + h)
+        return;
+    port_log("trace: vramw: v%u %s %d,%d %dx%d", port_video_frames(), what, x, y, w, h);
+    if (sx >= 0)
+        port_log(" from %d,%d", sx, sy);
+    port_log(" caller %p\n", caller);
+}
+
 void gpu_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src) {
+    gpu_trace_vramw("image", x, y, w, h, -1, -1, __builtin_return_address(0));
     if (!gpu_hw_on) {
         load_image(x, y, w, h, src);
         return;
@@ -602,6 +625,7 @@ void gpu_store_image(s32 x, s32 y, s32 w, s32 h, u16 *dst) {
 }
 
 void gpu_move_image(s32 sx, s32 sy, s32 w, s32 h, s32 dx, s32 dy) {
+    gpu_trace_vramw("copy", dx, dy, w, h, sx, sy, __builtin_return_address(0));
     if (!gpu_hw_on) {
         move_now(sx, sy, w, h, dx, dy);
         return;
@@ -616,6 +640,7 @@ void gpu_move_image(s32 sx, s32 sy, s32 w, s32 h, s32 dx, s32 dy) {
 }
 
 void gpu_fill_rect(s32 x, s32 y, s32 w, s32 h, u16 c) {
+    gpu_trace_vramw("fill", x, y, w, h, -1, -1, __builtin_return_address(0));
     if (!gpu_hw_on) {
         fill_now(x, y, w, h, c);
         return;
@@ -1020,4 +1045,11 @@ void gpu_set_texwindow(u32 mx, u32 my, u32 ox, u32 oy) {
     tw_mask_y = my;
     tw_off_x = ox;
     tw_off_y = oy;
+}
+
+/* the texture page (E1's bits) and the texture window's masks the next command is drawn with (libgpu.c's overlays) */
+void gpu_texture_state(u32 *tp, u32 *mask_x, u32 *mask_y) {
+    *tp = texpage;
+    *mask_x = tw_mask_x;
+    *mask_y = tw_mask_y;
 }

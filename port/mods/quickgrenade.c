@@ -65,7 +65,11 @@ extern s32 D_8009CD00;
 extern u8 D_800D7AB8[] __attribute__((weak));
 static void count_shown(s32 ot);
 u32 port_disc_file(const char *name, u8 **data);
-void gpu_load_image(s32 x, s32 y, s32 w, s32 h, const u16 *src);
+/* (libgpu.c) a texture of the port's own, in VRAM only while its primitives (their CLUT word | PORT_OVERLAY_MARK)
+ * are drawn */
+#define PORT_OVERLAY_MARK 0x8000
+void port_vram_overlay(u16 clut, s32 tx, s32 ty, s32 tw, s32 th, const u16 *tex, s32 cx, s32 cy, s32 cw,
+                       const u16 *col);
 u32 GTE_cfc2(int r);
 void GTE_ctc2(int r, u32 v);
 void GsMapModelingData(u32 *p);
@@ -125,6 +129,7 @@ void PopMatrix(void);
 
 static s32 wait;
 static void own_grenades(s32 pressed, s32 fresh);
+static void test_lob(void);
 static void own_fly(s32 fresh);
 void endless_enemy_blast(s32 *pos) __attribute__((weak)); /* (where it goes off) */
 #define LIVE_REAL 4
@@ -159,6 +164,7 @@ void quick_grenade(void) {
     frame = D_8009CDA8;
     if (g_Args->level == 11)
         return; /* none in the casino mission (Russian Roulette: its blackjack table) */
+    test_lob();
     if (wait > 0)
         wait--;
     if (W(D_800D31C0, 2, s16) == 2500)
@@ -248,12 +254,12 @@ s32 func_80076A8C(u8 *grenade) {
 
 /* Grenades of the mod's own, for the missions without frag grenades: King's Ransom's model (L08/DATA08.BIN in
  * L08/LVL08CD.BIN, the type its frag throws, a TMD of 74 textured triangles) and texture (TIM 32 of
- * L08/LVL08TIM.BIN), read from the disc (port_disc_file) once, the texture put where no mission has anything: the
- * 32 rows under the two 240-line frames (x 448, y 480, cut in three bands of 32 rows: see load(); its colours at 0,
- * 508), and the model's texture page, colours and places in it moved there. (It was at x 928, y 320, 16x64, where
- * the AR36 sniper rifle puts its scope's crosshair as it's drawn, in its missions 1, 3, 5 and 8: a grenade
- * thrown after that, Bond's or a guard's, turned the crosshair's clear background into a black box. VRAM traced in
- * all eleven missions, every weapon drawn: no 16x64 place is free in all of them; those 32 rows are.) They fly
+ * L08/LVL08TIM.BIN), read from the disc (port_disc_file) once; the model's texture page, colours and places in it
+ * moved to x 448, y 480 (the 32 rows under the two 240-line frames, cut in three bands of 32 rows: see load(); its
+ * colours at 0, 508). The texture is in VRAM there only while the grenades' own primitives are drawn (libgpu.c's
+ * overlays: their CLUT word marked, PORT_OVERLAY_MARK), what the room keeps there put back before anything else
+ * reads it. (It was left in VRAM at each throw: first at x 928, y 320, where the AR36 puts its scope's crosshair (a
+ * black box after a grenade), then in those rows, which no survey of rooms can promise stay free.) They fly
  * and bounce, losing most of their speed, here (through the level's shot mesh, func_800746D0, as projectiles are moved), guards who see one
  * shout and run, and three seconds after the throw it goes off as the frag does (func_80065614 and the blast
  * sound, func_80027248, from an object of this mod's own, the blast Bond's). The model is drawn with the
@@ -439,7 +445,7 @@ static void load(void) {
                 }
                 for (b = 0; b < BANDS - 1 && !(lo >= band_row[b] && hi < band_row[b] + 32); b++)
                     ; /* (none holding them all: the last band's, and the rows outside it clamped) */
-                W(q, 6, u16) = CLUT_Y << 6 | CLUT_X >> 4;
+                W(q, 6, u16) = PORT_OVERLAY_MARK | CLUT_Y << 6 | CLUT_X >> 4;
                 W(q, 10, u16) = (W(q, 10, u16) & ~0x1F) | (TEX_X / 64) | (TEX_Y / 256) << 4;
                 for (k = 0; k < nv; k++) {
                     s32 row;
@@ -450,6 +456,7 @@ static void load(void) {
                     at[1] = row + TEX_Y % 256;
                 }
             }
+        port_vram_overlay(CLUT_Y << 6 | CLUT_X >> 4, TEX_X, TEX_Y, 16 * BANDS, 32, strip, CLUT_X, CLUT_Y, 16, clut);
         GsMapModelingData(model + 1);
         GsLinkObject4((u32)(model + 3), &dobj, 0);
         dobj.coord2 = &coord;
@@ -583,9 +590,6 @@ static void throw_own(void) {
     if ((u32)(g_Args->level - 1) < 11)
         func_80026F30(swing_sound[g_Args->level - 1], 0);
     toss = TOSS;
-    /* (again: what the level loads may cover it) */
-    gpu_load_image(TEX_X, TEX_Y, 16 * BANDS, 32, strip);
-    gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
 }
 
 /* (endless's lent weapons) what one of another mission's throws or launches, from in front of Bond's view: a frag
@@ -619,8 +623,6 @@ int quick_projectile(int kind) {
     live[g].kind = kind;
     if (kind <= QP_FLASH || kind == QP_SATCHEL)
         toss = TOSS;
-    gpu_load_image(TEX_X, TEX_Y, 16 * BANDS, 32, strip);
-    gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
     return 1;
 }
 
@@ -679,9 +681,27 @@ int quick_grenade_enemy(const s32 *from, const s32 *to, u8 *owner) {
     live[g].kind = QP_FRAG;
     memcpy(live[g].aim, to, 12);
     toss = TOSS;
-    gpu_load_image(TEX_X, TEX_Y, 16 * BANDS, 32, strip);
-    gpu_load_image(CLUT_X, CLUT_Y, 16, 1, clut);
     return 1;
+}
+
+/* (tests: TWINE_TEST_LOB=N: at video frame N, once, a grenade of the mod's own lobbed as a guard's is, from in front of
+ * Bond's eyes to 2500 on: King's Ransom's quick grenade is its own frag, this is the mod's there too) */
+u32 port_video_frames(void);
+char *getenv(const char *s);
+int atoi(const char *s);
+static void test_lob(void) {
+    static int at = -2;
+    s32 yaw = W(&g_Camera, 0x82, s16), from[3], to[3], i, dir[3];
+    if (at == -2)
+        at = getenv("TWINE_TEST_LOB") ? atoi(getenv("TWINE_TEST_LOB")) : -1;
+    if (at < 0 || port_video_frames() < (u32)at)
+        return;
+    at = -1;
+    dir[0] = rsin(yaw), dir[1] = 0, dir[2] = rcos(yaw);
+    for (i = 0; i < 3; i++)
+        from[i] = g_CamPosX[i] + (dir[i] * 400 >> 12), to[i] = g_CamPosX[i] + (dir[i] * 2500 >> 12);
+    to[1] = g_Args->playerY;
+    port_log("test: a grenade lobbed (%s)\n", quick_grenade_enemy(from, to, 0) ? "thrown" : "none to be had");
 }
 
 /* (endless's enemy AI) the grenades live now, the mod's own and King's Ransom's: their places into at[][3] */

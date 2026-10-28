@@ -52,6 +52,7 @@ int gpu_hw_scale(void);
 /* a displayed frame (video.c's count): VRAM rectangle (x, y, w, h) (w 0: a 24-bit frame, not the renderer's);
  * compares, logs, writes `shot` (a PPM path, or NULL) */
 void gpu_hw_frame(u32 frame, s32 x, s32 y, s32 w, s32 h, const char *shot);
+void gpu_hw_shot_rect(s32 x, s32 y, s32 w, s32 h, const char *path);
 /* the rectangle into `dst` (an SDL_GPUTexture, R8G8B8A8, dst_w x dst_h), area-averaged */
 void gpu_hw_picture(void *dst, int dst_w, int dst_h, s32 x, s32 y, s32 w, s32 h);
 

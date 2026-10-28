@@ -689,6 +689,13 @@ static void maybe_shot(void) {
     char path[64];
     int shot = shot_wanted(), hw = gpu_hw_on && !gpu_display.rgb24;
     snprintf(path, sizeof(path), "shot_%04u.ppm", frames);
+    if (gpu_hw_on && shot && getenv("TWINE_SHOT_CARD")) { /* (tests: x,y,w,h: that rectangle of the card's VRAM too) */
+        int r[4];
+        char cp[64];
+        snprintf(cp, sizeof(cp), "card_%04u.ppm", frames);
+        if (sscanf(getenv("TWINE_SHOT_CARD"), "%d,%d,%d,%d", &r[0], &r[1], &r[2], &r[3]) == 4)
+            gpu_hw_shot_rect(r[0], r[1], r[2], r[3], cp);
+    }
     if (gpu_hw_on)
         gpu_hw_frame(frames, gpu_display.x, gpu_display.y, hw ? gpu_display.w : 0, gpu_display.h,
                      hw && shot ? path : NULL);

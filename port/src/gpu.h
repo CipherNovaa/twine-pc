@@ -27,6 +27,7 @@ void gpu_set_draw_area(s32 x1, s32 y1, s32 x2, s32 y2);
 void gpu_set_draw_offset(s32 x, s32 y);
 void gpu_set_texpage(u32 tp, int dither, int draw_on_display);
 void gpu_set_texwindow(u32 mx, u32 my, u32 ox, u32 oy);
+void gpu_texture_state(u32 *texpage, u32 *mask_x, u32 *mask_y);
 void gpu_save(void);
 void gpu_restore(void);
 void gpu_draw_origin(s32 *x, s32 *y);

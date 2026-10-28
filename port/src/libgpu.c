@@ -191,6 +191,222 @@ s32 ClearImage(RECT *r, u8 red, u8 g, u8 b) {
     return 0;
 }
 
+/* VRAM OVERLAYS: textures of the port's own (port/mods/quickgrenade.c's grenade, endless.c's lent launcher round)
+ * that no mission keeps a place free for. Their pixels are never left in VRAM: they are put there only while
+ * DrawOTag draws their own primitives, and what was there put back before anything else is drawn that reads or
+ * writes there, and when the walk ends. Their primitives are known by their colours: the overlay's CLUT word with
+ * bit 15 set (the GPU ignores that bit: the CLUT's y has 9 bits, 6-14), which their TMDs carry
+ * (PORT_OVERLAY_MARK). So whatever a room of any mission keeps at those places is never overwritten: a fixed
+ * "free" place had been chosen from a survey of VRAM writes (wt/scope), which no later room could be trusted to
+ * keep to. With the hardware renderer the swaps go to the card's VRAM alone (as the lent weapon's do): gpu.c's
+ * copy keeps the mission's pixels, read back for each swap (gpu_store_image: what the card has there).
+ * TWINE_TRACE=overlay logs each overlay registered and, every 600 video frames, the swaps and what made them. */
+#define OVERLAYS 4
+#define PORT_OVERLAY_MARK 0x8000
+u32 port_video_frames(void);
+#define OVERLAY_RECTS 2
+static struct {
+    u16 clut;                       /* (its CLUT word, without the mark) */
+    int n, in;
+    RECT r[OVERLAY_RECTS];
+    u16 *pix[OVERLAY_RECTS], *saved[OVERLAY_RECTS];
+} overlay[OVERLAYS];
+static int overlays, overlays_in;
+static u32 overlay_swaps, overlay_outs_for[4]; /* (why swapped out: something else reads, a VRAM transfer, a lent
+                                                * weapon's swap, the walk's end) */
+static int plant_at(void);
+static void overlay_plant_one(int i);
+s32 LoadImage(RECT *r, u32 *p);
+static int overlay_trace(void) {
+    static int on = -1;
+    if (on < 0)
+        on = port_trace("overlay");
+    return on;
+}
+
+/* (quickgrenade.c, endless.c) an overlay: its picture (tw x th at tx, ty) and colours (cw x 1 at cx, cy; cw 0: none),
+ * for the primitives whose CLUT word is clut | PORT_OVERLAY_MARK. Again with the same clut: the pixels replaced. */
+void port_vram_overlay(u16 clut, s32 tx, s32 ty, s32 tw, s32 th, const u16 *tex, s32 cx, s32 cy, s32 cw,
+                       const u16 *col) {
+    int i, k;
+    clut &= 0x7FFF;
+    for (i = 0; i < overlays && overlay[i].clut != clut; i++)
+        ;
+    if (i == OVERLAYS)
+        return;
+    if (i == overlays) {
+        overlays++;
+        overlay[i].clut = clut;
+    }
+    for (k = 0; k < overlay[i].n; k++)
+        free(overlay[i].pix[k]), free(overlay[i].saved[k]);
+    overlay[i].n = 0;
+    for (k = 0; k < 2; k++) {
+        s32 x = k ? cx : tx, y = k ? cy : ty, w = k ? cw : tw, h = k ? 1 : th;
+        const u16 *src = k ? col : tex;
+        int n = overlay[i].n;
+        if (w <= 0 || h <= 0 || !src)
+            continue;
+        overlay[i].r[n].x = (s16)x, overlay[i].r[n].y = (s16)y, overlay[i].r[n].w = (s16)w, overlay[i].r[n].h = (s16)h;
+        overlay[i].pix[n] = malloc((size_t)w * h * 2);
+        overlay[i].saved[n] = malloc((size_t)w * h * 2);
+        if (!overlay[i].pix[n] || !overlay[i].saved[n]) {
+            free(overlay[i].pix[n]), free(overlay[i].saved[n]);
+            continue;
+        }
+        memcpy(overlay[i].pix[n], src, (size_t)w * h * 2);
+        overlay[i].n++;
+    }
+    if (overlay_trace())
+        port_log("trace: overlay: %d (colours %04X): %dx%d at %d,%d, colours %dx1 at %d,%d\n", i, clut, tw, th, tx, ty,
+                 cw, cx, cy);
+    if (plant_at() >= 0 && port_video_frames() >= (u32)plant_at())
+        overlay_plant_one(i); /* (tests: registered after the frame the pattern was planted at) */
+}
+
+static void overlay_load(s32 x, s32 y, s32 w, s32 h, const u16 *p) {
+    if (gpu_hw_on)
+        gpu_hw_load_image(x, y, w, h, p);
+    else
+        gpu_load_image(x, y, w, h, p);
+}
+
+static void overlay_swap(int i, int in, int why) {
+    int k;
+    static int off = -1; /* (TWINE_TEST_OVERLAY_OFF=1, tests: as before, the pixels put in VRAM for good as they are
+                          * first drawn, what was there lost) */
+    if (off < 0)
+        off = getenv("TWINE_TEST_OVERLAY_OFF") != NULL;
+    if (off) {
+        for (k = 0; in && k < overlay[i].n; k++)
+            gpu_load_image(overlay[i].r[k].x, overlay[i].r[k].y, overlay[i].r[k].w, overlay[i].r[k].h,
+                           overlay[i].pix[k]);
+        return;
+    }
+    if (overlay[i].in == in)
+        return;
+    for (k = 0; k < overlay[i].n; k++) {
+        RECT *r = &overlay[i].r[k];
+        if (in)
+            gpu_store_image(r->x, r->y, r->w, r->h, overlay[i].saved[k]);
+        overlay_load(r->x, r->y, r->w, r->h, in ? overlay[i].pix[k] : overlay[i].saved[k]);
+    }
+    overlay[i].in = in;
+    overlays_in += in ? 1 : -1;
+    if (!in)
+        overlay_outs_for[why]++;
+    else if (!overlay_swaps++ && overlay_trace())
+        port_log("trace: overlay: %d first put in at v%u\n", i, port_video_frames());
+}
+
+static void overlays_out(int why) {
+    int i;
+    for (i = 0; overlays_in && i < overlays; i++)
+        overlay_swap(i, 0, why);
+}
+
+static int overlay_meets(int i, s32 x, s32 y, s32 w, s32 h) {
+    int k;
+    for (k = 0; k < overlay[i].n; k++) {
+        const RECT *r = &overlay[i].r[k];
+        if (x < r->x + r->w && r->x < x + w && y < r->y + r->h && r->y < y + h)
+            return 1;
+    }
+    return 0;
+}
+
+/* a textured command's texels (u, v ranges in its page; through a texture window: the page's whole range) and
+ * colours: do they meet overlay i's places */
+static int overlay_reads(int i, u32 tpage, u32 clut, int umin, int umax, int vmin, int vmax, u32 mx, u32 my) {
+    s32 tx = (tpage & 15) * 64, ty = (tpage >> 4 & 1) * 256, depth = tpage >> 7 & 3, sh = depth == 0 ? 2 : depth == 1;
+    if (mx)
+        umin = 0, umax = 255;
+    if (my)
+        vmin = 0, vmax = 255;
+    umin = umin > 0 ? umin - 1 : 0, umax = umax < 255 ? umax + 1 : 255; /* (the steps' rounding reaches past) */
+    vmin = vmin > 0 ? vmin - 1 : 0, vmax = vmax < 255 ? vmax + 1 : 255;
+    if (overlay_meets(i, tx + (umin >> sh), ty + vmin, ((umax - umin) >> sh) + 2, vmax - vmin + 1))
+        return 1;
+    if (tx + (umax >> sh) > 1023 && overlay_meets(i, 0, ty + vmin, ((tx + (umax >> sh)) & 1023) + 1, vmax - vmin + 1))
+        return 1; /* (a page at VRAM's right edge goes on at its left) */
+    return depth < 2 && overlay_meets(i, (clut & 63) * 16, clut >> 6 & 511, depth ? 256 : 16, 1);
+}
+
+/* Before a packet of the ordering table is drawn: the overlays its primitives are drawn from put in; those that
+ * something else in it reads or writes put out first */
+static void overlay_packet(const u32 *w, u32 len) {
+    u32 k = 0, tp, mx, my;
+    int i;
+    gpu_texture_state(&tp, &mx, &my);
+    while (k < len) {
+        u32 cmd = w[k] >> 24, n = 1;
+        if (cmd >= 0x20 && cmd < 0x40) { /* polygons */
+            int tex = cmd >> 2 & 1, gour = cmd >> 4 & 1, nv = cmd & 8 ? 4 : 3, v, pos = 1;
+            int umin = 255, umax = 0, vmin = 255, vmax = 0;
+            u32 clut = 0, page = tp;
+            n = 1 + nv * (1 + tex) + (gour ? nv - 1 : 0);
+            if (tex && k + n <= len) {
+                for (v = 0; v < nv; v++) {
+                    u32 uv;
+                    if (gour && v)
+                        pos++;
+                    uv = w[k + pos + 1];
+                    if (v == 0)
+                        clut = uv >> 16;
+                    if (v == 1)
+                        page = (tp & ~0x1FFu) | (uv >> 16 & 0x1FF);
+                    umin = (int)(uv & 255) < umin ? (int)(uv & 255) : umin;
+                    umax = (int)(uv & 255) > umax ? (int)(uv & 255) : umax;
+                    vmin = (int)(uv >> 8 & 255) < vmin ? (int)(uv >> 8 & 255) : vmin;
+                    vmax = (int)(uv >> 8 & 255) > vmax ? (int)(uv >> 8 & 255) : vmax;
+                    pos += 2;
+                }
+                tp = page; /* (a textured polygon sets the GPU's page) */
+                for (i = 0; i < overlays; i++)
+                    if ((clut & PORT_OVERLAY_MARK) && (clut & 0x7FFF) == overlay[i].clut)
+                        overlay_swap(i, 1, 0);
+                    else if (overlay[i].in && overlay_reads(i, page, clut, umin, umax, vmin, vmax, mx, my)) {
+                        static int told;
+                        if (overlay_trace() && told < 20 && ++told)
+                            port_log("trace: overlay: %d out at v%u for cmd %02X page %04X colours %04X u %d-%d v %d-%d "
+                                     "window %d,%d\n", i, port_video_frames(), cmd, page, clut, umin, umax, vmin, vmax, mx, my);
+                        overlay_swap(i, 0, 0);
+                    }
+            }
+        } else if (cmd >= 0x40 && cmd < 0x60) { /* lines: untextured (a poly-line runs to its end marker) */
+            if (!(cmd & 8))
+                n = cmd & 0x10 ? 4 : 3;
+            else {
+                for (n = cmd & 0x10 ? 4 : 3; k + n < len && (w[k + n] & 0xF000F000) != 0x50005000; n += cmd & 0x10 ? 2 : 1)
+                    ;
+                n++;
+            }
+        } else if (cmd >= 0x60 && cmd < 0x80) { /* rectangles */
+            int tex = cmd >> 2 & 1, size = cmd >> 3 & 3;
+            n = 2 + tex + (size == 0);
+            if (tex && overlays_in && k + n <= len) {
+                u32 uv = w[k + 2];
+                int rw = size == 1 ? 1 : size == 2 ? 8 : size == 3 ? 16 : (int)(w[k + 3] & 0x3FF);
+                int rh = size == 1 ? 1 : size == 2 ? 8 : size == 3 ? 16 : (int)(w[k + 3] >> 16 & 0x1FF);
+                int u0 = uv & 255, v0 = uv >> 8 & 255;
+                for (i = 0; i < overlays; i++)
+                    if (overlay[i].in &&
+                        overlay_reads(i, tp, uv >> 16, u0, u0 + rw - 1 > 255 ? 255 : u0 + rw - 1, v0,
+                                      v0 + rh - 1 > 255 ? 255 : v0 + rh - 1, 1, 1))
+                        overlay_swap(i, 0, 0); /* (flipped or wrapped: the page's whole range, as through a window) */
+            }
+        } else if (cmd == 0x02 || (cmd >= 0x80 && cmd < 0xE0)) { /* fills and transfers: none with an overlay in */
+            overlays_out(1);
+            n = cmd == 0x02 || cmd >= 0xC0 ? 3 : cmd < 0xA0 ? 4 : k + 2 < len ? 3 + ((((w[k + 2] - 1) & 1023) + 1) *
+                                                                                      ((((w[k + 2] >> 16) - 1) & 511) + 1) + 1) / 2 : len;
+        } else if (cmd == 0xE1)
+            tp = w[k] & 0x3FFF;
+        else if (cmd == 0xE2)
+            mx = w[k] & 31, my = w[k] >> 5 & 31;
+        k += n;
+    }
+}
+
 /* ordering tables: linked lists of packets, 24-bit addresses, 0xFFFFFF ends the list */
 u32 *ClearOTag(u32 *ot, s32 n) {
     s32 i;
@@ -322,17 +538,54 @@ static void primat(const u32 *pk, u32 len, u32 nth) {
     port_log("\n");
 }
 
+static u32 overlay_logged;
+/* (tests: TWINE_TEST_VRAM_PLANT=N: from video frame N a pattern written where the overlays go (those registered then,
+ * each one registered later as it is), through the game's own LoadImage, as a room that kept its own textures there
+ * would have them: check w looks for it after a grenade) */
+static int plant_at(void) {
+    static int at = -2;
+    if (at == -2)
+        at = getenv("TWINE_TEST_VRAM_PLANT") ? atoi(getenv("TWINE_TEST_VRAM_PLANT")) : -1;
+    return at;
+}
+static void overlay_plant_one(int i) {
+    static u16 pat[64 * 64];
+    int k, j;
+    for (k = 0; k < overlay[i].n; k++) {
+        RECT r = overlay[i].r[k];
+        if (r.w * r.h > 64 * 64)
+            continue;
+        for (j = 0; j < r.w * r.h; j++)
+            pat[j] = (u16)(((r.x + j % r.w) * 37 + (r.y + j / r.w) * 101) & 0x7FFF) | 0x0421;
+        LoadImage(&r, (u32 *)pat);
+        port_log("test: VRAM planted at %d,%d %dx%d (overlay %d)\n", r.x, r.y, r.w, r.h, i);
+    }
+}
+static void overlay_plant(void) {
+    static int done;
+    int i;
+    if (done || plant_at() < 0 || port_video_frames() < (u32)plant_at())
+        return;
+    done = 1;
+    for (i = 0; i < overlays; i++)
+        overlay_plant_one(i);
+}
+
 void DrawOTag(u32 *p) {
     u32 n = 0;
+    if (overlays)
+        overlay_plant();
     u64 t = PT_BEGIN();
     while (p && n++ < 0x100000) {
         u32 tag = *p, len = tag >> 24;
         if (lent_imgs) {
             if (!lent_in && ((p >= lent_ot_lo[0] && p < lent_ot_hi[0]) || (p >= lent_ot_lo[1] && p < lent_ot_hi[1])))
-                lent_swap(1);
+                overlays_out(2), lent_swap(1);
             else if (lent_in && ((p >= lent_ot_lo[2] && p < lent_ot_hi[2]) || (p >= lent_ot_lo[3] && p < lent_ot_hi[3])))
-                lent_swap(0);
+                overlays_out(2), lent_swap(0);
         }
+        if (len && overlays)
+            overlay_packet(p + 1, len);
         if (len && lent_in && lent_trace())
             lent_prim(p + 1, len);
         if (len && primat_on())
@@ -343,8 +596,15 @@ void DrawOTag(u32 *p) {
             break;
         p = (u32 *)(0x80000000u | (tag & 0xFFFFFF));
     }
+    overlays_out(3);
     if (lent_in)
         lent_swap(0);
+    if (overlays && overlay_trace() && port_video_frames() / 600 != overlay_logged) {
+        overlay_logged = port_video_frames() / 600;
+        port_log("trace: overlay: v%u: %u put in; out for something reading there %u, a transfer %u, a lent weapon %u, "
+                 "the walk's end %u\n", port_video_frames(), overlay_swaps, overlay_outs_for[0], overlay_outs_for[1],
+                 overlay_outs_for[2], overlay_outs_for[3]);
+    }
     PT_END(PT_DRAWOTAG, t);
     if (drawsync_callback)
         drawsync_callback();
