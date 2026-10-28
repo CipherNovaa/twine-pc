@@ -5,7 +5,9 @@
  *
  * Each level keeps where it starts in its data: its start point (section, yaw, x, y, z: the record the level's
  * loader reads when it starts, func_80032074 in LEVEL01) and after it its load points, 0x10 bytes each (the same
- * five, then the point's id, which the doors name, and its music). A room's mission starts at the room's point
+ * five, then the point's id, which the doors name, and a sound the mission plays as Bond arrives there through a door:
+ * an id of its sound table, func_80026F30; not the music, which is the mission's own logic: port/mods/endless.c,
+ * func_80026D08). A room's mission starts at the room's point
  * when that point is copied over the start point before the mission's main runs.
  *
  * TWINE_ENDLESS=1 starts a run (with TWINE_LEVEL unset or naming the first room's level, for tests);

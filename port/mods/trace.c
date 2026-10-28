@@ -35,6 +35,7 @@
  *         health put back, people hit 5, 10, ... times still up; path: sent guards hunting Bond that hardly move in
  *         3 s (port/mods/endless.c's func_80034A48, hits_frame).
  * (sound: port/mods/endless.c's func_80026F30 and the runtime's port_tone_play / port_voice_play log under "sound".)
+ * (music: port/mods/endless.c's func_80026D08, the mission's songs started and stopped, logs under "music".)
  *
  * The overlay (debug menu, F9: its WEAPON TRACE page is the mod debugmenu.c's) shows the weapon line live.
  *

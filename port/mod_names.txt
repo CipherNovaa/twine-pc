@@ -196,3 +196,18 @@ level07 func_80034A48 func_800355D0
 level09 func_80034A48 func_8003561C
 level10 func_80034A48 func_800351B0
 level11 func_80034A48 func_8003451C
+# the music's start and volume (port/mods/endless.c): the same code at the same addresses
+level04 func_80026D08 func_80026D08
+level04 func_800272A4 func_800272A4
+level05 func_80026D08 func_80026D08
+level05 func_800272A4 func_800272A4
+level06 func_80026D08 func_80026D08
+level06 func_800272A4 func_800272A4
+level07 func_80026D08 func_80026D08
+level07 func_800272A4 func_800272A4
+level08 func_80026D08 func_80026D08
+level08 func_800272A4 func_800272A4
+level09 func_80026D08 func_80026D08
+level09 func_800272A4 func_800272A4
+level10 func_80026D08 func_80026D08
+level10 func_800272A4 func_800272A4

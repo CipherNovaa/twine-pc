@@ -4,7 +4,7 @@
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-p]
   -j JOBS    runs at once (default 4; at most 12, paced at most 5). A turbo run takes a whole core while it runs: 8 suit
              the 16-core machine when it is otherwise quiet; a run waits to start while the load is over the core count
-  -k CHECKS  the checks to run, letters from abcdefghijklmnopqr (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrt (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
@@ -25,6 +25,9 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
              r the weapon list: own and lent weapons each an entry with a checkmark; the weapon buttons (wheel, Z/X,
                d-pad) step through the checked ones, Q/L1 the one held before, number keys by group; checkmarks kept
                for the run; every lent weapon reached; the campaign's stepping the game's own; the HUD strip
+             t the music (TWINE_TRACE=music): Night Watch's and Meltdown's rooms play their mission's action song from
+               the start; Night Watch's campaign its stealth song first, the action song once its story flag 2 is up
+               (raised by the test as its scripts would), as ever
   -r ROOMS   pool rooms for a-c, as level:point,... (default: every room in port/src/endless.c's table)
   -v         print each failing run's log tail
   -8         every run with 8 MB of RAM (the ram_8mb setting)
@@ -1332,6 +1335,47 @@ def check_bar(runs):
 
 
 
+# ---- t: the music: a run's Night Watch and Meltdown rooms play the action song (entry 1) from the start; the campaign
+# its own logic (Night Watch: the stealth song, entry 0, then entry 1 once Bond's story flag 2 is up) ----
+
+def music_runs():
+    room = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_TRACE": "music"}
+    return {"t_nw_room": Run("t_nw_room", 4, 30, dict(room, TWINE_ENDLESS_ROOM="4:0")),
+            "t_md_room": Run("t_md_room", 10, 30, dict(room, TWINE_ENDLESS_ROOM="10:-1")),
+            "t_nw_camp": Run("t_nw_camp", 4, 45, {"TWINE_TRACE": "music", "TWINE_TEST_STORY_FLAG": "300:2"})}
+
+
+def music_events(run):
+    """the music trace's starts and stops: (frame, "start"/"stop", entry, the line)"""
+    return [(int(m.group(1)), m.group(2), int(m.group(3)), m.group(0)) for m in
+            re.finditer(r"trace: L\d+ f(\d+) music: (start|stop) entry (-?\d+)[^\n]*", run.log)]
+
+
+def check_music(runs):
+    for k, label in (("t_nw_room", "Night Watch 4:0"), ("t_md_room", "Meltdown 10:-1")):
+        r = runs[k]
+        ev = music_events(r)
+        starts = [e for e in ev if e[1] == "start"]
+        result("t", "%s room: the action song from the start, never the stealth one" % label,
+               bool(starts) and starts[0][2] == 1 and "in a run" in starts[0][3] and starts[0][0] < 30
+               and all(e[2] == 1 for e in starts) and not r.crashed(),
+               "; ".join(e[3].split("music: ")[1][:90] for e in ev[:4]) or "no music started")
+    r = runs["t_nw_camp"]
+    ev = music_events(r)
+    flag = re.search(r"test: f(\d+) Bond's story flag 2 raised", r.log)
+    fr = int(flag.group(1)) if flag else 1 << 30
+    starts = [e for e in ev if e[1] == "start"]
+    before = [e for e in starts if e[0] < fr]
+    after = [e for e in starts if e[0] >= fr]
+    stop0 = [e for e in ev if e[1] == "stop" and e[2] == 0 and e[0] >= fr]
+    result("t", "Night Watch campaign: the stealth song, then the action song on its trigger",
+           bool(flag) and bool(before) and all(e[2] == 0 for e in before) and bool(after) and after[0][2] == 1
+           and after[0][0] - fr < 10 and bool(stop0) and not any("in a run" in e[3] for e in ev) and not r.crashed(),
+           "flag 2 up at f%s; %s" % (flag.group(1) if flag else "-",
+                                    "; ".join(e[3].split("music: ")[1][:70] + " @f%d" % e[0] for e in ev[:4]) or
+                                    "no music started"))
+
+
 # ---- n: more than six people at once (port/mods/people.c: 12 slots with 8 MB of RAM) ----
 
 def people_runs():
@@ -1770,7 +1814,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqr", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrt", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -1849,6 +1893,8 @@ def main():
         groups["bar"] = bar_runs()
     if "r" in checks:
         groups["select"] = select_runs()
+    if "t" in checks:
+        groups["music"] = music_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.cost())  # (the long ones first)
     t0 = time.time()
@@ -1912,10 +1958,13 @@ def main():
         checked(groups["ramp"].values(), check_ramp, groups["ramp"])
     if "select" in groups:
         checked(groups["select"].values(), check_select, groups["select"])
+    if "music" in groups:
+        checked(groups["music"].values(), check_music, groups["music"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
              "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp",
-             "p": "12 people", "q": "the bar's guards", "r": "weapon list"}
+             "p": "12 people", "q": "the bar's guards", "r": "weapon list",
+             "t": "music"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))
