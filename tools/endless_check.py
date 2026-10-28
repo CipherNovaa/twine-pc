@@ -2050,7 +2050,7 @@ def scope_runs():
     """the AR36 drawn and scoped (from frame 166/200) on the guards of the room, after a grenade of the port's own
     (quickgrenade.c: a guard's in King's Ransom at frame 199, Bond's quick grenade in 1:-1 at 180), shot at 240/250"""
     arm = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_ARM": 1, "TWINE_ENDLESS_TEST_DRAW": "AR36",
-           "TWINE_ENDLESS_TEST_GOD": 1}
+           "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENEMY_AI": "improved"}  # (the port's AI whatever -o says: its guard throws)
     guard = dict(arm, TWINE_ENDLESS_ROOM="8:-1", TWINE_TEST_PAD="166:0800", TWINE_SHOT=240)
     return {"w_guard_sw": Run("w_guard_sw", 8, 14, dict(guard, TWINE_RENDERER="sw")),
             "w_guard_hw": Run("w_guard_hw", 8, 14, dict(guard, TWINE_RENDERER="hw", TWINE_SMOOTH=1)),
@@ -2097,7 +2097,8 @@ def cheat_runs():
     shots = ",".join("%d:4000,%d:0" % (t, t + 25) for t in range(200, 1500, 50))
     b = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_NO_RAMP": 1, "TWINE_ENDLESS_ROOM": "8:-1",
          "TWINE_ENDLESS_NEXT": "3:-1,2:4", "TWINE_ENDLESS_TEST_EXIT": "300", "TWINE_ENDLESS_TEST_MEET": 1,
-         "TWINE_ENDLESS_TEST_DRAW": "INGALLS", "TWINE_TEST_PAD": shots, "TWINE_TRACE": "weapon,hits"}
+         "TWINE_ENDLESS_TEST_DRAW": "INGALLS", "TWINE_TEST_PAD": shots, "TWINE_TRACE": "weapon,hits",
+         "TWINE_ENEMY_AI": "improved"}  # (the port's AI whatever -o says: stealthy Bond is measured by guards firing)
     s = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "2:4", "TWINE_ENDLESS_TEST_DIE": 150, "TWINE_TEST_PAD": "490:8,493:0",
          "TWINE_ENDLESS_DUMP": 1}
     runs = {}
