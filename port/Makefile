@@ -27,6 +27,9 @@ RT_CFLAGS := -m32 -std=gnu11 -O2 -g -fno-pie -fno-stack-protector -Wall -Wno-unu
              -I$(ROOT)/include -I$(ROOT)/port/src -include $(ROOT)/port/src/glibc_compat.h
 # -static-libgcc: one library fewer for the systems it is copied to (make dist-linux)
 LDFLAGS := -m32 -no-pie -static-libgcc
+# (tests: extra flags for every C file, e.g. XCFLAGS=-ftrivial-auto-var-init=pattern, with PB= a build of its own)
+CFLAGS += $(XCFLAGS)
+RT_CFLAGS += $(XCFLAGS)
 # what the Windows build changes (below): the partial link, objcopy, the runtime's headers for generated code, the
 # module's names made local
 LD_R := ld -m elf_i386 -r

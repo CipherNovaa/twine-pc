@@ -104,6 +104,7 @@ class Run:
         self.log = ""
         self.timed_out = False  # (stopped by the harness, never reaching its vblanks: .stopped says why)
         self.stopped = ""
+        self.aslr = False  # (True: the host's address randomization left on, as a player's run has it)
         self.wall = 0.0
 
     def cost(self):
@@ -166,10 +167,10 @@ class Run:
             env["TWINE_ENEMY_AI"] = "original"
         t0 = time.time()
         with open(os.path.join(self.dir, "out.txt"), "w") as out:
-            # (setarch -R: the same addresses every run. Some of the game's code reads memory it never set (a blast's
-            # debris in Fallen Angel at f1088 of k_gl_lent comes out in one of three places), finding there what the
-            # host's address randomization left: with it, two runs of the same build can differ)
-            child = subprocess.Popen(["nice"] + SETARCH + (["wine"] if windows else []) + [exe], cwd=self.dir, env=env, stdout=out,
+            # (setarch -R: the same addresses every run. The game's code read bytes of host stack addresses its own
+            # code had left in the scratchpad (main.c: the game's stack now at a fixed place), and two runs of the same
+            # build could differ (k_gl_lent's debris at f1088); k_aslr_a/b check they no longer do)
+            child = subprocess.Popen(["nice"] + ([] if self.aslr else SETARCH) + (["wine"] if windows else []) + [exe], cwd=self.dir, env=env, stdout=out,
                                      stderr=subprocess.STDOUT)
             # (no bound on the wall clock that a loaded machine can reach: a run is stopped when its game is stuck, the
             # watchdog's "no frame shown" (in turbo: 6 s of the game thread's own CPU time) standing for 30 s, or
@@ -672,6 +673,11 @@ def lent_runs():
                 TWINE_TRACE="weapon,change" + (",proj" if key in ("rocket", "gl") else ""), TWINE_RENDERER="hw",
                 TWINE_SMOOTH=1))
             del runs["k_%s_%s" % (key, kind)].env["TWINE_ENDLESS_TEST_MEET"]
+    # (two runs of k_gl_lent with the host's address randomization on, every frame's RAM and scratchpad hashed
+    # (TWINE_TEST_RAMHASH): the same, frame for frame, as the logs)
+    for k in ("k_aslr_a", "k_aslr_b"):
+        runs[k] = Run(k, 9, 75, dict(runs["k_gl_lent"].env, TWINE_TEST_RAMHASH=1))
+        runs[k].aslr = True
     # (the flash bang at home (Courier) and lent (King's Ransom), as played: hw renderer, smooth motion; thrown every
     # 90 frames, a guard sent put by Bond (TEST_MEET); traced: state 15, the fade, the guards flagged and blinded, the
     # sounds; tools/flash_trace.py compares them)
@@ -880,6 +886,35 @@ def check_blast(runs):
            "frames %d-%d: %s" % (t0, t1, ", ".join(during) or "no hits"))
 
 
+def same_runs(a, b):
+    """two runs' logs as they should be the same: the first line apart (times, run folders, the host's own
+    pointers (0x0... in hex) and Bond's projectiles' raw dumps left out), or None"""
+    def norm(r):
+        out = []
+        for l in r.log.splitlines():
+            if "timing:" in l or re.search(r"proj: #\d+ (object|entry|part) ", l):
+                continue
+            l = re.sub(r"\d\d:\d\d:\d\d\.\d+ ", "", l).replace(r.dir, "R")
+            out.append(re.sub(r"\b0[0-9A-F]{7}\b", "PTR", l))
+        return out
+    x, y = norm(a), norm(b)
+    for i, (p, q) in enumerate(zip(x, y)):
+        if p != q:
+            return "line %d: %s | %s" % (i, p[:150], q[:150])
+    return None if len(x) == len(y) else "%d lines against %d" % (len(x), len(y))
+
+
+def check_aslr(runs):
+    a, b = runs["k_aslr_a"], runs["k_aslr_b"]
+    ha, hb = a.lines(r"ramhash "), b.lines(r"ramhash ")
+    d = same_runs(a, b)
+    first = next((i for i, (p, q) in enumerate(zip(ha, hb)) if p.split("ramhash", 1)[1] != q.split("ramhash", 1)[1]), None)
+    result("k", "two runs with the host's address randomization on: the same, every frame's RAM and scratchpad too",
+           bool(ha) and len(ha) == len(hb) and first is None and d is None and not a.timed_out and not b.timed_out,
+           "%d frames hashed; %s" % (len(ha), "first frame apart: %s" % ha[first].split(" ramhash")[0] if first is not None
+                                     else d or "logs the same"))
+
+
 def check_lent(runs):
     check_blast(runs)
     for w, lv_home, lv_lent, label in (("INGALLS", 8, 2, "Ingalls"), ("KOFFLER", 2, 8, "KS5")):
@@ -909,6 +944,7 @@ def check_lent(runs):
     result("k", "AR36: the scope's picture as at home", qh >= 0.85 and ql >= 0.85,
            "its marks found: home %d%%, lent %d%%" % (qh * 100, ql * 100))
     check_flash(runs)
+    check_aslr(runs)
     part = room_part(runs["k_satchel"].log, 9)
     fr = lambda pat: [int(x) for x in re.findall(r" f(\d+) v\d+ weapons: " + pat, part)]
     thrown, det_in, boom, back = (fr(r"SATCHEL CHARGE fired"), fr(r"SATCHEL DETONATOR into slot \d+ \(a charge out"),

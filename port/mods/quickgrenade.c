@@ -75,6 +75,26 @@ void GsSortObject4(void *obj, void *ot, s32 shift, void *scratch);
 s32 func_80065614(void *obj, u8 life, u8 kind);
 s32 func_80027248(s32 sound, s32 at, s32 arg2);
 s32 func_800746D0(s32 mesh, s32 *from, s32 *to, s16 *normal, s16 *hit, s32 *flags);
+/* (the walls test with the mod's own memory for its arguments and the scratchpad put back after: the game's code keeps
+ * its pointer arguments there, and host stack addresses, moved by the host's address randomization, showed through in
+ * later game code: see endless.c's walls_between) */
+static u8 scratch_kept[0x400];
+static s32 walls_between(s32 mesh, const s32 *from, const s32 *to, s16 *normal, s16 *hit, s32 *flags) {
+    static s32 f[4], t[4], fl;
+    static s16 nn[4], hh[4];
+    s32 r;
+    memcpy(f, from, 12), memcpy(t, to, 12), f[3] = t[3] = 0, fl = flags ? *flags : 0;
+    memcpy(scratch_kept, (void *)0x1F800000u, 0x400);
+    r = func_800746D0(mesh, f, t, nn, hh, flags ? &fl : 0);
+    memcpy((void *)0x1F800000u, scratch_kept, 0x400);
+    if (normal)
+        memcpy(normal, nn, 8);
+    if (hit)
+        memcpy(hit, hh, 8);
+    if (flags)
+        *flags = fl;
+    return r;
+}
 void free(void *p);
 void *malloc(unsigned n);
 void port_log(const char *fmt, ...);
@@ -481,15 +501,16 @@ static void fly(void) {
             from[i] = live[g].pos[i];
             to[i] = from[i] + live[g].vel[i];
         }
-        if (func_800746D0(D_800E2F2C, from, to, normal, hit, &flags) != 0 &&
+        if (walls_between(D_800E2F2C, from, to, normal, hit, &flags) != 0 &&
             (live[g].kind == QP_ROUND || live[g].kind == QP_ROCKET)) { /* (a launcher's round, a rocket: off as it hits) */
-            memcpy(live[g].pos, hit, 12);
+            for (i = 0; i < 3; i++) /* (hit: the s16 point where it hit; 12 bytes of it read past its end before) */
+                live[g].pos[i] = hit[i];
             live[g].on = 0;
             blast(live[g].pos, live[g].owner);
             continue;
         } else if (live[g].kind == QP_SATCHEL && !live[g].vel[0] && !live[g].vel[2] && live[g].ticks > 1) {
             continue; /* (a satchel charge come to rest: there until detonated) */
-        } else if (func_800746D0(D_800E2F2C, from, to, normal, hit, &flags) != 0) {
+        } else if (walls_between(D_800E2F2C, from, to, normal, hit, &flags) != 0) {
             /* off the surface: the speed across it turned back at a quarter, along it a third kept (it lands
              * near where it comes down, not skidding on) */
             long long dot = 0, len = 0;
