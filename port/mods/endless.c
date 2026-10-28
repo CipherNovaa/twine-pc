@@ -6558,7 +6558,12 @@ static int lent_model(s32 idx) {
 const char *endless_model_file(void) {
     if (lent_work_type && D_800E2F58 == lent_work_type)
         return lent_work_path;
-    return D_800E2F58 ? D_8009DB50[D_800E2F58] : "-";
+    if (!D_800E2F58)
+        return "-";
+    { /* (the table's entry as a PS1 address in RAM, or not a name: level 11's table isn't this one) */
+        u32 a = (u32)D_8009DB50[D_800E2F58];
+        return a >= 0x80000000u && a < 0x80800000u ? D_8009DB50[D_800E2F58] : "?";
+    }
 }
 
 void *func_800753F0_orig(s32 type);
