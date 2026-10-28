@@ -277,6 +277,7 @@ static int dt_on = -1, dt_n, dt_list[DOORS], dt_floor[DOORS], dt_done; /* (TWINE
 static const char *dt_result;
 extern s8 D_8009CABF; /* (the mission's loop leaves the controls unread: its opening iris) */
 static int wave_due; /* (the room's "WAVE N" for when the opening iris is over) */
+static s32 last_sent; /* (when the director last got a guard in: THE POSTED GUARDS) */
 static s32 last_frame = -1, room_frames, carried, kills_at_start, kills_scored, budget, cooldown, open;
 static s32 burst, segment, last_section = -1, loading, at_entry, survey_left, seen_gen = -1;
 int port_endless_gen(void);
@@ -338,7 +339,10 @@ static void take_out(u8 *o, const char *why) {
 
 /* the people's slots (port/mods/people.c: 12 with 8 MB of RAM, else the game's 6): the director's cap grows with them */
 int people_slots(void) __attribute__((weak));
-void people_guard_types(const u8 *types, int n) __attribute__((weak));
+void people_guard_types(const u8 *types, int n, const u8 *models, int m) __attribute__((weak));
+int people_game_slot_as(int s, int src, int kind) __attribute__((weak));
+u8 *people_record(int i) __attribute__((weak));
+u8 *people_busy(int i) __attribute__((weak));
 static int people_cap(void) {
     return people_slots ? people_slots() : 6;
 }
@@ -2315,6 +2319,68 @@ static const char guard_scripts[12][9] = {
     {1, 0, 0, 0, 0, 0, 0, 0, 0},  /* L11 GOON ZUKOVSKY ELECTRA HOTGIRL DEALER BULLION DIRECTOR */
 };
 #define FIXED_SCRIPT(w4) (g_Args->level >= 1 && g_Args->level <= 11 && !guard_scripts[g_Args->level][(w4) >> 20 & 7])
+/* A room whose kinds of guards have no slot of their own in its section (King's Ransom's bar: its slots bound to its
+ * three posted guards' type, the bar's two civilians' and the story person's left out of the room; its kinds, 35
+ * and 37, none: nobody ever came): a slot of the section's that nobody of the room can need any more (free, its
+ * type no kind's, nobody of it about and no record of it still to be made) is made one of a kind's, wearing a
+ * guard's model (people.c). Each kind with none gets one, while such slots last. */
+static int slot_unneeded(int s) { /* (free, its type no kind's nor a fighter's, nobody of it about, none to be made) */
+    u32 t = people_record(s)[0x1C];
+    int i, j;
+    if (*people_busy(s) != 0 || fighter_type(t, 0))
+        return 0;
+    for (i = 0; i < kind_count; i++)
+        if ((kinds[i][3] & 0xFF) == t)
+            return 0;
+    for (i = D_800B0DA0; i <= D_800B07B0; i++)
+        if (OBJ(i) != g_Player && OBJ(i)[4] && OBJ(i)[6] == t)
+            return 0;
+    for (i = 0; i < D_8009CF68; i++)
+        for (j = 0; j < D_8009CF6C[i]; j++) {
+            s32 *p = D_8009CF70[i] + j * 6;
+            if ((u32)(p[3] & 0xFF) == t && !(p[3] & 0x100))
+                return 0;
+        }
+    return 1;
+}
+static void kind_slots(void) {
+    int k, s, src = -1, next = 0;
+    if (!people_game_slot_as || !people_record || !people_busy || !kind_count)
+        return;
+    for (s = 0; s < 6 && src < 0; s++)
+        if (fighter_type(people_record(s)[0x1C], 0))
+            src = s;
+    if (src < 0)
+        return;
+    for (k = 0; k < kind_count; k++) { /* (first the kinds with no slot of their own) */
+        u32 kt = kinds[k][3] & 0xFF;
+        int have = 0;
+        for (s = 0; s < 6; s++)
+            have |= people_record(s)[0x1C] == kt;
+        for (s = 0; !have && s < 6; s++)
+            if (slot_unneeded(s) && people_game_slot_as(s, src, kt)) {
+                ELOG("room: slot %d (nobody's now) made a type %d guard's (a kind with none), in slot %d's model", s, kt, src);
+                break;
+            }
+    }
+    for (s = 0; s < 6; s++) /* (then any other slot nobody can need: one more guard at a time, the kinds in turn) */
+        if (slot_unneeded(s)) {
+            u32 kt = kinds[next++ % kind_count][3] & 0xFF;
+            if (people_game_slot_as(s, src, kt))
+                ELOG("room: slot %d (nobody's now) made a type %d guard's, in slot %d's model", s, kt, src);
+        }
+}
+
+static int kind_has_slot(u32 t) { /* (a slot of the section's bound to type t, the people's extra ones too) */
+    int s, n = people_slots ? people_slots() : 6;
+    if (!people_record)
+        return 1;
+    for (s = 0; s < n; s++)
+        if (people_record(s)[0x1C] == t)
+            return 1;
+    return 0;
+}
+
 /* the room as it starts: the kinds of guards, its doorways and floor */
 static int trace_sound(void);
 static void flash_reset(void);
@@ -2330,6 +2396,7 @@ static void room_start(void) {
     }
     s32 i, j, counts[256];
     room_frames = carried = budget = open = kills_scored = said = burst = at_entry = 0;
+    last_sent = 0;
     flash_reset();
     draw_slot = -1;
     kind_count = copy_next = door_count = stuck_count = seated_said = 0;
@@ -2389,14 +2456,20 @@ static void room_start(void) {
             else
                 ELOG("room: kind type %d (script %d: not a moving guard's) not copied", kinds[i][3] & 0xFF, kinds[i][4] >> 20 & 7);
         kind_count = n;
-        if (people_guard_types) { /* (the people's extra slots, past the game's six: copies of these kinds' slots) */
-            u8 t[16];
+        if (people_guard_types) { /* (the people's extra slots, past the game's six: copies of these kinds' slots, or
+                                   * of a guard's slot for a kind the section has none of) */
+            u8 t[16], m[6];
+            int nm = 0;
             for (i = 0; i < kind_count && i < 16; i++)
                 t[i] = kinds[i][3] & 0xFF;
-            people_guard_types(t, i);
+            for (j = 0; people_record && j < 6; j++)
+                if (fighter_type(people_record(j)[0x1C], 0))
+                    m[nm++] = people_record(j)[0x1C];
+            people_guard_types(t, i, m, nm);
         }
     }
     no_story_people(counts);
+    kind_slots();
     {   /* (the log: the mission's placed people kept and left out, its armed guards among them) */
         int kept = 0, out = 0, armed = 0;
         for (i = 0; i < D_8009CF68; i++)
@@ -2468,6 +2541,12 @@ static int stuck_near(s32 x, s32 z) { /* (by where one sent got stuck) */
     return 0;
 }
 
+/* Rooms whose guards come in by every doorway, Bond's own among them (the playtest: King's Ransom's bar, two doors,
+ * one Bond comes in by): elsewhere only by those further from where he came in than he is */
+static int both_doors(void) {
+    return g_Args->level == 8 && D_800D2F8C == 5;
+}
+
 static int lately(s32 x, s32 z) { /* (by where one of the last few came, or by where Bond came in; or someone there) */
     int k;
     if (stuck_near(x, z))
@@ -2476,7 +2555,7 @@ static int lately(s32 x, s32 z) { /* (by where one of the last few came, or by w
                                                                         * it; more people, more places taken) */
         if (OBJ(k) != g_Player && OBJ(k)[4] && HEALTH(OBJ(k)) > 0 && dist2(POS(OBJ(k))[0], POS(OBJ(k))[2], x, z) < 500)
             return 1;
-    if (dist2(x, z, entry[2], entry[4]) < 3500)
+    if (dist2(x, z, entry[2], entry[4]) < 3500 && !both_doors())
         return 1;
     for (k = 0; k < 4; k++)
         if ((recent[k][0] | recent[k][2]) && dist2(recent[k][0], recent[k][2], x, z) < 2500)
@@ -2494,7 +2573,7 @@ static int place(int *door) {
     *door = 1;
     for (k = 0; k < door_count; k++) {
         s32 best = 0x7FFFFFFF, b = -1, d = dist2(bx, bz, doors[k][0], doors[k][2]);
-        if (d < 3500 || d > 20000 || dist2(entry[2], entry[4], doors[k][0], doors[k][2]) < at + 500)
+        if (d < 3500 || d > 20000 || (dist2(entry[2], entry[4], doors[k][0], doors[k][2]) < at + 500 && !both_doors()))
             continue;
         for (i = 0; i < faces; i++) {
             s32 e;
@@ -2650,7 +2729,15 @@ static void spawn(const char *why) {
     }
     rec = copies[copy_next];
     copy_next = (copy_next + 1) % COPIES;
-    memcpy(rec, kinds[rnd() % kind_count], sizeof(copies[0]));
+    {   /* (a kind with no slot of its own in the section can never be made: its record (its script) with the type of
+         * the next kind that has one, as the kinds-in-turn below would come to) */
+        int k0 = rnd() % kind_count, k;
+        memcpy(rec, kinds[k0], sizeof(copies[0]));
+        for (k = 0; k < kind_count && !kind_has_slot(kinds[(k0 + k) % kind_count][3] & 0xFF); k++)
+            ;
+        if (k > 0 && k < kind_count)
+            rec[3] = (rec[3] & ~0xFF) | (kinds[(k0 + k) % kind_count][3] & 0xFF);
+    }
     rec[0] = mid[i][0] - D_800D2FB0[0];
     rec[1] = mid[i][1] - D_800D2FB0[1];
     rec[2] = mid[i][2] - D_800D2FB0[2];
@@ -2694,6 +2781,7 @@ static void spawn(const char *why) {
     /* a gunshot heard where Bond is, on the AI's board: a guard sent comes alert (the game's own guards stand and wait
      * for a noise or the sight of him; Masquerade's take him for one of theirs till then) */
     func_80053DE4(0, 0, g_Args->playerX, g_Args->playerY, g_Args->playerZ);
+    last_sent = room_frames;
     ELOG("spawn (%s): guard type %d %s at %d %d %d, %d from Bond, budget %d; ai %d, state %08X", why, rec[3] & 0xFF,
          door ? "in at a doorway" : "on the floor", mid[i][0], mid[i][1], mid[i][2],
          dist2(g_Args->playerX, g_Args->playerZ, mid[i][0], mid[i][2]), budget, o[0xA7],
@@ -2933,12 +3021,22 @@ static int ai_improved(void) {
 }
 
 static u8 blind_now[64]; /* (blinded by a flash bang: the port's AI keeps off him, THE FLASH BANG'S GUARDS) */
+/* THE POSTED GUARDS: a room's own guards at their posts (a fixed script: King's Ransom's bar's three, its "PUB")
+ * keep to them, as at home; but when the director has got nobody in for 20 s (the room's slots all held: the bar's
+ * by those three), they hunt Bond like any sent guard. Never a sniper (each level's sniper script, -1: none). */
+static const s8 sniper_script[12] = {-1, 2, -1, 4, -1, -1, -1, -1, 3, -1, -1, -1};
+static int posted_hunt(void) {
+    return room_frames - last_sent > SEC * 20;
+}
 static int any_hunter(u8 *o) { /* (one who would hunt Bond: a copy, or one of the room's own moving guards) */
     s32 *src = *(s32 **)(o + 0x60);
     if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0 || !*(u8 **)(o + 0x118) || blind_now[(o - OBJ(0)) / 0x124 & 63])
         return 0;
     if (is_copy(o))
         return 1;
+    if (src && FIXED_SCRIPT(src[1]) && posted_hunt() && fighter_type(o[6], 0) &&
+        (src[1] >> 20 & 7) != sniper_script[g_Args->level < 12 ? g_Args->level : 0])
+        return 1; /* (THE POSTED GUARDS: a room nobody comes to has its own posted guards come for Bond) */
     return src && !FIXED_SCRIPT(src[1]) && fighter_type(o[6], 0);
 }
 

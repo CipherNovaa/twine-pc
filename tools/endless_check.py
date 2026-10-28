@@ -4,7 +4,7 @@
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-p]
   -j JOBS    runs at once (default 4; at most 12, paced at most 5). A turbo run takes a whole core while it runs: 8 suit
              the 16-core machine when it is otherwise quiet; a run waits to start while the load is over the core count
-  -k CHECKS  the checks to run, letters from abcdefghijklmnop (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijklmnopq (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
@@ -1178,6 +1178,37 @@ def check_texts(runs):
            "MAX_TEXT" not in f.log, "%d cut, crash %s" % (len(f.lines(r"text: .* cut to")), f.crashed()))
 
 
+# ---- q: King's Ransom's bar (8:5): its kinds of guards have no slot of their own (its slots: its three posted guards',
+# the bar's civilians', the story person's left out): a slot nobody needs made a kind's (endless.c kind_slots), the
+# posted guards hunt when nobody comes; guards keep coming, in by both doorways, Bond's own among them ----
+
+def bar_runs():
+    env = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:5", "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1,
+           "TWINE_ENDLESS_TEST_SHOOT": 20, "TWINE_ENDLESS_TEST_MEET": 1}  # (everyone shot from 20 s on, every 2 s;
+    # Bond put by each guard sent, so he's away from the door he came in by)
+    return {"q_bar": Run("q_bar", 8, 150, dict(env)), "q_bar8": Run("q_bar8", 8, 150, dict(env, TWINE_RAM_8MB=1))}
+
+
+def check_bar(runs):
+    for k, label in (("q_bar", "2 MB (8 under -8)"), ("q_bar8", "8 MB")):
+        r = runs[k]
+        st = re.search(r"f(\d+) v\d+ room start: level 8 section 5 at (-?\d+) -?\d+ (-?\d+)", r.log)
+        f0, ex, ez = (int(st.group(1)), int(st.group(2)), int(st.group(3))) if st else (0, 0, 0)
+        sp = [(int(m.group(1)), m.group(2), int(m.group(3)), int(m.group(4))) for m in
+              re.finditer(r" f(\d+) v\d+ spawn \([^)]*\): guard type \d+ (in at a doorway|on the floor) at (-?\d+) -?\d+ (-?\d+)",
+                          r.log)]
+        mins = [sum(1 for f, _, _, _ in sp if 1200 * m <= f - f0 < 1200 * (m + 1)) for m in range(3)]
+        near = [s for s in sp if s[1] == "in at a doorway" and math.hypot(s[2] - ex, s[3] - ez) < 4500]
+        far = [s for s in sp if s[1] == "in at a doorway" and math.hypot(s[2] - ex, s[3] - ez) > 8000]
+        made = r.lines(r"room: slot \d+ \(nobody's now\) made a type")
+        result("q", "%s: guards keep coming (each minute)" % label, bool(st) and not r.crashed() and all(mins[:2]),
+               "spawns each minute %s, %d in all; %s" % (mins, len(sp), (made[0].split("room: ")[1][:70] if made else
+                                                                          "no slot made a kind's")))
+        result("q", "%s: in by both doorways (Bond's own too)" % label, bool(near) and bool(far),
+               "%d in near the door Bond came in by, %d at the far side" % (len(near), len(far)))
+
+
+
 # ---- n: more than six people at once (port/mods/people.c: 12 slots with 8 MB of RAM) ----
 
 def people_runs():
@@ -1467,7 +1498,7 @@ def check_campaign(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklmnop", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopq", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -1542,6 +1573,8 @@ def main():
         groups["ramp"] = ramp_runs()
     if "p" in checks:
         groups["people"] = people_runs()
+    if "q" in checks:
+        groups["bar"] = bar_runs()
     every = [r for g in groups.values() for r in g.values()]
     every.sort(key=lambda r: -r.cost())  # (the long ones first)
     t0 = time.time()
@@ -1586,6 +1619,8 @@ def main():
         check_shell(groups["shell"])
     if "people" in groups:
         check_people(groups["people"])
+    if "bar" in groups:
+        check_bar(groups["bar"])
     if "doors" in groups:
         check_doors(groups["doors"])
     if "ramp" in groups:
@@ -1593,7 +1628,7 @@ def main():
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
              "f": "restart", "g": "weapon carry", "h": "card save", "i": "campaign", "j": "enemy AI",
              "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp",
-             "p": "12 people"}
+             "p": "12 people", "q": "the bar's guards"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))
