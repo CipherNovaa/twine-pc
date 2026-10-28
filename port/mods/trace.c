@@ -28,6 +28,12 @@
  *         (+0x20), root motion off (+3), his combat state (the script's vars[7], +0x3C), his script's place (+0xA4
  *         from its start +0xA0, or "mod" in the mod's memory).
  *         For proving the lent flash bang as at home (tools/flash_trace.py).
+ * strip   the HUD's weapon strip (port/mods/weaponkeys.c) each tick it is drawn: the name it shows, its fade, the
+ *         weapon in hand and to change to, the weapon's state, the gun model shown or hidden; and a menu over the
+ *         mission opened or closed (here): "trace: L<level> f<frame> strip: ...".
+ * hits    each bullet that reaches a person, its damage, health before and after, a hit that does nothing and why,
+ *         health put back, people hit 5, 10, ... times still up; path: sent guards hunting Bond that hardly move in
+ *         3 s (port/mods/endless.c's func_80034A48, hits_frame).
  * (sound: port/mods/endless.c's func_80026F30 and the runtime's port_tone_play / port_voice_play log under "sound".)
  *
  * The overlay (debug menu, F9: its WEAPON TRACE page is the mod debugmenu.c's) shows the weapon line live.
@@ -376,6 +382,13 @@ void trace_frame(void) {
         on_person = port_trace("person");
         on_proj = port_trace("proj");
         on_flash = port_trace("flash");
+    }
+    {   /* (TWINE_TRACE=strip, weaponkeys.c's HUD strip: a menu over the mission opened and closed, for the strip after) */
+        static int menu_was, on_strip = -1;
+        if (on_strip < 0)
+            on_strip = port_trace("strip");
+        if (on_strip && (D_8009CAA4 != 0) != menu_was)
+            port_log("trace: L%d f%d strip: a menu %s\n", g_Args->level, D_8009CDA8, (menu_was = D_8009CAA4 != 0) ? "open" : "closed");
     }
     if (on_flash)
         trace_flash();

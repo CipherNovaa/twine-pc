@@ -106,7 +106,7 @@ void PopMatrix(void);
 static s32 wait;
 static void own_grenades(s32 pressed, s32 fresh);
 static void own_fly(s32 fresh);
-void endless_enemy_blast(void) __attribute__((weak));
+void endless_enemy_blast(s32 *pos) __attribute__((weak)); /* (where it goes off) */
 #define LIVE_REAL 4
 static int dist_ok(const s32 *a, const s32 *b) { /* (the same grenade a tick on: near where it was) */
     s32 dx = a[0] - b[0], dz = a[2] - b[2];
@@ -435,13 +435,18 @@ static void blast_or_flash(s32 *pos, u8 *owner, int harm) {
     memset(sub, 0, sizeof(sub));
     W(obj, 0x88, void *) = owner ? owner : g_Player; /* (a guard's: not Bond's kill) */
     if (owner && endless_enemy_blast)
-        endless_enemy_blast(); /* (a guard's spares his friends: endless.c) */
+        endless_enemy_blast(pos); /* (a guard's spares his friends: endless.c) */
     W(obj, 0x90, u8 *) = sub;
     W(sub, 0x14, s16) = W(sub, 0x1C, s16) = W(sub, 0x24, s16) = 4096;
     memcpy(sub + 0x28, pos, 12);
     if (harm)
         func_80065614(obj, 1, 5);
     func_80027248(BLAST_SOUND, (s32)(sub + 0x14), 0);
+}
+
+/* (headless tests, endless.c's TWINE_ENDLESS_TEST_GUARD_BLAST: a grenade's blast at pos, owner's (0: Bond's)) */
+void quick_grenade_test_blast(s32 *pos, u8 *owner) {
+    blast(pos, owner);
 }
 
 /* the grenades in the air moved a tick: falling, bouncing off what they hit (at half the speed) */

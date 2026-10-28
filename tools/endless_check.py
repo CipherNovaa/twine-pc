@@ -598,6 +598,11 @@ def lent_runs():
     del runs["k_pool"].env["TWINE_ENDLESS_TEST_MEET"]
     # (as played: the hardware renderer, smooth motion; the pool stepped through, each weapon's model; the timing)
     runs["k_pool_hw"] = Run("k_pool_hw", 2, 80, dict(runs["k_pool"].env, TWINE_RENDERER="hw", TWINE_SMOOTH=1))
+    # (a guard's grenade spares his friends from its blast, not from Bond: a blast of a guard's at the guard farthest
+    # from Bond while Bond's Ingalls bursts hit another (TWINE_TRACE=hits); and Bond's blast there, which kills him)
+    runs["k_blast"] = Run("k_blast", 8, 30, dict(home, TWINE_ENDLESS_TEST_DRAW="INGALLS", TWINE_TEST_PAD=shots,
+                                                 TWINE_ENDLESS_TEST_GUARD_BLAST="298", TWINE_TRACE="hits"))
+    runs["k_blast_bond"] = Run("k_blast_bond", 8, 30, dict(runs["k_blast"].env, TWINE_ENDLESS_TEST_GUARD_BLAST="298,bond"))
     runs["k_perf"] = Run("k_perf", 8, 70, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="2:4",
                                               TWINE_ENDLESS_TEST_EXIT=120, TWINE_ENDLESS_TEST_DRAW="AR36",
                                               TWINE_RENDERER="hw", TWINE_SMOOTH=1, TWINE_TIMING=1))
@@ -834,7 +839,28 @@ def scope_picture(img):
     return sum(dark(x, y) for x, y in pts) / len(pts)
 
 
+def check_blast(runs):
+    """a guard's grenade: his friends near it unhurt by it, Bond's bullets still hurting people meanwhile"""
+    g, b = runs["k_blast"].log, runs["k_blast_bond"].log
+    went = re.search(r"f(\d+) v\d+ ai: a guard's grenade goes off at .*? till frame (\d+) \(hit masks \+0x400.*?, (\d+) people within", g)
+    back = re.search(r"masks put back: of the (\d+) near the blast .*?, (\d+) still up", g.split("test: a grenade's blast", 1)[-1])
+    up = re.search(r"test: the blast's person \d+ a second on: (\w+)", g)
+    t0, t1 = (int(went.group(1)), int(went.group(2))) if went else (0, 0)
+    hits = [(int(f), d) for f, d in re.findall(r"trace: L8 f(\d+) hits: .*? hit by INGALLS TYPE 20 .*?: (damage \d+|NO DAMAGE)", g)]
+    during = [d for f, d in hits if t0 <= f < t1]
+    result("k", "a guard's grenade spares his friends near it (%s near)" % (back.group(1) if back else "?"),
+           bool(went) and bool(back) and int(back.group(1)) >= 1 and back.group(1) == back.group(2) and bool(up) and
+           up.group(1) == "up", "%s; %s" % (back.group(0) if back else "no blast", up.group(0) if up else "no target"))
+    bu = re.search(r"test: the blast's person \d+ a second on: (\w+)", b)
+    result("k", "... where Bond's blast kills (the same place, Bond's grenade)", bool(bu) and bu.group(1) == "down",
+           bu.group(0) if bu else "no target")
+    result("k", "... and Bond's bullets hurt people in the blast's second (Ingalls, TWINE_TRACE=hits)",
+           bool(during) and all(d.startswith("damage") for d in during),
+           "frames %d-%d: %s" % (t0, t1, ", ".join(during) or "no hits"))
+
+
 def check_lent(runs):
+    check_blast(runs)
     for w, lv_home, lv_lent, label in (("INGALLS", 8, 2, "Ingalls"), ("KOFFLER", 2, 8, "KS5")):
         h = room_part(runs["k_home_" + label.lower()].log, lv_home)
         l = room_part(runs["k_lent_" + label.lower()].log, lv_lent)
@@ -1605,6 +1631,13 @@ def select_runs():
                                            TWINE_TEST_INPUT=",".join("%d:wheeldown" % t for t in range(900, 2500, 100)))),
     }
     del runs["p_inv"].env["TWINE_ENDLESS_TEST_DRAW"]
+    # (the playtest's: the AR36 carried through a door into Meltdown, where the game's slot is the P2K's till the AR36
+    # comes out at frame 61: the strip names the AR36 from the room's first frame; the pause menu opened and left over
+    # that room's strip; RESTART MISSION, the fresh run's first room)
+    runs["p_carry"] = Run("p_carry", 8, 50, dict(base, TWINE_ENDLESS_ROOM="8:-1", TWINE_ENDLESS_NEXT="10:4",
+                                                 TWINE_ENDLESS_TEST_EXIT="200,5000", TWINE_ENDLESS_TEST_DRAW="AR36",
+                                                 TWINE_ENDLESS_TEST_RESTART=400, TWINE_TRACE="select,change,strip",
+                                                 TWINE_TEST_PAD="345:0008,348:0,410:4000,413:0", TWINE_SHOT="330"))
     camp = {"TWINE_TRACE": "select,change", "TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1,
             "TWINE_TEST_INPUT": "600:wheeldown,700:wheeldown,800:wheelup,1200:x,1300:z"}
     runs["p_camp"] = Run("p_camp", 8, 75, camp)
@@ -1630,6 +1663,24 @@ def strip_letters(img, y0=0.73, y1=0.81):
     return hit / n if n else 0.0
 
 
+def strip_rooms(log):
+    """each room's start: (level, the weapon drawn as it starts, the strip's names in its first 90 frames, the names
+    after a menu over it closed, whether a menu opened in it, how the room came: door / restart / first)"""
+    out = []
+    parts = re.split(r"(?=endless: \S+ f0 v\d+ room start: level)", log)
+    for i, p in enumerate(parts[1:], 1):
+        lv = int(re.match(r"endless: \S+ f0 v\d+ room start: level (\d+)", p).group(1))
+        drawn = re.search(r"f0 v\d+ weapon: (.+?) drawn", p)
+        early = [n for f, n in re.findall(r"trace: L%d f(\d+) strip: \"(.+?)\" drawn" % lv, p) if int(f) < 90]
+        early += [n for f, n in re.findall(r"trace: L%d f(\d+) select: strip shown: group \d+ lit, \"(.+?)\"" % lv, p) if int(f) < 90]
+        menu = p.split("strip: a menu closed", 1)
+        after = re.findall(r"strip: \"(.+?)\" drawn", menu[1]) if len(menu) > 1 else []
+        prev = parts[i - 1]
+        how = "restart" if "RESTART MISSION: the run begins again" in prev else "door" if "carry: Bond leaves with" in prev else "first"
+        out.append((lv, drawn.group(1) if drawn else None, early, after, "strip: a menu open" in p, how))
+    return out
+
+
 def check_select(runs):
     r = runs["p_kr"]
     p = r.log.split("room start: level 8 ", 1)[-1]
@@ -1646,6 +1697,25 @@ def check_select(runs):
            "slot too; hw, smooth)", shown >= len(want) and named >= 6 and on > 0.01 and before < on / 4 and
            name > 0.01 and band < name / 4, "%d shown, %d name bands; numbers %.3f -> %.3f, name %.3f -> %.3f" %
            (shown, named, before, on, band, name))
+    # the strip at a room's start: the weapon carried in (the AR36 into Meltdown), not the mission's own in the game's
+    # slot meanwhile; after the pause menu; the fresh run's first room after RESTART MISSION
+    rooms = strip_rooms(runs["p_carry"].log)
+    door = [x for x in rooms if x[5] == "door" and x[0] == 10]
+    rest = [x for x in rooms if x[5] == "restart"]
+    bad = ["L%d (%s) drawn %s, strip %s" % (lv, how, d, ", ".join(sorted(set(n for n in e if n != d))))
+           for lv, d, e, a, m, how in rooms if any(n != d for n in e)]
+    car = door[0] if door else None
+    ok = bool(car) and car[1] == "AR36 SNIPER" and len(car[2]) >= 20 and not bad
+    result("r", "HUD strip at a room's start names the weapon carried in (the AR36 through a door into Meltdown: each "
+           "frame of its first 90; hw, smooth)", ok, "; ".join(bad) or ("Meltdown: %s drawn, %d strip frames" %
+           (car[1], len(car[2])) if car else "no room through a door into Meltdown"))
+    # (the menu opened over the strip, at room frame 85: the game's band is over once it closes, so none or the AR36)
+    menu = car and car[4] and all(n == "AR36 SNIPER" for n in car[3])
+    result("r", "... and after the pause menu over it (none, or the AR36)", bool(menu),
+           "menu %s, after it: %s" % (car[4], ", ".join(sorted(set(car[3]))) or "no strip") if car else "no room")
+    result("r", "... and in the fresh run's first room after RESTART MISSION", bool(rest) and bool(rest[0][2]) and
+           all(n == rest[0][1] for n in rest[0][2]), "%s drawn, strip %s" % (rest[0][1], ", ".join(sorted(set(rest[0][2]))))
+           if rest else "no restart")
     # the checkmarks kept: the list in Meltdown and Courier as King's Ransom left it
     lists = re.findall(r"trace: L(\d+) f\d+ select: the next-weapon button: .*?; list (.+)", runs["p_ticks"].log)
     def marks(lst):

@@ -185,3 +185,14 @@ level09 func_80026C90 func_80026C90
 level10 func_80026C90 func_80026C90
 level05 D_800B0AC8 D_800B5F70
 level05 D_800B0AE4 D_800B5F8C
+# a bullet reaching a person (port/mods/endless.c: TWINE_TRACE=hits)
+level08 func_80034A48 func_80035300
+level02 func_80034A48 func_8003540C
+level03 func_80034A48 func_80034F1C
+level04 func_80034A48 func_80034F2C
+level05 func_80034A48 func_80035140
+level06 func_80034A48 func_80035344
+level07 func_80034A48 func_800355D0
+level09 func_80034A48 func_8003561C
+level10 func_80034A48 func_800351B0
+level11 func_80034A48 func_8003451C

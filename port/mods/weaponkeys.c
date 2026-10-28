@@ -494,8 +494,10 @@ void weaponkeys_hud_pre(void) {
             if (band_left <= 0 && (D_8009CDA8 < strip_at || D_8009CDA8 - strip_at > 20) && D_800B0DDC >= 0 &&
                 D_800B0DDC < SLOTS) { /* (not one of ours: the game's own change) */
                 Ent e[64];
-                int run, n = list(e, &run);
-                strip_show((const char *)g_Weapons[D_800B0DDC].pad0, e, n);
+                int run, n = list(e, &run), c = run ? current(e, n, run) : -1;
+                /* (in a run, the weapon he carries that is in hand or coming: at a room's start the game's slot is
+                 * still the mission's own, not shown, while the one carried in waits to be taken out) */
+                strip_show(c >= 0 ? e[c].name : (const char *)g_Weapons[D_800B0DDC].pad0, e, n);
             }
             band_left = D_8009EED0;
         }
@@ -596,6 +598,14 @@ void weaponkeys_hud(void) {
     if (D_8009CDA8 < strip_at || age < 0 || age >= STRIP_TICKS * 4096)
         return;
     hud_lvl = age < (STRIP_TICKS - STRIP_FADE) * 4096 ? 128 : (STRIP_TICKS * 4096 - age) * 128 / (STRIP_FADE * 4096);
+    if (!port_subframe && port_trace("strip")) { /* (each tick it's drawn: its name, and the gun on screen) */
+        extern u8 *D_8009CD98;
+        int s = D_800B0DD4;
+        port_log("trace: L%d f%d strip: \"%s\" drawn (level %d); in hand %d (%s), to %d, state %d, gun %s\n",
+                 g_Args->level, D_8009CDA8, strip_name, hud_lvl, s,
+                 s >= 0 && s < SLOTS ? (const char *)g_Weapons[s].pad0 : "-", D_800B0DDC, D_800F11F0,
+                 !D_8009CD98 ? "none" : *(u32 *)(D_8009CD98 + 0x7C) & 0x80000000 ? "hidden" : "shown");
+    }
     hud_ot = (u32 *)D_800B8EFC[D_800B8F24][1];
     prims_begin();
     hud_n = D_800AEDA8; /* (the letters past those the menus use: the count, or past the last text's (the game's name

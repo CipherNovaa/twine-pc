@@ -32,7 +32,7 @@
  * endless_frame is called at the top of every frame of the mission (mods/savestate.c's Pad_Update).
  * TWINE_ENDLESS_DUMP=1 also logs the section's doors, its kinds of placed things and its people.
  *
- * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 SsUtAllKeyOff func_80026C90 func_80053804 func_8005519C
+ * MOD_REPLACES_NATIVE: func_8004900C func_80057750 func_80076014 func_80076104 func_8002D4E4 func_8002E1B0 RestartPrompt_Open func_8004CA5C func_8004B270 func_80054414 func_8002E318 func_80048B4C func_80055E24 func_8005E020 func_8003C1BC func_80041DBC func_80053ED8 func_80053114 func_800572F4 func_80026F30 func_80027248 func_80081458 func_8004DD9C func_8007A17C func_800753F0 func_800449BC func_80044A60 func_80042E6C func_80043078 func_800291B0 func_80033F38 func_800350F0 SsUtAllKeyOff func_80026C90 func_80053804 func_8005519C func_80034A48
  *
  * Names are LEVEL01's; port/mods.py maps them onto each level. */
 #include "twine.h"
@@ -150,6 +150,7 @@ u32 port_disc_part(const char *name, u32 offset, u32 len, u8 **data);
 void free(void *p);
 void *malloc(unsigned n);
 int quick_grenade_enemy(const s32 *from, const s32 *to, u8 *owner); /* (quickgrenade.c) */
+void quick_grenade_test_blast(s32 *pos, u8 *owner); /* (quickgrenade.c, tests) */
 int port_live_grenades(s32 (*at)[3], int max);
 s32 func_80027248(s32 sound, s32 at, s32 arg2); /* a sound of the level's bank at a place */
 s32 func_80051728(u8 *obj, u8 *target) __attribute__((weak)); /* what a person makes of another: 0x40 he sees him */
@@ -1244,6 +1245,7 @@ static int hitloop_trace(void) {
 }
 void func_80033F38_orig(void);
 static void hit_loop(void);
+static void hits_frame(void);
 void func_80033F38(void) {
     static int test = -1;
     static s32 skipped, last_tick = -1;
@@ -2017,9 +2019,12 @@ int endless_carried_ticked(int e) { /* (its checkmark: in the weapon buttons' ro
         return g_Weapons[(int)car[e].slot].flags >> 12 & 1;
     return car[e].pi == det_pi ? 1 : pool_round[(int)car[e].pi];
 }
-/* the weapon in hand, or the one a change is drawing next (a pool weapon going into the slot in hand included) */
+/* the weapon in hand, or the one a change is drawing next (a pool weapon going into the slot in hand included; the
+ * room's carried weapon still to come out: that one, not the mission's own in the game's slot meanwhile, which isn't
+ * shown) */
 int endless_carried_current(void) {
-    int i, s = D_800B0DDC >= 0 && D_800B0DDC < SLOTS ? D_800B0DDC : D_800B0DD4;
+    int i, s = draw_slot >= 0 && draw_slot < SLOTS ? draw_slot
+             : D_800B0DDC >= 0 && D_800B0DDC < SLOTS ? D_800B0DDC : D_800B0DD4;
     for (i = 0; i < car_n; i++)
         if (pool_pending_slot >= 0 ? car[i].pi == pool_pending_pi && car[i].slot < 0 : car[i].slot == s)
             return i;
@@ -4721,6 +4726,7 @@ void endless_frame(void) {
     room_frames++;
     blind_frame(); /* (a lent flash bang's blinded guards) */
     shotgun_frame();
+    hits_frame(); /* (TWINE_TRACE=hits, path: health put back, guards that hardly move) */
     if (trace_voices() && (room_frames == 1 || room_frames == 20 || room_frames == 40 || room_frames % 100 == 0)) {
         char what[640]; /* (TWINE_TRACE=voices: what sounds; a sound left on from the last mission, the playtest's
                          * endless SMG fire, shows as keyed on before this executable) */
@@ -4970,6 +4976,42 @@ void endless_frame(void) {
             func_8005E020(o);
             ELOG("test shot: person %d type %d health %d -> %d", i, o[6], was, HEALTH(o));
         }
+    if (getenv("TWINE_ENDLESS_TEST_GUARD_BLAST")) { /* (headless tests: N[,bond]: at room
+        * frame N a grenade's blast at the guard farthest from Bond, a guard's (another guard the thrower), or Bond's) */
+        static int target = -1;
+        const char *t = getenv("TWINE_ENDLESS_TEST_GUARD_BLAST");
+        int at = atoi(t), bond = strstr(t, "bond") != 0;
+        if (room_frames == at) {
+            int owner = -1;
+            s32 far = -1;
+            target = -1;
+            for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+                u8 *o = OBJ(i);
+                s32 d;
+                if (o == g_Player || !o[4] || o[5] != 6 || HEALTH(o) <= 0 || !TYPE_DEF(o[6])[0x2C])
+                    continue;
+                d = dist2(g_Args->playerX, g_Args->playerZ, POS(o)[0], POS(o)[2]);
+                if (d > far)
+                    far = d, target = i;
+            }
+            for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++)
+                if (i != target && OBJ(i) != g_Player && OBJ(i)[4] && OBJ(i)[5] == 6 && HEALTH(OBJ(i)) > 0)
+                    owner = i;
+            if (target >= 0 && (bond || owner >= 0)) {
+                s32 pos[3];
+                pos[0] = POS(OBJ(target))[0], pos[1] = POS(OBJ(target))[1] - 100, pos[2] = POS(OBJ(target))[2];
+                ELOG("test: a grenade's blast, %s, at person %d type %d (health %d, %d from Bond)",
+                     bond ? "Bond's" : "a guard's", target, OBJ(target)[6], HEALTH(OBJ(target)), far);
+                quick_grenade_test_blast(pos, bond ? 0 : OBJ(owner));
+            } else
+                target = -1;
+        }
+        if (target >= 0 && room_frames == at + SEC) {
+            ELOG("test: the blast's person %d a second on: %s, health %d", target,
+                 OBJ(target)[4] && HEALTH(OBJ(target)) > 0 ? "up" : "down", HEALTH(OBJ(target)));
+            target = -1;
+        }
+    }
     if (getenv("TWINE_ENDLESS_TEST_GOD") && HEALTH(g_Player) > 0 && HEALTH(g_Player) < 0x10000)
         HEALTH(g_Player) = 0x20000; /* (headless tests: Bond doesn't fall) */
     if (getenv("TWINE_ENDLESS_TEST_DRAW") && room_frames == 60) /* (headless tests: Bond changes to the weapon named) */
@@ -5325,6 +5367,167 @@ u8 *func_8003C1BC(s32 *rec, s32 x, s32 y, s32 z) {
     }
 }
 
+/* BOND'S HITS ON PEOPLE, LOGGED (TWINE_TRACE=hits): each bullet that reaches a person (func_80034A48: the hit loop's,
+ * for every projectile's hit on a person; arg2 the model's part it hit, which picks the damage: part 14 the type's
+ * whole health (+0's +0x20; the head), parts 2, 5, 9, 10, 12, 13 half the bullet's damage, 3 and 6 a quarter (7, 8,
+ * 11 an eighth or a quarter on an armoured one, +0x48 & 0x02000000), the rest all of it), its health before and
+ * after, and whether he falls; a hit that takes nothing, with why (the game's own reasons, read before the hit as
+ * func_80034A48 has them); health put back after a hit (within 10 s); one down to no health that isn't falling a
+ * second on; and after every 5th hit a person survives, what he has taken. The lines:
+ *   trace: L<l> f<frame> hits: person <slot> type <t> (<sent|room's>) hit by <weapon> in part <p> (<share>): damage
+ *          <d> (the bullet's <b>), health <h0> -> <h1>[, dies]
+ *   trace: ... hits: person ... hit by ... in part ...: NO DAMAGE, health <h0> -> <h1>: <reason>; +0E .. +48 .. +4C ..
+ *          (no-kill flag on|off) +A4 .. ai .. state ..
+ *   trace: ... hits: person ... health put back <h0> -> <h1>, <n> frames after Bond's hit; ...
+ *   trace: ... hits: person ... down to health <h> a second ago but not falling; ...
+ *   trace: ... hits: person ... <n> hits and still up: <k> hurt him (<total> damage), <z> did nothing; health <h> of
+ *          the type's <full>; ...
+ * And sent guards that hardly move (TWINE_TRACE=hits or path): each 3 s a sent guard hunting Bond (THE RAMP lets him)
+ * moved under 300, unless he stands seeing Bond and not running:
+ *   trace: ... path: sent guard <slot> type <t> moved <d> in 3 s, at x y z (made <n> s ago): the port walking him
+ *          <0|1>, sees Bond <0|1>, animation asked <a> running <r> (run <ra>), ai <script> state <+24> combat <vars[7]>
+ * (Names are the port's own guesses where the game's are unknown; read with the code.) */
+void func_80034A48_orig(u8 *o, u8 *proj, s16 part, s16 arg3);
+static int hits_on = -1, path_on;
+static int hits_trace(void) {
+    if (hits_on < 0)
+        hits_on = port_trace("hits"), path_on = hits_on || port_trace("path");
+    return hits_on;
+}
+static s32 hit_key[64], hit_n[64], hit_hurt[64], hit_dmg[64], hit_after[64], hit_at[64], hit_down[64];
+static s32 path_at[64][3], path_check[64];
+static s32 hit_person_key(int i, u8 *o) { /* (a new person in the slot: his counts begin again) */
+    return (made_at[i] + 1) * 0x101 ^ o[6] << 24 ^ port_endless_wave() << 16 ^ (s32)(long)made_how[i];
+}
+static const char *part_share(int part, u8 *o) {
+    if (part == 14)
+        return "the head: his whole health";
+    if ((part == 7 && (*(s32 *)(o + 0x48) & 0x02000000)))
+        return "an eighth (armoured)";
+    if (((part == 8 || part == 11) && (*(s32 *)(o + 0x48) & 0x02000000)) || part == 3 || part == 6)
+        return "a quarter";
+    if (part == 2 || part == 5 || part == 9 || part == 12 || part == 10 || part == 13)
+        return "half";
+    return "all";
+}
+static void person_flags(char *b, int n, u8 *o) {
+    u8 *ctx = *(u8 **)(o + 0x118), *st = *(u8 **)(o + 0x94);
+    snprintf(b, n, "+0E %04X +48 %08X +4C %08X (no-kill flag %s) +A4 %02X, ai %d state %08X combat %d", *(u16 *)(o + 0xE),
+             *(s32 *)(o + 0x48), *(s32 *)(o + 0x4C), *(s32 *)(o + 0x4C) & 0x40000000 ? "ON" : "off", o[0xA4], o[0xA7],
+             st ? *(s32 *)(st + 0x24) : -1, ctx ? *(s32 *)(ctx + 0x3C) : -1);
+}
+void func_80034A48(u8 *o, u8 *proj, s16 part, s16 arg3) {
+    s32 before, after, bullet;
+    int i, bond;
+    u8 *by, *ctx;
+    char why[96], fl[160], weap[40];
+    s16 e5[5];
+    if (!hits_trace() || port_subframe || !o || !proj || (u8 *)o < OBJ(0) || (u8 *)o >= OBJ(64) || o == (u8 *)g_Player ||
+        o[5] != 6) {
+        func_80034A48_orig(o, proj, part, arg3);
+        return;
+    }
+    i = (int)(((u8 *)o - OBJ(0)) / 0x124);
+    before = HEALTH(o), bullet = *(s32 *)(proj + 0x34), by = *(u8 **)(proj + 0x88), bond = by == (u8 *)g_Player;
+    ctx = *(u8 **)(o + 0x118);
+    why[0] = 0;
+    if (*(u16 *)(o + 0xE) == 0x7FFF)
+        snprintf(why, sizeof(why), "immune (his hit mask 7FFF)%s", blast_active() ? ", a guard's grenade's second" : "");
+    else if (before <= 0)
+        snprintf(why, sizeof(why), "already down (no health)");
+    else if (!bond && !(ctx && (*(s32 *)(ctx + 0x10) & 0x200)))
+        snprintf(why, sizeof(why), "not Bond's bullet (his AI takes no damage from others': its +0x10 & 0x200 clear)");
+    person_flags(fl, sizeof(fl), o);
+    func_80034A48_orig(o, proj, part, arg3);
+    after = HEALTH(o);
+    if (bond)
+        snprintf(weap, sizeof(weap), "%s", D_800B0DD4 >= 0 && D_800B0DD4 < 16 ? (char *)g_Weapons[D_800B0DD4].pad0 : "?");
+    else if (by >= OBJ(0) && by < OBJ(256))
+        snprintf(weap, sizeof(weap), "object %d (type %d)'s shot", (int)((by - OBJ(0)) / 0x124), by[6]);
+    else
+        snprintf(weap, sizeof(weap), "a shot of nobody's");
+    if (hit_key[i] != hit_person_key(i, o))
+        hit_key[i] = hit_person_key(i, o), hit_n[i] = hit_hurt[i] = hit_dmg[i] = 0, hit_down[i] = 0;
+    if (!bond && after >= before && why[0]) /* (a guard's stray shot on a friend: the game's way, not logged) */
+        return;
+    hit_n[i]++;
+    hit_at[i] = room_frames, hit_after[i] = after;
+    if (after < before) {
+        hit_hurt[i]++, hit_dmg[i] += before - after;
+        port_log("trace: L%d f%d hits: person %d type %d (%s) hit by %s in part %d (%s): damage %d (the bullet's %d), "
+                 "health %d -> %d%s\n", g_Args->level, D_8009CDA8, i, o[6], is_copy(o) ? "sent" : "room's", weap, part,
+                 part_share(part, o), before - after, bullet, before, after, after <= 0 ? ", dies" : "");
+    } else {
+        if (!why[0])
+            snprintf(why, sizeof(why), after > before ? "health went up" : "the damage worked out as nothing (part %d's share of %d)",
+                     part, bullet);
+        port_log("trace: L%d f%d hits: person %d type %d (%s) hit by %s in part %d (%s): NO DAMAGE, health %d -> %d: %s; %s%s%s\n",
+                 g_Args->level, D_8009CDA8, i, o[6], is_copy(o) ? "sent" : "room's", weap, part, part_share(part, o), before,
+                 after, why, fl, g_Invincible ? "; g_Invincible on" : "", (g_Args->flags2 >> 13 & 1) ? "; 4x damage cheat on" : "");
+    }
+    if (after > 0 && hit_n[i] % 5 == 0) {
+        s32 full = *(u8 **)o ? *(s32 *)(*(u8 **)o + 0x20) : 0;
+        port_log("trace: L%d f%d hits: person %d type %d (%s, %s %d s ago) %d hits and still up: %d hurt him (%d damage), "
+                 "%d did nothing; health %d of the type's %d; %s\n", g_Args->level, D_8009CDA8, i, o[6],
+                 is_copy(o) ? "sent" : "room's", made_how[i] ? made_how[i] : "made", port_endless_room(e5) ? (room_frames - made_at[i]) / SEC : -1,
+                 hit_n[i], hit_hurt[i], hit_dmg[i], hit_n[i] - hit_hurt[i], after, full, fl);
+    }
+}
+/* each frame of a room: health put back after a hit, one down not falling; sent guards that hardly move */
+static void hits_frame(void) {
+    int i;
+    char fl[160];
+    hits_trace();
+    if ((!hits_on && !path_on) || port_subframe)
+        return;
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = OBJ(i), *an, *ctx;
+        if (o == (u8 *)g_Player || !o[4] || o[5] != 6)
+            continue;
+        if (hits_on && hit_key[i] == hit_person_key(i, o) && hit_n[i] && room_frames - hit_at[i] <= SEC * 10) {
+            if (HEALTH(o) > hit_after[i]) {
+                person_flags(fl, sizeof(fl), o);
+                port_log("trace: L%d f%d hits: person %d type %d (%s) health put back %d -> %d, %d frames after Bond's hit; %s\n",
+                         g_Args->level, D_8009CDA8, i, o[6], is_copy(o) ? "sent" : "room's", hit_after[i], HEALTH(o),
+                         room_frames - hit_at[i], fl);
+                hit_after[i] = HEALTH(o);
+            } else
+                hit_after[i] = HEALTH(o);
+            if (HEALTH(o) <= 0 && !(o[0xA4] & 2) && room_frames - hit_at[i] == SEC && !hit_down[i]) {
+                person_flags(fl, sizeof(fl), o);
+                hit_down[i] = 1;
+                port_log("trace: L%d f%d hits: person %d type %d (%s) down to health %d a second ago but not falling; %s\n",
+                         g_Args->level, D_8009CDA8, i, o[6], is_copy(o) ? "sent" : "room's", HEALTH(o), fl);
+            }
+        }
+        if (!path_on)
+            continue;
+        if (!is_copy(o) || HEALTH(o) <= 0 || !hunter(o) || room_frames - made_at[i] < SEC) {
+            path_check[i] = 0;
+            continue;
+        }
+        if (!path_check[i] || path_check[i] > room_frames) {
+            path_check[i] = room_frames, path_at[i][0] = POS(o)[0], path_at[i][1] = POS(o)[1], path_at[i][2] = POS(o)[2];
+            continue;
+        }
+        if (room_frames - path_check[i] < SEC * 3)
+            continue;
+        {
+            s32 moved = dist2(POS(o)[0], POS(o)[2], path_at[i][0], path_at[i][2]), run = run_anim(o[6]);
+            int sees;
+            an = *(u8 **)(o + 0x94), ctx = *(u8 **)(o + 0x118);
+            sees = (ctx && (*(s32 *)ctx & 0x80)) || seen_sight[i];
+            if (moved < 300 && an && (!sees || *(s16 *)(an + 0x12) == run || driving[i]))
+                port_log("trace: L%d f%d path: sent guard %d type %d moved %d in 3 s, at %d %d %d (made %d s ago): the "
+                         "port walking him %d, sees Bond %d, animation asked %d running %d (run %d), ai %d state %08X "
+                         "combat %d\n", g_Args->level, D_8009CDA8, i, o[6], moved, POS(o)[0], POS(o)[1], POS(o)[2],
+                         (room_frames - made_at[i]) / SEC, driving[i], sees, *(s16 *)(an + 0x10), *(s16 *)(an + 0x12), run,
+                         o[0xA7], *(s32 *)(an + 0x24), ctx ? *(s32 *)(ctx + 0x3C) : -1);
+            path_check[i] = room_frames, path_at[i][0] = POS(o)[0], path_at[i][1] = POS(o)[1], path_at[i][2] = POS(o)[2];
+        }
+    }
+}
+
 /* A person hit: one that is hit again and again without being hurt (a story person the game won't let die,
  * under a guard's look) is taken out of the room */
 void func_8005E020(u8 *o) {
@@ -5620,21 +5823,37 @@ s32 func_800572F4(u32 *cmd, u8 *obj, u8 *chr) {
     return func_800572F4_orig(cmd, obj, chr);
 }
 
-/* A guard's grenade going off (quickgrenade.c): the people (Bond aside) not hurt by it, their hit masks made
- * 0x7FFF for the blast's few frames and put back after (a guard's grenade is for Bond, not his friends) */
+/* A guard's grenade going off (quickgrenade.c): the people (Bond aside) not hurt by it (a guard's grenade is for Bond,
+ * not his friends). The game's own way: hit mask bit 0x400, which keeps off a blast or a projectile that isn't Bond's
+ * (func_80037B6C's blasts check the blast's maker, +0x88 of the object it was made for: this one's the guard; and
+ * func_80037768's shots), set on everyone for the blast's second and taken off after (a mask that had it keeps it).
+ * Bond's bullets (func_80034A48: no mask bit but 0x7FFF) and his own blasts (0x800 only) still hurt them: before, the
+ * masks were made 0x7FFF for that second, and nothing Bond did could hurt anyone meanwhile. The people near it are
+ * counted, and how many are still up as the second ends. TWINE_TEST_OLD_BLAST=1: the old 0x7FFF (tests). */
 static u16 blast_masks[64];
-static s32 blast_until = -1;
-void endless_enemy_blast(void) {
-    int i;
+static u8 blast_near[64];
+static s32 blast_until = -1, blast_at[3];
+void endless_enemy_blast(s32 *pos) {
+    int i, n = 0, old = getenv("TWINE_TEST_OLD_BLAST") != NULL;
     if (blast_until >= 0)
         return;
-    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++)
-        if (OBJ(i) != g_Player) {
-            blast_masks[i] = *(u16 *)(OBJ(i) + 0xE);
-            *(u16 *)(OBJ(i) + 0xE) = 0x7FFF;
-        }
+    for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++) {
+        u8 *o = OBJ(i);
+        blast_near[i] = 0;
+        if (o == g_Player)
+            continue;
+        blast_masks[i] = *(u16 *)(o + 0xE);
+        *(u16 *)(o + 0xE) = old ? 0x7FFF : blast_masks[i] | 0x400;
+        if (pos && o[4] && o[5] == 6 && HEALTH(o) > 0 && dist2(pos[0], pos[2], POS(o)[0], POS(o)[2]) < 4000 &&
+            POS(o)[1] - pos[1] < 1500 && pos[1] - POS(o)[1] < 1500)
+            blast_near[i] = 1, n++;
+    }
+    if (pos)
+        blast_at[0] = pos[0], blast_at[1] = pos[1], blast_at[2] = pos[2];
     blast_until = D_8009CDA8 + SEC;
-    ELOG("ai: a guard's grenade goes off: his friends spared till frame %d", blast_until);
+    ELOG("ai: a guard's grenade goes off at %d %d %d: his friends spared from it till frame %d (%s), %d people within "
+         "4000 of it", blast_at[0], blast_at[1], blast_at[2], blast_until,
+         old ? "hit masks 7FFF: the old way, nothing hurts them" : "hit masks +0x400: not hurt by others' blasts and shots, Bond's still hurt", n);
 }
 
 static int blast_active(void) {
@@ -5642,14 +5861,27 @@ static int blast_active(void) {
 }
 
 static void blast_frame(void) {
-    int i;
+    int i, near = 0, up = 0, n = 0;
+    char who[160];
+    who[0] = 0;
     if (blast_until < 0 || (D_8009CDA8 < blast_until && D_8009CDA8 >= blast_until - SEC * 2))
         return; /* (the frame counter going back: a new mission, put back at once) */
     for (i = D_800B0DA0; i <= D_800B07B0 && i < 64; i++)
-        if (OBJ(i) != g_Player)
-            *(u16 *)(OBJ(i) + 0xE) = blast_masks[i];
+        if (OBJ(i) != g_Player) {
+            u16 *m = (u16 *)(OBJ(i) + 0xE);
+            if (getenv("TWINE_TEST_OLD_BLAST"))
+                *m = blast_masks[i];
+            else if (*m != 0x7FFF) /* (only the bit, the script's changes meanwhile kept) */
+                *m = (*m & ~0x400) | (blast_masks[i] & 0x400);
+            if (blast_near[i]) {
+                near++;
+                up += OBJ(i)[4] && HEALTH(OBJ(i)) > 0;
+                if (n < 140)
+                    n += snprintf(who + n, sizeof(who) - n, " %d%s", i, OBJ(i)[4] && HEALTH(OBJ(i)) > 0 ? "" : "(down)");
+            }
+        }
     blast_until = -1;
-    ELOG("ai: the people's hit masks put back");
+    ELOG("ai: the people's hit masks put back: of the %d near the blast (people%s), %d still up", near, who, up);
 }
 
 /* The first-person model loader (a weapon change: func_80076014, func_80076104 without the disc archive): a model
