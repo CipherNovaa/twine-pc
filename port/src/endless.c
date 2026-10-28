@@ -726,6 +726,16 @@ void port_endless_table_import(void) {
 void port_endless_best(char names[3][4], u32 scores[3]) {
     Score s[SCORES];
     int n = table_read(s), i;
+    const char *fake = getenv("TWINE_TEST_BEST"); /* (media: NAME:score,NAME:score,NAME:score) */
+    if (fake) {
+        for (i = 0; i < 3; i++) {
+            memset(names[i], 0, 4);
+            scores[i] = 0;
+            if (fake && sscanf(fake, "%3[^:]:%u", names[i], &scores[i]) == 2)
+                fake = strchr(fake, ',') ? strchr(fake, ',') + 1 : NULL;
+        }
+        return;
+    }
     for (i = 0; i < 3; i++) {
         memset(names[i], 0, 4);
         if (i < n && strcmp(s[i].name, "-"))
@@ -793,6 +803,9 @@ static void run_over(u8 *args) {
     EndlessRun *r = &port_endless_run;
     /* the points the rooms gave, and for the run as a whole: head shots and accuracy */
     r->score += r->headshots * 250 + (r->shots ? r->hits * 5000 / r->shots : 0);
+    if (getenv("TWINE_TEST_RUN")) /* (media: rooms,kills,headshots,shots,hits,seconds,score of a run, as given) */
+        sscanf(getenv("TWINE_TEST_RUN"), "%d,%d,%d,%d,%d,%d,%d", &r->rooms, &r->kills, &r->headshots, &r->shots,
+               &r->hits, &r->time, &r->score);
     *(u16 *)(args + 0x2C4) = r->kills > 0x7FFF ? 0x7FFF : r->kills;
     *(u16 *)(args + 0x2C6) = r->headshots > 0x7FFF ? 0x7FFF : r->headshots;
     *(s32 *)(args + 0x2C8) = r->shots;

@@ -762,9 +762,9 @@ s32 func_8003277C(void) {
  * A run made unranked (a save state loaded) goes in as a cheated mission's does: the cheat flag 9 set, which keeps
  * it off the table.
  *
- * The stats' lines (made as text: func_8005133C) say what the run did: rooms cleared and waves in place of
- * efficiency and health, the enemies eliminated in full, and the score endless mode gives instead of the
- * mission's (D_80160FE8, which the table then takes). */
+ * The stats' lines (made as text: func_8005133C) say what the run did: the waves reached in place of health, the
+ * enemies eliminated in full, the run's time, and the score endless mode gives instead of the mission's
+ * (D_80160FE8, which the table then takes). */
 extern int port_endless_stats, port_endless_unranked;
 extern char port_endless_unranked_why[32];
 typedef struct {
@@ -796,8 +796,8 @@ s32 func_8005133C(char *text, s32 x, s32 y) {
             strcpy(text = line, "ENDLESS"); /* (in a buffer: the text is written over, capitalized) */
         } else if (!strncmp(text, "enemies eliminated", 18))
             snprintf(text = line, sizeof(line), "enemies eliminated...%d", r->kills);
-        else if (!strncmp(text, "efficiency", 10))
-            snprintf(text = line, sizeof(line), "rooms cleared.%d", r->rooms);
+        else if (!strncmp(text, "time", 4)) /* (the run's own time: +0x2D8 holds the one its stars are rated by) */
+            snprintf(text = line, sizeof(line), "time..........%2d:%02d", r->time / 3600, r->time / 60 % 60);
         else if (!strncmp(text, "health", 6))
             snprintf(text = line, sizeof(line), "waves.........%d", r->rooms + 1);
         else if (port_endless_unranked && strstr(text, "hi-score")) { /* (why it takes no place in the table) */
@@ -889,6 +889,22 @@ void func_80028644(void) {
         *(u32 *)(a + 4) |= 1 << 9;
     a[0x114] = 1; /* the stats as a mission completed's */
     a[0x115] = 0;
+    /* The medal (func_800350F4: four lines' stars summed, 0-5 black, 6-10 bronze, 11-15 silver, 16-20 gold) rates
+     * a percentage per line, a star a fifth (21%, 41%, 61%, 81%). A run's own: efficiency (kills to hits) and
+     * accuracy as the mission's; the waves line (the mission's health, +0x2D4: a run ends with Bond dead, 0) the
+     * waves reached, 5% each; and the time (a mission's under its par, so a longer run fewer stars) the run's
+     * length, 20 minutes for 100%, given as the time under par that rates the same (the real one shown: the
+     * text, below) */
+    {
+        s32 par = (*(u8 *)(0x8007112Cu + m) - (a[0x12A] == 1 ? 0 : 2)) * 60; /* (the mission's par, seconds) */
+        s32 waves = port_endless_run.rooms + 1, secs = port_endless_run.time / 60;
+        s32 survived = secs >= 1200 ? 100 : secs * 100 / 1200;
+        s32 wpct = waves >= 20 ? 100 : waves * 5;
+        *(s32 *)(a + 0x2D4) = (wpct * 0x20000 + 99) / 100; /* (health: 0x20000 is all of it) */
+        *(s32 *)(a + 0x2D8) = par > 0 ? par * (100 - survived) / 100 * 60 : 0;
+        port_endless_logf(-1, "stats: waves %d (%d%%), %d s survived (%d%%; as %d s of a %d s par)", waves, wpct,
+                          secs, survived, *(s32 *)(a + 0x2D8) / 60, par);
+    }
     in_endless_stats = 1;
     port_endless_logf(-1, "the run's stats screen opens");
     func_80028644_orig();
