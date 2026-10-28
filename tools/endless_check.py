@@ -4,7 +4,7 @@
 Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-p]
   -j JOBS    runs at once (default 4; at most 12, paced at most 5). A turbo run takes a whole core while it runs: 8 suit
              the 16-core machine when it is otherwise quiet; a run waits to start while the load is over the core count
-  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrstuvwxz (default all):
+  -k CHECKS  the checks to run, letters from abcdefghijklmnopqrstuvwxyz (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus, f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
@@ -43,7 +43,13 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
              x slots for lent weapons: the playtest's eight weapons carried into Night Watch (4:4) each drawn there (the
                weapon buttons stepping through the pool), its own model; Night Watch's tools all taken away; every
                mission's lent weapons in real slots, the rest in the pool, none left out (the table printed)
-             z the blackjack table (y left free): each key does its action (W/S, Up/Down bet +/-1000; D/A, Right/Left
+             y key remapping (twine.ini's [controls], port/src/controls.c): fire bound to V fires with V and not the
+               mouse's left button, with no [controls] block the left button and not V (and the block written in,
+               commented); names not known logged with their lines, never fatal; the F1 list shows the bindings (hw:
+               a shot of it); the front end's CONTROLS page (OPTIONS > PORT SETTINGS > controls: hw, a shot of it)
+               binds a key pressed, Esc leaves it, right adds one, a gamepad button is taken from the action that
+               had it, RESET ALL puts all back (twine.ini each time)
+             z the blackjack table: each key does its action (W/S, Up/Down bet +/-1000; D/A, Right/Left
                +/-100; Space/Enter bet and hit; E stay; Q double down; Z/X insurance yes/no, nothing without the
                prompt; Esc/Backspace leave), at the front end's BLACKJACK and the mission's own table; leaving the
                main menu's BLACKJACK lands on the main menu (no mission failed, no mission select); at the mission's
@@ -2263,29 +2269,115 @@ def check_nwslots(runs):
            "; ".join(rows) or "no rooms")
 
 
+# ---- y: key remapping (port/src/controls.c: twine.ini's [controls]; fixes/shell.c's CONTROLS page) ----
+
+# (TWINE_TEST_KEYS: keys and buttons by their twine.ini names, read through the bindings as a player's are; V held
+# for 30 frames three times, then the mouse's left button as long three times, in a room of King's Ransom)
+Y_KEYS = "260:V:30,360:V:30,460:V:30,560:Mouse Left:30,660:Mouse Left:30,760:Mouse Left:30"
+Y_INI = ("smooth = 0\n\n[controls]\nfire = V, Bogus Key\nfier = X\npad_fire = Cross, Q\naim = Mouse Right\n"
+         "use = Wheel Sideways\n")
+
+
+def remap_runs():
+    base = {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_SEED": 5, "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_ENDLESS_TEST_ARM": 1,
+            "TWINE_ENDLESS_TEST_MEET": 1, "TWINE_ENDLESS_AMMO_LOG": 1, "TWINE_ENDLESS_TEST_NO_RAMP": 1,
+            "TWINE_ENDLESS_ROOM": "8:-1", "TWINE_ENDLESS_TEST_DRAW": "INGALLS", "TWINE_TEST_KEYS": Y_KEYS}
+    # (the front end: main menu, OPTIONS, PORT SETTINGS, its controls line (the ninth), the page; then on its first
+    # line (fire) Cross and V, Cross and Esc, right and B; up twice (wrapping) to pad_last_weapon, Cross and East (pad
+    # crouch's); down to RESET ALL, Cross)
+    pad = "400:40,403:0,460:4000,463:0,560:40,563:0,590:40,593:0,620:40,623:0,650:4000,653:0," + \
+          "".join("%d:40,%d:0," % (700 + i * 25, 703 + i * 25) for i in range(8)) + \
+          "960:4000,963:0,1100:4000,1103:0,1250:4000,1253:0,1350:20,1353:0,1450:10,1453:0,1480:10,1483:0," \
+          "1520:4000,1523:0,1620:40,1623:0,1660:4000,1663:0"
+    return {"y_custom": Run("y_custom", 8, 55, dict(base, TWINE_RENDERER="hw", TWINE_TEST_HELP=1, TWINE_SHOT=240),
+                            config=Y_INI),
+            "y_default": Run("y_default", 8, 55, base),
+            "y_page": Run("y_page", 0, 40, {"TWINE_TEST_NO_FILMS": 1, "TWINE_TEST_SHELL_SHOTS": 1, "TWINE_SMOOTH": 0,
+                                            "TWINE_RENDERER": "hw", "TWINE_TEST_PAD": pad,
+                                            "TWINE_TEST_KEYS": "1130:V,1280:Escape,1380:B,1550:East"})}
+
+
+def shots_by_key(log):
+    """the INGALLS's shots (its clip going down), counted by the TWINE_TEST_KEYS key last pressed before each"""
+    key, got, last = None, Counter(), None
+    for line in log.splitlines():
+        m = re.search(r"test keys: (.+?) pressed at frame", line)
+        if m:
+            key = m.group(1)
+        m = re.search(r"ammo: INGALLS[^:]*? clip (\d+) at frame", line)
+        if m:
+            c = int(m.group(1))
+            if last is not None and c < last:
+                got[key] += 1
+            last = c
+    return got
+
+
+def check_remap(runs):
+    c, d, p = runs["y_custom"], runs["y_default"], runs["y_page"]
+    cs, ds = shots_by_key(c.log), shots_by_key(d.log)
+    result("y", "fire = V: V fires, the mouse's left button doesn't", cs["V"] >= 10 and cs["Mouse Left"] == 0 and
+           not c.crashed(), "shots after V %d, after Mouse Left %d" % (cs["V"], cs["Mouse Left"]))
+    result("y", "no [controls]: the left button fires, V doesn't (as before)", ds["Mouse Left"] >= 10 and ds["V"] == 0
+           and not d.crashed(), "shots after V %d, after Mouse Left %d" % (ds["V"], ds["Mouse Left"]))
+    ini = open(os.path.join(d.dir, "conf/twine/twine.ini")).read()
+    block = "[controls]" in ini and "# fire = Mouse Left" in ini and "# pad_fire = Right Trigger" in ini
+    result("y", "no [controls]: defaults unchanged, the block written in (commented)", block and
+           bool(d.lines(r"controls: 0 of \d+ actions changed")), "block %s; %s" % (
+               "written" if block else "missing", (d.lines(r"controls: \d+ of") or ["no count"])[0]))
+    want = [r"twine.ini line 4: fire = V, Bogus Key: no key, mouse button or wheel called \"Bogus Key\"",
+            r"twine.ini line 5: \"fier\" is no action", r"twine.ini line 6: pad_fire = Cross, Q: a key or mouse button",
+            r"controls: pad_fire = South", r"twine.ini line 8: use = Wheel Sideways: .*nothing known, so its default: E, F"]
+    missing = [w for w in want if not c.lines(w)]
+    cini = open(os.path.join(c.dir, "conf/twine/twine.ini")).read()
+    result("y", "bad names logged with their lines, the rest kept, never fatal", not missing and not c.crashed() and
+           cini.count("[controls]") == 1, "missing: %s" % "; ".join(missing) if missing else "%d lines" % len(
+               c.lines(r"controls: twine.ini line")))
+    helps = c.lines(r"^help: ")
+    fire_line = [h for h in helps if re.search(r"\.\. fire$", h)]
+    result("y", "F1 lists the bindings (fire: V; the pad's: Cross / A)", len(fire_line) == 2 and
+           fire_line[0].startswith("help: V ") and "Cross / A" in fire_line[1] and
+           any(h.startswith("help: E, F ") and h.endswith("use") for h in helps),
+           " | ".join(h[6:] for h in fire_line) or "no help lines")
+    # the CONTROLS page
+    shots = [l for l in p.lines(r"test: a shot of the controls page")]
+    ini = open(os.path.join(p.dir, "conf/twine/twine.ini")).read()
+    seq = [r"settings: fire = V$", r"controls: fire left as it was", r"settings: fire = V, B$",
+           r"settings: pad_crouch = none", r"settings: pad_last_weapon = East", r"controls: all back to their defaults"]
+    got = [bool(p.lines(w)) for w in seq]
+    live = re.findall(r"^(?!#)\s*(fire|pad_crouch|pad_last_weapon)\s*=.*$", ini, re.M)
+    img = p.shot("the controls page")
+    lit = bright(img, 0.2, 0.25, 0.95, 0.85) if img is not None else 0
+    result("y", "CONTROLS page: shown (hw), binds, Esc leaves, adds, takes from another, resets; twine.ini each time",
+           all(got) and len(shots) >= 3 and lit > 0.03 and not live and "# fire = Mouse Left" in ini and not p.crashed(),
+           "steps %s; %d shots, lines %.0f%% bright; live lines after the reset: %s" % (
+               "".join("y" if g else "n" for g in got), len(shots), lit * 100, ", ".join(live) or "none"))
+
+
 # ---- z: the blackjack table: its keys, its F1 help, leaving it ----
 
-BJ_KEYS = "300:w,330:up,360:d,390:right,420:s,450:down,480:a,510:left,540:w,580:space,700:q,900:enter,1000:space," \
-          "1100:e,1200:z,1230:x,1300:space,1340:%s,1400:e"  # (the hand dealt at 1300 has the dealer's ace up)
+# (TWINE_TEST_KEYS: the keys by their twine.ini names, read as a player's are: at the table through its own keys)
+BJ_KEYS = "300:W,330:Up,360:D,390:Right,420:S,450:Down,480:A,510:Left,540:W,580:Space,700:Q,900:Enter,1000:Space," \
+          "1100:E,1200:Z,1230:X,1300:Space,1340:%s,1400:E"  # (the hand dealt at 1300 has the dealer's ace up)
 BJ_MENU_PAD = "600:40,604:0,640:40,644:0,680:40,684:0,760:4000,764:0"  # (BLACKJACK: three downs, no save; Cross)
 
 
 def blackjack_runs():
-    loop = "".join(",%d:space,%d:%s,%d:e" % (t, t + 40, "zx"[i % 2], t + 100) for i, t in enumerate(range(1600, 4600, 300)))
+    loop = "".join(",%d:Space,%d:%s,%d:E" % (t, t + 40, "ZX"[i % 2], t + 100) for i, t in enumerate(range(1600, 4600, 300)))
     return {
         # the main menu's BLACKJACK: two keys at the table, Esc, and where it lands
         "bj_menu": Run("bj_menu", 0, 150, {"TWINE_TEST_NO_FILMS": 1, "TWINE_TEST_SHELL_SHOTS": 1, "TWINE_SMOOTH": 0,
-                                           "TWINE_TEST_PAD": BJ_MENU_PAD, "TWINE_TEST_KEYS": "1400:w,1440:d,1500:esc",
+                                           "TWINE_TEST_PAD": BJ_MENU_PAD, "TWINE_TEST_KEYS": "1400:W,1440:D,1500:Escape",
                                            "TWINE_SHOT": "1450,1700"}),
         # every key (insurance taken with Z), more hands for another ace, Backspace to leave
         "bj_keys": Run("bj_keys", 11, 260, {"TWINE_BLACKJACK": 1, "TWINE_SMOOTH": 0,
-                                            "TWINE_TEST_KEYS": BJ_KEYS % "z" + loop + ",4900:backspace"}),
-        "bj_ins_no": Run("bj_ins_no", 11, 80, {"TWINE_BLACKJACK": 1, "TWINE_SMOOTH": 0, "TWINE_TEST_KEYS": BJ_KEYS % "x"}),
+                                            "TWINE_TEST_KEYS": BJ_KEYS % "Z" + loop + ",4900:Backspace"}),
+        "bj_ins_no": Run("bj_ins_no", 11, 80, {"TWINE_BLACKJACK": 1, "TWINE_SMOOTH": 0, "TWINE_TEST_KEYS": BJ_KEYS % "X"}),
         # the mission's own table (the front end's BLACKJACK forgotten once seated): a key, F1's help (hw: the
         # window's picture), Esc stands Bond up in the casino, the mission going on
         "bj_mission": Run("bj_mission", 11, 60, {"TWINE_BLACKJACK": 1, "TWINE_TEST_BJ_MISSION": 1, "TWINE_SMOOTH": 0,
                                                  "TWINE_RENDERER": "hw", "TWINE_NO_HINT": 1,
-                                                 "TWINE_TEST_KEYS": "300:w,330:f1,400:f1,450:esc",
+                                                 "TWINE_TEST_KEYS": "300:W,330:F1,400:F1,450:Escape",
                                                  "TWINE_SHOT": "360,1000"}),
     }
 
@@ -2300,11 +2392,12 @@ def bj_presses(run):
     it) in the order of the log (the table's frames are the mission's, the keys' the video's)"""
     out, state, cur = [], None, None
     for l in run.log.splitlines():
-        k = re.search(r"test: key (\w+) at frame (\d+) \(table (\d)\)", l)
+        k = re.search(r"test keys: (.+?) pressed at frame (\d+) \(table (\d)\)", l)
         m = BJ_STATE.search(l)
         p = re.search(r"blackjack: f\d+ pressed (.*)", l)
         if k:
-            cur = {"key": k.group(1), "frame": int(k.group(2)), "table": int(k.group(3)), "pressed": "",
+            key = k.group(1).lower()
+            cur = {"key": {"return": "enter", "escape": "esc"}.get(key, key), "frame": int(k.group(2)), "table": int(k.group(3)), "pressed": "",
                    "before": state, "after": None}
             out.append(cur)
         elif p and cur and not cur["pressed"] and cur["after"] is None:
@@ -2424,7 +2517,7 @@ def check_blackjack(runs):
 def main():
     global WORK, DISC
     args = sys.argv[1:]
-    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrstuvwxz", None, False
+    jobs, checks, rooms, verbose = 4, "abcdefghijklmnopqrstuvwxyz", None, False
     while args:
         a = args.pop(0)
         if a == "-j":
@@ -2524,6 +2617,8 @@ def main():
         groups["scope"] = scope_runs()
     if "x" in checks:
         groups["nwslots"] = nwslots_runs()
+    if "y" in checks:
+        groups["remap"] = remap_runs()
     if "z" in checks:
         groups["blackjack"] = blackjack_runs()
     every = [r for g in groups.values() for r in g.values()]
@@ -2601,6 +2696,8 @@ def main():
         checked(groups["scope"].values(), check_scope, groups["scope"])
     if "nwslots" in groups:
         checked(groups["nwslots"].values(), check_nwslots, groups["nwslots"])
+    if "remap" in groups:
+        checked(groups["remap"].values(), check_remap, groups["remap"])
     if "blackjack" in groups:
         checked(groups["blackjack"].values(), check_blackjack, groups["blackjack"])
     names = {"a": "guards fight", "b": "nobody unkillable", "c": "spawns valid", "d": "room rules", "e": "menus",
@@ -2608,7 +2705,7 @@ def main():
              "k": "lent weapons", "l": "text letters", "m": "shell start", "n": "exits", "o": "wave ramp",
              "p": "12 people", "q": "the bar's guards", "r": "weapon list",
              "s": "Bond walks", "t": "music", "u": "auto-aim", "v": "cheats", "w": "scope reticle",
-             "x": "slots for lent", "z": "blackjack"}
+             "x": "slots for lent", "y": "key remapping", "z": "blackjack"}
     width = max(len(w) for _, w, _, _ in RESULTS) if RESULTS else 10
     report = ["%s %-18s %-*s %s  %s" % (c, names[c], width, w, s, d) for c, w, s, d in sorted(RESULTS, key=lambda x: x[0])]
     print("\n".join(report))

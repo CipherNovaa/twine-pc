@@ -77,7 +77,7 @@ all: $(EXE)
 # sections, with PORT_NOSAVE variables: the window, input and on-screen text, the audio device, the memory
 # cards, the hardware renderer, the films, the recompiled code's stack, the smooth motion's timing and the
 # runtime's place (main.c), the console's boot animation, save states themselves.
-NOSAVE := video audio memcard gpu_hw hdmovie recomp_rt interp main libpad mdec intro intro_card bios_boot \
+NOSAVE := video controls audio memcard gpu_hw hdmovie recomp_rt interp main libpad mdec intro intro_card bios_boot \
           bios_cdrom savestate setup
 
 $(RT_OUT)/%.o: $(ROOT)/port/src/%.c $(wildcard $(ROOT)/port/src/*.h) $(wildcard $(ROOT)/include/*.h) Makefile
