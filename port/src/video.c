@@ -133,6 +133,7 @@ static const char *const bj_help[] = {
     "@W / @S, Up/Down .... bet +/- 1000; split / pass",
     "@D / @A, Right/Left .. bet +/- 100",
     "Esc, Backspace ... leave the table",
+    "Tab .............. how to play (MI6's message)",
     "F5, F6 ........... save state, load state",
     "",
     "GAMEPAD",
@@ -992,8 +993,8 @@ static void poll_input(int tick) {
         down |= P_SELECT;
     /* at the blackjack table: its keys alone, the pad's buttons its prompts show (no arrows' d-pad, no bindings:
      * no use, weapon, crouch or strafe buttons, no mouse buttons, no keys' sticks) */
-    if (table)
-        down = table_bits(keys, table);
+    if (table) /* (its messages key too: the MI6 message on how to play) */
+        down = table_bits(keys, table) | (down & P_SELECT);
     /* The punch's keys (Space) choose in the menus (Space: keymap) and punch (below) while Bond has the controls;
      * with TWINE_JUMP=1 (and the jump mod built in, PORT_MODS=... JUMP) they jump instead, kept until the game's
      * next tick takes it */

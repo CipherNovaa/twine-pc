@@ -7,7 +7,7 @@ Usage: tools/endless_check.sh [-j JOBS] [-k CHECKS] [-r ROOMS] [-v] [-8] [-o] [-
   -k CHECKS  the checks to run, letters from abcdefghijklmnopqrstuvwxyz (default all):
              a guards fight, b nobody unkillable, c spawns valid (a, b and c share each pool room's run),
              d room rules, e menus (and the game's messages at the top or bottom: PORT SETTINGS' MESSAGES, twine.ini
-             messages), f restart (and a lent automatic's looping fire stopped through a door, a restart,
+             message_box), f restart (and a lent automatic's looping fire stopped through a door, a restart,
              the menu), g weapon carry, h card save, i campaign regression,
              j enemy AI (hunting: guards close on a still Bond, walking by the floor; no bunching),
              k lent weapons as at home (fire rate, damage, scope, sound; ammo from drops for every weapon carried;
@@ -464,12 +464,12 @@ def menu_runs():
                                                               "TWINE_HD": 0, "TWINE_TEST_PAD": pad[:pad.index("620:")] +
                                                               "590:40,593:0,620:4000,623:0,700:10,703:0,730:10,733:0,"
                                                               "760:10,763:0,800:4000,803:0", "TWINE_SHOT": 850}, card=card)
-    # (the game's blue messages at the top (messages = top) or the bottom (default), hw renderer, smooth motion: an
+    # (the game's blue messages at the top (message_box = top) or the bottom (default), hw renderer, smooth motion: an
     # endless room's "WAVE 1", the campaign's "PRESS SELECT FOR MESSAGE" (Courier's start))
     for where in ("top", "bottom"):
         env = {"TWINE_RENDERER": "hw", "TWINE_SMOOTH": 1}
         if where == "top":
-            env["TWINE_MESSAGES"] = "top"
+            env["TWINE_MESSAGE_BOX"] = "top"
         runs["menu_msgs_end_" + where] = Run("menu_msgs_end_" + where, 8, 10, dict(
             env, TWINE_ENDLESS=1, TWINE_ENDLESS_ROOM="8:4", TWINE_ENDLESS_SEED=4, TWINE_ENDLESS_TEST_GOD=1, TWINE_SHOT=75))
         runs["menu_msgs_camp_" + where] = Run("menu_msgs_camp_" + where, 2, 12, dict(env, TWINE_SHOT=160))
@@ -495,8 +495,8 @@ def check_messages(runs):
         ini = open(os.path.join(r.dir, "conf/twine/twine.ini")).read() if os.path.exists(
             os.path.join(r.dir, "conf/twine/twine.ini")) else ""
         result("e", "port settings: MESSAGES top/bottom (Cross on its line: top, kept in twine.ini)",
-               bool(r.lines(r"settings: messages = top")) and "messages = top" in ini and not r.crashed(),
-               "set %d, ini %s" % (len(r.lines(r"settings: messages = top")), "saved" if "messages = top" in ini else
+               bool(r.lines(r"settings: message_box = top")) and "message_box = top" in ini and not r.crashed(),
+               "set %d, ini %s" % (len(r.lines(r"settings: message_box = top")), "saved" if "message_box = top" in ini else
                                    "unchanged"))
     for what, frame in (("end", 75), ("camp", 160)):
         got = {}
@@ -504,7 +504,7 @@ def check_messages(runs):
             img = read_ppm(os.path.join(runs["menu_msgs_%s_%s" % (what, where)].dir, "screen_%04d_0.ppm" % frame))
             got[where] = (blue_box(img, 0.0, 0.11), blue_box(img, 0.70, 0.80)) if img else None
         t, b = got["top"], got["bottom"]
-        result("e", "messages %s: the blue box at the top with messages = top, at the bottom (over the weapon strip) "
+        result("e", "messages %s: the blue box at the top with message_box = top, at the bottom (over the weapon strip) "
                "by default (hw, smooth)" % ("in an endless room (WAVE 1)" if what == "end" else
                                             "in the campaign (Courier's PRESS SELECT FOR MESSAGE)"),
                bool(t and b) and t[0] > 0.01 and t[1] < 0.005 and b[1] > 0.01 and b[0] < 0.005,
