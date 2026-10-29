@@ -1,320 +1,410 @@
-# TWINE PS1 decompilation
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/banner_live.avif" alt="007: The World Is Not Enough, native PC port" width="100%">
+</p>
 
-A work-in-progress matching decompilation of **007: The World Is Not Enough** (PlayStation, NTSC-U, SLUS-01272, Black Ops Entertainment, 2000).
+<p align="center">
+  <img alt="Platforms: Windows and Linux" src="https://img.shields.io/badge/platforms-Windows%20%7C%20Linux-1f6feb?style=for-the-badge">
+  <img alt="Renderer: Vulkan" src="https://img.shields.io/badge/renderer-Vulkan%20%2B%20software-b8860b?style=for-the-badge">
+  <img alt="Decompilation: 14 of 14 executables byte-identical" src="https://img.shields.io/badge/decompilation-14%2F14%20byte--identical-2ea043?style=for-the-badge">
+  <img alt="License: MPL 2.0" src="https://img.shields.io/badge/license-MPL%202.0-6e7681?style=for-the-badge">
+</p>
 
-"Matching" means the C source recompiles to a byte-identical copy of the original game. Every change is checked against the retail checksum, so the source can be modded with confidence.
+<p align="center">
+  <a href="../../releases/latest"><b>Download for Windows</b></a> &nbsp;·&nbsp;
+  <a href="../../releases/latest"><b>Download for Linux</b></a> &nbsp;·&nbsp;
+  <a href="#setup-in-3-steps"><b>Setup in 3 steps</b></a> &nbsp;·&nbsp;
+  <a href="docs/DEVELOPMENT.md"><b>Developer guide</b></a>
+</p>
 
-You need your own copy of the game. No game data is in this repository.
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/hero.avif" alt="Gameplay: the grenade launcher, rocket launcher, shotgun, sniper rifle, a quick-punch combo, the IAC Defender, KA-57, satchel charges, KS5 and a flash bang" width="800">
+  <br>
+  <i>Endless Mode.</i>
+</p>
 
-## Status
+**The 2000 PlayStation shooter, rebuilt to run natively on PC.** This isn't an emulator or your average decomp! The game's code was decompiled, rebuilt for the PC in the C language, and given a new "engine room": smooth motion at your monitor's refresh rate, sharp high-resolution graphics, mouse and keyboard or a modern gamepad layout, many new gameplay additions, and an entirely new Endless (high-score) Mode.
+
+## Table of contents
+
+- [PlayStation vs. PC](#playstation-vs-pc)
+- [Features](#features)
+- [Endless Mode](#endless-mode)
+- [Bond's arsenal](#supplied-by-mi6s-finest-bonds-arsenal-of-weaponry-and-gadgets)
+- [Grenades](#grenades)
+- [Blackjack mode](#blackjack-mode)
+- [Port settings](#port-settings)
+- [Controls](#controls)
+- [Debug menu](#debug-menu)
+- [HD movies](#hd-movies)
+- [What you need](#what-you-need)
+- [Setup in 3 steps](#setup-in-3-steps)
+- [FAQ](#faq)
+- [Under the hood](#under-the-hood)
+- [Known issues](#known-issues)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Acknowledgements](#acknowledgements)
+- [Credits and legal](#credits-and-legal)
+
+## PlayStation vs. PC
+<sup>[(Back to top)](#table-of-contents)</sup>
+
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/wipe.avif" alt="A wipe between the PlayStation's picture and the PC port's in Courier's bank hall" width="800">
+  <br>
+  <i>PS1 vs. port comparison.</i>
+</p>
+
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/zoom.jpg" alt="Close-up: the PlayStation's 512×240 dithered picture next to the port's 4× true-colour picture" width="900">
+  <br>
+  <i>The original's 512 × 240 picture with 15-bit colour, and the port at four times the resolution in true colour.</i>
+</p>
+
+## Features
+<sup>[(Back to top)](#table-of-contents)</sup>
+
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/smooth.avif" alt="The same camera pan at the original 20 frames a second and with smooth motion at 60" width="720">
+  <br>
+  <i>The game originally runs at 20 FPS. Smooth motion draws extra frames in between, so the picture moves at your display's refresh rate while keeping the original artistic vision intact.</i>
+</p>
 
 | | |
 |---|---|
-| `LEVEL01.EXE` rebuilt from source | **byte-identical** (`make`) |
-| All 14 executables (boot stub, menu, movie player, 11 levels) | **byte-identical** (`make LEVEL=level05`, `LEVEL=shell`, ...) |
-| Full disc image from rebuilt executables | **byte-identical** to the retail dump (`tools/build_all.sh`) |
-| All 11 levels are **shiftable** | code and data can grow or shrink and the game still runs. Tested by inserting 4 KB early in the code of levels 1, 2 and 6; in Level 1, gameplay, the pause menu and the developer menu all work. Mods can be written in C without matching. |
-| C mods in **every level** | `make cmod CMODS="TWINSTICK WIDEFOV"`: modern twin-stick controls and a wider field of view, checked in DuckStation (twin-stick in Levels 1, 2 and 4, and played with a DualSense; wide FOV in Level 2) |
-| Level 1 game functions in C | 774 of 866 functions match exactly (89%). 90 more are near-miss C under `#ifdef NON_MATCHING` (the matching build keeps their asm; a disc built with them plays fine in DuckStation), so every function except the two startup stubs has C. Run `tools/progress.py` and `tools/banked_scores.py` for current numbers. |
-| Levels 2–11 | Each builds byte-identical with about 420–440 functions from Level 1's C, 100–118 from Level 2's (levels 3–11), and 90–120 of its own (`tools/port_level.py`, `auto_match.py --level`), plus 63–70 near misses. Roughly 170–210 functions per level are still asm, mostly that level's own code. |
-| Compiler | GCC 2.8.x, Sony PSX build (old-gcc `2.8.1-psx`), `-O2 -G0`, no `-fno-builtin`. Three source regions are `-O0`. |
-| SDK | PsyQ 4.4 (580 library functions auto-identified) |
+| **Smooth motion** | **"Shaken, not Stirred..."** The game engine technically still runs at its original 20 frames a second; the port draws the frames between ticks, at 60, 144 or 240 Hz: whatever your display runs at. |
+| **High-resolution graphics** | Your GPU redraws the game at up to 8× the PlayStation's resolution, in true colour. Prefer the original look, with its 15-bit colour and dithering? See PORT SETTINGS. |
+| **Mouse and keyboard** | Mouse look, with additional keyboard layout support, number keys for weapon groups, quick punch, quick grenade, sprint. |
+| **Modern gamepad controls** | Gripping, modern controls for dynamic movement and gadget combos! Twin-stick aiming, triggers to aim and fire, and an all-new sprint. Supports any controller SDL recognises: Xbox, PlayStation, Switch and generic pads. |
+| **Quick punch and quick grenade** | Quick controls for frag grenades and melee, removing the original's need to cycle through weapons or switch to unarmed. |
+| **Save states** | F5 to save, F6 to load. |
+| **The entire game** | Every mission, the menus, briefings, movies, music and memory card saves, from the PlayStation boot animation on. Nothing is cut, and extra effort went into restoring content cut from the retail and development versions. |
 
-The 11 levels share one engine. 617 of Level 1's 841 game functions appear unchanged in every other level, in the same link order, so most decompiled code applies to all levels. See `docs/port_plan.md` for the plan for a native PC port.
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_punch_combo.avif" alt="A quick-punch combo knocking guards off their feet" width="480">
+  <br>
+  <i>Quick punch: attack with "unarmed" in left hand without holstering weapon, or while reloading.</i>
+</p>
 
-## Native PC port
+## Endless Mode
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-`make -C port` builds `build/port/twine`: the whole game as one native Linux program (32-bit x86). The decompiled C is compiled for the PC; code still in assembly is statically recompiled to C (`port/recomp.py`); the console's hardware and libraries are written anew for the host in `port/src` (software GPU, GTE, SPU with XA streaming audio, MDEC movies, CD reading straight from the disc image, memory cards, SDL3 for the window, input and sound). It plays the game from the PlayStation boot animation through the logos, intro movie, menus and briefings into the missions and back, with saving and loading. Between the game's 20 Hz ticks the camera moves smoothly at the display's refresh rate, and the mouse looks around.
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/endless_mosaic.jpg" alt="A grid of the 61 rooms of Endless Mode" width="100%">
+</p>
 
-Building needs gcc with 32-bit support, 32-bit SDL3 (`lib32-sdl3`), `glslc` (`shaderc`) and `xxd` for the hardware renderer's shaders, and the matching builds of all 14 executables (`tools/build_all.sh`, see Setup).
+**BOND IS BACK!** with a new way to play. Pick **ENDLESS** on mission select and fight wave after wave through rooms taken from nine of the game's missions, from Courier's bank to Turncoat's subway. Each room picks its guards from that mission, sends them in through the doors, and opens an exit when you've fought for it. Your weapons, health and armour come with you, along with weapons lent from other missions. Your score goes on the game's own high-score table, saved to the memory card.
 
-Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the boot animation, your console's BIOS (e.g. `SCPH1001.BIN`; without one only the title card shows). By default the program looks for `workbench/disc/007 - The World Is Not Enough (USA).bin` and a `bios/` folder in the current directory.
+- **61 rooms**, hand-picked by playing every section of every mission. Some flow into each other: King's Ransom's streets and the Turncoat subway's cars.
+- **AI/Room Director** paces the waves, sends guards in by doorways you can't see, and lets the room's own guards hunt you when it goes quiet.
+- **Bond's arsenal, unleashed:** your inventory can hold any of the game's guns. The PS1 original didn't have the memory to do this in-engine.
+- **Mission objectives, suppressed:** no timers, alarms or mission-failure screens, just the fight!
+- **8 MB mode** (optional) raises the people limit from 6 to 12 at once.
 
-**Settings** go in `~/.config/twine/twine.ini` (or `$XDG_CONFIG_HOME/twine/twine.ini`), one `key = value` per line; each stands for the environment variable `TWINE_<KEY>`, which wins if both are set. The most used are also on the front end's OPTIONS screen, under PORT SETTINGS (mouse speed, invert mouse, pad layout, smooth motion, HD movies, vibration, infinite grenades, autoload), which writes them here:
+### Scoring and medals
 
-| key | |
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/stats_tiers.avif" alt="The end-of-run stats screen fading through a black, bronze, silver and gold medal" width="720">
+  <br>
+  <i>The run's stats on the Mission Complete screen, from a black medal up to gold.</i>
+</p>
+
+**Endless Mode** scores every run as you play:
+
+| | Points |
 |---|---|
-| `disc`, `bios` | the disc image; the BIOS file or a folder with it |
-| `fullscreen = 1` | start in full screen (F11 or Alt+Enter switches at any time) |
-| `display` | which display: its number or part of its name (`port.log` lists them), e.g. `display = HDMI-A-1` |
-| `aspect = fill` | stretch the picture over the whole screen (for a 4:3 CRT driven at 1280x1024); by default it keeps 4:3 |
-| `vsync = 0` | show frames as fast as they come instead of at the display's refresh |
-| `smooth = 0` | no frames between the game's ticks |
-| `fps_max` | frames at most that many a second (`0`: no limit); by default three times the display's refresh rate, so that each refresh gets one drawn at most a third of a refresh before it |
-| `mouse_sens`, `mouse_invert = 1` | mouse look speed (default 1), inverted up/down |
-| `mouse = 0` | leave the mouse alone (no mouse look; for playing with a gamepad) |
-| `filter` | how the picture is scaled: `sharp` (default: even pixels, no blur), `nearest`, `linear` |
-| `renderer = hw` | draw with the graphics card (Vulkan) instead of in software (`sw`, the default for now): the PlayStation's drawing is done again by the card, at `scale` times its resolution, and shown instead (movies in 24-bit colour still come from the software side) |
-| `scale` | with `renderer = hw`: 1-8 times the PlayStation's resolution (default 1). A picture larger than the window is averaged down to it (supersampling) |
-| `truecolor` | with `renderer = hw`: `1` draws without the PlayStation's 15-bit colour and dithering (the default above scale 1), `0` with them (the default at scale 1, where the picture is then the software renderer's pixel for pixel) |
-| `present` | with `renderer = hw`: how frames reach the display: `vsync` (each waits for the display's refresh), `mailbox` (the newest frame waiting replaces older ones; presenting doesn't wait) or `immediate` (at once, tearing). Unset, `vsync` decides |
-| `rumble = 0` | no gamepad rumble (it follows the game's vibration option otherwise) |
-| `deadzone` | the gamepad sticks' dead zone in percent (default 12) |
-| `gamecontrollerdb.txt` | not a setting: a file next to `twine.ini` in SDL's gamepad mapping format (as the community's gamecontrollerdb.txt), for gamepads SDL doesn't know |
-| `controls = original` | the gamepad's buttons as the PlayStation pad's, set in the game's own options (by default they follow a modern layout in the missions, below) |
-| `card1`, `card2` | memory card images (raw 128 KB, as emulators use). Slot 1 defaults to `~/.local/share/twine/card1.mcd`, made on first use; slot 2 to `card2.mcd` there if it exists; `none` leaves a slot empty |
-| `autoload` | the memory card slot whose save the front end loads after the title screen (`1`, the default, or `2`; `off`): CONTINUE then goes straight to the missions |
-| `hd = 0` | the PS1's own movies even where an HD clip is there |
-| `infinite_grenades = 1` | a cheat: throwing a grenade leaves as many as there were |
-| `devcheats = 1` | the developers' cheat codes work: on the pause menu in the missions (see Developer cheat codes below; SELECT SELECT CIRCLE CIRCLE then SELECT CIRCLE completes the mission), and the front end's own codes, which the retail game never checks (below) |
-| `no_intro = 1` | skip the boot animation and title card |
-| `level = N` | start straight in mission folder N (1-11) |
+| **A kill** | 100, doubled if it comes the moment you enter a room and falling back to 100 over the first minute, then multiplied by the wave: ×1.1 on wave 1, ×2 on wave 10, ×3 on wave 20 |
+| **A room cleared** | 500 + 250 per wave, plus up to 900 more for clearing it in under 90 seconds |
+| **At the end of the run** | 250 per headshot, plus 50 per point of accuracy (a 60% run: 3,000) |
 
-**Controls** (F1 shows them over the game). Keyboard and mouse: WASD move, the mouse looks (inside missions), left button fires, right button aims, E or F uses things (doors, people), R reloads, Space or the mouse's back button punches, G throws a grenade, Shift (held) sprints, 1-9 pick a weapon, Q goes back to the last one, Z/X or the wheel change weapons, C or Ctrl crouches, Tab shows messages, Esc or Enter pauses; arrows move and turn in missions. In menus (the phone's pause menu too): arrows, Enter or Space to choose, Esc or Backspace to go back. Keys are read by their place on the keyboard, so other layouts (AZERTY, ...) have them in the same places. Aiming (right button or L2) and strafing leans out, as in the original. The actions follow the game's own button settings in the options menu. Gamepad, in missions: the left stick moves, the right stick looks, R2 fires, L2 aims, Square reloads, Triangle uses things, Circle crouches, R3 punches, R1 throws a grenade, L3 sprints until the stick lets go, the d-pad's left and right change weapons, L1 goes back to the last one, Start pauses, Back or the touchpad shows messages; in menus it is a PlayStation pad. Its sticks have a dead zone (the `deadzone` setting, in percent, 12 by default), and the keyboard keeps working while a gamepad is connected.
+The run ends when Bond falls, and its stats rate four lines out of four stars each:
 
-**Save states**: F5 saves the mission as it is, F6 loads it again (from anywhere: the front end, another mission, a later session). One state is kept, in `~/.local/share/twine/states/`; a new version of the port can't load the old one's.
+- **Efficiency:** kills per hit landed. One hit per kill is 100%.
+- **Accuracy:** hits per shot fired.
+- **Waves:** 5% per wave reached, so wave 20 is 100%.
+- **Time:** how long you survived, with 20 minutes for 100%.
 
-**A save with everything unlocked:** `tools/make_unlocked_card.py CARD OUT.mcd` takes a card with a save the game made (any progress) and writes a card whose save has all 11 missions available and completed, difficulty 007 (`--difficulty agent` otherwise), and all six bonus cheats unlocked for Options > Cheats (`--cheats-on` also switches them on). Saved as `~/.local/share/twine/card2.mcd` it is the card in slot 2: Options > Memory Card > Load > slot 2, then use CONTINUE (NEW GAME starts over). The script's comments describe the save format.
+Each line earns a star at 21%, 41%, 61% and 81%. The stars add up to the medal: **black** (0–5), **bronze** (6–10), **silver** (11–15) or **gold** (16–20), with Bond's gun on the screen in the medal's colour. On the harder difficulty every line earns one extra star. A ranked run's score goes on the high-score table on your memory card; cheats, save states, the debug menu and infinite grenades make a run unranked.
 
-The title card's lettering is baked from the MGS1 Codec font, © 2025 Andrew Gleeson, licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); the glyph data in `port/src/intro_font.h` is adapted from it and shared under the same license (`port/tools/bake_intro_font.py` re-bakes it).
+**The campaign** keeps the original game's own scoring and medals: 100 per kill, 1,000 per headshot, 1,000 per point of efficiency, up to 8,000 for the health you finish with, 25 for every second under the mission's par time, plus the mission's own bonuses. Its medals rate efficiency, accuracy, the health you finish with, and your time against the mission's par.
 
-For testing: `TWINE_HEADLESS=1` runs without a window, `TWINE_SHOT=frames` saves frames as PPM files, `TWINE_TEST_PAD`/`TWINE_TEST_STICK`/`TWINE_TEST_LOOK` stand in for the controls, `TWINE_PROFILE=1` samples where the time goes (`port/tools/profile.py`), `TWINE_FPSLOG=1` logs the frame rate and pacing every ten seconds, `TWINE_CD_LOG`, `TWINE_BIOS_LOG`, `TWINE_SMOOTH_LOG`, `TWINE_PAD_LOG` log more to `port.log` (written in the current directory), and `TWINE_CORE=1` turns a fatal error into a core dump (`2`: also a write where the console has no hardware, the mark of a stray pointer). With `TWINE_RENDERER=hw`, headless runs draw on the graphics card too (SDL's offscreen video driver): `TWINE_SHOT` frames are the card's picture at full resolution plus `screen_NNNN.ppm`, what a 1280x960 window would show; `TWINE_HW_COMPARE=1` (scale 1) compares every shown frame with the software renderer's VRAM and logs how much of it is identical (and writes `cmp_NNNN.ppm` for `TWINE_SHOT` frames: software, card, difference); `TWINE_HW_STATS=1` logs the renderer's work and its CPU and GPU time every 100 frames; `TWINE_HW_PROBE`, `TWINE_HW_LOG` and `TWINE_HW_DEBUG` are described in `port/src/gpu_hw.c`. With the hardware renderer the software GPU keeps what it is sent and draws it only when something reads that part of VRAM (`port/src/gpu.c`): `TWINE_SW_DEFER=0` has it draw everything at once, `TWINE_SW_DEFER=1` keeps it doing so under `TWINE_HW_COMPARE` (which then checks what it kept), `TWINE_SW_DEFER_LOG=1` logs what made it draw. `make -C port hwtest` builds `build/port/hwtest`, which checks the hardware renderer against the software one on random GPU commands, also those the game never uses (mask bit, texture windows, VRAM copies). The source files' header comments describe the rest.
+## Supplied by MI6's Finest: Bond's Arsenal of Weaponry and Gadgets
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-## Setup
+<table>
+  <tr>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_p2k.avif" alt="Wolfram P2K pistol" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_smg.avif" alt="Ingalls Type 20 submachine gun" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_ks5.avif" alt="Koffler KS5 submachine gun" width="100%"></td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_tmp.avif" alt="Meyer TMP" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_frinesi_auto.avif" alt="Frinesi Auto" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_ka57.avif" alt="Kazakovich KA-57 rifle" width="100%"></td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_shotgun.avif" alt="Frinesi shotgun" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_sniper.avif" alt="AR36 sniper rifle scope" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_iac_defender.avif" alt="IAC Defender" width="100%"></td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_rocket.avif" alt="Rocket launcher" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_grenade_launcher.avif" alt="Grenade launcher" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_satchel.avif" alt="Satchel charges" width="100%"></td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_flash_bang.avif" alt="Flash bang" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_gas_grenade.avif" alt="Gas grenade" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_stunner.avif" alt="Cell phone stunner" width="100%"></td>
+  </tr>
+</table>
 
-Arch/CachyOS packages: `ghidra`, `mips-elf-binutils`, `duckstation-qt-bin` (AUR), plus `cmake`/`gcc`/`python`.
+<p align="center"><i>Fifteen of the game's weapons, each in a room of Endless Mode.</i></p>
 
-```sh
-python -m venv .venv && .venv/bin/pip install "splat64[mips]" capstone pycparser
-# tools that are cloned or downloaded into tools/ (all gitignored):
-#   tools/mkpsxiso   github.com/Lameguy64/mkpsxiso (build with cmake)
-#   tools/old-gcc    github.com/decompals/old-gcc releases (2.8.1-psx at least)
-#   tools/maspsx     github.com/mkst/maspsx (then: git -C tools/maspsx apply ../patches/maspsx-mflo-load-nop.patch)
-#   tools/m2c        github.com/matt-kempster/m2c
-```
+Each weapon works the same in every Endless room as in its home mission: fire rate, damage, scope and sounds are all identical.
 
-The maspsx patch adds a nop real ASPSX inserts when a load sits between `mflo`/`mfhi` and a `mult`/`div` that doesn't read the loaded register (ASPSX always keeps two instructions between them).
+## Grenades
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-Put your disc dump in `workbench/disc/` and extract it with `dumpsxiso` into `workbench/extracted/` (with `-s workbench/extracted/disc.xml`).
+<table>
+  <tr>
+    <td width="50%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_quick_grenade.avif" alt="A quick grenade thrown without changing weapons" width="100%"></td>
+    <td width="50%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_gas_grenade.avif" alt="A gas grenade putting guards to sleep" width="100%"></td>
+  </tr>
+</table>
 
-## Building
+**Quick grenade:** a frag grenade on its own button (G, or R1 on a gamepad), thrown without holstering your weapon, with a frag counter on the HUD. An optional **infinite grenades** setting is available in PORT SETTINGS.
 
-| command | result |
-|---|---|
-| `make` | build `LEVEL01.EXE` from source and verify its SHA-1 |
-| `make split` | re-run splat (after changing `config/level01.yaml` or symbol names); for Level 1 this also re-applies `tools/make_shiftable.py` |
-| `make disc` | full disc image with our `LEVEL01.EXE`, `build/disc/twine.cue` |
-| `make play` | playable disc with the developer cheat codes unlocked in every level, `build/disc/twine_play.cue` |
-| `make mod` | test disc with every mod in `mods/` (boots straight into Level 1), `build/disc/twine_mod.cue` |
-| `tools/build_all.sh` | build all 14 executables and a disc from them, `build/disc/twine_all.cue` |
-| `make cmod CMODS=TWINSTICK` | playable disc with C mods compiled in (see below), `build/disc/twine_cmod.cue` |
-| `tools/make_boot_patch.py N` | print a patch that boots straight into level N |
+## Blackjack mode
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-Load the `.cue` file in DuckStation.
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_blackjack.avif" alt="A hand of blackjack at the casino table" width="640">
+</p>
 
-## Mods (`mods/*.patch`)
+**"Well played, Mr. Bond..."** The fan-favourite, PlayStation-exclusive casino from Russian Roulette, straight from the main menu: pick **BLACKJACK** and you're seated at the table.
 
-Each line patches one 32-bit word and checks the original value first. Patches written for Level 1 are carried over to every other level by matching the surrounding code.
+## Port settings
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-- `debug_cheats.patch` turns the developer cheat codes back on. The retail game disables them through the CD-archive flag at `g_Args+0x1BC`.
-- `boot_to_level1.patch` skips the front-end and boots straight into Level 1. It uses the boot stub's own "skip shell" switch.
-- `debug_camera_page.patch` starts every level with the CAMERA INFO debug page showing.
-- `invincible.patch` starts every level with invincibility on.
-- `fov_wide.patch` widens the field of view (projection distance 300 → 240, about 81° → 94° horizontal). Weapon zoom still works on top of it.
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/settings.avif" alt="Scrolling the PORT SETTINGS page in the game's Options menu" width="720">
+</p>
 
-To pick your own set of mods: `make mod MODS="mods/debug_cheats.patch mods/fov_wide.patch" MOD_NAME=twine_custom`.
+The port's options live inside the game's own **Options** menu: **PORT SETTINGS** has mouse speed, invert mouse, pad layout (modern or original), smooth motion, HD movies, vibration, enemy AI (the port's improved or the original), where the in-game message box sits (bottom or top), **CONTROLS** for remapping ([below](#remapping)) and the debug menu. Options also gets **AUTOLOAD**, the memory card slot loaded at start. Every setting is also a line in `twine.ini`, alongside the ones with no menu entry (display, renderer, scale, filter and more: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
 
-### Developer cheat codes (with `debug_cheats`)
+## Controls
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-Enter these **on the pause menu**. Every code starts with **SELECT SELECT CIRCLE CIRCLE**, followed by:
+Press **F1** in the game for the full list. Everything can be rebound ([below](#remapping)).
 
-| then | effect |
-|---|---|
-| L2 R2 | **open the hidden developer menu** |
-| SQUARE SQUARE SQUARE SQUARE | toggle invincibility |
-| R1 R1 L1 L1 | all weapons |
-| L1 L1 R1 R1 | refill ammo |
-| SELECT CIRCLE | complete mission (probable) |
-| SELECT SQUARE | mission failed |
-| R1 R1 R1 / L1 L1 L1 | object-cycling mode / next object |
-| SQUARE LEFT SQUARE / CIRCLE CIRCLE CIRCLE | visual modes: objects tinted red / drawn as black silhouettes (from the code; not yet seen in game) |
-| UP UP SELECT, DOWN DOWN SELECT, SQUARE RIGHT SQUARE, SQUARE SQUARE SQUARE SELECT, SQUARE CIRCLE SQUARE CIRCLE | not identified yet |
-
-The front end has four codes of its own that the retail game never checks (the native port's `devcheats` setting turns them back on; enter them on the main menu): SELECT SELECT CIRCLE CIRCLE then **L1 L1 R1 R1** makes every mission selectable, **L1 ×7** shows every movie in the Movies menu, **L2 L2 R2 R2** turns on a sprite position editor that prints positions to the log, and **(SELECT R1 L2) ×5** sets a flag that skips ahead in the front end.
-
-Unverified: after every code, the game rewrites the player's `+0xE` field (health?) depending on god mode. Turn invincibility on first if Bond dies right after entering a code.
-
-The **developer menu** uses Up/Down to choose an option, Left/Right to change it and Start to close. It has these options:
-- DISPLAY: 9 debug pages (framerate, camera, player position, object counts, profiling, and more)
-- EDIT: CAMERA is a **free-fly camera** you move with the D-pad
-- INVINCIBILTY (the developers' spelling) and IGNORE WALLS (noclip)
-- DISPLAY HUD and DISPLAY OBJECTS on/off
-- TERRAIN and SUBDIVISION rendering toggles
-
-## C mods (`make cmod`)
-
-Because the build is shiftable, mods can be ordinary C. `make cmod CMODS="TWINSTICK ..."` rebuilds **all 11 levels** with the mods (`tools/build_cmod.py`) and makes a normal disc (front-end included), `build/disc/twine_cmod.cue`. The matching build never sees mod code.
-
-There are two kinds:
-- **`src/mods/<name>.c`: works in every level.** A mod is written with Level 1's names. It lists the functions it replaces on a `MOD_REPLACES:` line, and can call the original as `<name>_orig`. For each level:
-  - `tools/port_symbols.py` maps those names onto that level. Each Level 1 function is found in the other level by its address-masked instructions, then the symbols in matching instructions are paired up. The other levels have no C source; all the names come from this.
-  - The level's own definition of a replaced function is made weak with `objcopy`, so the mod's version wins at link time, and gets an `_orig` alias.
-- **`#ifdef MOD_<NAME>` inside the decompiled Level 1 source:** Level 1 only. Use this for small changes in the middle of a function.
-
-| C mod | where | effect |
+| Action | Keyboard and mouse | Gamepad |
 |---|---|---|
-| `TWINSTICK` | `src/mods/twinstick.c`, every level | modern twin-stick controls (below) |
-| `WIDEFOV` | `src/mods/widefov.c`, every level | wider field of view: projection 300 → 240, about 81° → 94° horizontal (`workbench/screenshots/16_*`) |
-| `INVINCIBLE` | `src/mods/invincible.c`, every level | start every level with invincibility on |
-| `DEVCHEATS` | Level 1 `Cheat_CheckCodes` (`#ifdef`) | developer cheat codes and menu (`debug_cheats.patch` does the same for every level on the matching build) |
+| Move / look | WASD / mouse | left stick / right stick |
+| Fire / aim | left button / right button | R2 (RT) / L2 (LT) |
+| Use | E or F | Triangle (Y) |
+| Reload | R | Square (X) |
+| Change weapon | 1-9 by group, wheel or Z/X; Q for the previously used weapon | d-pad left/right; L1 (LB) for the previously used weapon |
+| Punch / grenade | Space or mouse 4 / G | R3 / R1 (RB) |
+| Sprint / crouch | Shift / C or Ctrl | L3 (toggle) / Circle (B) |
+| Messages | Tab | Back or touchpad |
+| Pause | Esc or Enter | Start |
+| Save / load state | F5 / F6 | |
+| Full screen | F11 or Alt+Enter | |
 
-For example, `make cmod CMODS="TWINSTICK WIDEFOV"`. Each mod must replace different functions, because two mods can't both replace the same one.
+### Remapping
 
-`mods/*.patch` files that patch a level EXE don't apply to C-mod builds, because the addresses have moved. Boot-stub patches still work. For testing, `tools/make_disc.py ... --replace SLUS_012.72=<stub with boot_to_level1> LEVEL01.EXE=build/level01_cmod/level01.exe` skips the front-end.
+<img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/controls_page.avif" alt="The CONTROLS page in PORT SETTINGS: scrolling the actions and their keys" width="420" align="right">
 
-**`TWINSTICK`: modern twin-stick controls** (every level)
-- **Left stick:** moves forward/back and **strafes**.
-- **Right stick:** **turns**, and **looks up and down while you move**. The retail game ignores the right stick completely, and only lets you look up and down in aim mode (hold R1), where you can't move. The look direction follows the game's REVERSE SNIPER option, the same as aim mode. In aim mode the right stick aims.
-- **Analog mode:** turned on automatically. The retail game keeps the pad in digital mode unless the front-end's analog option is set (bit 8 of `g_Args->flags2`).
-- **Code:** three functions in `src/mods/twinstick.c`:
-  - It wraps the input mapper (`func_8005D760`), which runs every frame and turns the pad into movement flags. Afterwards, the left stick X sets the strafe flags and the right stick X sets the turn flags.
-  - It wraps the on-foot update (`func_80061DC0`). The game sets the player model's pitch from the ground slope there, and the camera and firing follow that pitch; the mod adds a look offset on top, driven by the right stick Y.
-  - It replaces `Pad_StickToSpeed` with a version that reads the right stick.
-- **Verified in DuckStation** in Levels 1, 2 and 4. With retail code, the right stick does nothing and the left stick turns; with the mod, the right stick turns and the left stick strafes. See `workbench/screenshots/10_*`, `11_*`, `14_*` and `15_*`. Level 11 boots into analog mode with the mod. Looking up and down was tested by hand with a DualSense.
-- **In DuckStation:** set the controller type to **Analog Controller (DualShock)**. A DualSense maps the way you'd expect.
+Every action can be rebound, on the keyboard, mouse and gamepad:
 
-How controls work in this engine, for further mods:
-- `Pad_Update` reads the pad. In analog mode (pad ID 0x73) it sets `D_800B0E54 = 1` and copies the sticks to `g_PadAxes` = [right X, right Y, left X, left Y], centred on 0x7F.
-- `func_8005D760` maps them to intent flags. Left stick Y: forward `D_800DDC44` / back `D_800DDCC0`. Left stick X: turn left `D_800DDCC4` / turn right `D_800DDDB8`, and `D_800DE0DC` (signed). Button map (`g_Args->buttonMap[8]`): fire `D_800DDEEC`, strafe left `D_800DDD8C`, strafe right `D_800DDD90`, crouch `D_800DDD94`, sniper `D_800DDDB4`, and others.
-- Movement (`func_80061B70`) is digital: ±0xE1 per frame, or ±0xA0 on diagonals. Turning (`func_800617AC`) is analog, through `Pad_StickToSpeed(0, 0x50)`: 3-unit dead zone and a quadratic curve. Aiming (`func_80043EE0`) uses `Pad_StickToSpeed` with per-weapon speeds (Weapon fields `0x53` yaw, `0x58` pitch).
+- **In the game:** Options → PORT SETTINGS → **CONTROLS**. Pick an action and press the new key or button. Right adds a second one, Left puts the row back, and the last row resets everything. Changes are saved straight away.
+- **In `twine.ini`:** a `[controls]` block lists every action with its current keys, for example `fire = Mouse Left` or `use = E, F`. Remove the `#` in front of a line to change it. Keys are named the way your keyboard labels them, and gamepad buttons by position (South, East, Right Trigger...).
 
-## Data mods: level archives, textures, enemies, AI scripts
+F1 in-game shows your current bindings. Prefer the PlayStation's own button layouts? Set **PAD LAYOUT** to ORIGINAL in PORT SETTINGS, and the game's Options → **CONTROLLER** page chooses the gamepad's buttons, as on the original console version.
 
-Each level's assets are in one archive, `Lnn/LVLnnCD.BIN`. The game looks files up by name through the archive's table, so files can be replaced and can change size. This was verified by growing a file and moving every file after it: Level 1 still loads and plays.
+<br clear="right">
 
-```sh
-tools/cdbin.py list    workbench/extracted/L01/LVL01CD.BIN
-tools/cdbin.py extract workbench/extracted/L01/LVL01CD.BIN workbench/cdbin/L01
-# edit files in workbench/cdbin/L01, then
-tools/cdbin.py pack    workbench/extracted/L01/LVL01CD.BIN workbench/cdbin/L01 build/LVL01CD.BIN
-tools/make_disc.py build/disc/data.xml --replace LVL01CD.BIN=build/LVL01CD.BIN   # then mkpsxiso as in the Makefile
-```
+## Debug menu
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-Repacking unmodified files gives a byte-identical archive. The archive starts with a table of 0x1C-byte entries (`char name[26]; u16 start_sector`), with 2 KB sectors.
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/debug_menu.avif" alt="The developers' debug menu open over Courier's bank, then its object count page" width="720">
+</p>
 
-What's inside (Level 1):
+The original developers' debug menu, left in the game's code, with pages restored from a development version. Open it with **F9**; **DEBUG MENU** must be enabled in PORT SETTINGS first.
 
-| file | contents |
+| Option | What it does |
 |---|---|
-| `KG011.INI`, `KG012.INI`, `KG013.INI` | **plain-text** setup for the level's three sections. **`maxguys = 6`** caps how many characters are active at once. Raising it to 12 loads and plays fine, but the opening scene has the same guards, so the guards themselves are placed by the map and scripts (probably `DATA01.BIN` and `AIB01.BIN`). `[guy_slot n]` picks the character model and `[tex_slot n]` its texture (ski guards, Elektra, Bond). |
-| `L01/AIB01.BIN` | **AI scripts**: bytecode for the game's script VM (dispatcher `func_800575FC`, 0x44-opcode table at `0x8009D7A8`). The EXE still contains the development file names `GOON.AIB`, `SNIPER.AIB`, `PILOT.AIB`, `DIRECTOR.AIB`, `ELECTRA.AIB`, `BONDNIS.AIB`. A disassembler for this bytecode would make enemy behaviour editable; the opcode table is in [`docs/ai_script_vm.md`](docs/ai_script_vm.md). |
-| `L01/LVL01TIM.BIN` | 80 TIM images: **HUD, weapons, crates, vehicles, effects**. Tinting them shows up in game (`workbench/screenshots/13_*`). |
-| `L01/L01S1-3.TIM`, `.TRN`, `.TRK` | per-section texture page (8-bit), terrain and track data |
-| `L01/TEX01x.BIN` (`TEX PSX`), `L01/GUY01x.BIN` (`GUY `) | character textures and models |
-| `L01/*.HMD` | Sony HMD models (weapons, vehicles) |
-| `SHDATA/LOAD_01.TIM`, `LOAD1.TIM` | loading screen and "Loading" bar |
-| `SOUNDFX/L1FX.VH/.VB` | sound effect bank |
+| **DISPLAY** | An information panel: (player info, first-person weapon info, object counts, frame rate (shown frames added) and more), plus three pages from a 2000 beta that the retail game dropped, restored: COLLBOX INFO (Page Up/Down steps through the collision boxes), TERRAIN INFO and BG COLOR INFO. |
+| **EDIT** | Edit modes, such as a free camera. |
+| **TERRAIN · SUBDIVISION · CONTOUR** | Switches for the level's geometry. |
+| **SNAPSHOT · WAYPOINTS** | Disabled in the retail game; shown as they were left. |
+| **INVINCIBILITY** | Bond takes no damage. |
+| **IGNORE WALLS** | Bond walks through walls. |
+| **EDIT OBJECTIVES** | A switch for controlling the mission's objectives. |
+| **DISPLAY HUD** | The HUD on or off: clean shots for screenshots. |
+| **DISPLAY OBJECTS** | Level objects on/off. |
 
-How enemies get into a level (for an enemy-count mod; still to be done):
-- Map entries are instanced by `func_8003C1BC(entry, x, y, z)`.
-- The word at `entry+0xC` holds the object type in its low byte, with bit 8 set once the object is instanced. The type indexes a table of 0x70-byte type records at `g_Args->unk228`; byte 1 of a record is the object class, and class 6 is a character.
-- `func_8003C6B0` creates the object from a fixed pool. It returns nothing when the pool is full, which is presumably what `maxguys` limits.
-- Characters live in a 0x124-byte array at `D_800AFFC8`. Each gets its AI script through `func_80053790(obj, n)`, with `n` taken from bits of `entry+0x10`.
-- So more enemies means more map entries (they come from the level data; which file is still to be worked out) plus a higher `maxguys`.
+Opening it during an Endless Mode run marks the run unranked, excluding it from the high-score table.
 
-## Shiftable build (writing mods in C)
+## HD movies
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-The original game only works if every function and variable stays at its original address, because compiled code and data hold absolute addresses. After `make split`, `tools/make_shiftable.py` rewrites the generated assembly so every address is a symbol the linker fills in:
+The mission movies on the disc are short, low-resolution, chopped cuts of the film: a limitation of the PS1's CD capacity. If you own the film and would enjoy higher-quality movie scenes, the port can play HD video in their place, in high definition with full sound. (This feature is experimental: depending on your file, the clips may be cut incorrectly.)
 
-| fixed address in splat output | rewritten as |
-|---|---|
-| switch jump tables in `.data` (raw `0x8002....` words) | references to `jtgt_<addr>` labels added in the function's asm |
-| absolute linker symbols inside the EXE | `nearest label + offset` |
-| BSS variables | `bss_anchor + offset`, a label at the exact end of the data (the zero padding at the end of the EXE is now added by `tools/fix_exe.py`) |
-| `lui`/`lw` pairs splat did not match up | `%hi`/`%lo` of the symbol (found with a control-flow analysis per function) |
-| the hand-written GTE polygon module that lives in `.data` (after the `"POLY.c"` string) | its absolute `j`/`jal` become label references. For its `lui`/`ori` pairs the linker computes both halves (`.word opcode + poly_addr_<addr>_hi`), because `%hi` assumes a sign-extended low half and `ori` doesn't sign-extend. |
-| header entry point and text size | the entry function's symbol and a size computed by `tools/fix_exe.py` |
+1. Get the film (I can't provide support for obtaining it). The clip timings were matched against a 2160p upscaled release (2:08:00); other versions may not line up.
+2. Cut the clips with [ffmpeg](https://ffmpeg.org) installed: `python3 port/tools/hdmovies.py FILM hdmovies`
+3. Put the `hdmovies` folder next to the game. The movies play from then on; **HD MOVIES** in PORT SETTINGS turns them off.
 
-The matching build is unchanged byte for byte, so `make` still checks the SHA-1. To see that shifting works, insert some bytes early in `.text` (for example `__asm__(".section .text\n.space 0x1000\n");` at the top of `src/level01/text_80026B00.c`), run `make build/level01/level01.exe` (the SHA-1 check will fail, as expected) and boot the result.
+No film footage is part of this project: the clips are made only from your own copy of the film.
 
-Caveats:
-- The `mods/*.patch` files patch fixed addresses. Use them only on the matching build; with a shifted build, write the change in C instead.
-- Decompiling a function that uses a switch also means moving its jump table out of `asm/level01/data/` (the table refers to that function's `jtgt_` labels).
-- All 11 levels are shiftable (`SHIFTABLE` in the Makefile) and still match. Levels 1, 2 and 6 were play-tested with 4 KB inserted at the start of `.text`. C mods in `src/mods/` work in all of them (see C mods above).
+## What you need
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-## Notes for modders (Level 1 addresses)
+- **Your own copy of the game:** a disc image of *007: The World Is Not Enough* for the PlayStation. It **must be the American release (SLUS-01272)**, as `.bin` + `.cue`. This project contains no game data.
+- **System requirements:** Windows 10 or 11, or Linux (Ubuntu 22.04 or newer, Debian 12, Fedora, Arch, SteamOS...). For the high-resolution renderer you need a graphics card with Vulkan support; without one, the game draws in software.
+- **Optional:** a PlayStation BIOS file, for the console's start-up animation (supported for the love of the original).
 
-Every one of these is shared engine code, so it's in every level at a shifted address.
+## Setup in 3 steps
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-**Camera**
-- Struct at `0x800AFFE4`:
-  - target X/Y/Z: `+0x04`/`+0x08`/`+0x0C`
-  - rotation X/Y/Z: `+0x10`/`+0x12`/`+0x14` (s16, 4096 = 360°)
-  - position X/Y/Z: `+0x48`/`+0x4C`/`+0x50`
-- The player's heading is `gPsi` at `0x800AFF9C`.
-- The camera-mode update functions are clustered at `0x8004DB00`–`0x80050A00`.
+<img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/setup.jpg" alt="The first-run screen: disc image found and checked" width="420" align="right">
 
-**Field of view**
-- `g_Projection` (u16, `0x800B0090`) is set to 300 in the graphics init (`0x8002F6A4`). Lower values give a wider view.
-- It's written to the GTE `H` register by `func_8004DFA8` (leaving scope). `func_8004E07C` adds weapon zoom on top.
-- The game renders at 512×240.
+1. **Download** the build for your system from [Releases](../../releases/latest) and unpack it anywhere.
+2. **Start it:** `twine.exe` on Windows, `./twine` on Linux.
+3. **Choose your disc image** on the first-run screen, or drop the file onto the window. The port checks it's the right release, and you're in.
 
-**Controller**
-- Button bits use PsyQ's layout. Held, previous and newly-pressed buttons are at `0x800B0E44`, `0x800B0E50` and `0x800B0E4C`.
-- Analog axes are a `u8[4]` at `0x800B0E5C`, in the order [RX, RY, LX, LY], with 0x7F as center.
-- **Only the left stick is used.** The right stick is read every frame but nothing uses it, so twin-stick look is a natural mod.
-- Stick-to-speed curve: `func_8004472C` (deadzone 3, quadratic, compensates for frame rate). The on-foot controller is `func_80043EE0`.
-- Button mapping: `g_Args+0x148` holds a `u16[8]` for use weapon, prev weapon, next weapon, reload, crouch, sniper, strafe L and strafe R. The defaults are Cross, Triangle, Square, Circle, L1, R1, L2 and R2, set by the boot stub.
+Settings, saves and memory cards stay in the game's folder. To keep them in your user folder instead, delete the file named `portable`.
 
-**Weapons**
-- `g_Weapons` at `0x800B00A4`: six 0xB8-byte slots.
-  - `flags`: `+0x38` (`|= 0x1800` = owned)
-  - ammo: `+0x44`
-  - clip: `+0x48`
-  - reserve: `+0x4A`
-  - clipSize: `+0x50` (u8)
-  - maxAmmo: `+0x5C`
+<br clear="right">
 
-**Player**
-- The player object pointer is at `0x800B0B00` (health at `+0xE`, 0x7FFF = full).
-- The world position is copied into `g_Args+0x208`/`+0x20C`/`+0x210`.
+## FAQ
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-## Layout
+<details>
+<summary><b>Is this an emulator?</b></summary>
+<br>
+No. The game's code was decompiled to C and is compiled as a native program, and the PlayStation's hardware is rebuilt in software for the PC. That's what makes smooth motion, high resolutions and new modes possible.
+</details>
 
+<details>
+<summary><b>Why do I need my own disc image?</b></summary>
+<br>
+The game belongs to its rights holders. This project shares only its own work; the game itself has to come from you.
+</details>
+
+<details>
+<summary><b>Do my saves carry over?</b></summary>
+<br>
+Yes. Memory card images in the usual emulator format (raw 128 KB <code>.mcd</code>) work, although I'd advise making a backup first: moving saves from the port back to an emulator is untested.
+</details>
+
+<details>
+<summary><b>Will it run on my graphics card?</b></summary>
+<br>
+Any card with a current Vulkan driver should run the high-resolution renderer: NVIDIA, AMD or Intel. If it can't start, the game falls back to drawing in software and tells you so. If you have issues with specific hardware, please submit a report and I'll do my best to help.
+</details>
+
+<details>
+<summary><b>I found a bug.</b></summary>
+<br>
+Please <a href="../../issues/new/choose">open an issue</a> and attach <code>port.log</code> from the game's folder.
+</details>
+
+## Under the hood
+<sup>[(Back to top)](#table-of-contents)</sup>
+
+The port stands on a **matching decompilation**: C source that rebuilds all 14 of the game's executables byte-for-byte identical to the original disc. Every change is checked against the retail checksums, so the code can be changed with confidence.
+
+```mermaid
+flowchart LR
+    disc[("Your disc image<br>(SLUS-01272)")]
+    subgraph game ["The game's code"]
+        dec["Decompiled C<br>matching, all 14 executables"]
+        rec["MIPS assembly<br>statically recompiled to C"]
+        mods["Mods and fixes<br>Endless Mode, controls, smooth motion"]
+    end
+    subgraph rt ["PlayStation hardware, rebuilt"]
+        gpu["GPU<br>software + Vulkan"]
+        gte["GTE<br>3D maths"]
+        spu["SPU + XA<br>sound, music"]
+        cd["CD-ROM, MDEC,<br>pads, memory cards"]
+    end
+    sdl["SDL3"]
+    pc["Windows / Linux"]
+    disc --> cd
+    game --> rt --> sdl --> pc
 ```
-config/       splat configs for all 14 executables, symbol names (symbol_addrs.level01.txt), checksums,
-              level01_syms.ld (absolute symbols the C needs, e.g. scratchpad addresses)
-src/level01/  decompiled C: one file per optimization region (text_<addr>.c)
-src/mods/     C mods that work in every level (make cmod)
-asm/<exe>/    splat output, made shiftable by tools/make_shiftable.py (regenerated by make split)
-include/      common.h (types, m2c macros), twine.h (game structs and globals), gte.h, psyq.h
-mods/         word patches for the matching build
-docs/         reverse-engineering notes: functions.md (what matched functions do, struct layouts, frame
-              timing, camera/aim), ai_script_vm.md
-tools/        build and analysis scripts; Ghidra scripts in tools/ghidra_scripts
-workbench/    your disc, BIOS, extracted files, screenshots (never committed)
-```
 
-Main tools:
-- **Matching:** `auto_match.py` (m2c + compile + compare, with fixups), `match_test.py` (try one function), `permute.py` (decomp-permuter on near-misses), `integrate_one.py` (put a match into the source), `progress.py`
-- **Building and mods:** `make_shiftable.py`, `fix_exe.py`, `build_cmod.py`, `port_symbols.py`, `port_level.py` (Level 1's C into the other levels), `twin_port.py` (a matched function's C into levels where it differs only in constants), `jtbl_fix.py` (switch jump tables), `apply_mods.py`, `make_boot_patch.py`, `make_disc.py`, `build_all.sh`
-- **Data:** `cdbin.py` (level archives)
+- **Native code, no emulation:** the decompiled C compiles straight to x86. Code not yet decompiled is statically recompiled from MIPS to C, so the whole game runs as one native program.
+- **The PlayStation, rebuilt:** the GPU (with a Vulkan renderer that redraws the game at up to 8×), the GTE, the SPU with XA streaming audio, MDEC movies, the CD drive reading straight from the disc image, pads and memory cards.
+- **Smooth motion without changing the game:** between the game's ticks, the port saves the machine's state, draws the scene with the camera and models where they'd be at that moment, then puts everything back. The game's own logic never sees it.
+- **Tested headless:** a regression suite plays the game without a window, faster than real time, and checks it from its logs and screenshots. More than 450 checks run in three configurations, and two runs of the same build come out identical.
+- **One tree, two platforms:** Windows builds come from the same sources through a thin platform layer, and the Linux sections stay byte-identical.
 
-## Workflow for decompiling a function
+Building, the decompilation's progress, modding (C mods, data mods, the AI script VM) and the tools: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
 
-1. Pick an `INCLUDE_ASM(...)` line in `src/level01/*.c`.
-2. Get a starting point with `.venv/bin/python tools/m2c/m2c.py -t mipsel-gcc-c --globals=used --valid-syntax asm/level01/nonmatchings/<file>/<func>.s`, or from the Ghidra decompiler.
-3. Iterate on the C in a scratch file named `<func>.c`, using `tools/match_test.py <file> --gcc 2.8.1-psx --opt=-O2 --diff`.
-4. Replace the `INCLUDE_ASM` line with the C and run `make`. It must still print `OK`. `tools/integrate_one.py <func> <file.c>` does this and keeps the change only if the build still matches; with `--nonmatching` it banks a near miss under `#ifdef NON_MATCHING` instead (build a disc that runs those with `make cmod CMODS=NONMATCHING LEVELS=level01`).
-5. After matching more functions, run `tools/twin_port.py levelNN` for each level (copies of the function that differ only in constants or addresses, such as struct offsets and array sizes), then `tools/port_level.py port levelNN` for levels 2–11 in order (identical copies).
+## Known issues
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-`tools/auto_match.py` automates steps 2–4 for functions that m2c gets right on the first try. It also retries common m2c mistakes:
-- pointer strides
-- signedness
-- `void` returns
-- `register` parameters
+- **Messages at the top** (PORT SETTINGS → MESSAGES) is experimental: some missions' own on-screen pieces may sit close to it.
+- **HD movies** depend on your copy of the film: a different cut can make a clip start or end in the wrong place.
+- **Windows** is tested in a virtual machine and under Wine, but not yet widely on real hardware. Reports from Windows machines are very welcome.
+- **8 MB mode:** in one Flashpoint room a guard can occasionally walk off the floor.
 
-`tools/permute.py` runs [decomp-permuter](https://github.com/simonlindholm/decomp-permuter) on near-misses and integrates any that reach score 0.
+Found something else? Please [open an issue](../../issues/new/choose) with your `port.log`.
 
-Matching tips learned on this codebase:
-- **Unoptimized regions** often use `register` parameters.
-- **GTE code** is written with inline-asm macros (`include/gte.h`). Include the explicit `nop` after `mfc2` reads.
-- **Call `abs()` directly.** GCC expands it as a builtin.
-- **Look for `volatile`.** It shows up as reloads inside loops that would otherwise be hoisted.
-- **Typed structs often fix a mismatch.** Writing a struct with an array field (`obj->vars[i]`) instead of raw pointer maths sometimes flips the operand order.
+## Roadmap
+<sup>[(Back to top)](#table-of-contents)</sup>
 
-## Ghidra
+Planned for Endless Mode:
 
-The project is in `tools/ghidra_projects/TWINE`. It contains all 11 levels (in `levels/`) plus the shell, movie player and boot stub (in `system/`), all imported with [ghidra_psx_ldr](https://github.com/lab313ru/ghidra_psx_ldr).
+- **Bigger fights:** up to 24 guards at once in the largest rooms, arriving through doorways out of sight and from several sides.
+- **Guards from other missions** in every room, for more variety.
+- **Late-wave surprises:** civilian disguises after wave 10.
+- **More rooms**, and smoother room-to-room flow.
+- **A loadout screen** in Q's briefing.
+- **Endless Mode's extra weapons in the campaign** when the "all weapons" cheat is on.
+- **Ski rooms** from Cold Reception, once the skiing itself gets speed and movement refinements.
+- **Quick gas grenades:** the option to swap the quick frag grenade for a gas grenade.
+- **Content from the N64 version:** theoretically possible, and something I've always wanted, but it's a long shot.
+- **A room creator / level editor:** it would give much more freedom over room flow, but it's significant work. I'd love to see the community make maps one day, too.
+- **A global stats screen** for all missions and Endless Mode combined.
 
-Names from `config/symbol_addrs.level01.txt` are applied with `tools/ghidra_scripts/ApplySymbols.java`.
+## Contributing
+<sup>[(Back to top)](#table-of-contents)</sup>
+
+Bug reports are the most useful help: the [issue form](../../issues/new/choose) asks for what you need, and `port.log` from the game's folder shows what the game was doing. To build the port or work on the decompilation, start with **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**. You'll need your own copy of the game there too, since every build is made from your disc. If you have ideas for gameplay mechanics or anything else, feel free to reach out.
+
+## Acknowledgements
+<sup>[(Back to top)](#table-of-contents)</sup>
+
+### The original team
+
+<p align="center">
+  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/team.png" alt="A group photo of the Black Ops Entertainment development team, hidden on the game's disc" width="480">
+  <br>
+  <i>The Black Ops Entertainment team, from a photo hidden on the game's disc.</i>
+</p>
+
+Special thanks to the original developers at Black Ops Entertainment for making this possible. I grew up with this game, and it has always been a dream of mine to see a modern version of it. Thank you, for this game and for the experience of finding this hidden photo.
+
+### Tools and references
+
+This project stands on the work of the PlayStation and decompilation communities:
+
+- [psx-spx](https://psx-spx.consoledev.net/), the PlayStation hardware documentation that the port's GPU, GTE, SPU, CD-ROM and MDEC are written from.
+- [old-gcc](https://github.com/decompals/old-gcc) (the PSX compiler builds), [maspsx](https://github.com/mkst/maspsx), [splat](https://github.com/ethteck/splat), [m2c](https://github.com/matt-kempster/m2c), [mkpsxiso](https://github.com/Lameguy64/mkpsxiso) and [ghidra_psx_ldr](https://github.com/lab313ru/ghidra_psx_ldr): the tools behind the matching decompilation.
+- [SDL3](https://www.libsdl.org/) for the window, input and sound, and [pl_mpeg](https://github.com/phoboslab/pl_mpeg) for HD movie playback.
+
+## Credits and legal
+<sup>[(Back to top)](#table-of-contents)</sup>
+
+Original project by **CipherNovaa**.
+
+*007: The World Is Not Enough* © its respective rights holders. Developed by Black Ops Entertainment and published by Electronic Arts. James Bond and 007 are trademarks of their respective owners. This is an unofficial fan project, not affiliated with or endorsed by any of them. The decompiled game code is the work of the game's original authors and remains their property; it is shared for preservation and interoperability, and no game data or assets are distributed. The development team's photo in the Acknowledgements is shown for acknowledgment and historical documentation. See [NOTICE.md](NOTICE.md).
+
+The project's own code (the PC port's runtime, tools and mods) is licensed under the [Mozilla Public License 2.0](LICENSE). The title card's font is adapted from the MGS1 Codec font by Andrew Gleeson ([CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)). Third-party libraries in the downloads are listed in `licenses/` inside each download.
+
+**AI disclosure:** much of this project's code, tooling and documentation was written with AI assistance (Anthropic's Claude), directed, reviewed and playtested by the author.

@@ -1,0 +1,46 @@
+name: Bug report
+description: Something in the game or the port doesn't work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please don't attach game files, disc images or BIOS files.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: The mission or mode, where you were, what you did.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release you downloaded (for example v0.1.0).
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: System
+      options: [Windows 11, Windows 10, Linux, Steam Deck, Other]
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Graphics card and controller
+      description: For example "AMD Radeon RX 6700, DualSense" or "NVIDIA RTX 3070, keyboard and mouse".
+  - type: textarea
+    id: log
+    attributes:
+      label: port.log
+      description: Drag the file `port.log` from the game's folder here. It shows what the game was doing.
