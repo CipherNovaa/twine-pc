@@ -2,9 +2,10 @@
  *
  * The number keys pick a weapon by its group, the same in every mission (GROUPS below): 1 pistols, 2 submachine guns
  * and assault rifles, 3 sniper rifles, 4 shotguns, 5 explosives and launchers, 6 gadgets, 7 fists. A key takes the
- * group's first weapon Bond has; pressed again (its group's weapon in hand) the next of the group, round. A group he
- * has nothing of does nothing. Q (and L1 in the modern pad layout, port/src/video.c) takes the weapon held before the
- * one in hand, whatever they are: pressed again, back.
+ * group's weapon held last (else its first); pressed again (its group's weapon in hand) the next of the group, round:
+ * the weapons checked in the inventory only, when any of the group is. A group he has nothing of does nothing. Q (and
+ * L1 in the modern pad layout, port/src/video.c) takes the weapon held before the one in hand, whatever they are:
+ * pressed again, back. A weapon only passed through on the way (held under half a second) isn't one held.
  *
  * The weapon buttons (next, previous: the pad's, the mouse wheel, Z and X) are the game's (func_800798D4, every frame
  * Bond has the controls: it steps the slot to change to, D_800B0DDC, through func_80079C54 past the slots that aren't
@@ -278,16 +279,31 @@ s32 func_80079C54(s32 dir) {
 }
 
 /* ---- Q: the weapon held before ---- */
+/* A weapon counts as held once it has been in hand SETTLE ticks (half a second), or at once when Q chose it: the ones
+ * a number key or the weapon buttons only pass through on the way (key 1 twice: the P2K, then the IAC Defender) aren't
+ * the weapon before. Each group keeps the last weapon held of it, for its number key. */
+#define SETTLE 10
 static char held[28], before[28]; /* (the weapon in hand, settled; the one before it) */
+static char cand[28];             /* (the one in hand, settling) */
+static s32 cand_at;
+static int cand_by_q;
+static char group_last[8][28];    /* (each group's last held) */
 static int level = -1;
 static s32 last_frame;
+
+static void memset_groups(void) {
+    int g;
+    for (g = 0; g < 8; g++)
+        group_last[g][0] = 0;
+}
 
 static void history(int run) {
     const char *now;
     int s = D_800B0DD4;
     if (level != g_Args->level || D_8009CDA8 < last_frame) { /* (a mission begun: in a run, Q's weapon carried in) */
         level = g_Args->level;
-        held[0] = before[0] = 0;
+        held[0] = before[0] = cand[0] = 0;
+        memset_groups();
         if (run && endless_carried_before)
             snprintf(before, sizeof(before), "%s", endless_carried_before());
     }
@@ -298,12 +314,21 @@ static void history(int run) {
     now = (const char *)g_Weapons[s].pad0;
     if (!strncmp(now, held, 23))
         return;
+    if (strncmp(now, cand, 23)) { /* (just in hand: it settles from now) */
+        snprintf(cand, sizeof(cand), "%s", now);
+        cand_at = D_8009CDA8;
+    }
+    if (!cand_by_q && held[0] && D_8009CDA8 - cand_at < SETTLE)
+        return;
+    cand_by_q = 0;
     if (held[0]) {
         snprintf(before, sizeof(before), "%s", held);
         if (run && endless_carried_set_before)
             endless_carried_set_before(before);
     }
     snprintf(held, sizeof(held), "%s", now);
+    if (group_of(held) >= 1 && group_of(held) <= 7)
+        snprintf(group_last[group_of(held)], sizeof(group_last[0]), "%s", held);
     if (port_trace("select"))
         port_log("trace: L%d f%d select: in hand %s (before it %s)\n", g_Args->level, D_8009CDA8, held,
                  before[0] ? before : "(none)");
@@ -379,15 +404,23 @@ void func_800798D4(void) {
     if (!key || D_800DDEEC || !func_800794A0())
         return;
     c = current(e, n, run);
-    if (key < 0) { /* Q: the weapon held before */
+    if (key < 0) { /* Q: the weapon held before (the one held, if the one in hand hasn't settled yet) */
+        const char *want = c >= 0 && held[0] && strncmp(e[c].name, held, 23) ? held : before;
         for (k = 0; k < n && t < 0; k++)
-            if (before[0] && !strncmp(e[k].name, before, 23))
+            if (want[0] && !strncmp(e[k].name, want, 23))
                 t = k;
-    } else if (key <= 7) { /* a group: its first, or (its weapon in hand) the next of it */
-        int from = c >= 0 && group_of(e[c].name) == key ? c : -1;
+    } else if (key <= 7) { /* a group: its last held (else its first), or (its weapon in hand) the next of it; the
+                            * weapons checked in the inventory only, if any of the group is */
+        int from = c >= 0 && group_of(e[c].name) == key ? c : -1, checked = 0;
+        for (k = 0; k < n; k++)
+            checked |= group_of(e[k].name) == key && e[k].ticked;
+        if (from < 0 && group_last[key][0])
+            for (k = 0; k < n && t < 0; k++)
+                if (!strncmp(e[k].name, group_last[key], 23) && (e[k].ticked || !checked))
+                    t = k;
         for (k = 1; k <= n && t < 0; k++) {
             int i = from >= 0 ? (from + k) % n : k - 1;
-            if (group_of(e[i].name) == key)
+            if (group_of(e[i].name) == key && (e[i].ticked || !checked))
                 t = i;
         }
     }
@@ -404,6 +437,7 @@ void func_800798D4(void) {
         D_800B0DDC = D_800B0DD8;
         return;
     }
+    cand_by_q = key < 0; /* (Q's choice counts as held at once) */
 #ifdef MOD_TRACE
     trace_change_by(key < 0 ? "Q (the weapon held before)" : "the number keys (the groups)");
 #endif

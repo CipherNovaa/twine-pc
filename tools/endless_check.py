@@ -1956,7 +1956,8 @@ def hitloop_ticks(run):
 SEL_INPUTS = [(900, "wheeldown", "FLASH BANG"), (1000, "x", "IAC DEFENDER"), (1100, "dright", "FLASH BANG"),
               (1200, "wheelup", "IAC DEFENDER"), (1300, "z", "FLASH BANG"), (1400, "dleft", "IAC DEFENDER"),
               (1500, "q", "FLASH BANG"), (1600, "l1", "IAC DEFENDER"), (1700, "6", "FLASH BANG"),
-              (1800, "6", "CELL PHONE STUNNER"), (1900, "1", "WOLFRAM P2K"), (2000, "1", "IAC DEFENDER")]
+              (1800, "1", "IAC DEFENDER"), (1900, "6", "FLASH BANG"), (2000, "1", "IAC DEFENDER")]
+# (keys 1 and 6: the checked weapons of the group only, the one held last first: never the P2K or the stunner here)
 
 
 def select_runs():
@@ -1982,6 +1983,11 @@ def select_runs():
         "p_all": Run("p_all", 6, 140, dict(base, TWINE_ENDLESS_NEXT="10:-1", TWINE_ENDLESS_TEST_EXIT="200,5000",
                                            TWINE_TEST_INPUT=",".join("%d:wheeldown" % t for t in range(900, 2500, 100)))),
     }
+    # (the playtest's combo: a weapon, key 1 twice past the P2K to the IAC, then Q flips between those two; key 1
+    # again later takes the IAC, the group's one held last)
+    runs["p_combo"] = Run("p_combo", 10, 60, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "10:-1", "TWINE_ENDLESS_TEST_ARM": 1,
+                                              "TWINE_ENDLESS_TEST_GOD": 1, "TWINE_TRACE": "select,change",
+                                              "TWINE_TEST_INPUT": "400:4,600:1,630:1,760:q,860:q,960:4,1060:1"})
     del runs["p_inv"].env["TWINE_ENDLESS_TEST_DRAW"]
     # (the playtest's: the AR36 carried through a door into Meltdown, where the game's slot is the P2K's till the AR36
     # comes out at frame 61: the strip names the AR36 from the room's first frame; the pause menu opened and left over
@@ -2047,8 +2053,14 @@ def check_select(runs):
     got = in_hand(p, 8)[1:]  # (the first: the carried IAC drawn as the room starts)
     want = [x for _, _, x in SEL_INPUTS]
     result("r", "King's Ransom, IAC + flash bang lent in one slot, only they checked: the wheel, Z/X, the d-pad step "
-           "between them, Q and L1 flip, keys 6 and 1 by group (hw, smooth)", got[:len(want)] == want,
+           "between them, Q and L1 flip, keys 6 and 1 by group, checked ones only (hw, smooth)", got[:len(want)] == want,
            "in hand: %s" % ", ".join(got) if got[:len(want)] != want else "%d changes as asked" % len(want))
+    c = runs["p_combo"]
+    got_c = in_hand(c.log, 10)[1:]  # (the first: the P2K the mission starts with)
+    want_c = ["FRINESI AUTO", "IAC DEFENDER", "FRINESI AUTO", "IAC DEFENDER", "FRINESI AUTO", "IAC DEFENDER"]
+    result("r", "Meltdown combo: key 1 twice past the P2K to the IAC (the P2K passed through, not held), Q flips IAC and "
+           "shotgun, key 1 later takes the IAC (the group's held last)", got_c[:6] == want_c and not c.crashed(),
+           "in hand: %s" % ", ".join(got_c))
     shown = len(re.findall(r"select: strip shown", p))
     before, on = (strip_letters(read_ppm(os.path.join(r.dir, "screen_%04d_0.ppm" % f))) for f in (895, 925))
     band, name = (strip_letters(read_ppm(os.path.join(r.dir, "screen_%04d_0.ppm" % f)), 0.815, 0.885) for f in (895, 925))
