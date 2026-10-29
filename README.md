@@ -232,7 +232,7 @@ F1 in-game shows your current bindings. Prefer the PlayStation's own button layo
 
 The original developers' debug menu, left in the game's code, with pages restored from a development version. Open it with **F9**; **DEBUG MENU** must be enabled in PORT SETTINGS first.
 
-| Option | What it does |
+| Option | Function |
 |---|---|
 | **DISPLAY** | An information panel: (player info, first-person weapon info, object counts, frame rate (shown frames added) and more), plus three pages from a 2000 beta that the retail game dropped, restored: COLLBOX INFO (Page Up/Down steps through the collision boxes), TERRAIN INFO and BG COLOR INFO. |
 | **EDIT** | Edit modes, such as a free camera. |
@@ -246,7 +246,7 @@ The original developers' debug menu, left in the game's code, with pages restore
 
 Opening it during an Endless Mode run marks the run unranked, excluding it from the high-score table.
 
-## HD movies
+## High Definition Movie Support
 <sup>[(Back to top)](#table-of-contents)</sup>
 
 The mission movies on the disc are short, low-resolution, chopped cuts of the film: a limitation of the PS1's CD capacity. If you own the film and would enjoy higher-quality movie scenes, the port can play HD video in their place, in high definition with full sound. (This feature is experimental: depending on your file, the clips may be cut incorrectly.)
@@ -257,7 +257,7 @@ The mission movies on the disc are short, low-resolution, chopped cuts of the fi
 
 No film footage is part of this project: the clips are made only from your own copy of the film.
 
-## What you need
+## Requirements
 <sup>[(Back to top)](#table-of-contents)</sup>
 
 - **Your own copy of the game:** a disc image of *007: The World Is Not Enough* for the PlayStation. It **must be the American release (SLUS-01272)**, as `.bin` + `.cue`. This project contains no game data.
@@ -369,6 +369,9 @@ Planned for Endless Mode:
 - **Content from the N64 version:** theoretically possible, and something I've always wanted, but it's a long shot.
 - **A room creator / level editor:** it would give much more freedom over room flow, but it's significant work. I'd love to see the community make maps one day, too.
 - **A global stats screen** for all missions and Endless Mode combined.
+- **Styled keyboard button indicators**
+- **Widescreen support**
+- **Native gyro aim support**
 
 ## Contributing
 <sup>[(Back to top)](#table-of-contents)</sup>
