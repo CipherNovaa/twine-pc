@@ -460,6 +460,11 @@ def menu_runs():
                                   config="infinite_grenades = 1\n")
         # (PORT SETTINGS: OPTIONS' fourth item, up three times to MESSAGES (wrapping past DEBUG MENU and CONTROLS),
         # Cross: top)
+        # (PORT SETTINGS with no HD movies anywhere: its HD MOVIES line says NONE)
+        runs["menu_hd_none"] = Run("menu_hd_none", 0, 30, {"TWINE_TEST_NO_FILMS": 1, "TWINE_SMOOTH": 0,
+                                                          "TWINE_HD_MOVIES": "/nonexistent",
+                                                          "TWINE_TEST_PAD": pad[:pad.index("620:")] + "590:40,593:0,620:4000,623:0"},
+                                   card=card)
         runs["menu_msgs_page"] = Run("menu_msgs_page", 0, 30, {"TWINE_TEST_NO_FILMS": 1, "TWINE_SMOOTH": 0,
                                                               "TWINE_HD": 0, "TWINE_TEST_PAD": pad[:pad.index("620:")] +
                                                               "590:40,593:0,620:4000,623:0,700:10,703:0,730:10,733:0,"
@@ -494,6 +499,11 @@ def check_messages(runs):
         r = runs["menu_msgs_page"]
         ini = open(os.path.join(r.dir, "conf/twine/twine.ini")).read() if os.path.exists(
             os.path.join(r.dir, "conf/twine/twine.ini")) else ""
+        if "menu_hd_none" in runs:
+            h = runs["menu_hd_none"]
+            result("e", "port settings with no HD movies: its HD MOVIES line NONE (not to be turned on)",
+                   "hd movie: no clips (PORT SETTINGS: NONE) in /nonexistent" in h.log and not h.crashed(),
+                   "logged" if "no clips" in h.log else "no line")
         result("e", "port settings: MESSAGES top/bottom (Cross on its line: top, kept in twine.ini)",
                bool(r.lines(r"settings: message_box = top")) and "message_box = top" in ini and not r.crashed(),
                "set %d, ini %s" % (len(r.lines(r"settings: message_box = top")), "saved" if "message_box = top" in ini else
@@ -526,7 +536,7 @@ def check_menus(runs):
         result("e", "main menu items", b > 0.04, "items area %.0f%% bright" % (b * 100))
     check_messages(runs)
     for k, run in runs.items():
-        if k in ("menu_main", "menu_cheats") or k.startswith("menu_msgs"):
+        if k in ("menu_main", "menu_cheats", "menu_hd_none") or k.startswith("menu_msgs"):
             continue
         img = run.shot("mission select")
         if img is None:

@@ -9,6 +9,7 @@ All notable changes to the PC port are listed here. The format follows [Keep a C
 
 ### Fixed
 - Windows: the game now starts after choosing a disc on the setup screen. It stopped with "SLUS_012.72 is not on the disc", because the `.cue` was read in place of the disc image.
+- PORT SETTINGS: HD MOVIES shows NONE, and can't be turned on, until there are HD movie clips to play.
 - Endless Mode: big frame-rate drops with some weapons lent from other missions, such as the rocket launcher in Courier's rooms, at high refresh rates with smooth motion.
 
 ## [0.1.0] - 2026-10-28

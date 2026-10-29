@@ -7,9 +7,11 @@
  * Cross), and the game goes on as if the PS1 movie had played. Decoding is pl_mpeg's (port/third_party, MIT). */
 #define PL_MPEG_IMPLEMENTATION
 #include <SDL3/SDL.h>
+#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include "port.h"
 #include "spu.h"
@@ -63,9 +65,54 @@ static void SDLCALL on_audio(plm_t *plm, plm_samples_t *samples, void *user) {
         SDL_PutAudioStreamData(s->audio, samples->interleaved, samples->count * 2 * sizeof(float));
 }
 
+/* where the clips are: TWINE_HD_MOVIES, else an hdmovies folder next to the game (make dist), else the user's own */
+static const char *movies_dir(char *def, size_t size) {
+    const char *dir = getenv("TWINE_HD_MOVIES"), *xdg = getenv("XDG_DATA_HOME"), *home = getenv("HOME");
+    ssize_t n;
+    char *slash;
+    if (dir)
+        return dir;
+    n = readlink("/proc/self/exe", def, size - 10);
+    slash = n > 0 ? (def[n] = 0, strrchr(def, '/')) : NULL;
+    if (slash && (strcpy(slash + 1, "hdmovies"), access(def, F_OK) == 0))
+        return def;
+    if (xdg && *xdg)
+        snprintf(def, size, "%s/twine/movies", xdg);
+    else
+        snprintf(def, size, "%s/.local/share/twine/movies", home ? home : ".");
+    return def;
+}
+
+/* 1 if there are clips to play (PORT SETTINGS' HD MOVIES: a setting with nothing to play shows NONE); looked again
+ * every two seconds, so a folder put there while the game runs counts */
+int port_hd_movies_found(void) {
+    static int found = -1;
+    static Uint64 at;
+    char def[900];
+    const char *dir;
+    DIR *d;
+    struct dirent *e;
+    int was = found;
+    if (found >= 0 && SDL_GetTicks() - at < 2000)
+        return found;
+    at = SDL_GetTicks();
+    found = 0;
+    dir = movies_dir(def, sizeof(def));
+    if (*dir && strcmp(dir, "0") && (d = opendir(dir))) {
+        while (!found && (e = readdir(d))) {
+            size_t l = strlen(e->d_name);
+            found = l > 4 && !strcasecmp(e->d_name + l - 4, ".mpg");
+        }
+        closedir(d);
+    }
+    if (found != was)
+        port_log("hd movie: %s in %s\n", found ? "clips" : "no clips (PORT SETTINGS: NONE)", dir);
+    return found;
+}
+
 /* 1 if <name>'s clip was shown (the PS1 movie is then not to be played) */
 int port_hd_movie(const char *name) {
-    const char *dir = getenv("TWINE_HD_MOVIES"), *xdg = getenv("XDG_DATA_HOME"), *home = getenv("HOME");
+    const char *dir;
     char path[1024], def[900];
     plm_t *plm;
     Show s = {0};
@@ -75,18 +122,7 @@ int port_hd_movie(const char *name) {
     int skipped = 0;
     if (getenv("TWINE_HD") && !atoi(getenv("TWINE_HD")))
         return 0; /* hd = 0: the PS1's movies (the front end's PORT SETTINGS) */
-    if (!dir) {
-        /* an hdmovies folder next to the game (make dist), else the user's own */
-        ssize_t n = readlink("/proc/self/exe", def, sizeof(def) - 8);
-        char *slash = n > 0 ? (def[n] = 0, strrchr(def, '/')) : NULL;
-        if (slash && (strcpy(slash + 1, "hdmovies"), access(def, F_OK) == 0))
-            ;
-        else if (xdg && *xdg)
-            snprintf(def, sizeof(def), "%s/twine/movies", xdg);
-        else
-            snprintf(def, sizeof(def), "%s/.local/share/twine/movies", home ? home : ".");
-        dir = def;
-    }
+    dir = movies_dir(def, sizeof(def));
     port_log("hd movie: %s asked for\n", name);
     if (!*dir || !strcmp(dir, "0") || port_video_headless() || !(s.renderer = port_video_renderer()))
         return 0;

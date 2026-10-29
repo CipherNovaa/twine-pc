@@ -300,6 +300,8 @@ static int env_on(const char *name, int dflt) {
     return s && *s ? atoi(s) != 0 : dflt;
 }
 
+int port_hd_movies_found(void); /* (port/src/hdmovie.c) */
+
 static int mouse_steps(void) { /* mouse speed in quarters, 1-12 */
     const char *s = getenv("TWINE_MOUSE_SENS");
     int n = s && atof(s) > 0 ? (int)(atof(s) * 4 + 0.5) : 4;
@@ -347,11 +349,15 @@ static void setting(int i, int d, char *label, char *value) {
         strcpy(label, "smooth motion");
         strcpy(value, onoff[on]);
         return;
-    case 4:
+    case 4: /* (no clips to play: NONE, not to be turned on) */
+        strcpy(label, "hd movies");
+        if (!port_hd_movies_found()) {
+            strcpy(value, "none");
+            return;
+        }
         on = env_on("TWINE_HD", 1) ^ (d != 0);
         if (d)
             port_setting_save("hd", on ? "1" : "0");
-        strcpy(label, "hd movies");
         strcpy(value, onoff[on]);
         return;
     case 5:

@@ -253,7 +253,7 @@ The mission movies on the disc are short, low-resolution, chopped cuts of the fi
 
 1. Get the film (I can't provide support for obtaining it). The clip timings were matched against a 2160p upscaled release (2:08:00); other versions may not line up.
 2. Cut the clips with [ffmpeg](https://ffmpeg.org) installed: `python3 port/tools/hdmovies.py FILM hdmovies`
-3. Put the `hdmovies` folder next to the game. The movies play from then on; **HD MOVIES** in PORT SETTINGS turns them off.
+3. Put the `hdmovies` folder next to the game. The movies play from then on; **HD MOVIES** in PORT SETTINGS turns them off (until the clips are there, it shows NONE).
 
 No film footage is part of this project: the clips are made only from your own copy of the film.
 
