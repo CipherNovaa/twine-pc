@@ -612,6 +612,13 @@ def carry_runs():
                                          "TWINE_ENDLESS_TEST_ARM": 1, "TWINE_ENDLESS_TEST_DRAW": "FRINESI AUTO",
                                          "TWINE_ENDLESS_TEST_DOOR": 2, "TWINE_ENDLESS_TEST_EXIT": 150,
                                          "TWINE_ENDLESS_TEST_GOD": 1}),
+            # City of Walkways' rocket launcher lent into Courier, where a palette under it is written every frame:
+            # the lent images' saved copy kept up to date, not read back at every swap (8 a tick at 165 Hz)
+            "lent_reads": Run("lent_reads", 5, 30, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_TEST_ARM": 1, "TWINE_ENDLESS_TEST_GOD": 1,
+                                                     "TWINE_ENDLESS_TEST_DRAW": "ROCKET", "TWINE_RENDERER": "hw",
+                                                     "TWINE_SMOOTH": 1, "TWINE_SMOOTH_FIXED": 8, "TWINE_TIMING": 1,
+                                                     "TWINE_ENDLESS_ROOM": "5:4", "TWINE_ENDLESS_NEXT": "2:4",
+                                                     "TWINE_ENDLESS_TEST_EXIT": "60,999999"}),
             # Turncoat's subway: walked from one car into the next, a door that leaves the textures to the section
             # before (flags bit 23): the run started at that car, so they are loaded whole (the seats, the windows)
             "subway_car": Run("subway_car", 3, 40, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "3:2",
@@ -668,6 +675,13 @@ def check_lend(runs):
 
 
 def check_carry(runs):
+    lr = runs["lent_reads"]
+    lent = lr.log.split("room start: level 2 ", 1)
+    reads = [float(x) for x in re.findall(r"lent reads ([0-9.]+)", lent[1])] if len(lent) > 1 else []
+    swaps = [float(x) for x in re.findall(r"lent swaps ([0-9.]+)", lent[1])] if len(lent) > 1 else []
+    result("g", "the rocket launcher lent into Courier: its swaps read nothing back (smooth, 8 drawings a tick)",
+           bool(reads) and max(reads) < 1 and not lr.crashed(),
+           "lent reads a tick %s, lent swaps %s ms" % (reads[-3:], swaps[-3:]))
     s = runs["subway_car"]
     path = os.path.join(s.dir, "shot_0600.ppm")
     img = read_ppm(path) if os.path.exists(path) else None

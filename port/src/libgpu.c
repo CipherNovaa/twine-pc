@@ -113,16 +113,32 @@ static int lent_image(const RECT *r, const u32 *p) {
     return 1;
 }
 
-/* the game writes VRAM there itself: what the lent images cover read again at the next swap. (Reading it at each
- * swap made gpu.c draw everything it keeps for later, every drawing: the swaps' own loads are kept there.) */
-static void lent_written(s32 x, s32 y, s32 w, s32 h) {
+/* the game writes VRAM there itself: what the lent images cover, kept up to date from what it writes (an image: its
+ * pixels; a fill: its colour), else read again at the next swap. (Reading it at each swap made gpu.c draw everything
+ * it keeps for later, every drawing; and a mission that writes a palette there every frame, as City of Walkways' lent
+ * rocket launcher's under Courier's, had it read at every swap: 21 ms of a tick at 165 Hz.) */
+static void lent_written_px(s32 x, s32 y, s32 w, s32 h, const u16 *src, int fill, u16 c) {
     int i;
     if (lent_in)
         return;
-    for (i = 0; i < lent_imgs; i++)
-        if (x < lent_img[i].r.x + lent_img[i].r.w && lent_img[i].r.x < x + w && y < lent_img[i].r.y + lent_img[i].r.h &&
-            lent_img[i].r.y < y + h)
+    for (i = 0; i < lent_imgs; i++) {
+        const RECT *r = &lent_img[i].r;
+        s32 x0 = x > r->x ? x : r->x, y0 = y > r->y ? y : r->y;
+        s32 x1 = x + w < r->x + r->w ? x + w : r->x + r->w, y1 = y + h < r->y + r->h ? y + h : r->y + r->h, j, k;
+        if (x0 >= x1 || y0 >= y1)
+            continue;
+        if (!lent_img[i].have || (!src && !fill)) {
             lent_img[i].have = 0;
+            continue;
+        }
+        for (j = y0; j < y1; j++)
+            for (k = x0; k < x1; k++)
+                lent_img[i].saved[(j - r->y) * r->w + (k - r->x)] = src ? src[(j - y) * w + (k - x)] : c;
+    }
+}
+
+static void lent_written(s32 x, s32 y, s32 w, s32 h) {
+    lent_written_px(x, y, w, h, NULL, 0, 0);
 }
 
 static int lent_trace(void);
@@ -169,7 +185,7 @@ static void lent_swap(int in) {
 s32 LoadImage(RECT *r, u32 *p) {
     if (lent_image(r, p))
         return 0;
-    lent_written(r->x, r->y, r->w, r->h);
+    lent_written_px(r->x, r->y, r->w, r->h, (const u16 *)p, 0, 0);
     gpu_load_image(r->x, r->y, r->w, r->h, (const u16 *)p);
     return 0;
 }
@@ -186,8 +202,9 @@ s32 MoveImage(RECT *r, s32 x, s32 y) {
 }
 
 s32 ClearImage(RECT *r, u8 red, u8 g, u8 b) {
-    lent_written(r->x, r->y, r->w, r->h);
-    gpu_fill_rect(r->x, r->y, r->w, r->h, (red >> 3) | ((g >> 3) << 5) | ((b >> 3) << 10));
+    u16 c = (red >> 3) | ((g >> 3) << 5) | ((b >> 3) << 10);
+    lent_written_px(r->x, r->y, r->w, r->h, NULL, 1, c);
+    gpu_fill_rect(r->x, r->y, r->w, r->h, c);
     return 0;
 }
 
