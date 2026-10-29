@@ -216,8 +216,8 @@ Press **F1** in the game for the full list. Everything can be rebound ([below](#
 
 Every action can be rebound, on the keyboard, mouse and gamepad:
 
-- **In the game:** Options → PORT SETTINGS → **CONTROLS**. Pick an action and press the new key or button. Right adds a second one, Left puts the row back, and the last row resets everything. Changes are saved straight away.
-- **In `twine.ini`:** a `[controls]` block lists every action with its current keys, for example `fire = Mouse Left` or `use = E, F`. Remove the `#` in front of a line to change it. Keys are named the way your keyboard labels them, and gamepad buttons by position (South, East, Right Trigger...).
+- **In the game:** Options → PORT SETTINGS → **CONTROLS**. Pick an action and press the new key or button. Right adds an additional button/key, Left resets row, last option resets to default. Changes are saved immediately.
+- **In `twine.ini`:** a `[controls]` block lists every action with its current keys, for example `fire = Mouse Left` or `use = E, F`. Remove the `#` in front of a line to change it.Gamepad buttons by are labeled by raw position (South, East, Right Trigger...).
 
 F1 in-game shows your current bindings. Prefer the PlayStation's own button layouts? Set **PAD LAYOUT** to ORIGINAL in PORT SETTINGS, and the game's Options → **CONTROLLER** page chooses the gamepad's buttons, as on the original console version.
 
