@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/banner_live.avif" alt="007: The World Is Not Enough, native PC port" width="100%">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/banner_live.avif" alt="007: The World Is Not Enough, native PC port" width="100%">
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/hero.avif" alt="Gameplay: the grenade launcher, rocket launcher, shotgun, sniper rifle, a quick-punch combo, the IAC Defender, KA-57, satchel charges, KS5 and a flash bang" width="800">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/hero.avif" alt="Gameplay: the grenade launcher, rocket launcher, shotgun, sniper rifle, a quick-punch combo, the IAC Defender, KA-57, satchel charges, KS5 and a flash bang" width="800">
 </p>
 
 **The 2000 PlayStation shooter, rebuilt to run natively on PC.** This isn't an emulator or your average decomp! The game's code was decompiled, rebuilt for the PC in the C language, and given a new "engine room": smooth motion at your monitor's refresh rate, sharp high-resolution graphics, mouse and keyboard or a modern gamepad layout, many new gameplay additions, and an entirely new Endless (high-score) Mode.
@@ -48,13 +48,13 @@
 <sup>[(Back to top)](#table-of-contents)</sup>
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/wipe.avif" alt="A wipe between the PlayStation's picture and the PC port's in Courier's bank hall" width="800">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/wipe.avif" alt="A wipe between the PlayStation's picture and the PC port's in Courier's bank hall" width="800">
   <br>
   <i>PS1 vs. port comparison.</i>
 </p>
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/zoom.jpg" alt="Close-up: the PlayStation's 512×240 dithered picture next to the port's 4× true-colour picture" width="900">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/zoom.jpg" alt="Close-up: the PlayStation's 512×240 dithered picture next to the port's 4× true-colour picture" width="900">
   <br>
   <i>The original's 512 × 240 picture with 15-bit colour, and the port at four times the resolution in true colour.</i>
 </p>
@@ -63,7 +63,7 @@
 <sup>[(Back to top)](#table-of-contents)</sup>
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/smooth.avif" alt="The same camera pan at the original 20 frames a second and with smooth motion at 60" width="720">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/smooth.avif" alt="The same camera pan at the original 20 frames a second and with smooth motion at 60" width="720">
   <br>
   <i>The game originally runs at 20 FPS. Smooth motion draws extra frames in between, so the picture moves at your display's refresh rate while keeping the original artistic vision intact.</i>
 </p>
@@ -79,7 +79,7 @@
 | **The entire game** | Every mission, the menus, briefings, movies, music and memory card saves, from the PlayStation boot animation on. Nothing is cut, and extra effort went into restoring content cut from the retail and development versions. |
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_punch_combo.avif" alt="A quick-punch combo knocking guards off their feet" width="480">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_punch_combo.avif" alt="A quick-punch combo knocking guards off their feet" width="480">
   <br>
   <i>Quick punch: attack with "unarmed" in left hand without holstering weapon, or while reloading.</i>
 </p>
@@ -88,7 +88,7 @@
 <sup>[(Back to top)](#table-of-contents)</sup>
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/endless_mosaic.jpg" alt="A grid of the 61 rooms of Endless Mode" width="100%">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/endless_mosaic.jpg" alt="A grid of the 61 rooms of Endless Mode" width="100%">
 </p>
 
 **BOND IS BACK!** with a new way to play. Pick **ENDLESS** on mission select and fight wave after wave through rooms taken from nine of the game's missions, from Courier's bank to Turncoat's subway. Each room picks its guards from that mission, sends them in through the doors, and opens an exit when you've fought for it. Your weapons, health and armour come with you, along with weapons lent from other missions. Your score goes on the game's own high-score table, saved to the memory card.
@@ -102,7 +102,7 @@
 ### Scoring and medals
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/stats_tiers.avif" alt="The end-of-run stats screen fading through a black, bronze, silver and gold medal" width="720">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/stats_tiers.avif" alt="The end-of-run stats screen fading through a black, bronze, silver and gold medal" width="720">
   <br>
   <i>The run's stats on the Mission Complete screen, from a black medal up to gold.</i>
 </p>
@@ -131,29 +131,29 @@ Each line earns a star at 21%, 41%, 61% and 81%. The stars add up to the medal: 
 
 <table>
   <tr>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_p2k.avif" alt="Wolfram P2K pistol" width="100%"></td>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_smg.avif" alt="Ingalls Type 20 submachine gun" width="100%"></td>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_ks5.avif" alt="Koffler KS5 submachine gun" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_p2k.avif" alt="Wolfram P2K pistol" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_smg.avif" alt="Ingalls Type 20 submachine gun" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_ks5.avif" alt="Koffler KS5 submachine gun" width="100%"></td>
   </tr>
   <tr>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_tmp.avif" alt="Meyer TMP" width="100%"></td>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_frinesi_auto.avif" alt="Frinesi Auto" width="100%"></td>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_ka57.avif" alt="Kazakovich KA-57 rifle" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_tmp.avif" alt="Meyer TMP" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_frinesi_auto.avif" alt="Frinesi Auto" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_ka57.avif" alt="Kazakovich KA-57 rifle" width="100%"></td>
   </tr>
   <tr>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_shotgun.avif" alt="Frinesi shotgun" width="100%"></td>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_sniper.avif" alt="AR36 sniper rifle scope" width="100%"></td>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_iac_defender.avif" alt="IAC Defender" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_shotgun.avif" alt="Frinesi shotgun" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_sniper.avif" alt="AR36 sniper rifle scope" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_iac_defender.avif" alt="IAC Defender" width="100%"></td>
   </tr>
   <tr>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_rocket.avif" alt="Rocket launcher" width="100%"></td>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_grenade_launcher.avif" alt="Grenade launcher" width="100%"></td>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_satchel.avif" alt="Satchel charges" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_rocket.avif" alt="Rocket launcher" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_grenade_launcher.avif" alt="Grenade launcher" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_satchel.avif" alt="Satchel charges" width="100%"></td>
   </tr>
   <tr>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_flash_bang.avif" alt="Flash bang" width="100%"></td>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_gas_grenade.avif" alt="Gas grenade" width="100%"></td>
-    <td width="33%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_stunner.avif" alt="Cell phone stunner" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_flash_bang.avif" alt="Flash bang" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_gas_grenade.avif" alt="Gas grenade" width="100%"></td>
+    <td width="33%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_stunner.avif" alt="Cell phone stunner" width="100%"></td>
   </tr>
 </table>
 
@@ -166,8 +166,8 @@ Each weapon works the same in every Endless room as in its home mission: fire ra
 
 <table>
   <tr>
-    <td width="50%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_quick_grenade.avif" alt="A quick grenade thrown without changing weapons" width="100%"></td>
-    <td width="50%"><img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_gas_grenade.avif" alt="A gas grenade putting guards to sleep" width="100%"></td>
+    <td width="50%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_quick_grenade.avif" alt="A quick grenade thrown without changing weapons" width="100%"></td>
+    <td width="50%"><img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_gas_grenade.avif" alt="A gas grenade putting guards to sleep" width="100%"></td>
   </tr>
 </table>
 
@@ -177,7 +177,7 @@ Each weapon works the same in every Endless room as in its home mission: fire ra
 <sup>[(Back to top)](#table-of-contents)</sup>
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/w_blackjack.avif" alt="A hand of blackjack at the casino table" width="640">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/w_blackjack.avif" alt="A hand of blackjack at the casino table" width="640">
 </p>
 
 **"Well played, Mr. Bond..."** The fan-favourite, PlayStation-exclusive casino from Russian Roulette, straight from the main menu: pick **BLACKJACK** and you're seated at the table.
@@ -186,7 +186,7 @@ Each weapon works the same in every Endless room as in its home mission: fire ra
 <sup>[(Back to top)](#table-of-contents)</sup>
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/settings.avif" alt="Scrolling the PORT SETTINGS page in the game's Options menu" width="720">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/settings.avif" alt="Scrolling the PORT SETTINGS page in the game's Options menu" width="720">
 </p>
 
 The port's options live inside the game's own **Options** menu: **PORT SETTINGS** has mouse speed, invert mouse, pad layout (modern or original), smooth motion, HD movies, vibration, enemy AI (the port's improved or the original), where the in-game message box sits (bottom or top), **CONTROLS** for remapping ([below](#remapping)) and the debug menu. Options also gets **AUTOLOAD**, the memory card slot loaded at start. Every setting is also a line in `twine.ini`, alongside the ones with no menu entry (display, renderer, scale, filter and more: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
@@ -212,7 +212,7 @@ Press **F1** in the game for the full list. Everything can be rebound ([below](#
 
 ### Remapping
 
-<img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/controls_page.avif" alt="The CONTROLS page in PORT SETTINGS: scrolling the actions and their keys" width="420" align="right">
+<img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/controls_page.avif" alt="The CONTROLS page in PORT SETTINGS: scrolling the actions and their keys" width="420" align="right">
 
 Every action can be rebound, on the keyboard, mouse and gamepad:
 
@@ -227,7 +227,7 @@ F1 in-game shows your current bindings. Prefer the PlayStation's own button layo
 <sup>[(Back to top)](#table-of-contents)</sup>
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/debug_menu.avif" alt="The developers' debug menu open over Courier's bank, then its object count page" width="720">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/debug_menu.avif" alt="The developers' debug menu open over Courier's bank, then its object count page" width="720">
 </p>
 
 The original developers' debug menu, left in the game's code, with pages restored from a development version. Open it with **F9**; **DEBUG MENU** must be enabled in PORT SETTINGS first.
@@ -267,7 +267,7 @@ No film footage is part of this project: the clips are made only from your own c
 ## Setup in 3 steps
 <sup>[(Back to top)](#table-of-contents)</sup>
 
-<img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/setup.jpg" alt="The first-run screen: disc image found and checked" width="420" align="right">
+<img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/setup.jpg" alt="The first-run screen: disc image found and checked" width="420" align="right">
 
 1. **Download** the build for your system from [Releases](../../releases/latest) and unpack it anywhere.
 2. **Start it:** `twine.exe` on Windows, `./twine` on Linux.
@@ -381,7 +381,7 @@ Bug reports are the most useful help: the [issue form](../../issues/new/choose) 
 ### The original team
 
 <p align="center">
-  <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/team.png" alt="A group photo of the Black Ops Entertainment development team, hidden on the game's disc" width="480">
+  <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/team.png" alt="A group photo of the Black Ops Entertainment development team, hidden on the game's disc" width="480">
   <br>
   <i>The Black Ops Entertainment team, from a photo hidden on the game's disc.</i>
 </p>
