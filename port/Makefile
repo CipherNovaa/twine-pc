@@ -272,7 +272,7 @@ dist: $(PB)/twine
 # The Linux download (build/dist/twine-linux and twine-linux-x86.tar.gz): this build, its SDL3 and a 32-bit runtime for
 # systems without one, built in containers, with a launcher; no game data. See tools/dist/dist_linux.sh.
 dist-linux: $(PB)/twine
-	tools/dist/dist_linux.sh $(abspath $(PB)/twine) $(abspath $(ROOT)/build/dist)
+	tools/dist/dist_linux.sh "$$(realpath $(PB)/twine)" "$$(realpath -m $(ROOT)/build/dist)" # (quoted: a path with spaces)
 
 clean:
 	rm -rf $(PB)
