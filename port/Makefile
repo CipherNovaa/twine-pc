@@ -238,7 +238,7 @@ windows:
 
 # The USB test kit for a Windows PC (port/usbkit): make -C port usbkit DEST=/run/media/.../STICK/twine
 usbkit:
-	$(MAKE) PORT_OS=windows usbkit-win DEST="$(abspath $(DEST))"
+	$(MAKE) PORT_OS=windows usbkit-win DEST="$$(realpath -m '$(DEST)')" # (the shell's: a path with spaces)
 
 # Host tool: the MDEC model on its own, decoding movie frames from the disc image (port/tools/mdectest.c)
 mdectest: $(PB)/mdectest

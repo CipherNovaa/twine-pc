@@ -256,6 +256,10 @@ static void put_all(const Header *s, int loaded) {
         memcpy(range[i].at, p, range[i].size);
     port_irq_now(now, 1);
     hold(0, &old);
+    /* what gpu.c kept for later when the state was saved (the hardware renderer's: drawn here only when read back),
+     * done now: in VRAM before anything reads it, or the hardware renderer copies it from there (else black where
+     * it hadn't been done yet; with the software renderer, never done at all) */
+    gpu_sync(0, 0, 1024, 512);
     if (gpu_hw_on) { /* the renderer's copy of VRAM, from gpu.c's */
         gpu_hw_reset();
         gpu_hw_load_image(0, 0, 1024, 512, gpu_vram);
