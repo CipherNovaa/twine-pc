@@ -566,6 +566,7 @@ static void move_now(s32 sx, s32 sy, s32 w, s32 h, s32 dx, s32 dy) {
 }
 
 static int defer_on(void);
+static void trace_area(const char *why);
 void gpu_trace_vramw(const char *what, s32 x, s32 y, s32 w, s32 h, s32 sx, s32 sy, const void *caller);
 static void keep_write(int type, s32 x, s32 y, s32 w, s32 h, s32 sx, s32 sy, u16 c, const u16 *src);
 
@@ -580,6 +581,26 @@ static void fill(const u32 *w) {
         keep_write(K_FILL, x, y, wd, ht, 0, 0, c, NULL);
     else
         fill_now(x, y, wd, ht, c);
+}
+
+/* TWINE_TRACE_VRAMW too: the drawing area, each time it's set to reach into that rectangle (drawing there paints over
+ * what's kept there, and no VRAM write says so), with what set it */
+u32 port_video_frames(void);
+static void trace_area(const char *why) {
+    static int on = -1;
+    static s32 box[4], last[4] = {-1, -1, -1, -1};
+    if (on < 0) {
+        const char *e = getenv("TWINE_TRACE_VRAMW");
+        on = e && sscanf(e, "%d,%d,%d,%d", &box[0], &box[1], &box[2], &box[3]) == 4;
+    }
+    if (!on || area_x1 > area_x2 || area_y1 > area_y2 || area_x1 >= box[0] + box[2] || box[0] > area_x2 ||
+        area_y1 >= box[1] + box[3] || box[1] > area_y2)
+        return;
+    if (last[0] == area_x1 && last[1] == area_y1 && last[2] == area_x2 && last[3] == area_y2)
+        return;
+    last[0] = area_x1, last[1] = area_y1, last[2] = area_x2, last[3] = area_y2;
+    port_log("trace: vramw: v%u drawing area %d,%d-%d,%d (offset %d,%d) by %s\n", port_video_frames(), area_x1, area_y1,
+             area_x2, area_y2, off_x, off_y, why);
 }
 
 /* TWINE_TRACE_VRAMW=x,y,w,h (research): every VRAM write (image, copy, fill) that meets that rectangle, with the
@@ -669,10 +690,12 @@ static void env(u32 w) {
     case 0xE3:
         area_x1 = w & 1023;
         area_y1 = (w >> 10) & 511;
+        trace_area("E3");
         break;
     case 0xE4:
         area_x2 = w & 1023;
         area_y2 = (w >> 10) & 511;
+        trace_area("E4");
         break;
     case 0xE5:
         off_x = sext11(w);
@@ -744,6 +767,7 @@ static void replay(int why) {
             move_now(k->u.r.sx, k->u.r.sy, k->u.r.w, k->u.r.h, k->u.r.x, k->u.r.y);
         else {
             area_x1 = k->u.p.area_x1, area_y1 = k->u.p.area_y1, area_x2 = k->u.p.area_x2, area_y2 = k->u.p.area_y2;
+            trace_area("a kept primitive replayed");
             off_x = k->u.p.off_x, off_y = k->u.p.off_y;
             texpage = k->u.p.texpage;
             tw_mask_x = k->u.p.tw_mask_x, tw_mask_y = k->u.p.tw_mask_y;
@@ -755,6 +779,7 @@ static void replay(int why) {
     replaying = 0;
     recording = rec;
     area_x1 = a1, area_y1 = b1, area_x2 = a2, area_y2 = b2, off_x = ox, off_y = oy;
+    trace_area("a kept drawing's state");
     texpage = tp, tw_mask_x = mx, tw_mask_y = my, tw_off_x = tx, tw_off_y = ty;
     mask_set = ms, mask_check = mc, dither_on = di;
     n_kept = 0;
@@ -1014,6 +1039,7 @@ void gpu_restore(void) {
     tw_mask_x = saved.tw_mask_x, tw_mask_y = saved.tw_mask_y, tw_off_x = saved.tw_off_x, tw_off_y = saved.tw_off_y;
     mask_set = saved.mask_set, mask_check = saved.mask_check, dither_on = saved.dither_on;
     gpu_display = saved.display;
+    trace_area("the extra drawing's restore");
 }
 
 /* where the frame being drawn is: the drawing area's top left */

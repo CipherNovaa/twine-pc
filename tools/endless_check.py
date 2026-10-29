@@ -611,7 +611,12 @@ def carry_runs():
     return {"carry": Run("carry", 8, 110, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "8:-1", "TWINE_ENDLESS_SEED": 5,
                                          "TWINE_ENDLESS_TEST_ARM": 1, "TWINE_ENDLESS_TEST_DRAW": "FRINESI AUTO",
                                          "TWINE_ENDLESS_TEST_DOOR": 2, "TWINE_ENDLESS_TEST_EXIT": 150,
-                                         "TWINE_ENDLESS_TEST_GOD": 1})}
+                                         "TWINE_ENDLESS_TEST_GOD": 1}),
+            # Turncoat's subway: walked from one car into the next, a door that leaves the textures to the section
+            # before (flags bit 23): the run started at that car, so they are loaded whole (the seats, the windows)
+            "subway_car": Run("subway_car", 3, 40, {"TWINE_ENDLESS": 1, "TWINE_ENDLESS_ROOM": "3:2",
+                                                     "TWINE_ENDLESS_TEST_DOOR": "4@200/walk", "TWINE_ENDLESS_TEST_GOD": 1,
+                                                     "TWINE_RENDERER": "sw", "TWINE_SHOT": "600"})}
 
 
 def iris_runs():  # (the second room's mission: the carried PS100, lent, in hand as its opening iris opens)
@@ -663,6 +668,15 @@ def check_lend(runs):
 
 
 def check_carry(runs):
+    s = runs["subway_car"]
+    path = os.path.join(s.dir, "shot_0600.ppm")
+    img = read_ppm(path) if os.path.exists(path) else None
+    win = bright(img, 0.02, 0.25, 0.2, 0.55, 30) if img else 0  # (the tunnel through the left windows; black: 2%)
+    door = s.lines(r"door: open, to load point 4 \(section 4\), flags 008")
+    car = s.lines(r"room start: level 3 section 4")
+    result("g", "the next subway car walked into: its textures there (the windows)",
+           bool(door) and bool(car) and win > 0.2 and not s.crashed(),
+           "door %s, car %s, windows %.0f%% lit" % (bool(door), bool(car), win * 100))
     r = runs["carry"]
     left = r.lines(r"carry: Bond leaves with")
     drawn = r.lines(r"weapon: .* drawn")

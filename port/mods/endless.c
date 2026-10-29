@@ -5517,9 +5517,14 @@ void endless_frame(void) {
         open = 1; /* (headless tests: the exit open) */
     if (getenv("TWINE_ENDLESS_TEST_LOCKED") && room_frames >= 100 && room_frames < 140)
         D_800D2F90 = 2; /* (headless tests: a shut door, walked into again and again) */
-    if (getenv("TWINE_ENDLESS_TEST_DOOR") && room_frames == 100 && !segment) { /* (headless tests: a door to load point N) */
-        open = 1, room_frames = SEC * 60, D_800D2F90 = 2, D_8009CFFC = 1;
+    if (getenv("TWINE_ENDLESS_TEST_DOOR") && /* (headless tests: a door to load point N; N@F: at the room's frame F) */
+        room_frames == (strchr(getenv("TWINE_ENDLESS_TEST_DOOR"), '@') ? atoi(strchr(getenv("TWINE_ENDLESS_TEST_DOOR"), '@') + 1) : 100) &&
+        !segment) { /* (N@F/walk: as Bond walks through a door between the mission's sections: no fade) */
+        open = 1, room_frames = SEC * 60, D_800D2F90 = 2, D_8009CFFC = strstr(getenv("TWINE_ENDLESS_TEST_DOOR"), "/walk") ? D_8009CFFC : 1;
         *(s16 **)(D_8009E9C4 + 8) = D_8009E9C4 + 0xC + atoi(getenv("TWINE_ENDLESS_TEST_DOOR")) * 8;
+        if (strstr(getenv("TWINE_ENDLESS_TEST_DOOR"), "/walk")) /* (and the textures left to the section before, as
+                                                                  * a door between the mission's sections has it) */
+            *(u32 *)((u8 *)D_8009E9C4 + 0x14) |= 1u << 23;
     }
     if (getenv("TWINE_ENDLESS_TEST_EXIT")) { /* (N, or N,M,...: the first room at N, the second at M, ..., the
                                               * rooms after the list's end at its last) */
@@ -5665,8 +5670,15 @@ void endless_frame(void) {
             D_8009CFFC = -1;
             *(s32 *)(D_8009E9C4 + 8) = 0;
         } else if (open && !back) { /* the room cleared */
-            ELOG("door: open, to load point %d (section %d)", point, to ? to[0] : -1);
+            ELOG("door: open, to load point %d (section %d), flags %08X", point, to ? to[0] : -1,
+                 *(u32 *)((u8 *)D_8009E9C4 + 0x14));
             if (port_endless_segment(point)) { /* the mission's next section, as the next room */
+                /* the section's textures loaded whole: the mission's own doors between its sections (Turncoat's
+                 * subway cars) have the load skip them (flags bit 23, func_80031678), the earlier sections having
+                 * put them in VRAM; a run starts at any section, and without them the next car's seats and
+                 * windows were black */
+                if (!getenv("TWINE_TEST_SEGMENT_STREAM")) /* (tests: as the mission's door has it) */
+                    *(u32 *)((u8 *)D_8009E9C4 + 0x14) &= ~(1u << 23);
                 port_endless_score(500 + 250 * wave);
                 log_weapons("as Bond leaves for the next section");
                 carry_out(); /* (the weapon in hand kept across: the same mission's) */
