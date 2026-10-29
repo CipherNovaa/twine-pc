@@ -78,7 +78,7 @@ if (-not $disc) {
                   TWINE_HEADLESS = "1"; TWINE_MOUSE = "0"; TWINE_NO_INTRO = "1"; TWINE_CARD1 = "none"; TWINE_CARD2 = "none"
                   SDL_AUDIO_DRIVER = "dummy"; SDL_AUDIODRIVER = "dummy"; TWINE_DISC = $disc.FullName; TWINE_TURBO = "1"
                   TWINE_TEST_VBLANKS = [string][math]::Round($secs * 59.94); TWINE_CRASH_DUMPS = $dir }
-        foreach ($v in $vars) { $vals[$v[0]] = $v[1] }
+        foreach ($v in $vars) { $vals[$v[0]] = if ($v[1] -eq "@cue") { [IO.Path]::ChangeExtension($disc.FullName, ".cue") } else { $v[1] } }
         foreach ($k in $vals.Keys) { [Environment]::SetEnvironmentVariable($k, $vals[$k]) }
         $t0 = Get-Date
         $p = Start-Process -FilePath $exe -WorkingDirectory $dir -NoNewWindow -PassThru `

@@ -2,6 +2,11 @@
 
 All notable changes to the PC port are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-10-29
+
+### Fixed
+- Windows: the game now starts after choosing a disc on the setup screen. It stopped with "SLUS_012.72 is not on the disc", because the `.cue` was read in place of the disc image.
+
 ## [0.1.0] - 2026-10-28
 
 ### Added

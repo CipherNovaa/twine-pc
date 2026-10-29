@@ -636,7 +636,7 @@ static void choose_disc(const char *path) {
     S.disc = d;
     snprintf(S.disc_path, sizeof(S.disc_path), "%s", path);
     port_setting_save("disc", path);
-    SDL_setenv_unsafe("TWINE_DISC", d.bin, 1);
+    setenv("TWINE_DISC", d.bin, 1); /* (the C library's: what cdrom.c's getenv reads; SDL's is Windows' own) */
     snprintf(S.note, sizeof(S.note), "Saved. Press PLAY.");
     S.note_bad = 0;
     S.focus = B_PLAY;
@@ -871,7 +871,7 @@ void port_setup(int argc, char **argv) {
     disc_check(disc, &S.disc);
     port_log("setup: disc %s: %s\n", disc ? disc : "(none)", S.disc.what);
     if (S.disc.ok)
-        SDL_setenv_unsafe("TWINE_DISC", S.disc.bin, 1);
+        setenv("TWINE_DISC", S.disc.bin, 1);
     ini_path();
     S.focus = S.disc.ok ? B_PLAY : B_DISC;
     if (port_video_headless()) {

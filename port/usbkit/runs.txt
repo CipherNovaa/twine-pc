@@ -1,9 +1,11 @@
 # The USB test kit's headless runs (port/usbkit/test.ps1 on Windows, tools/usbkit_compare.py on Linux), each like a
 # run of tools/endless_check.py: its own folders, headless, dummy sound, no cards, TWINE_TURBO=1 unless it says 0,
 # TWINE_TEST_VBLANKS = seconds * 59.94.
-# name|seconds of game time|a line its log must have (a regular expression)|"VAR=VALUE" ...
+# name|seconds of game time|a line its log must have (a regular expression)|"VAR=VALUE" ... ("@cue": the .cue next to
+# the disc image, as the setup screen saves it)
 menu_main|40|test: a shot of the main menu|"TWINE_LEVEL=0" "TWINE_TEST_NO_FILMS=1" "TWINE_TEST_SHELL_SHOTS=1" "TWINE_SMOOTH=0"
 campaign_2|30|Exec level02|"TWINE_LEVEL=2"
+from_cue|30|Exec level02|"TWINE_LEVEL=2" "TWINE_DISC=@cue"
 campaign_2_paced|10|Exec level02|"TWINE_LEVEL=2" "TWINE_TURBO=0"
 endless_hw_smooth|30|room in level 8|"TWINE_LEVEL=8" "TWINE_ENDLESS=1" "TWINE_ENDLESS_ROOM=8:4" "TWINE_ENDLESS_SEED=4" "TWINE_ENDLESS_TEST_GOD=1" "TWINE_RENDERER=hw" "TWINE_SMOOTH=1" "TWINE_SHOT=900"
 savestate|30|savestate: loaded|"TWINE_LEVEL=2" "TWINE_TEST_SAVE=200" "TWINE_TEST_LOAD=400"

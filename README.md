@@ -270,7 +270,7 @@ No film footage is part of this project: the clips are made only from your own c
 <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/setup.jpg" alt="The first-run screen: disc image found and checked" width="420" align="right">
 
 1. **Download** the build for your system from [Releases](../../releases/latest) and unpack it anywhere.
-2. **Start it:** `twine.exe` on Windows, `./twine` on Linux.
+2. **Start it:** `twine.exe` on Windows, `./twine` on Linux. (Windows may say "Windows protected your PC": click **More info**, then **Run anyway**.)
 3. **Choose your disc image** on the first-run screen, or drop the file onto the window. The port checks it's the right release, and you're in.
 
 Settings, saves and memory cards stay in the game's folder. To keep them in your user folder instead, delete the file named `portable`.
@@ -302,6 +302,12 @@ Yes. Memory card images in the usual emulator format (raw 128 KB <code>.mcd</cod
 <summary><b>Will it run on my graphics card?</b></summary>
 <br>
 Any card with a current Vulkan driver should run the high-resolution renderer: NVIDIA, AMD or Intel. If it can't start, the game falls back to drawing in software and tells you so. If you have issues with specific hardware, please submit a report and I'll do my best to help.
+</details>
+
+<details>
+<summary><b>Windows says "Windows protected your PC". Is it safe?</b></summary>
+<br>
+That's Windows SmartScreen warning about a program that isn't signed with a paid certificate, which is usual for free fan projects. Click <b>More info</b>, then <b>Run anyway</b>. The source code is all here, and each release lists its files' checksums in <code>SHA256SUMS.txt</code>.
 </details>
 
 <details>

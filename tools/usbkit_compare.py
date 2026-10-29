@@ -90,7 +90,7 @@ def main():
                     "TWINE_NO_INTRO": "1", "TWINE_CARD1": "none", "TWINE_CARD2": "none",
                     "SDL_AUDIO_DRIVER": "dummy", "SDL_AUDIODRIVER": "dummy", "TWINE_DISC": disc, "TWINE_TURBO": "1",
                     "TWINE_TEST_VBLANKS": str(int(round(secs * 59.94)))})
-        env.update(env_add)
+        env.update({k: os.path.splitext(disc)[0] + ".cue" if v == "@cue" else v for k, v in env_add.items()})
         exe = os.path.join(d, "twinechk")
         os.symlink(os.path.abspath(linux), exe)
         stuck = False
