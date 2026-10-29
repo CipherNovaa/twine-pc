@@ -33,8 +33,8 @@
 - [Port settings](#port-settings)
 - [Controls](#controls)
 - [Debug menu](#debug-menu)
-- [HD movies](#hd-movies)
-- [What you need](#what-you-need)
+- [High Definition Movie Support](#high-definition-movie-support)
+- [Requirements](#requirements)
 - [Setup in 3 steps](#setup-in-3-steps)
 - [FAQ](#faq)
 - [Under the hood](#under-the-hood)
@@ -216,8 +216,8 @@ Press **F1** in the game for the full list. Everything can be rebound ([below](#
 
 Every action can be rebound, on the keyboard, mouse and gamepad:
 
-- **In the game:** Options → PORT SETTINGS → **CONTROLS**. Pick an action and press the new key or button. Right adds an additional button/key, Left resets row, last option resets to default. Changes are saved immediately.
-- **In `twine.ini`:** a `[controls]` block lists every action with its current keys, for example `fire = Mouse Left` or `use = E, F`. Remove the `#` in front of a line to change it.Gamepad buttons by are labeled by raw position (South, East, Right Trigger...).
+- **In the game:** Options → PORT SETTINGS → **CONTROLS**. Pick an action and press the new key or button. Right adds an additional key or button, Left resets the row, and the last option resets everything to default. Changes are saved immediately.
+- **In `twine.ini`:** a `[controls]` block lists every action with its current keys, for example `fire = Mouse Left` or `use = E, F`. Remove the `#` in front of a line to change it. Gamepad buttons are labelled by their position (South, East, Right Trigger...).
 
 F1 in-game shows your current bindings. Prefer the PlayStation's own button layouts? Set **PAD LAYOUT** to ORIGINAL in PORT SETTINGS, and the game's Options → **CONTROLLER** page chooses the gamepad's buttons, as on the original console version.
 
@@ -369,9 +369,9 @@ Planned for Endless Mode:
 - **Content from the N64 version:** theoretically possible, and something I've always wanted, but it's a long shot.
 - **A room creator / level editor:** it would give much more freedom over room flow, but it's significant work. I'd love to see the community make maps one day, too.
 - **A global stats screen** for all missions and Endless Mode combined.
-- **Styled keyboard button indicators**
-- **Widescreen support**
-- **Native gyro aim support**
+- **Styled keyboard button prompts** in the game's own style.
+- **Widescreen support.**
+- **Native gyro aiming** for controllers that have it.
 
 ## Contributing
 <sup>[(Back to top)](#table-of-contents)</sup>
