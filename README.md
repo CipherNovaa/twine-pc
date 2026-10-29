@@ -371,7 +371,7 @@ Planned for Endless Mode:
 - **A global stats screen** for all missions and Endless Mode combined.
 - **Styled keyboard button prompts** in the game's own style.
 - **Widescreen support.**
-- **Native gyro aiming** for controllers that have it.
+- **Native gyro aiming** for gyro-compatible controllers.
 
 ## Contributing
 <sup>[(Back to top)](#table-of-contents)</sup>
