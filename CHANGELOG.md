@@ -4,8 +4,12 @@ All notable changes to the PC port are listed here. The format follows [Keep a C
 
 ## [0.1.1] - 2026-10-29
 
+### Changed
+- Weapon combos: a number key now takes the weapon of its group you held last, and skips weapons unchecked in the inventory (when any of the group is checked). Q (and L1) no longer counts a weapon you only passed through on the way, so pressing 1 twice to reach the IAC Defender and then Q returns to the weapon you had before.
+
 ### Fixed
 - Windows: the game now starts after choosing a disc on the setup screen. It stopped with "SLUS_012.72 is not on the disc", because the `.cue` was read in place of the disc image.
+- Endless Mode: big frame-rate drops with some weapons lent from other missions, such as the rocket launcher in Courier's rooms, at high refresh rates with smooth motion.
 
 ## [0.1.0] - 2026-10-28
 
