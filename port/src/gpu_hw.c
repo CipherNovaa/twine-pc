@@ -894,7 +894,17 @@ static int env_int(const char *name, int dflt) {
     return s && *s ? atoi(s) : dflt;
 }
 
+int port_video_headless(void);
+
+/* renderer = hw, or (the default) nothing asked with a window to show it: the software renderer when it can't start;
+ * headless runs draw in software unless they ask for hw (the tests' pictures) */
 int gpu_hw_wanted(void) {
+    const char *r = getenv("TWINE_RENDERER");
+    return r && *r ? !SDL_strcasecmp(r, "hw") : !port_video_headless();
+}
+
+/* the hardware renderer asked for by name (renderer = hw): a notice if it can't start (the default's is only logged) */
+int gpu_hw_asked(void) {
     const char *r = getenv("TWINE_RENDERER");
     return r && !SDL_strcasecmp(r, "hw");
 }
@@ -1037,15 +1047,24 @@ static int create_pipelines(void) {
 }
 
 /* The device and everything the renderer draws with. SDL's video subsystem must be up (video.c). */
+int port_video_display_height(void); /* (video.c) */
+
 int gpu_hw_init(void) {
     SDL_GPUSamplerCreateInfo si;
     SDL_GPUBufferCreateInfo bi;
     SDL_GPUTransferBufferCreateInfo ti;
     SDL_PropertiesID props;
-    scale = env_int("TWINE_SCALE", 1);
+    const char *sv = getenv("TWINE_SCALE");
+    int lines = port_video_display_height(), asked;
+    /* scale = auto (the default): the least whose picture (the game's 240 lines times it) covers the display's
+     * height, 8 at most; 1 without a window (headless) */
+    if (!sv || !*sv || !SDL_strcasecmp(sv, "auto"))
+        scale = lines > 0 ? (lines + 239) / 240 : 1;
+    else
+        scale = atoi(sv);
     scale = scale < 1 ? 1 : scale > 8 ? 8 : scale;
+    asked = scale;
     truecolor = env_int("TWINE_TRUECOLOR", scale > 1) != 0;
-    exact = scale == 1 && !truecolor;
     stats_on = env_int("TWINE_HW_STATS", 0);
     compare_on = env_int("TWINE_HW_COMPARE", 0);
     log_on = env_int("TWINE_HW_LOG", 0);
@@ -1058,10 +1077,25 @@ int gpu_hw_init(void) {
     target_format = truecolor ? SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM : SDL_GPU_TEXTUREFORMAT_R16G16B16A16_UNORM;
     if (!create_pipelines())
         goto fail;
-    target = texture(target_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER, 1024 * scale,
-                     512 * scale);
-    depth = texture(SDL_GPU_TEXTUREFORMAT_D16_UNORM, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET, 1024 * scale,
-                    512 * scale);
+    /* (a card that can't make the picture that big (8x: 8192 pixels wide): a scale less, not the software renderer) */
+    for (;;) {
+        target = texture(target_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER,
+                         1024 * scale, 512 * scale);
+        depth = texture(SDL_GPU_TEXTUREFORMAT_D16_UNORM, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET, 1024 * scale,
+                        512 * scale);
+        if ((target && depth) || scale == 1)
+            break;
+        if (target)
+            SDL_ReleaseGPUTexture(dev, target);
+        if (depth)
+            SDL_ReleaseGPUTexture(dev, depth);
+        port_log("gpu_hw: no %dx%d picture on this card (%s); scale %d\n", 1024 * scale, 512 * scale, SDL_GetError(),
+                 scale - 1);
+        scale--;
+    }
+    exact = scale == 1 && !truecolor;
+    port_log("gpu_hw: scale %d (%s%s, display %d lines)\n", scale, sv && *sv && SDL_strcasecmp(sv, "auto") ? "asked" : "auto",
+             scale < asked ? ", less than asked" : "", lines);
     vram = texture(SDL_GPU_TEXTUREFORMAT_R16_UINT, SDL_GPU_TEXTUREUSAGE_SAMPLER, 1024, 512);
     if (!target || !depth || !vram)
         goto fail;

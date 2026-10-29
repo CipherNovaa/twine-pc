@@ -5,6 +5,7 @@ All notable changes to the PC port are listed here. The format follows [Keep a C
 ## [0.1.1] - 2026-10-29
 
 ### Changed
+- The graphics card now draws the game by default (the hardware renderer, falling back to software if it can't start), at a resolution to match your display: `scale = auto`, 6x on a 1440p screen, 5x on 1080p, 8x on 4K. Before, a new install drew in software at the PlayStation's own resolution.
 - Weapon combos: a number key now takes the weapon of its group you held last, and skips weapons unchecked in the inventory (when any of the group is checked). Q (and L1) no longer counts a weapon you only passed through on the way, so pressing 1 twice to reach the IAC Defender and then Q returns to the weapon you had before.
 
 ### Fixed

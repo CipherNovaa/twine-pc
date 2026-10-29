@@ -12,7 +12,8 @@
  * TWINE_RENDERER=hw draws with the PC's GPU (gpu_hw.c; Vulkan, through SDL's GPU renderer, which then shows
  * everything here too) at TWINE_SCALE times VRAM's resolution, and shows that picture instead of VRAM's (but for
  * 24-bit movie frames, which come from VRAM as before); a picture larger than the window is averaged down to it
- * (supersampling) before the filter scales it the rest of the way. The default is TWINE_RENDERER=sw. With it,
+ * (supersampling) before the filter scales it the rest of the way. hw is the default with a window (sw if it can't
+ * start; TWINE_RENDERER=sw asks for the software renderer), and TWINE_SCALE=auto: the display's height. With sw,
  * TWINE_PRESENT=vsync|mailbox|immediate picks how frames reach the display (port_video_present_mode).
  * TWINE_HEADLESS=1 runs without a window; TWINE_SHOT=<frame>[,<frame>...] (or <first>-<last>) dumps frames as PPM (with the hardware
  * renderer its picture, at its full resolution, and also screen_NNNN.ppm: what a 1280x960 window would show,
@@ -503,6 +504,13 @@ static void set_fullscreen(int on) {
         SDL_ShowCursor();
 }
 
+/* the height in pixels of the display the window is on (0: no window): gpu_hw.c's scale = auto */
+int port_video_display_height(void) {
+    SDL_DisplayID d = window ? SDL_GetDisplayForWindow(window) : 0;
+    const SDL_DisplayMode *m = d ? SDL_GetDesktopDisplayMode(d) : NULL;
+    return m ? (int)(m->h * (m->pixel_density > 0 ? m->pixel_density : 1) + 0.5f) : 0;
+}
+
 /* TWINE_RENDERER=hw without a window: the GPU device on SDL's offscreen video driver (and Ctrl+C still ends
  * the program: nothing here reads SDL's quit event) */
 static void headless_hw(void) {
@@ -573,7 +581,9 @@ void port_video_init(void) {
         port_log("video: no GPU renderer for the hardware renderer (%s); drawing in software\n", SDL_GetError());
         gpu_hw_on = 0;
     }
-    if (gpu_hw_wanted() && !gpu_hw_on) /* (the setup screen shows it before the game: setup.c) */
+    if (gpu_hw_wanted() && !gpu_hw_on && !gpu_hw_asked()) /* (the default: hw if it starts, else quietly sw) */
+        port_log("video: the hardware renderer couldn't start (%s); drawing in software\n", SDL_GetError());
+    else if (gpu_hw_wanted() && !gpu_hw_on) /* (the setup screen shows it before the game: setup.c) */
         port_notice("renderer", "The hardware renderer (renderer = hw) couldn't start: no usable Vulkan driver "
                                 "for this 32-bit program. The game draws with the software renderer instead. (%s)",
                     SDL_GetError());

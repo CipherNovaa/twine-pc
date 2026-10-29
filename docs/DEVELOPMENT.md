@@ -44,8 +44,8 @@ Running needs your disc image (`.bin` with raw 2352-byte sectors) and, for the b
 | `mouse_sens`, `mouse_invert = 1` | mouse look speed (default 1), inverted up/down |
 | `mouse = 0` | leave the mouse alone (no mouse look; for playing with a gamepad) |
 | `filter` | how the picture is scaled: `sharp` (default: even pixels, no blur), `nearest`, `linear` |
-| `renderer = hw` | draw with the graphics card (Vulkan) instead of in software (`sw`, the default for now): the PlayStation's drawing is done again by the card, at `scale` times its resolution, and shown instead (movies in 24-bit colour still come from the software side) |
-| `scale` | with `renderer = hw`: 1-8 times the PlayStation's resolution (default 1). A picture larger than the window is averaged down to it (supersampling) |
+| `renderer = hw` | draw with the graphics card (Vulkan) (the default; `renderer = sw` draws in software, as the game also does when the card can't start): the PlayStation's drawing is done again by the card, at `scale` times its resolution, and shown instead (movies in 24-bit colour still come from the software side) |
+| `scale` | with the hardware renderer: `auto` (the default: enough to cover the display's height, 6 on a 1440p screen, at most 8), or 1-8 times the PlayStation's resolution. A picture larger than the window is averaged down to it (supersampling) |
 | `truecolor` | with `renderer = hw`: `1` draws without the PlayStation's 15-bit colour and dithering (the default above scale 1), `0` with them (the default at scale 1, where the picture is then the software renderer's pixel for pixel) |
 | `present` | with `renderer = hw`: how frames reach the display: `vsync` (each waits for the display's refresh), `mailbox` (the newest frame waiting replaces older ones; presenting doesn't wait) or `immediate` (at once, tearing). Unset, `vsync` decides |
 | `rumble = 0` | no gamepad rumble (it follows the game's vibration option otherwise) |

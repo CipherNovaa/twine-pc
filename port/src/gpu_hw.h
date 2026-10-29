@@ -45,7 +45,8 @@ void gpu_hw_move_image(s32 sx, s32 sy, s32 w, s32 h, s32 dx, s32 dy);
 void gpu_hw_reset(void);
 
 /* video.c */
-int gpu_hw_wanted(void);       /* TWINE_RENDERER=hw */
+int gpu_hw_wanted(void);       /* TWINE_RENDERER=hw, or nothing asked with a window */
+int gpu_hw_asked(void);        /* TWINE_RENDERER=hw */
 int gpu_hw_init(void);         /* 1 when the GPU is ready (gpu_hw_on is then 1) */
 void *gpu_hw_device(void);     /* its SDL_GPUDevice */
 int gpu_hw_scale(void);
