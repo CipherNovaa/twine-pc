@@ -1,8 +1,8 @@
 #!/bin/bash
 # release.sh VERSION: the two downloads of a release in build/release/
 #
-#   twine-VERSION-windows-x86.zip   build/dist-win/twine (make -C port windows), portable, with README.txt
-#   twine-VERSION-linux-x86.tar.gz  build/dist/twine-linux (make -C port dist-linux)
+#   twine-pc-vVERSION-windows-x86.zip   build/dist-win/twine (make -C port windows), portable, with README.txt
+#   twine-pc-vVERSION-linux-x86.tar.gz  build/dist/twine-linux (make -C port dist-linux)
 #
 # Each gets the project's LICENSE, NOTICE.md and CHANGELOG.md, and tools/hdmovies.py. Nothing of the game's data, a
 # BIOS, a disc image or film clips goes in: the script stops if a file of those kinds is in either folder.
@@ -42,13 +42,13 @@ printf 'This file keeps the game portable: its settings, saves, cards and logs s
     > "$W/portable"
 add_docs "$W" crlf
 check "$W"
-(cd "$OUT" && python3 -m zipfile -c "twine-$VERSION-windows-x86.zip" twine)
+(cd "$OUT" && python3 -m zipfile -c "twine-pc-v$VERSION-windows-x86.zip" twine)
 
 L=$OUT/twine-linux
 cp -r "$ROOT/build/dist/twine-linux" "$L"
 add_docs "$L" lf
 check "$L"
-tar -C "$OUT" --owner=0 --group=0 --numeric-owner -czf "$OUT/twine-$VERSION-linux-x86.tar.gz" twine-linux
+tar -C "$OUT" --owner=0 --group=0 --numeric-owner -czf "$OUT/twine-pc-v$VERSION-linux-x86.tar.gz" twine-linux
 
-(cd "$OUT" && sha256sum "twine-$VERSION-windows-x86.zip" "twine-$VERSION-linux-x86.tar.gz" > SHA256SUMS.txt)
+(cd "$OUT" && sha256sum "twine-pc-v$VERSION-windows-x86.zip" "twine-pc-v$VERSION-linux-x86.tar.gz" > SHA256SUMS.txt)
 say "$(cd "$OUT" && ls -l --block-size=M ./*.zip ./*.tar.gz | awk '{print $5, $NF}' | tr '\n' ' ')"
