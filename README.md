@@ -19,7 +19,7 @@
 <p align="center">
   <img src="https://github.com/CipherNovaa/TWINE-PC/raw/media/docs/media/hero.avif" alt="Gameplay: the grenade launcher, rocket launcher, shotgun, sniper rifle, a quick-punch combo, the IAC Defender, KA-57, satchel charges, KS5 and a flash bang" width="800">
   <br>
-  <i>Endless Mode.</i>
+  <i>Gameplay.</i>
 </p>
 
 **The 2000 PlayStation shooter, rebuilt to run natively on PC.** This isn't an emulator or your average decomp! The game's code was decompiled, rebuilt for the PC in the C language, and given a new "engine room": smooth motion at your monitor's refresh rate, sharp high-resolution graphics, mouse and keyboard or a modern gamepad layout, many new gameplay additions, and an entirely new Endless (high-score) Mode.
