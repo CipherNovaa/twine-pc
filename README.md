@@ -91,7 +91,7 @@
   <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/endless_mosaic.jpg" alt="A grid of the 61 rooms of Endless Mode" width="100%">
 </p>
 
-**BOND IS BACK!** with a new way to play. Pick **ENDLESS** on mission select and fight wave after wave through rooms taken from nine of the game's missions, from Courier's bank to Turncoat's subway. Each room picks its guards from that mission, sends them in through the doors, and opens an exit when you've fought for it. Your weapons, health and armour come with you, along with weapons lent from other missions. Your score goes on the game's own high-score table, saved to the memory card.
+**BOND IS BACK!** with a new way to play. Pick **ENDLESS** on mission select and fight wave after wave through rooms taken from nine of the game's missions, from Courier's bank to Turncoat's subway. Each room picks its guards from that mission, sends them in through the doors, and opens an exit after you've fought for the escape. Your weapons, health and armour come with you, along with weapons lent from other missions. Your score goes on the game's own high-score table, saved to the memory card.
 
 - **61 rooms**, hand-picked by playing every section of every mission. Some flow into each other: King's Ransom's streets and the Turncoat subway's cars.
 - **AI/Room Director** paces the waves, sends guards in by doorways you can't see, and lets the room's own guards hunt you when it goes quiet.
