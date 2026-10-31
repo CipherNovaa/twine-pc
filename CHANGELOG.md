@@ -2,7 +2,7 @@
 
 All notable changes to the PC port are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.3] - 2026-10-31
 
 ### Added
 - SKIP INTRO on the Options screen (`skip_intro = 1` in `twine.ini`): starts at the title screen, without the console's boot animation, the port's title card, the legal screen, the logo films or the intro film. The MOVIES menu still plays them. Off by default.
