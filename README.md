@@ -171,7 +171,7 @@ Each weapon works the same in every Endless room as in its home mission: fire ra
   </tr>
 </table>
 
-**Quick grenade:** a frag grenade on its own button (G, or R1 on a gamepad), thrown without holstering your weapon, with a frag counter on the HUD. An optional **infinite grenades** setting is available in PORT SETTINGS.
+**Quick grenade:** (G, or R1 on a gamepad), thrown without holstering your weapon, with a frag counter on the HUD. An optional **infinite grenades** setting is available in PORT SETTINGS.
 
 ## Blackjack mode
 <sup>[(Back to top)](#table-of-contents)</sup>
@@ -189,7 +189,7 @@ Each weapon works the same in every Endless room as in its home mission: fire ra
   <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/settings.avif" alt="Scrolling the PORT SETTINGS page in the game's Options menu" width="720">
 </p>
 
-The port's options live inside the game's own **Options** menu: **PORT SETTINGS** has mouse speed, invert mouse, pad layout (modern or original), smooth motion, HD movies, vibration, enemy AI (the port's improved or the original), where the in-game message box sits (bottom or top), **CONTROLS** for remapping ([below](#remapping)) and the debug menu. Options also gets **AUTOLOAD**, the memory card slot loaded at start. Every setting is also a line in `twine.ini`, alongside the ones with no menu entry (display, renderer, scale, filter and more: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
+The port's options live inside the game's **Options** menu: **PORT SETTINGS** has mouse speed, invert mouse, pad layout (modern or original), smooth motion, HD movies, vibration, enemy AI (the port's improved or the original), where the in-game message box sits (bottom or top), **CONTROLS** for remapping ([below](#remapping)) and the debug menu. Options also gets **AUTOLOAD**, the memory card slot loaded at start. Every setting is also a line in `twine.ini`, alongside the ones with no menu entry (display, renderer, scale, filter and more: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
 
 ## Controls
 <sup>[(Back to top)](#table-of-contents)</sup>
@@ -354,7 +354,6 @@ Building, the decompilation's progress, modding (C mods, data mods, the AI scrip
 
 - **Messages at the top** (PORT SETTINGS → MESSAGES) is experimental: some missions' own on-screen pieces may sit close to it.
 - **HD movies** depend on your copy of the film: a different cut can make a clip start or end in the wrong place.
-- **Windows** is tested in a virtual machine and under Wine, but not yet widely on real hardware. Reports from Windows machines are very welcome.
 - **8 MB mode:** in one Flashpoint room a guard can occasionally walk off the floor.
 
 Found something else? Please [open an issue](../../issues/new/choose) with your `port.log`.
@@ -387,7 +386,7 @@ Bug reports are the most useful help: the [issue form](../../issues/new/choose) 
 ## Acknowledgements
 <sup>[(Back to top)](#table-of-contents)</sup>
 
-### The original team
+### The Original team
 
 <p align="center">
   <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/team.png" alt="A group photo of the Black Ops Entertainment development team, hidden on the game's disc" width="480">
