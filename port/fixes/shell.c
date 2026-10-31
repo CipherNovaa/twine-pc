@@ -1,7 +1,7 @@
 /* The front end (SHELL.EXE) on the PC: what the native build changes in its code (port/mods.py builds this into
  * the shell's module). Names are the shell's own.
  *
- * MOD_REPLACES_NATIVE: func_80046DC4 func_80033018 func_8006F30C func_8006F0B4 func_80042450 func_80042B94 func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8 func_8003EA00 func_800385C4 func_8004E438 func_8004DB98
+ * MOD_REPLACES_NATIVE: func_80038458 func_80046DC4 func_80033018 func_8006F30C func_8006F0B4 func_80042450 func_80042B94 func_8006CDA8 func_8002ABF0 func_80026998 func_8002A400 func_80029B1C func_800293C0 func_8003277C func_8003A7A8 func_80051768 func_80028644 func_8005133C func_8003C14C func_80033818 func_80051824 func_800519D8 func_800439E0 func_800443D8 func_8003EA00 func_800385C4 func_8004E438 func_8004DB98
  */
 #include <stdlib.h>
 #include <string.h>
@@ -35,8 +35,12 @@ u32 func_8006CDA8(u32 **addr, u32 **header) {
  * func_8002ABF0 is the front end's frame (drawing, then waiting for the vblank's buffer swap). */
 static void shell_keys(void);
 
+static int in_legal; /* (the legal screen being skipped: its frames aren't shown) */
+
 void func_8002ABF0(void) {
     s32 i;
+    if (in_legal)
+        return;
     shell_keys();
     if (port_dev_cheats)
         for (i = 0; i < 4; i++)
@@ -54,9 +58,27 @@ int port_hd_movie(const char *name);
  * instead when the user has a clip of it (hdmovie.c). Not as endless mode starts: its rooms are no mission's. */
 extern int port_endless;
 
+extern int port_title_seen; /* (main.c: it outlives the front end's going and coming back) */
+static int skip_intro(void) { /* (the OPTIONS screen's SKIP INTRO: the logos before the title screen) */
+    const char *v = getenv("TWINE_SKIP_INTRO");
+    return v && atoi(v);
+}
+
+/* The legal screen, its 5 seconds not waited for */
+void func_80038458_orig(void);
+void func_80038458(void) {
+    in_legal = skip_intro();
+    func_80038458_orig();
+    in_legal = 0;
+}
+
 void func_80026998(s32 movie) {
     if (port_endless || getenv("TWINE_TEST_NO_FILMS")) /* (endless mode: no mission's film before its rooms) */
         return;
+    if (skip_intro() && !port_title_seen) { /* (the logos and the intro film; the MOVIES menu's are after the title) */
+        port_log("shell: skip intro: %s not played\n", D_80070E4C + (s16)movie * 16);
+        return;
+    }
     if (!port_hd_movie(D_80070E4C + (s16)movie * 16))
         func_80026998_orig(movie);
 }
@@ -261,6 +283,7 @@ s32 func_80042B94(void) {
 
 /* The title screen; after it, the main menu */
 void func_8002A400(void) {
+    port_title_seen = 1;
     if (!getenv("TWINE_TEST_NO_FILMS")) /* (tests: no title screen to press START on either) */
         func_8002A400_orig();
     autoload();
@@ -418,6 +441,11 @@ static char *autoload_name(void) {
     return names[v < 0 ? 2 : v];
 }
 
+/* SKIP INTRO on the OPTIONS screen, under AUTOLOAD: the same (off, the default: the game starts as it always has) */
+static char *skip_intro_name(void) {
+    return skip_intro() ? "SKIP INTRO ON" : "SKIP INTRO OFF";
+}
+
 /* The CONTROLS page (on_page 2), from PORT SETTINGS' controls line: a line for each of the keyboard's and the
  * gamepad's actions (port/src/controls.c), its keys or buttons as the value, and RESET ALL (to defaults) last, laid out as
  * the page is; CTL_ROWS of them at a time, scrolled as the cursor goes past them. Cross on a line waits for the next
@@ -485,7 +513,7 @@ static void ctl_row(int line, char *label, char *value) {
 
 static void make_items(int page, int at) {
     static char *const own[] = {(char *)0x8008E0FCu, (char *)0x8008E108u, (char *)0x8008E114u};
-    int i, n = page ? SETTINGS : 5;
+    int i, n = page ? SETTINGS : 6;
     ITEMS = 0;
     NEXT_GLYPH = FIRST_GLYPH;
     on_page = page;
@@ -523,8 +551,8 @@ static void make_items(int page, int at) {
         n *= 2;
     } else
         for (i = 0; i < n; i++) {
-            strcpy(item_text[i], i < 3 ? own[i] : i == 3 ? "PORT SETTINGS" : autoload_name());
-            func_8005133C(item_text[i], ITEM_X, 0x46 + i * 0x1C);
+            strcpy(item_text[i], i < 3 ? own[i] : i == 3 ? "PORT SETTINGS" : i == 4 ? autoload_name() : skip_intro_name());
+            func_8005133C(item_text[i], ITEM_X, 0x46 + i * 0x17);
         }
     colour_items(n, at);
     CURSOR_END = n;
@@ -534,12 +562,7 @@ static void make_items(int page, int at) {
 /* The OPTIONS screen's items: PORT SETTINGS after the others */
 void func_80029B1C(void) {
     func_80029B1C_orig();
-    strcpy(item_text[3], "PORT SETTINGS");
-    func_8005133C(item_text[3], ITEM_X, 0x9A);
-    func_80051768(3, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
-    strcpy(item_text[4], autoload_name());
-    func_8005133C(item_text[4], ITEM_X, 0x9A + 0x1C);
-    func_80051768(4, *(s16 *)0x80098C12u, *(s16 *)0x80098C14u);
+    make_items(0, CURSOR); /* (closer together than the game's three: six fit its panel) */
 }
 
 /* BLACKJACK on the main menu, after MOVIES: the casino mission (folder 11, mission 3) started at its blackjack
@@ -722,6 +745,11 @@ s32 func_8003277C(void) {
             v = ((v < 0 ? 2 : v) + ((now & 0x8000) & ~was ? 2 : 1)) % 3;
             port_setting_save("autoload", values[v]);
             make_items(0, 4);
+            return r == 2 ? 1 : r;
+        }
+        if (CURSOR == 5 && (r == 2 || ((now & 0xA000) & ~was))) {
+            port_setting_save("skip_intro", skip_intro() ? "0" : "1");
+            make_items(0, 5);
             return r == 2 ? 1 : r;
         }
         return r;

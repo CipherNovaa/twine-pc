@@ -28,6 +28,7 @@
 #include "intro.h"
 
 void port_setting_save(const char *key, const char *value); /* main.c */
+void port_path_save(const char *key, const char *path);     /* main.c */
 void *port_video_window(void);                              /* video.c */
 
 #define RETAIL_SERIAL "SLUS_012.72"
@@ -635,7 +636,7 @@ static void choose_disc(const char *path) {
     }
     S.disc = d;
     snprintf(S.disc_path, sizeof(S.disc_path), "%s", path);
-    port_setting_save("disc", path);
+    port_path_save("disc", path);
     setenv("TWINE_DISC", d.bin, 1); /* (the C library's: what cdrom.c's getenv reads; SDL's is Windows' own) */
     snprintf(S.note, sizeof(S.note), "Saved. Press PLAY.");
     S.note_bad = 0;
@@ -650,7 +651,7 @@ static void choose_bios(const char *path) {
         port_log("setup: %s: not a PS1 BIOS\n", path);
         return;
     }
-    port_setting_save("bios", path);
+    port_path_save("bios", path);
     look_at_bios();
     snprintf(S.bios_note, sizeof(S.bios_note), "%s", rank == 3 ? "Saved." : "Saved (not the American one: fine).");
 }
@@ -874,6 +875,8 @@ void port_setup(int argc, char **argv) {
         setenv("TWINE_DISC", S.disc.bin, 1);
     ini_path();
     S.focus = S.disc.ok ? B_PLAY : B_DISC;
+    if (getenv("TWINE_TEST_CHOOSE_DISC"))
+        choose_disc(getenv("TWINE_TEST_CHOOSE_DISC")); /* (tests: as the chooser would) */
     if (port_video_headless()) {
         if (shot_path && getenv("TWINE_SETUP_SHOT_PAGE") && !strcmp(getenv("TWINE_SETUP_SHOT_PAGE"), "notices")) {
             check_folder("XDG_CONFIG_HOME", ".config", "settings");

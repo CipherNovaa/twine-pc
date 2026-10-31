@@ -2,6 +2,14 @@
 
 All notable changes to the PC port are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- SKIP INTRO on the Options screen (`skip_intro = 1` in `twine.ini`): starts at the title screen, without the console's boot animation, the port's title card, the legal screen, the logo films or the intro film. The MOVIES menu still plays them. Off by default.
+
+### Changed
+- Portable installs: `disc` and `bios` in `twine.ini` can be relative to the game's folder, and a disc or BIOS chosen inside that folder is saved that way, so the folder can be moved.
+
 ## [0.1.2] - 2026-10-31
 
 ### Fixed

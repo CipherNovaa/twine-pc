@@ -98,6 +98,7 @@ import math
 import os
 import re
 import shutil
+import tempfile
 import subprocess
 import sys
 import time
@@ -465,6 +466,17 @@ def menu_runs():
                                                           "TWINE_HD_MOVIES": "/nonexistent",
                                                           "TWINE_TEST_PAD": pad[:pad.index("620:")] + "590:40,593:0,620:4000,623:0"},
                                    card=card)
+        # (SKIP INTRO: from start-up to the title screen with none of the logos, Enter on it to the main menu)
+        runs["menu_skip_intro"] = Run("menu_skip_intro", 0, 15, {"TWINE_SKIP_INTRO": 1, "TWINE_SMOOTH": 0,
+                                                                "TWINE_TEST_KEYS": "300:Return"}, card=card)
+        # (a portable folder: a relative disc found in the game's folder, and one chosen inside it saved relative)
+        folder = tempfile.mkdtemp(prefix="twine_portable_")
+        os.makedirs(os.path.join(folder, "_iso"))
+        os.symlink(DISC, os.path.join(folder, "_iso", "game.bin"))
+        open(os.path.join(folder, "portable"), "w").close()
+        runs["menu_rel_disc"] = Run("menu_rel_disc", 2, 10, {"TWINE_HOME": folder, "TWINE_DISC": "_iso/game.bin"})
+        runs["menu_rel_save"] = Run("menu_rel_save", 2, 10, {"TWINE_HOME": folder, "TWINE_TEST_CHOOSE_DISC":
+                                                             os.path.join(folder, "_iso", "game.bin")})
         runs["menu_msgs_page"] = Run("menu_msgs_page", 0, 30, {"TWINE_TEST_NO_FILMS": 1, "TWINE_SMOOTH": 0,
                                                               "TWINE_HD": 0, "TWINE_TEST_PAD": pad[:pad.index("620:")] +
                                                               "590:40,593:0,620:4000,623:0,700:10,703:0,730:10,733:0,"
@@ -499,6 +511,18 @@ def check_messages(runs):
         r = runs["menu_msgs_page"]
         ini = open(os.path.join(r.dir, "conf/twine/twine.ini")).read() if os.path.exists(
             os.path.join(r.dir, "conf/twine/twine.ini")) else ""
+        if "menu_skip_intro" in runs:
+            k = runs["menu_skip_intro"]
+            result("e", "SKIP INTRO: the logos and intro film not played, the title screen and main menu reached",
+                   "skip intro: INTRO not played" in k.log and "hd movie: EAGAMES" not in k.log and
+                   "hd movie: INTRO" not in k.log and "START.TIM" in k.log and "shell: main menu" in k.log and
+                   not k.crashed(), "main menu" if "shell: main menu" in k.log else "no main menu")
+            d, v = runs["menu_rel_disc"], runs["menu_rel_save"]
+            result("e", "portable: a relative disc is found in the game's folder", "Exec level02" in d.log and
+                   not d.crashed(), "started" if "Exec level02" in d.log else "not started")
+            saved = open(os.path.join(v.dir, "conf/twine/twine.ini")).read()
+            result("e", "portable: a disc chosen inside the game's folder is saved relative to it",
+                   "disc = _iso/game.bin" in saved and "Exec level02" in v.log and not v.crashed(), saved[:60])
         if "menu_hd_none" in runs:
             h = runs["menu_hd_none"]
             result("e", "port settings with no HD movies: its HD MOVIES line NONE (not to be turned on)",
@@ -536,7 +560,8 @@ def check_menus(runs):
         result("e", "main menu items", b > 0.04, "items area %.0f%% bright" % (b * 100))
     check_messages(runs)
     for k, run in runs.items():
-        if k in ("menu_main", "menu_cheats", "menu_hd_none") or k.startswith("menu_msgs"):
+        if k in ("menu_main", "menu_cheats", "menu_hd_none", "menu_skip_intro", "menu_rel_disc", "menu_rel_save") or \
+                k.startswith("menu_msgs"):
             continue
         img = run.shot("mission select")
         if img is None:

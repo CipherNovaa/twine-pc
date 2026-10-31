@@ -13,7 +13,8 @@ A PS1 BIOS is optional: it only plays the console's start-up animation.
 
 This folder is portable: the file named "portable" keeps the settings, saves, memory cards
 and log in the twine folder next to twine.exe. Delete that file to keep them in
-%APPDATA%\twine instead.
+%APPDATA%\twine instead. A disc image kept inside this folder is remembered by its place
+in the folder, so the whole folder can be moved.
 
 Settings:  twine\twine.ini   (twine.exe --setup shows the disc screen again)
 Log:       twine\port.log

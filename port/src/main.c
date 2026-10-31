@@ -836,7 +836,62 @@ static void game_folder_files(void) {
         setenv("TWINE_DISC", best, 0);
 }
 
+/* The game's folder (the launcher's TWINE_HOME, else the program's), with no / at its end; 0 when it can't be told */
+static int game_folder(char *dir, size_t len) {
+    const char *home = getenv("TWINE_HOME"), *base = home ? home : SDL_GetBasePath();
+    size_t n;
+    if (!base)
+        return 0;
+    snprintf(dir, len, "%s", base);
+    for (n = strlen(dir); n > 1 && (dir[n - 1] == '/' || dir[n - 1] == '\\'); n--)
+        dir[n - 1] = 0;
+    return 1;
+}
+
+static int path_absolute(const char *p) {
+    return p[0] == '/' || p[0] == '\\' || (isalpha((unsigned char)p[0]) && p[1] == ':');
+}
+
+/* twine.ini's disc and bios may be relative, to the game's folder (on Windows the game works in its twine folder,
+ * main.c's cwd is no guide): what's there is made absolute for all that reads them; else they're left as they are */
+static void game_folder_paths(void) {
+    static const char *const names[] = {"TWINE_DISC", "TWINE_BIOS"};
+    char dir[1024], path[1300];
+    int i;
+    if (!game_folder(dir, sizeof(dir)))
+        return;
+    for (i = 0; i < 2; i++) {
+        const char *v = getenv(names[i]);
+        if (!v || !*v || path_absolute(v))
+            continue;
+        snprintf(path, sizeof(path), "%s/%s", dir, v);
+        if (access(path, F_OK) == 0)
+            setenv(names[i], path, 1);
+    }
+}
+
+/* A path chosen, as twine.ini keeps it: relative when the game is portable (the file named portable in its folder) and
+ * the path is inside that folder, so the folder can be moved; else as it is. */
+void port_path_save(const char *key, const char *path) {
+    char dir[1024], marker[1100];
+    size_t i, n;
+    const char *keep = path;
+    if (game_folder(dir, sizeof(dir)) && (snprintf(marker, sizeof(marker), "%s/portable", dir), access(marker, F_OK) == 0)) {
+        n = strlen(dir);
+        for (i = 0; i < n && path[i]; i++) {
+            char a = (char)tolower((unsigned char)dir[i]), b = (char)tolower((unsigned char)path[i]);
+            if ((a == '\\' ? '/' : a) != (b == '\\' ? '/' : b))
+                break;
+        }
+        if (i == n && (path[n] == '/' || path[n] == '\\') && path[n + 1])
+            keep = path + n + 1;
+    }
+    port_setting_save(key, keep);
+    setenv(!strcmp(key, "disc") ? "TWINE_DISC" : "TWINE_BIOS", path, 1); /* (what's read from now on: the whole path) */
+}
+
 int port_dev_cheats;
+int port_title_seen;
 int port_blackjack; /* the front end's BLACKJACK: the casino mission at its table (fixes/shell.c, fixes/level11.c) */
 
 /* The watchdog: no frame shown for six seconds (the game stuck in a loop, or waiting on something that never
@@ -965,6 +1020,7 @@ static int port_main(int argc, char **argv) {
         return 0;
     }
     load_settings();
+    game_folder_paths();
     game_folder_files();
     port_dev_cheats = getenv("TWINE_DEVCHEATS") && atoi(getenv("TWINE_DEVCHEATS"));
     port_blackjack = getenv("TWINE_BLACKJACK") && atoi(getenv("TWINE_BLACKJACK")); /* (with level = 11, for tests) */

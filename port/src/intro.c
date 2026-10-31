@@ -3,7 +3,7 @@
  * what main() has at startup (PS1 RAM and scratchpad zero, GPU, SPU, GTE and the I/O ports at power-on),
  * so the game runs the same with or without the intro.
  *
- * TWINE_NO_INTRO=1 skips both; headless runs (TWINE_HEADLESS) skip both unless TWINE_INTRO=1.
+ * TWINE_NO_INTRO=1 skips both, as does TWINE_SKIP_INTRO=1 (the OPTIONS screen's SKIP INTRO: fixes/shell.c, the logos too); headless runs (TWINE_HEADLESS) skip both unless TWINE_INTRO=1.
  * TWINE_INTRO_SHOT=<n>[,<n>...] dumps intro frames (BIOS vblanks, then card frames) as intro_NNNN.ppm;
  * they don't count towards the game's TWINE_SHOT frame numbers.
  *
@@ -244,7 +244,8 @@ void port_intro(void) {
     int headless = port_video_headless();
     u8 *rom;
     u32 entry;
-    if ((getenv("TWINE_NO_INTRO") && atoi(getenv("TWINE_NO_INTRO"))) || (headless && !getenv("TWINE_INTRO")))
+    if ((getenv("TWINE_NO_INTRO") && atoi(getenv("TWINE_NO_INTRO"))) ||
+        (getenv("TWINE_SKIP_INTRO") && atoi(getenv("TWINE_SKIP_INTRO"))) || (headless && !getenv("TWINE_INTRO")))
         return;
     if (headless) /* the boot's sound runs on console time (bios_boot.c feeds it per frame) */
         spu_set_clock(SPU_CLOCK_MANUAL);

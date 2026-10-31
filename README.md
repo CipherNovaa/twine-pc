@@ -189,7 +189,7 @@ Each weapon works the same in every Endless room as in its home mission: fire ra
   <img src="https://github.com/CipherNovaa/twine-pc/raw/media/docs/media/settings.avif" alt="Scrolling the PORT SETTINGS page in the game's Options menu" width="720">
 </p>
 
-The port's options live inside the game's **Options** menu: **PORT SETTINGS** has mouse speed, invert mouse, pad layout (modern or original), smooth motion, HD movies, vibration, enemy AI (the port's improved or the original), where the in-game message box sits (bottom or top), **CONTROLS** for remapping ([below](#remapping)) and the debug menu. Options also gets **AUTOLOAD**, the memory card slot loaded at start. Every setting is also a line in `twine.ini`, alongside the ones with no menu entry (display, renderer, scale, filter and more: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
+The port's options live inside the game's **Options** menu: **PORT SETTINGS** has mouse speed, invert mouse, pad layout (modern or original), smooth motion, HD movies, vibration, enemy AI (the port's improved or the original), where the in-game message box sits (bottom or top), **CONTROLS** for remapping ([below](#remapping)) and the debug menu. Options also gets **AUTOLOAD**, the memory card slot loaded at start. **SKIP INTRO** there goes straight to the title screen at start-up. Every setting is also a line in `twine.ini`, alongside the ones with no menu entry (display, renderer, scale, filter and more: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
 
 ## Controls
 <sup>[(Back to top)](#table-of-contents)</sup>
@@ -273,7 +273,7 @@ No film footage is part of this project: the clips are made only from your own c
 2. **Start it:** `twine.exe` on Windows, `./twine` on Linux. (Windows may say "Windows protected your PC": click **More info**, then **Run anyway**.)
 3. **Choose your disc image** on the first-run screen, or drop the file onto the window. The port checks it's the right release, and you're in.
 
-Settings, saves and memory cards stay in the game's folder. To keep them in your user folder instead, delete the file named `portable`.
+Settings, saves and memory cards stay in the game's folder. To keep them in your user folder instead, delete the file named `portable`. A disc image kept inside the game's folder is saved relative to it, so you can move the whole folder.
 
 <br clear="right">
 
