@@ -2,6 +2,14 @@
 
 All notable changes to the PC port are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-10-31
+
+### Fixed
+- Windows: the game crashed when Bond opened his phone for a new MI6 message (Tab), in any mission. A CD position was written over a stack value the game needed; the Linux build was laid out so that it did no harm.
+
+### Added
+- Windows: a crash's `port.log` now has the registers and the top of the stack, to trace crashes the stack walk can't follow.
+
 ## [0.1.1] - 2026-10-29
 
 ### Changed

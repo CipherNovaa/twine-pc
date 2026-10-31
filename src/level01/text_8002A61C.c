@@ -290,7 +290,11 @@ void func_8002AE34(u8 arg0) {
 }
 
 s32 func_8002AF08(void) {
+#ifdef NATIVE_PORT
+    s8 sp10[4]; /* (a CD position, which CdIntToPos writes 3 bytes of: a lone byte may lie against the saved frame pointer) */
+#else
     s8 sp10;
+#endif
 
     if (func_80082F24(1, 0) == 0) {
         return -1;
@@ -336,7 +340,11 @@ void func_8002B0A0(void) {
 }
 
 void func_8002B17C(void) {
+#ifdef NATIVE_PORT
+    s8 sp10[4]; /* (a CD position, which CdIntToPos writes 3 bytes of: a lone byte may lie against the saved frame pointer) */
+#else
     s8 sp10;
+#endif
 
     if ((u8) D_800AFEB6 == 3) {
         D_8009CA58 = 6;
@@ -359,7 +367,11 @@ void func_8002B17C(void) {
 
 #ifdef NON_MATCHING
 s32 func_8002B29C(s32 arg0, s32 arg1) {
+#ifdef NATIVE_PORT
+    s8 sp10[4]; /* (a CD position, which CdIntToPos writes 3 bytes of: a lone byte may lie against the saved frame pointer) */
+#else
     s8 sp10;
+#endif
     if (D_800AFEBC == -1) {
         D_800AFEB8 = D_800AF6A5;
     }

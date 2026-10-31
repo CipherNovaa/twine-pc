@@ -840,6 +840,23 @@ static LONG CALLBACK on_crash(EXCEPTION_POINTERS *ep) {
                                                        : 0ul);
     fprintf(stderr, "crash: exception %08lX at %08lX\n", ep->ExceptionRecord->ExceptionCode,
             (unsigned long)ep->ContextRecord->Eip);
+    { /* the registers and the words on top of the stack, as they were: where it came from when the instruction it
+       * crashed at says nothing (a jump to 0 has no frame to walk); addr2line -f -e twine.exe on the build's */
+        const CONTEXT *c = ep->ContextRecord;
+        MEMORY_BASIC_INFORMATION m;
+        const u32 *sp = (const u32 *)c->Esp;
+        int i;
+        port_log("crash: eax %08lX ebx %08lX ecx %08lX edx %08lX esi %08lX edi %08lX ebp %08lX esp %08lX\n",
+                 (unsigned long)c->Eax, (unsigned long)c->Ebx, (unsigned long)c->Ecx, (unsigned long)c->Edx,
+                 (unsigned long)c->Esi, (unsigned long)c->Edi, (unsigned long)c->Ebp, (unsigned long)c->Esp);
+        if (VirtualQuery(sp, &m, sizeof(m)) && m.State == MEM_COMMIT && !(m.Protect & (PAGE_NOACCESS | PAGE_GUARD))) {
+            u32 room = (u32)((const u8 *)m.BaseAddress + m.RegionSize - (const u8 *)sp) / 4;
+            for (i = 0; i < 48 && (u32)i < room; i += 8)
+                port_log("crash: stack+%02X %08X %08X %08X %08X %08X %08X %08X %08X\n", i * 4, sp[i], (u32)i + 1 < room ? sp[i + 1] : 0,
+                         (u32)i + 2 < room ? sp[i + 2] : 0, (u32)i + 3 < room ? sp[i + 3] : 0, (u32)i + 4 < room ? sp[i + 4] : 0,
+                         (u32)i + 5 < room ? sp[i + 5] : 0, (u32)i + 6 < room ? sp[i + 6] : 0, (u32)i + 7 < room ? sp[i + 7] : 0);
+        }
+    }
     fflush(NULL);
     if (getenv("TWINE_CRASH_DUMPS")) { /* (a minidump there: the USB test kit's results, port/usbkit) */
         typedef struct {

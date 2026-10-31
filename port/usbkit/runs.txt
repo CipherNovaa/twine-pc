@@ -6,6 +6,7 @@
 menu_main|40|test: a shot of the main menu|"TWINE_LEVEL=0" "TWINE_TEST_NO_FILMS=1" "TWINE_TEST_SHELL_SHOTS=1" "TWINE_SMOOTH=0"
 campaign_2|30|Exec level02|"TWINE_LEVEL=2"
 from_cue|30|Exec level02|"TWINE_LEVEL=2" "TWINE_DISC=@cue"
+mi6_message|70|xa: file 1 channel 0|"TWINE_LEVEL=2" "TWINE_TEST_KEYS=300:W:120,420:E,450:Tab,480:Tab,510:Tab,540:Tab,570:Tab,600:Tab,630:Tab,660:Tab,690:Tab,720:Tab,750:Tab,780:Tab,810:Tab,840:Tab,870:Tab,900:Tab,930:Tab,960:Tab,990:Tab,1020:Tab,1050:Tab,1080:Tab,1110:Tab,1140:Tab"
 campaign_2_paced|10|Exec level02|"TWINE_LEVEL=2" "TWINE_TURBO=0"
 endless_hw_smooth|30|room in level 8|"TWINE_LEVEL=8" "TWINE_ENDLESS=1" "TWINE_ENDLESS_ROOM=8:4" "TWINE_ENDLESS_SEED=4" "TWINE_ENDLESS_TEST_GOD=1" "TWINE_RENDERER=hw" "TWINE_SMOOTH=1" "TWINE_SHOT=900"
 savestate|30|savestate: loaded|"TWINE_LEVEL=2" "TWINE_TEST_SAVE=200" "TWINE_TEST_LOAD=400"
