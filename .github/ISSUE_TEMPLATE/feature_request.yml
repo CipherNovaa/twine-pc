@@ -1,0 +1,30 @@
+name: Feature request
+description: An idea for something new in the game or the port
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Please check the open issues first in case someone has asked already: a thumbs-up there helps too.
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you'd like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it would help
+      description: What it would make better, or what you'd use it for.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release you're playing (for example v0.1.3), if it matters.
+  - type: dropdown
+    id: os
+    attributes:
+      label: System
+      options: [Windows 11, Windows 10, Linux, Steam Deck, macOS, Other]

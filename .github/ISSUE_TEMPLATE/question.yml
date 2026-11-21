@@ -1,0 +1,14 @@
+name: Question or contribution
+description: Ask something, or offer to help (translations, other releases, other systems)
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Contributions are welcome. Please ask here before starting anything large, and never attach game files, disc images or BIOS files.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question or offer
+    validations:
+      required: true
